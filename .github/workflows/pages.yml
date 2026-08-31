@@ -25,6 +25,7 @@ jobs:
           mkdir -p _site
           cp index.html _site/
           cp -r js _site/js
+          if [ -d assets ]; then cp -r assets _site/assets; fi
           cd _site
           git init -b gh-pages
           git config user.name "github-actions[bot]"

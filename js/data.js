@@ -18,72 +18,102 @@ const BAL={
   ORB_CAPTURE_GEN:5,       // ×世代内戦歴
   SURVIVE_ESS_BONUS:30,
   CAPTURE_ESS_BONUS:60,
-  BOUND_DMG_MULT:1.6,      // 拘束中の被ダメ倍率
-  BOUND_ARMOR_MULT:0.5,
-  HEAT_DECAY:1.5,
+
+  /* --- スタミナ / 抵抗 / 押し倒し --- */
+  STAMINA_MAX:100,
+  STAMINA_REGEN:3.5,       // 非拘束時 /s
+  STAMINA_REGEN_HEAT:1,    // 発情中 /s
+  STAMINA_RIP_COST:14,     // 引き剥がし1回
+  STRUGGLE_MOVE_RATE:0.09, // 移動1pxあたりの抵抗ゲージ
+  STRUGGLE_SHOT_GAIN:5,    // 攻撃1発あたり
+  RIP_NEED_CLING:60,       // 絡みつき(ワーム)を剥がすのに必要な抵抗
+  RIP_NEED_TETHER:85,      // 蔦(触手花/大触手)を剥がすのに必要な抵抗
+  PIN_STAMINA_TH:35,       // これ未満のスタミナで拘束されると押し倒される
+  PIN_PULSE_T:0.8,         // もがき1拍
+  PIN_PULSE_COST:6,        // もがき1拍のスタミナ
+  PIN_ESCAPE_GAIN:18,      // もがき1拍の脱出ゲージ
+  ATTACH_DMG_MULT:1.3,     // 四肢拘束中の被ダメ倍率
+  PIN_DMG_MULT:1.5,        // 押し倒し中の被ダメ倍率
+
+  /* --- 媚薬 / 発情 --- */
+  APHRO_DECAY:0.6,         // 媚薬ゲージ自然減衰 /s
+  APHRO_GAS:9,             // ガス雲の中 /s
+  APHRO_IMP:2.2,           // 小淫魔が近くにいる /s
+  HEAT_DUR:10,             // 発情状態の持続
+  HEAT_AFTER:35,           // 発情終了後の媚薬ゲージ
+
+  STAMINA_DRAG:1.5,       // 2箇所以上絡みつかれている間のじわ削り /s
+
+  /* --- 燭台(回復) --- */
+  PROP_HP:24,
+  PROP_INIT:6,             // 初期配置数
+  PROP_RESPAWN:26,         // 追加出現間隔(s)
+
   CHEST_TIMES:[35,95,155],
 };
 
 /* ---------------- モンスターカード ----------------
-   dmgは接触ダメージ。armorで軽減される(状態異常のdotは貫通)。
+   dmgは接触ダメージ。armorで軽減される(dot・特殊は貫通あり)。
    xp: ヒロインが倒したとき彼女に入る経験値 = プレイヤーが得るエッセンス。 */
 const MONSTERS={
-  bat:{
-    name:'こうもり', role:'量産・翻弄', cost:2, unlock:0,
-    hp:10, spd:96, r:9, dmg:4, xp:1,
-    desc:'安価な群れ。ヒロインの注意とエネルギー循環を担う。',
+  slug:{
+    name:'ナメクジ', role:'接触魅了', cost:2, unlock:0,
+    hp:14, spd:34, r:10, dmg:2, xp:2,
+    desc:'のろく弱いが、触れられると目が離せなくなる。魅了された相手を彼女は撃てない。',
+    trait:'接触で【魅了】+微媚薬',
+  },
+  worm:{
+    name:'地上ワーム', role:'四肢拘束', cost:3, unlock:0,
+    hp:18, spd:38, r:10, dmg:2, xp:2,
+    desc:'のろく弱いが、触れると腕や脚に絡みつく。絡まれた分だけ彼女は鈍り、引き剥がしはスタミナを削る。',
+    trait:'接触で四肢に絡みつく【拘束】',
+  },
+  ghost:{
+    name:'ゴースト', role:'主力・圧', cost:3, unlock:0,
+    hp:24, spd:64, r:11, dmg:7, xp:3,
+    desc:'ゆらゆらと回り込む主力打点。拘束で鈍った相手に群がらせる。',
   },
   slime:{
-    name:'粘スライム', role:'粘液の跡', cost:3, unlock:0,
+    name:'粘スライム', role:'粘液の跡', cost:3, unlock:60,
     hp:20, spd:52, r:11, dmg:5, xp:2,
     desc:'進んだ跡に粘液を残す。踏んだヒロインは移動が鈍る。',
     trait:'移動跡に粘液(スロウ)',
   },
-  ghost:{
-    name:'ゴースト', role:'漂う圧力', cost:3, unlock:0,
-    hp:24, spd:64, r:11, dmg:7, xp:3,
-    desc:'ゆらゆらと回り込む。数を並べると囲みが完成しやすい。',
-  },
-  zombie:{
-    name:'ゾンビ', role:'重打', cost:4, unlock:120,
-    hp:52, spd:40, r:12, dmg:11, xp:5,
-    desc:'鈍いが一撃が重い。護りを上から叩ける数少ない初期戦力。',
-  },
-  worm:{
-    name:'縛鎖ワーム', role:'拘束', cost:6, unlock:280,
-    hp:44, spd:74, r:11, dmg:6, xp:6,
-    desc:'地中を潜航し、至近で跳びかかって【拘束】する。拘束中の対象は被ダメージが増す。',
-    trait:'潜航接近→跳びつき拘束',
+  gas:{
+    name:'ガス玉', role:'媚薬ガス', cost:4, unlock:200,
+    hp:16, spd:22, r:11, dmg:0, xp:3,
+    desc:'ふわふわと漂い、桃色の媚薬ガスを吹き出してその場に滞留させる。吸えば媚薬ゲージがじわりと溜まる。倒すと最後に大きく弾ける。',
+    trait:'媚薬ガス滞留(吸うと蓄積)',
   },
   imp:{
-    name:'小淫魔', role:'状態異常(遠隔)', cost:6, unlock:280,
-    hp:26, spd:78, r:9, dmg:1, xp:6,
-    desc:'距離を保ち熱の矢を放つ。【発情】が蓄積すると集中が乱れ、抵抗も鈍る。時折【魅了】の視線。',
-    trait:'発情ダート/まれに魅了',
+    name:'小淫魔', role:'煽り・じらし', cost:5, unlock:280,
+    hp:20, spd:120, r:8, dmg:0, xp:5,
+    desc:'攻撃はしない。ヒロインの周りをパタパタと飛び回って煽り、集中を乱し、媚薬を薫らせる。すばしこく撃ち落としにくい。',
+    trait:'まとわり煽り(媚薬+集中低下)',
   },
   flower:{
-    name:'触手花', role:'設置罠', cost:5, unlock:450,
+    name:'触手花', role:'設置罠・蔦', cost:5, unlock:450,
     hp:60, spd:0, r:13, dmg:0, xp:5,
-    desc:'その場で待つ肉花。近づいた獲物を咲いて搦め捕り、【拘束】と持続ダメージを与える。',
-    trait:'待ち伏せ開花(拘束+dot)',
+    desc:'その場で待つ肉花。近づいた獲物の脚に蔦を絡め、その場に繋ぎ止めて締め上げる。',
+    trait:'待ち伏せ→脚に蔦(繋留拘束+dot)',
   },
-  nightbat:{
-    name:'宵闇こうもり', role:'融合・強襲', cost:4, unlock:-1,
-    hp:22, spd:132, r:10, dmg:7, xp:5,
-    desc:'【融合】こうもり×ゴースト。残像を引いて急襲し、掠めるたび僅かに熱を残す。',
-    trait:'高速+微発情', fusion:['bat','ghost'], fuseCost:320,
+  mistslime:{
+    name:'霧香スライム', role:'融合・ガスの跡', cost:6, unlock:-1,
+    hp:34, spd:48, r:12, dmg:4, xp:6,
+    desc:'【融合】粘スライム×ガス玉。進んだ跡が媚薬の霧になる。逃げ道そのものを桃色に染める。',
+    trait:'移動跡が媚薬ガスに', fusion:['slime','gas'], fuseCost:400,
   },
   gtent:{
     name:'大触手', role:'融合・捕縛', cost:9, unlock:-1,
     hp:150, spd:34, r:16, dmg:8, xp:12,
-    desc:'【融合】縛鎖ワーム×触手花。届く間合いから鞭で搦め、引き寄せて長く【拘束】する。',
-    trait:'遠隔グラブ+引き寄せ', fusion:['worm','flower'], fuseCost:550,
+    desc:'【融合】地上ワーム×触手花。届く間合いから鞭を伸ばして四肢に絡め、その場から逃さない。',
+    trait:'遠隔で四肢に蔦(繋留拘束)', fusion:['worm','flower'], fuseCost:550,
   },
   vampi:{
     name:'ヴァンピロード', role:'ボス', cost:26, unlock:900,
     hp:950, spd:55, r:28, dmg:20, xp:60, boss:true,
-    desc:'夜の統率者。突進で薙ぎ、捉えた相手を短く【拘束】する。召喚は1戦に1度。',
-    trait:'突進/接触拘束(短)',
+    desc:'夜の統率者。突進で薙ぎ払い、掠めた相手をよろめかせる。召喚は1戦に1度。',
+    trait:'突進/接触よろめき',
   },
 };
 const CARD_LV_MAX=5;
@@ -93,6 +123,7 @@ const cardCost=(id,lv)=>{
   return Math.max(1, b - (lv>=3?1:0) - (lv>=5?1:0));
 };
 const cardUpCost=(id,lv)=>Math.round((MONSTERS[id].cost*38)*(1+0.65*(lv-1)));
+const FUSION_IDS=['mistslime','gtent'];
 
 /* ---------------- 陣形(出現方法) ---------------- */
 const FORMATIONS={
@@ -103,7 +134,7 @@ const FORMATIONS={
   wave:{ name:'突撃列', count:5, factor:2.4, unlock:160,
     desc:'一方向から横列で押し寄せる。' },
   ambush:{ name:'潜伏', count:2, factor:1.5, unlock:280,
-    desc:'進行方向の先に伏せて置く。設置系と好相性。' },
+    desc:'進行方向の先に伏せて置く。設置系・鈍足と好相性。' },
   ring:{ name:'包囲円陣', count:8, factor:3.8, unlock:380,
     desc:'楕円の円陣で取り囲み、輪を締める。' },
 };
@@ -118,11 +149,13 @@ const ALTAR=[
   { id:'speed', name:'足枷の残滓', max:3, costs:[10,20,34],
     desc:'脚の軽さを僅かに奪う。', fx:'速度 -6%/段階' },
   { id:'sense', name:'感応増幅', max:3, costs:[14,26,44],
-    desc:'状態異常への感受性を高める。効きが深く、抜けにくくなる。', fx:'異常効果 +18%/段階' },
-  { id:'heat', name:'微熱の種', max:2, costs:[16,32],
-    desc:'戦闘開始時から熱が僅かに燻る。', fx:'初期発情 +18/段階' },
+    desc:'媚薬・魅了・拘束への感受性を高める。効きが深く、抜けにくくなる。', fx:'異常効果 +18%/段階' },
+  { id:'heat', name:'媚薬の残滓', max:2, costs:[16,32],
+    desc:'戦闘開始時から媚薬ゲージが僅かに溜まっている。', fx:'初期媚薬 +18/段階' },
   { id:'focus', name:'朧の霞', max:2, costs:[16,32],
     desc:'集中の芯を曇らせる。判断と反応が僅かに遅れる。', fx:'反応 -12%/段階' },
+  { id:'stamina', name:'倦怠の澱', max:3, costs:[14,26,44],
+    desc:'身体の芯に疲労を澱ませる。スタミナの上限と回復が落ちる。', fx:'スタミナ上限 -12/段階' },
 ];
 const altarLv=id=>META.altar[id]||0;
 
@@ -146,14 +179,18 @@ const EVOS={
 };
 const need=l=>Math.floor(6 + l*3.2 + l*l*0.18);
 
-/* ---------------- 状態異常(戦闘内・ヒロインに付与) ----------------
+/* ---------------- 状態表示(ヒロイン) ----------------
    カタログ準拠のid。効果はすべて機構レベル(数値)で表現する。 */
 const AILMENTS={
   bound:{ name:'拘束', color:'#c98cff', icon:'⛓' },
-  aphrodisia:{ name:'発情', color:'#ff86b3', icon:'♨' },
+  pinned:{ name:'押し倒し', color:'#ff5d7a', icon:'✖' },
+  aphro:{ name:'媚薬', color:'#ff9ec2', icon:'✿' },
+  heat:{ name:'発情', color:'#ff5d9e', icon:'♨' },
   slow:{ name:'粘液', color:'#8fe8c9', icon:'〰' },
   charm:{ name:'魅了', color:'#ffb3cf', icon:'✦' },
 };
+const LIMBS=['armL','armR','legL','legR'];
+const LIMB_NAMES={armL:'左腕', armR:'右腕', legL:'左脚', legR:'右脚'};
 
 /* ---------------- 堕ち二軸(観測記録用・世代内でリセット) ---------------- */
 const FALL_BODY_STAGES=[[0,'不惑'],[25,'綻び'],[50,'馴染み'],[72,'熟れ'],[90,'崩れ']];

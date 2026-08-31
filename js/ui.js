@@ -156,7 +156,7 @@ const UI={
     const wipeArmed=this._wipeArm && performance.now()-this._wipeArm<3000;
     return `
       <h1>ルミナ・サバイバーズ</h1>
-      <div class="sub">v0.2 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
+      <div class="sub">v0.3 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
       <p>あなたは<b>夜側の指揮者</b>。デッキから魔物を差し向け、AIで戦う光の少女<b>「ルミナ」</b>を追い詰める。<br>
       彼女に魔物が倒されるほどあなたのエネルギーとエッセンスは増え、彼女もまた強くなる。</p>
       <div style="text-align:center;color:var(--gold);font-size:12px;margin-bottom:8px">${esc(best)} ・ 通算${META.runs}戦 / 捕獲${META.captures}回</div>
@@ -171,7 +171,9 @@ const UI={
       <details style="margin-top:6px"><summary style="font-size:11px;color:var(--dim);cursor:pointer">あそびかた / ルール</summary>
       <p style="font-size:11.5px">
       ・戦闘中、ENを払ってカードの魔物を陣形つきで召喚。ルミナに倒されたぶんENとエッセンスが還元される。<br>
-      ・ルミナのHPを削りきると<b>捕獲</b>。与ダメージ・状態異常・捕獲で<b>オーブ</b>を獲得。<br>
+      ・拘束役は接触すると<b>四肢に絡みつく</b>。ルミナは移動と攻撃でもがいて引き剥がすが、<b>スタミナ</b>を消耗する。<br>
+      ・スタミナが薄い時に拘束すると<b>押し倒し</b>。<b>HPかスタミナを削りきれば敗北=捕獲</b>。与ダメ・異常・捕獲で<b>オーブ</b>獲得。<br>
+      ・ルミナの回復ハートは、彼女が<b>燭台を壊した時だけ</b>落ちる。回復させたくなければ燭台の周りで待ち伏せを。<br>
       ・ルミナは倒した魔物の経験で戦闘中レベルアップし、武器を融合させて強くなる。さらに<b>${BAL.GEN_LEN}戦ごとの世代内</b>で経験を持ち越す。<br>
       ・世代が変わると彼女の経験はリセット。ただし<b>祭壇の書き換え</b>は永続する。<br>
       ・護りが高く、序盤はダメージがほぼ通らない。エッセンスで魔物を育て、オーブで彼女を崩すこと。</p></details>
@@ -231,7 +233,7 @@ const UI={
       }
     }
     const fuses=[];
-    for(const id of ['nightbat','gtent']){
+    for(const id of FUSION_IDS){
       const m=MONSTERS[id];
       if(META.cards[id]&&META.cards[id].owned) continue;
       const cost=MONSTERS[id].fuseCost;
@@ -298,10 +300,11 @@ const UI={
         </div>
         <div class="kv" style="margin-top:4px">
           <div>HP <b>${preview.maxHp}</b></div>
+          <div>スタミナ <b>${preview.staminaMax}</b></div>
           <div>護り <b>${preview.armor}</b></div>
           <div>回復 <b>${preview.regen.toFixed(2)}/s</b></div>
           <div>基礎速度 <b>${Math.round(preview.baseSpeed)}</b></div>
-          <div>初期熱 <b>${Math.round(preview.ail.heat)}</b></div>
+          <div>初期媚薬 <b>${Math.round(preview.aphro)}%</b></div>
         </div>
         <div class="note">次の戦闘開始時の実効値(世代内継承+書き換え適用後)。</div>
       </div>
@@ -337,13 +340,16 @@ const UI={
     const title=cap?'★ 捕獲成功':(sum.outcome==='survive'?'守りきられた……':'撤退……');
     const color=cap?'var(--vio)':'var(--gold)';
     const by=cap&&sum.capturedBy&&MONSTERS[sum.capturedBy]?MONSTERS[sum.capturedBy].name:null;
+    const causeTxt=cap?(sum.cause==='stamina'?'スタミナが尽き、組み伏せられた':'体力が尽きた'):null;
     const scene=cap?sceneFor('capture',sum.capturedBy):null;
     const sceneHtml=cap?(scene
       ? `<div id="sceneBox"><b>${esc(scene.title||'')}</b>\n${scene.beats.map(esc).join('\n\n')}</div>`
-      : `<div class="note">捕獲シーン: テキスト未実装(js/scenes.js のフックへ別途追加)</div>`):'';
+      : `<div class="note">敗北シーン: テキスト未実装(js/scenes.js のフックへ別途追加)</div>`):'';
+    const cgHtml=cap?`<div id="cgWrap"></div>`:'';
     this.root.innerHTML=`<div class="screen"><div class="inner" style="text-align:center;min-width:340px">
       <h2 style="color:${color}">${title}</h2>
-      ${by?`<div style="font-size:12px;color:var(--body)">とどめ: ${esc(by)}</div>`:''}
+      ${by?`<div style="font-size:12px;color:var(--body)">とどめ: ${esc(by)}${causeTxt?' — '+esc(causeTxt):''}</div>`:''}
+      ${cgHtml}
       <div class="breakdown">
         経過時間 <b>${fmt(sum.time)}</b> ・ ルミナ Lv<b>${sum.heroLv}</b><br>
         討たれた魔物 <b>${sum.kills}</b>体 ・ 与ダメージ <b>${sum.dmg}</b> ・ 異常付与 <b>${sum.ail}</b>回<br>
@@ -358,6 +364,30 @@ const UI={
         <button class="sub" data-act="go" data-arg="home">ホーム</button>
       </div>
     </div></div>`;
+    if(cap) this.tryLoadCG(sum.capturedBy);
+  },
+
+  /* 敗北スチル: assets/cg/defeat_<id>.png → defeat.png の順に探す(無ければ注記のみ) */
+  tryLoadCG(byId){
+    const wrap=document.getElementById('cgWrap');
+    if(!wrap) return;
+    const cands=[];
+    if(byId) cands.push('assets/cg/defeat_'+byId+'.png');
+    cands.push('assets/cg/defeat.png');
+    const tryNext=i=>{
+      if(i>=cands.length){
+        wrap.innerHTML='<div class="note">敗北スチル: 未設定(assets/cg/defeat.png を置くと表示されます)</div>';
+        return;
+      }
+      const img=new Image();
+      img.onload=()=>{
+        img.style.cssText='max-width:100%;max-height:260px;border-radius:10px;border:1.4px solid var(--card-line);margin:6px 0';
+        wrap.innerHTML=''; wrap.appendChild(img);
+      };
+      img.onerror=()=>tryNext(i+1);
+      img.src=cands[i];
+    };
+    tryNext(0);
   },
 
   /* ---------- 戦闘バー ---------- */

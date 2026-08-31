@@ -147,12 +147,12 @@ function bgmStop(){
 const SAVE_KEY='luna2_save';
 function defaultMeta(){
   return {
-    v:2,
+    v:3,
     essence:0, orbs:0,
     runs:0, captures:0,
     gen:{ idx:1, battle:0 },              // 世代 / 世代内の戦闘数(0..GEN_LEN-1)
-    cards:{ bat:{owned:true,lv:1}, slime:{owned:true,lv:1}, ghost:{owned:true,lv:1} },
-    deck:['bat','slime','ghost'],
+    cards:{ slug:{owned:true,lv:1}, worm:{owned:true,lv:1}, ghost:{owned:true,lv:1} },
+    deck:['slug','worm','ghost'],
     formations:['scatter'],
     altar:{},                              // {id: lv}
     life:{ dmg:0, ail:0, kills:0, herBoss:0 },   // 通算記録
@@ -166,14 +166,35 @@ function saveMeta(){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify(META)); 
 function loadMeta(){
   try{
     const d=JSON.parse(localStorage.getItem(SAVE_KEY)||'null');
-    if(d && d.v===2){
+    if(d && (d.v===2||d.v===3)){
       META=Object.assign(defaultMeta(), d);
+      META.v=3;
       META.gen=Object.assign({idx:1,battle:0}, d.gen);
       META.life=Object.assign(defaultMeta().life, d.life);
       META.rot=Object.assign(defaultMeta().rot, d.rot);
       META.settings=Object.assign(defaultMeta().settings, d.settings);
+      migrateCards();
     }
   }catch(e){}
+}
+/* v2→v3: 廃止カード(こうもり/ゾンビ/宵闇こうもり)を除去し、コストを返金 */
+function migrateCards(){
+  const REFUND={ zombie:120, nightbat:320 };
+  for(const id of Object.keys(META.cards)){
+    if(!MONSTERS[id]){
+      if(META.cards[id].owned && REFUND[id]) META.essence+=REFUND[id];
+      delete META.cards[id];
+    }
+  }
+  // 新スターターを保証
+  for(const id of ['slug','worm','ghost']){
+    if(!META.cards[id]) META.cards[id]={owned:true,lv:1};
+    META.cards[id].owned=true;
+  }
+  META.deck=(META.deck||[]).filter(id=>META.cards[id]&&META.cards[id].owned);
+  if(!META.deck.length) META.deck=['slug','worm','ghost'];
+  META.formations=(META.formations||['scatter']).filter(f=>FORMATIONS[f]);
+  if(!META.formations.includes('scatter')) META.formations.unshift('scatter');
 }
 function wipeMeta(){ META=defaultMeta(); saveMeta(); }
 
