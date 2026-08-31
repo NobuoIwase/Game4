@@ -184,6 +184,25 @@ button:focus-visible{ outline:3px solid var(--blue); outline-offset:2px; }
 }
 .newbadge{ color:var(--pink); font-weight:bold; font-size:12px; }
 @media (prefers-reduced-motion: reduce){ button,.hcard{ transition:none; } }
+
+/* ===== モバイル(縦持ち)調整 ===== */
+#handrow{ flex-wrap:wrap; justify-content:center; }
+#formrow{ flex-wrap:wrap; justify-content:center; }
+#battlebar .spread{ flex-wrap:wrap; justify-content:center; row-gap:4px; }
+@media (max-width:720px){
+  #resbar{ gap:5px; font-size:10.5px; right:48px; flex-wrap:wrap; }
+  #resbar .chip{ padding:3px 9px; }
+  .hcard{ width:56px; height:74px; }
+  .hcard .nm{ font-size:8px; }
+  .hcard canvas{ top:3px; }
+  .fchip{ padding:3px 9px; font-size:9.5px; }
+  #battlebar{ gap:4px; bottom:4px; }
+  #battlebar .side button{ font-size:9.5px; padding:4px 9px; }
+  #entext{ font-size:10px; min-width:54px; }
+  .menu-grid{ grid-template-columns:1fr; }
+  .screen .inner{ padding:14px 14px; }
+  .cards{ grid-template-columns:repeat(auto-fill,minmax(124px,1fr)); }
+}
 </style>
 </head>
 <body>
