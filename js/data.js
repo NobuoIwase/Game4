@@ -5,8 +5,9 @@
 ============================================================ */
 
 const BAL={
-  RUN_TIME:180,            // 1戦=3分
+  RUN_TIME:300,            // 1戦=5分(v0.5で試験延長)
   GEN_LEN:4,               // この戦数ごとにヒロインの経験がリセット
+  FIELD_CAP:160,           // 場に出せる魔物の上限(超えると召喚不可)
   EN_BASE:12, EN_PER_LV:3, EN_MAX:60,
   EN_REGEN:0.78, EN_REGEN_LV:0.07,
   EN_START:10,
@@ -27,9 +28,10 @@ const BAL={
   COMBO_UNIT_PER:2,        // 2連鎖ごとに多数陣形+1体
 
   /* --- 夜の深まり(ヒロインLv連動で夜側が強くなる) --- */
-  NIGHT_UNIT_LV:5,         // 彼女のLvこれごとに多数陣形+1体(最大+3)
-  NIGHT_STAT_LV:0.025,     // 彼女のLv-1ごとの召喚hp/dmg加算
-  NIGHT_STAT_CAP:0.5,
+  NIGHT_UNIT_LV:4,         // 彼女のLvこれごとに多数陣形+1体(最大+4)
+  NIGHT_UNIT_MAX:4,
+  NIGHT_STAT_LV:0.04,      // 彼女のLv-1ごとの召喚hp/dmg加算
+  NIGHT_STAT_CAP:0.8,
   EN_REFUND:0.6,           // ヒロインが倒したときのEN還元率(ユニット単価×係数)
   ESS_RATE:0.55,           // エッセンス=撃破xp×係数
   ORB_DMG_STEP:45,         // 与ダメこれごとにオーブ+1
@@ -98,7 +100,9 @@ const BAL={
   PROP_INIT:6,             // 初期配置数
   PROP_RESPAWN:26,         // 追加出現間隔(s)
 
-  CHEST_TIMES:[35,95,155],
+  CHEST_TIMES:[40,110,180,250],
+
+  IMP_TEASE_CAP:2,         // 快感を注げる小淫魔は同時2体まで(数で強くなりすぎ防止)
 };
 
 /* ---------------- モンスターカード ----------------
@@ -107,14 +111,15 @@ const BAL={
 const MONSTERS={
   slug:{
     name:'ナメクジ', role:'接触魅了', cost:2, unlock:0,
-    hp:14, spd:34, r:10, dmg:2, xp:2,
+    hp:14, spd:34, r:10, dmg:2, xp:2, swarm:2,
     desc:'のろく弱いが、触れるたび「ナメクジという種族」への魅了が一段深まる。魅了された種族への攻撃は鈍り、深まるとどの個体にでも自分から寄っていってしまう。',
-    trait:'接触で【魅了】段階UP(種族別)',
+    trait:'接触で【魅了】段階UP(種族別)。Lv2+で群れ倍化',
   },
   goblin:{
     name:'ゴブリン', role:'群れ', cost:2, unlock:80,
-    hp:13, spd:66, r:9, dmg:4, xp:2,
+    hp:13, spd:66, r:9, dmg:4, xp:2, swarm:2,
     desc:'緑色のチビ。一匹では何もできず、群れて囲んで小突くしか能がない。数だけは湧く。',
+    trait:'Lv2+で群れ倍化',
   },
   leech:{
     name:'吸液羽虫', role:'吸い付き', cost:3, unlock:120,
@@ -124,9 +129,9 @@ const MONSTERS={
   },
   worm:{
     name:'地上ワーム', role:'四肢拘束', cost:3, unlock:0,
-    hp:18, spd:38, r:10, dmg:2, xp:2,
+    hp:18, spd:38, r:10, dmg:2, xp:2, swarm:2,
     desc:'のろく弱いが、触れると腕や脚に絡みつく。絡まれた分だけ彼女は鈍り、引き剥がしはスタミナを削る。',
-    trait:'接触で四肢に絡みつく【拘束】',
+    trait:'接触で四肢に絡みつく【拘束】。Lv2+で群れ倍化',
   },
   ghost:{
     name:'ゴースト', role:'主力・圧', cost:3, unlock:0,
@@ -141,13 +146,13 @@ const MONSTERS={
   },
   gas:{
     name:'ガス玉', role:'媚薬ガス', cost:4, unlock:200,
-    hp:16, spd:22, r:11, dmg:0, xp:3,
+    hp:16, spd:22, r:11, dmg:0, xp:3, solo:true,
     desc:'ふわふわと漂い、桃色の媚薬ガスを吹き出してその場に滞留させる。吸えば媚薬ゲージがじわりと溜まる。倒すと最後に大きく弾ける。',
     trait:'媚薬ガス滞留(吸うと蓄積)',
   },
   imp:{
     name:'小淫魔', role:'煽り・じらし', cost:5, unlock:280,
-    hp:20, spd:120, r:8, dmg:0, xp:5,
+    hp:20, spd:120, r:8, dmg:0, xp:5, solo:true,
     desc:'攻撃はしない。ヒロインの周りをパタパタと飛び回って煽り、集中を乱し、媚薬を薫らせる。すばしこく撃ち落としにくい。',
     trait:'まとわり煽り(媚薬+集中低下)',
   },
@@ -224,9 +229,15 @@ const UPG={
   bolt:  {name:'ホーリーボルト',   d1:'ひかりの矢で',    d2:'じどうこうげき',  max:5, kind:'wp'},
   orb:   {name:'セイントオーブ',   d1:'まもりの光球が',  d2:'まわりをかいてん', max:5, kind:'wp'},
   nova:  {name:'ピュアノヴァ',     d1:'じょうかの波動で', d2:'まわりをいっそう', max:5, kind:'wp'},
+  whip:  {name:'プリズムウィップ', d1:'ひかりのムチが',  d2:'まえをなぎはらう', max:5, kind:'wp'},
+  rain:  {name:'スターレイン',     d1:'ながれ星が',      d2:'ふりそそぐ',      max:5, kind:'wp'},
+  cross: {name:'クロスブーメラン', d1:'ひかりの十字が',  d2:'いって、もどる',  max:5, kind:'wp'},
   speed: {name:'スピードシューズ', d1:'いどう速度',      d2:'+10%',            max:3, kind:'ps'},
   vital: {name:'マックスハート',   d1:'さいだいHP+25',   d2:'いまも回復する',   max:3, kind:'ps'},
   magnet:{name:'ジェムマグネット', d1:'ジェムの回収',    d2:'はんいUP',        max:3, kind:'ps'},
+  haste: {name:'クイックリボン',   d1:'こうげき速度',    d2:'+8%',             max:3, kind:'ps'},
+  ward:  {name:'プチバリア',       d1:'まもり',          d2:'+1',              max:3, kind:'ps'},
+  growth:{name:'ラーニングピアス', d1:'けいけんち',      d2:'+12%',            max:3, kind:'ps'},
 };
 /* 融合進化(本家の進化に相当): baseがLv最大+ペアパッシブLv2以上で解禁 */
 const EVOS={
@@ -236,6 +247,12 @@ const EVOS={
     d1:'大きな聖環が', d2:'まもって癒す' },
   sburst:{ name:'スターバースト', base:'nova', pair:'magnet',
     d1:'大浄化がジェムを', d2:'ひきよせる' },
+  srush:{ name:'シャインラッシュ', base:'whip', pair:'haste',
+    d1:'連撃のムチが', d2:'ぜんほういをはらう' },
+  scomet:{ name:'コメットフォール', base:'rain', pair:'growth',
+    d1:'すい星のむれを', d2:'ふらせる' },
+  sjudge:{ name:'ジャッジメントクロス', base:'cross', pair:'ward',
+    d1:'大十字が何度も', d2:'つらぬきかえす' },
 };
 const need=l=>Math.floor(6 + l*3.2 + l*l*0.18);
 

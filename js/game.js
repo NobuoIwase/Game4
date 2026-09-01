@@ -17,9 +17,18 @@ function newHero(){
     regen:(0.7+0.15*gb)*(1-0.3*aRegen),
     baseSpeed:150*(1-0.06*aSpeed),
     level:1, xp:0, xpNeed:need(1),
-    wp:{bolt:1, orb:0, nova:0}, ps:{speed:0, vital:0, magnet:0},
-    evo:{sstar:0, sring:0, sburst:0},
+    wp:{bolt:1, orb:0, nova:0, whip:0, rain:0, cross:0},
+    ps:{speed:0, vital:0, magnet:0, haste:0, ward:0, growth:0},
+    evo:{sstar:0, sring:0, sburst:0, srush:0, scomet:0, sjudge:0},
     boltT:0.6, novaT:2.5, orbAng:0, novaAnim:0, novaR:0,
+    whipT:1.1, whipAnim:0, whipDir:1, whipSide:1, whipR:0, rainT:2.2, crossT:1.6,
+    /* 今夜の好み: ビルド選択の癖(戦闘ごとにランダム)。
+       噛み合わない好みを引いた夜は、シナジー不足でDPSが枯れる */
+    taste:(()=>{
+      const t={}; for(const k in UPG) t[k]=rand(0.55,1.65);
+      t.bolt=Math.max(t.bolt,1.15);   // 初期武器には最低限の愛着(1戦目のDPS床)
+      return t;
+    })(),
     ifr:0, face:1, moving:false, anim:rand(10),
     strafeDir:Math.random()<0.5?-1:1, strafeT:2,
     bubble:'', bubbleT:0, bubbleCd:0, aiLabel:'けいかい中', aiState:'',
@@ -350,12 +359,13 @@ function addStruggle(amount){
   const o=oldestRestraint(h);
   if(o && h.struggle>=o.at.need){
     h.struggle=0;
+    const ease=1+0.09*(h.resist.bound||0);   // 振りほどきに慣れるほどスタミナ消費が軽くなる
     if(o.kind==='limb'){
       detachLimb(o.slot,{fling:true});
-      h.stamina-=BAL.STAMINA_RIP_COST;
+      h.stamina-=BAL.STAMINA_RIP_COST/ease;
     }else{
       detachSucker(o.slot,{fling:true});
-      h.stamina-=BAL.SUCK_RIP_COST;
+      h.stamina-=BAL.SUCK_RIP_COST/ease;
     }
     heroBubble(h,'えいっ…!');
     sfx(300,700,0.15,'triangle',0.07);
@@ -853,7 +863,8 @@ function nearestEnemies(n,maxD){
 function weaponsUpdate(dt){
   const B=G.B, p=B.hero;
   const atkMult=((p.pinned||p.charmBind)?0:1)*Math.pow(0.75,armCount(p))   // 腕を拘束されるほど攻撃が乱れる
-    *(p.waveDur>0?BAL.WAVE_ATK:1);                                          // 発情の波の間は手が止まりがち
+    *(p.waveDur>0?BAL.WAVE_ATK:1)                                           // 発情の波の間は手が止まりがち
+    *(1+0.08*p.ps.haste);                                                   // クイックリボン
   if(atkMult<=0) return;
   if(p.wp.bolt>0){
     p.boltT-=dt*atkMult;
@@ -922,6 +933,75 @@ function weaponsUpdate(dt){
       if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN);
     }
   }
+  /* --- プリズムウィップ: 前方(交互に前後)を薙ぎ払う。進化=全方位 --- */
+  if(p.wp.whip>0){
+    p.whipT-=dt*atkMult;
+    if(p.whipT<=0){
+      const evo=p.evo.srush>0, lv=p.wp.whip;
+      p.whipT=(evo?0.72:1.12)*Math.pow(0.9,lv-1);
+      p.whipSide*=-1;
+      const range=evo?150:95+9*lv, half=evo?150:40+4*lv;
+      const dmg=evo?22:10+4*(lv-1);
+      p.whipAnim=0.16;
+      p.whipDir=evo?0:(p.whipSide>0?p.face:-p.face);   // 0=全方位
+      p.whipR=range;
+      let hit=false;
+      for(const e of B.enemies){
+        if(e.dead||e.dormant) continue;
+        const ex=e.x-p.x, ey=e.y-(p.y-10);
+        const inArc=evo ? Math.hypot(ex,ey)<range+e.r
+                        : (ex*p.whipDir>0 && Math.abs(ex)<range+e.r && Math.abs(ey)<half+e.r);
+        if(inArc){ damageEnemy(e,dmg); hit=true; }
+      }
+      for(const pr of B.props){
+        const ex=pr.x-p.x, ey=pr.y-(p.y-10);
+        const inArc=evo ? Math.hypot(ex,ey)<range
+                        : (ex*p.whipDir>0 && Math.abs(ex)<range && Math.abs(ey)<half);
+        if(inArc) damageProp(pr,dmg);
+      }
+      if(hit){ sfx(240,520,0.08,'sawtooth',0.04); if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN); }
+    }
+  }
+  /* --- スターレイン: 敵の頭上へ流れ星を降らせる(着弾で小範囲) --- */
+  if(p.wp.rain>0){
+    p.rainT-=dt*atkMult;
+    if(p.rainT<=0){
+      const evo=p.evo.scomet>0, lv=p.wp.rain;
+      p.rainT=(evo?1.5:2.3)*Math.pow(0.88,lv-1);
+      const drops=evo?5:1+Math.floor(lv/2);
+      const ts=nearestEnemies(drops*2,540);
+      let fired=false;
+      for(let i=0;i<drops;i++){
+        const t=ts.length?ts[(Math.random()*ts.length)|0]:null;
+        if(!t) break;
+        const tx=t.x+rand(-26,26), ty=t.y+rand(-16,16);
+        if(B.bullets.length<120){
+          B.bullets.push({kind:'rain', x:tx+rand(-40,40), y:ty-300, tx, ty,
+            vx:0, vy:540, dmg:evo?26:12+5*(lv-1), splash:evo?70:42, life:1.0, last:null, evo});
+          fired=true;
+        }
+      }
+      if(fired) sfx(880,380,0.14,'sine',0.03);
+      else p.rainT=0.2;
+    }
+  }
+  /* --- クロスブーメラン: 貫通して飛び、手元へ帰ってくる --- */
+  if(p.wp.cross>0){
+    p.crossT-=dt*atkMult;
+    if(p.crossT<=0){
+      const evo=p.evo.sjudge>0, lv=p.wp.cross;
+      const ts=nearestEnemies(1,500);
+      if(ts.length && B.bullets.length<120){
+        p.crossT=(evo?1.4:1.9)*Math.pow(0.9,lv-1);
+        const a=Math.atan2((ts[0].y-ts[0].r)-(p.y-12), ts[0].x-p.x);
+        const sp=evo?430:360;
+        B.bullets.push({kind:'cross', x:p.x, y:p.y-12, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp,
+          spd:sp, dmg:evo?20:9+4*(lv-1), retT:evo?0.55:0.42, ret:false, life:2.4, last:null, evo});
+        sfx(320,180,0.12,'square',0.04);
+        if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN);
+      }else p.crossT=0.15;
+    }
+  }
 }
 function orbPos(i,n){
   const p=G.B.hero;
@@ -950,7 +1030,12 @@ function maybeLevelup(){
 }
 function offerLevelup(){
   const B=G.B, p=B.hero;
-  const avail=Object.keys(UPG).filter(k=>curLv(k)<UPG[k].max);
+  const wpCount=Object.values(p.wp).filter(v=>v>0).length;
+  const avail=Object.keys(UPG).filter(k=>{
+    if(curLv(k)>=UPG[k].max) return false;
+    if(UPG[k].kind==='wp' && curLv(k)===0 && wpCount>=4) return false;   // 武器枠は4つまで
+    return true;
+  });
   const evos=readyEvos();
   const pool=avail.concat(evos.map(k=>'EVO:'+k));
   if(!pool.length){
@@ -964,7 +1049,9 @@ function offerLevelup(){
     if(k.startsWith('EVO:')) w=6;
     else{
       if(UPG[k].kind==='wp') w=curLv(k)===0?3:2.2;
+      if(UPG[k].kind==='wp' && curLv(k)>0) w*=1.5;   // 手持ちの武器を伸ばしたがる
       if(k==='vital' && p.hp<p.maxHp*0.5) w=4;
+      w*=p.taste[k]||1;   // 今夜の好み: 噛み合わない夜はビルドが散る
     }
     w*=rand(0.9,1.1);
     if(w>bw){ bw=w; pick=i; }
@@ -985,6 +1072,7 @@ function applyUpg(k){
   }
   if(UPG[k].kind==='wp') p.wp[k]++; else p.ps[k]++;
   if(k==='vital'){ p.maxHp=Math.round(p.maxHp)+25; p.hp=Math.min(p.maxHp,p.hp+25); }
+  if(k==='ward'){ p.armor++; }
   floatTxt(p.x,p.y-64,UPG[k].name+' Lv'+curLv(k)+'!','#ffd76a',13,1.5);
   heroBubble(p,'つよくなった♪',true);
 }
@@ -1012,9 +1100,10 @@ function spawnUnit(id, x, y, o){
   o=o||{};
   const B=G.B, d=unitDef(id);
   const elite=o.elite||1;
-  // 夜の深まり: 彼女が育つほど、召喚される魔物も強くなる
+  // 夜の深まり: 彼女が育つほど、召喚される魔物も強くなる(カード練度でスケール)
   const heroLv=(B.hero&&B.hero.level)||1;
-  const night=MONSTERS[id].boss?1:1+Math.min(BAL.NIGHT_STAT_CAP, BAL.NIGHT_STAT_LV*Math.max(0,heroLv-1));
+  const nscale=Math.min(1,(d.lv-1)/2);
+  const night=MONSTERS[id].boss?1:1+Math.min(BAL.NIGHT_STAT_CAP, BAL.NIGHT_STAT_LV*Math.max(0,heroLv-1))*nscale;
   const pm=(o.mult||1)*night;
   const u={
     id, x, y,
@@ -1110,6 +1199,7 @@ function enemiesUpdate(dt){
     e.t+=dt;
     if(e.hitFlash>0) e.hitFlash-=dt;
     if(e.orbCd>0) e.orbCd-=dt;
+    if(e.crossCd>0) e.crossCd-=dt;
     e.seenT=inSight(e,p)?e.seenT+dt:0;   // 彼女の視界に入っている時間(反応遅れの基準)
 
     // 四肢に絡みつき/吸い付き中: ヒロインに追従するだけ
@@ -1261,7 +1351,7 @@ function impTick(e,dt,d,dx,dy){
   }
   // 煽り(近くにいるだけで媚薬と集中低下)
   if(d<120){
-    applyPleasure(BAL.PLEAS_IMP*dt);
+    if(B.frameImp<BAL.IMP_TEASE_CAP){ B.frameImp++; applyPleasure(BAL.PLEAS_IMP*dt); }
     e.teaseT-=dt;
     if(e.teaseT<=0){
       e.teaseT=rand(2.2,3.8);
@@ -1405,8 +1495,49 @@ function beginCapture(src,cause){
 
 /* ================= 弾/回収物/燭台 ================= */
 function bulletsUpdate(dt){
-  const B=G.B;
+  const B=G.B, p=B.hero;
   for(const b of B.bullets){
+    /* --- スターレイン: 落下→着弾で小範囲 --- */
+    if(b.kind==='rain'){
+      b.y+=b.vy*dt; b.life-=dt;
+      if(Math.random()<0.5) parts(b.x,b.y,1,['#8fd3ff','#fff'],20,0.3);
+      if(b.y>=b.ty||b.life<=0){
+        b.life=0;
+        parts(b.tx,b.ty,b.evo?12:7,['#8fd3ff','#fff','#ffd76a'],b.evo?150:110,0.4);
+        sfx(180,60,0.1,'square',0.04);
+        for(const e of B.enemies){
+          if(e.dead||e.dormant) continue;
+          if(Math.hypot(e.x-b.tx,e.y-b.ty)<b.splash+e.r) damageEnemy(e,b.dmg);
+        }
+        for(const pr of B.props){
+          if(Math.hypot(pr.x-b.tx,pr.y-b.ty)<b.splash+12) damageProp(pr,b.dmg);
+        }
+        if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN*0.6);
+      }
+      continue;
+    }
+    /* --- クロスブーメラン: 貫通往復。敵ごとに短い多段CD --- */
+    if(b.kind==='cross'){
+      b.retT-=dt;
+      if(b.retT<=0){
+        b.ret=true;
+        const dx=p.x-b.x, dy=(p.y-12)-b.y, d=Math.hypot(dx,dy)||1;
+        b.vx+=(dx/d*b.spd-b.vx)*Math.min(1,dt*4);
+        b.vy+=(dy/d*b.spd-b.vy)*Math.min(1,dt*4);
+        if(b.ret && d<22) b.life=0;
+      }
+      b.x+=b.vx*dt; b.y+=b.vy*dt; b.life-=dt;
+      if(Math.random()<0.4) parts(b.x,b.y,1,['#fff3c4','#fff'],20,0.25);
+      for(const e of B.enemies){
+        if(e.dead||e.dormant||e.state==='attached'||(e.crossCd||0)>0) continue;
+        if(Math.hypot(e.x-b.x,(e.y-e.r*0.6)-b.y)<e.r+7){
+          damageEnemy(e,b.dmg);
+          e.crossCd=0.45;
+          parts(b.x,b.y,3,['#fff3c4','#fff'],90,0.25);
+        }
+      }
+      continue;
+    }
     b.x+=b.vx*dt; b.y+=b.vy*dt; b.life-=dt;
     if(b.life<=0) continue;
     if(Math.random()<0.3) parts(b.x,b.y,1,['#ffd76a','#fff'],20,0.25);
@@ -1467,7 +1598,7 @@ function pickupsUpdate(dt){
     }
     if(d<16){
       gm.dead=true;
-      p.xp+=gm.v;
+      p.xp+=gm.v*(1+0.12*p.ps.growth);   // ラーニングピアス
       S.gem();
       parts(p.x,p.y-14,3,['#8fd3ff','#fff'],70,0.3);
       maybeLevelup();
@@ -1508,7 +1639,12 @@ function openChest(){
   parts(p.x,p.y-10,20,['#ffd76a','#fff','#8fd3ff'],180,0.7);
   const evos=readyEvos();
   if(evos.length){ applyUpg('EVO:'+evos[0]); return; }
-  const avail=Object.keys(UPG).filter(k=>curLv(k)<UPG[k].max);
+  const wpCount=Object.values(p.wp).filter(v=>v>0).length;
+  const avail=Object.keys(UPG).filter(k=>{
+    if(curLv(k)>=UPG[k].max) return false;
+    if(UPG[k].kind==='wp' && curLv(k)===0 && wpCount>=4) return false;   // 武器枠は4つまで
+    return true;
+  });
   if(avail.length){
     const k=pickRand(avail);
     applyUpg(k);
@@ -1534,6 +1670,7 @@ function canPlay(id, formId){
   if(!slot) return {ok:false};
   if(slot.cdT>0) return {ok:false, why:'cd'};
   if(MONSTERS[id].boss && B.bossUsed) return {ok:false, why:'boss'};
+  if(B.enemies.length>=BAL.FIELD_CAP) return {ok:false, why:'cap'};
   const cost=playCost(id,formId);
   if(B.en<cost) return {ok:false, why:'en'};
   return {ok:true, cost};
@@ -1560,21 +1697,30 @@ function playCard(id, formId){
     return true;
   }
 
+  // ==== 物量ボーナスはカードの練度で解放される ====
+  // Lv1=乗らない / Lv2=半分 / Lv3+=フル。「研究所で群れ運用を覚える」
+  const clv=(META.cards[id]&&META.cards[id].lv)||1;
+  const pscale=Math.min(1,(clv-1)/2);
   // コンボ: 同じカードを窓内に重ねるほど、召喚が強く・多くなる
   const cb=B.combo[id];
   const comboN=(cb && B.time-cb.t<=BAL.COMBO_WINDOW)?Math.min(BAL.COMBO_MAX,cb.n+1):1;
   B.combo[id]={n:comboN, t:B.time};
   B.lastPlay={id, t:B.time};
-  const comboMult=1+BAL.COMBO_STAT*(comboN-1);
-  const comboExtra=Math.floor((comboN-1)/BAL.COMBO_UNIT_PER);
+  const comboMult=1+BAL.COMBO_STAT*(comboN-1)*pscale;
   if(comboN>=2){
     floatTxt(p.x, p.y-92, 'コンボ×'+comboN+'!', '#ffd76a', 12, 1.2);
     sfx(420+60*comboN, 700, 0.12, 'triangle', 0.05);
   }
-  // 夜の深まり: 彼女のLvに応じて多数陣形の頭数も増える
-  const nightExtra=Math.min(3, Math.floor(p.level/BAL.NIGHT_UNIT_LV));
+  // 夜の深まり: 彼女のLvに応じて多数陣形の頭数も増える(こちらも練度でスケール)
+  const comboExtra=Math.floor((comboN-1)/BAL.COMBO_UNIT_PER);
+  const nightExtra=Math.min(BAL.NIGHT_UNIT_MAX, Math.floor(p.level/BAL.NIGHT_UNIT_LV));
+  const extra=Math.floor((comboExtra+nightExtra)*pscale);
   const multi=(formId==='scatter'||formId==='wave'||formId==='ring'||formId==='ambush');
-  const n=f.count+(multi?comboExtra+nightExtra:0);
+  const m0=MONSTERS[id];
+  // solo(小淫魔/ガス玉)は数が増えない。swarm持ち(鈍足の群れ)は頭数が倍化する(Lv2+)
+  const sw=(m0.swarm||1)>1 && clv>=2 ? m0.swarm : 1;
+  let n=f.count;
+  if(!m0.solo && multi) n=Math.ceil((f.count+extra)*sw);
   const per=cost/n;
   const so={enVal:per, mult:comboMult};
 
@@ -1707,7 +1853,7 @@ function autoDirector(dt){
   // 6) ボス: 中盤以降・EN潤沢・彼女が万全でないとき
   for(const slot of B.hand){
     if(!MONSTERS[slot.id].boss) continue;
-    if(B.time>70 && B.time<150 && (hpRatio<0.8||stamRatio<0.6) && ready(slot.id,'scatter') && B.en>playCost(slot.id,'scatter')+8){
+    if(B.time>90 && B.time<BAL.RUN_TIME-60 && (hpRatio<0.8||stamRatio<0.6) && ready(slot.id,'scatter') && B.en>playCost(slot.id,'scatter')+8){
       playCard(slot.id,'scatter'); return;
     }
   }
@@ -1753,11 +1899,18 @@ function battleTick(dt){
   if(p.bubbleT>0) p.bubbleT-=dt;
   if(p.bubbleCd>0) p.bubbleCd-=dt;
   if(p.novaAnim>0) p.novaAnim-=dt;
+  if(p.whipAnim>0) p.whipAnim-=dt;
   p.hp=Math.min(p.maxHp,p.hp+p.regen*dt);   // 清廉のご加護
 
   condTick(p,dt);
   if(p.pinned){ pinTick(dt); if(G.mode!=='battle') return; }
   else if(p.charmBind){ charmBindTick(dt); if(G.mode!=='battle') return; }
+  // 小淫魔: 近くの数を数える(集中低下)が、快感を注げるのは同時2体まで
+  B.frameImp=0;
+  p.teaseN=0;
+  for(const e of B.enemies){
+    if(!e.dead&&e.id==='imp'&&Math.hypot(e.x-p.x,e.y-p.y)<120) p.teaseN++;
+  }
   aiUpdate(dt);
   weaponsUpdate(dt);
   bulletsUpdate(dt);

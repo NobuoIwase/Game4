@@ -156,12 +156,12 @@ const UI={
     const wipeArmed=this._wipeArm && performance.now()-this._wipeArm<3000;
     return `
       <h1>ルミナ・サバイバーズ</h1>
-      <div class="sub">v0.4.1 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
+      <div class="sub">v0.5 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
       <p>あなたは<b>夜側の指揮者</b>。デッキから魔物を差し向け、AIで戦う光の少女<b>「ルミナ」</b>を追い詰める。<br>
       彼女に魔物が倒されるほどあなたのエネルギーとエッセンスは増え、彼女もまた強くなる。</p>
       <div style="text-align:center;color:var(--gold);font-size:12px;margin-bottom:8px">${esc(best)} ・ 通算${META.runs}戦 / 捕獲${META.captures}回</div>
       <div class="menu-grid">
-        <button data-act="battle">▶ 出撃<small>3分間の観測戦闘</small></button>
+        <button data-act="battle">▶ 出撃<small>5分間の観測戦闘</small></button>
         <button class="sub" data-act="go" data-arg="deck">🃏 デッキ編成<small>${META.deck.length}/6 枚</small></button>
         <button class="sub" data-act="go" data-arg="lab">✦ 研究所<small>解放・強化・融合・陣形</small></button>
         <button class="sub" data-act="go" data-arg="altar">◉ オーブの祭壇<small>ルミナの初期状態を書き換える</small></button>

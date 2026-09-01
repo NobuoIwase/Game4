@@ -1010,12 +1010,19 @@ function drawHUD(g){
   g.fillText(fmt(B.time), W/2, 26);
   g.shadowBlur=0;
   g.font='9px '+FONT; g.fillStyle='rgba(190,200,240,0.75)';
-  g.fillText('/ 3:00 まで生存でルミナの勝利', W/2, 42);
+  g.fillText('/ '+fmt(BAL.RUN_TIME)+' まで生存でルミナの勝利', W/2, 42);
   // 右上
   g.textAlign='right'; g.font='bold 13px '+FONT; g.fillStyle='#ffd76a';
   g.fillText('被撃破 '+B.kills, W-16, 24);
   g.font='10px '+FONT; g.fillStyle='rgba(200,180,255,0.8)';
   g.fillText('第'+genNum(META.gen.idx)+'世代 / 戦歴'+(META.gen.battle+1)+'/'+BAL.GEN_LEN, W-16, 42);
+  // 夜の深まり(彼女のLv連動の夜側強化)
+  const nStat=Math.round(Math.min(BAL.NIGHT_STAT_CAP, BAL.NIGHT_STAT_LV*Math.max(0,p.level-1))*100);
+  const nUnit=Math.min(BAL.NIGHT_UNIT_MAX, Math.floor(p.level/BAL.NIGHT_UNIT_LV));
+  if(nStat>0||nUnit>0){
+    g.fillStyle='rgba(196,140,255,0.9)'; g.font='bold 10px '+FONT;
+    g.fillText('夜の深まり +'+nStat+'%'+(nUnit>0?' / +'+nUnit+'体':''), W-16, 58);
+  }
   // ボスHP
   const boss=B.enemies.find(e=>e.boss);
   if(boss){
@@ -1075,7 +1082,7 @@ function drawHUD(g){
   g.font='9px '+FONT; g.fillStyle='rgba(130,140,180,0.55)'; g.textAlign='left';
   g.fillText('enemies:'+B.enemies.length+' fps:'+Math.round(G.fps)+(TS>1?' x'+TS:''), 12, H-6);
   g.textAlign='right'; g.fillStyle='rgba(255,255,255,0.3)'; g.font='bold 10px '+FONT;
-  g.fillText('v0.4.1 侵蝕デッキ', W-12, H-6);
+  g.fillText('v0.5 侵蝕デッキ', W-12, H-6);
 }
 function drawCards(g){
   const B=G.B, c=B.lvCards; if(!c) return;
@@ -1154,6 +1161,51 @@ function drawUpgIcon(g,k,x,y){
     g.strokeStyle='#e9e6fa'; g.lineWidth=6;
     g.beginPath(); g.moveTo(-12,-2); g.lineTo(-12,4); g.stroke();
     g.beginPath(); g.moveTo(12,-2); g.lineTo(12,4); g.stroke();
+  }else if(id==='whip'||id==='srush'){
+    g.strokeStyle=id==='srush'?'#ffb3cf':'#ffe3f0'; g.lineWidth=4; g.lineCap='round';
+    g.shadowColor='#ff9ec2'; g.shadowBlur=8;
+    g.beginPath(); g.moveTo(-12,8);
+    g.quadraticCurveTo(-2,-14, 12,-6);
+    g.stroke();
+    if(id==='srush'){ g.globalAlpha=0.5; g.beginPath(); g.arc(0,0,14,0,TAU); g.stroke(); }
+  }else if(id==='rain'||id==='scomet'){
+    g.shadowColor='#8fd3ff'; g.shadowBlur=8;
+    for(const [ox,oy,r0] of (id==='scomet'?[[-8,-2,4],[4,-8,5.5],[9,6,3.5]]:[[-6,-4,4],[7,3,5]])){
+      g.strokeStyle='rgba(143,211,255,0.5)'; g.lineWidth=1.8;
+      g.beginPath(); g.moveTo(ox,oy-12); g.lineTo(ox,oy-4); g.stroke();
+      g.fillStyle='#e8f4ff';
+      star(g,ox,oy,r0+1.5,r0*0.45,4,0.4); g.fill();
+    }
+  }else if(id==='cross'||id==='sjudge'){
+    g.shadowColor='#fff3c4'; g.shadowBlur=9;
+    g.strokeStyle='#fff6d8'; g.lineWidth=id==='sjudge'?6:4.5; g.lineCap='round';
+    const L=id==='sjudge'?13:10;
+    g.beginPath(); g.moveTo(-L,0); g.lineTo(L,0); g.stroke();
+    g.beginPath(); g.moveTo(0,-L); g.lineTo(0,L); g.stroke();
+  }else if(id==='haste'){
+    g.strokeStyle='#ffb3cf'; g.lineWidth=3.4; g.lineCap='round';
+    g.beginPath(); g.moveTo(-10,-6); g.quadraticCurveTo(0,-12,10,-6); g.stroke();
+    g.beginPath(); g.moveTo(-10,2); g.quadraticCurveTo(0,-4,10,2); g.stroke();
+    g.beginPath(); g.moveTo(-10,10); g.quadraticCurveTo(0,4,10,10); g.stroke();
+  }else if(id==='ward'){
+    g.fillStyle='rgba(143,211,255,0.25)';
+    g.strokeStyle='#8fd3ff'; g.lineWidth=2.6; g.lineJoin='round';
+    g.beginPath();
+    g.moveTo(0,-12); g.lineTo(10,-7); g.lineTo(10,3);
+    g.quadraticCurveTo(10,10,0,13);
+    g.quadraticCurveTo(-10,10,-10,3);
+    g.lineTo(-10,-7); g.closePath();
+    g.fill(); g.stroke();
+  }else if(id==='growth'){
+    g.shadowColor='#7ee89a'; g.shadowBlur=8;
+    g.fillStyle='#8fd3ff';
+    g.save(); g.rotate(Math.PI/4);
+    g.fillRect(-5,-5,10,10);
+    g.restore();
+    g.strokeStyle='#7ee89a'; g.lineWidth=2.4; g.lineCap='round';
+    g.beginPath(); g.moveTo(6,-6); g.lineTo(12,-12); g.stroke();
+    g.beginPath(); g.moveTo(12,-12); g.lineTo(7,-12); g.stroke();
+    g.beginPath(); g.moveTo(12,-12); g.lineTo(12,-7); g.stroke();
   }
   g.restore();
 }
@@ -1260,13 +1312,48 @@ function draw(){
     for(const b of B.bullets){
       g.save();
       g.translate(b.x,b.y);
-      g.rotate(Math.atan2(b.vy,b.vx));
-      g.strokeStyle=b.evo?'rgba(180,220,255,0.6)':'rgba(255,215,106,0.5)'; g.lineWidth=2; g.lineCap='round';
-      g.beginPath(); g.moveTo(-12,0); g.lineTo(-3,0); g.stroke();
-      g.shadowColor=b.evo?'#8fd3ff':'#ffd76a'; g.shadowBlur=9;
-      g.fillStyle=b.evo?'#e8f4ff':'#fff6d8';
-      star(g,0,0,5.5,2.3,b.evo?5:4,performance.now()*0.02);
-      g.fill();
+      if(b.kind==='rain'){
+        // 落下する流れ星(縦の尾)
+        g.strokeStyle='rgba(143,211,255,0.55)'; g.lineWidth=2; g.lineCap='round';
+        g.beginPath(); g.moveTo(0,-26); g.lineTo(0,-6); g.stroke();
+        g.shadowColor='#8fd3ff'; g.shadowBlur=9;
+        g.fillStyle='#e8f4ff';
+        star(g,0,0,b.evo?6.5:5,2.3,4,performance.now()*0.02);
+        g.fill();
+      }else if(b.kind==='cross'){
+        // 高速回転する光の十字
+        g.rotate(performance.now()*0.02);
+        g.shadowColor='#fff3c4'; g.shadowBlur=10;
+        g.strokeStyle=b.evo?'#ffe9a8':'#fff6d8'; g.lineWidth=b.evo?5:3.6; g.lineCap='round';
+        const L=b.evo?13:9;
+        g.beginPath(); g.moveTo(-L,0); g.lineTo(L,0); g.stroke();
+        g.beginPath(); g.moveTo(0,-L); g.lineTo(0,L); g.stroke();
+      }else{
+        g.rotate(Math.atan2(b.vy,b.vx));
+        g.strokeStyle=b.evo?'rgba(180,220,255,0.6)':'rgba(255,215,106,0.5)'; g.lineWidth=2; g.lineCap='round';
+        g.beginPath(); g.moveTo(-12,0); g.lineTo(-3,0); g.stroke();
+        g.shadowColor=b.evo?'#8fd3ff':'#ffd76a'; g.shadowBlur=9;
+        g.fillStyle=b.evo?'#e8f4ff':'#fff6d8';
+        star(g,0,0,5.5,2.3,b.evo?5:4,performance.now()*0.02);
+        g.fill();
+      }
+      g.restore();
+    }
+    // プリズムウィップの薙ぎ(残像)
+    if(p.whipAnim>0){
+      const pr2=clamp(p.whipAnim/0.16,0,1);
+      g.save();
+      g.globalAlpha=pr2*0.75;
+      g.strokeStyle='#ffe3f0'; g.lineWidth=5; g.lineCap='round';
+      g.shadowColor='#ff9ec2'; g.shadowBlur=12;
+      if(p.whipDir===0){
+        g.beginPath(); g.arc(p.x,p.y-10,p.whipR*(1.05-pr2*0.25),0,TAU); g.stroke();
+      }else{
+        const sweep=(1-pr2)*1.9-0.95;
+        g.beginPath();
+        g.arc(p.x,p.y-10,p.whipR*0.92, p.whipDir>0?sweep-0.5:Math.PI+sweep-0.5, p.whipDir>0?sweep+0.5:Math.PI+sweep+0.5);
+        g.stroke();
+      }
       g.restore();
     }
   }else{
