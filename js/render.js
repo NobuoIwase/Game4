@@ -1191,7 +1191,7 @@ function drawHUD(g){
   g.font='9px '+FONT; g.fillStyle='rgba(130,140,180,0.55)'; g.textAlign='left';
   g.fillText('enemies:'+B.enemies.length+' fps:'+Math.round(G.fps)+(TS>1?' x'+TS:''), 12, H-6);
   g.textAlign='right'; g.fillStyle='rgba(255,255,255,0.3)'; g.font='bold 10px '+FONT;
-  g.fillText('v0.8 侵蝕デッキ', W-12, H-6);
+  g.fillText('v0.9 侵蝕デッキ', W-12, H-6);
 }
 function drawCards(g){
   const B=G.B, c=B.lvCards; if(!c) return;
@@ -1372,7 +1372,7 @@ function draw(){
     // オーブ
     if(p.wp.orb>0){
       const evo=p.evo.sring>0;
-      const R=(evo?66:52)+3*Math.max(1,p.wp.orb);
+      const R=(evo?70:56)+4*Math.max(1,p.wp.orb);
       g.strokeStyle='rgba(255,235,170,0.15)'; g.lineWidth=1;
       g.beginPath(); g.ellipse(p.x,p.y-10,R,R*0.9,0,0,TAU); g.stroke();
       for(let i=0;i<p.wp.orb;i++){

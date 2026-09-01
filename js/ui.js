@@ -108,6 +108,17 @@ const UI={
         }else S.deny();
         this.show('altar'); break;
       }
+      case 'shave':{
+        const r=luminaRank(arg);
+        const cost=shaveCost(r);
+        if(r>0 && META.orbs>=cost){
+          META.orbs-=cost;
+          META.lumina.upg[arg]=r-1;
+          saveMeta(); S.altar();
+          setBanner('加護を削いだ', LUMINA_UPG[arg].name+' '+(r-1>0?genNum(r-1):'消滅'), '#ffd76a');
+        }else S.deny();
+        this.show('altar'); break;
+      }
       case 'autoDefault':
         META.settings.autoplay=!META.settings.autoplay; saveMeta();
         this.show('home'); break;
@@ -164,7 +175,7 @@ const UI={
     const wipeArmed=this._wipeArm && performance.now()-this._wipeArm<3000;
     return `
       <h1>ルミナ・サバイバーズ</h1>
-      <div class="sub">v0.8 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
+      <div class="sub">v0.9 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
       <p>あなたは<b>夜側の指揮者</b>。デッキから魔物を差し向け、AIで戦う光の少女<b>「ルミナ」</b>を追い詰める。<br>
       彼女に魔物が倒されるほどあなたのエネルギーとエッセンスは増え、彼女もまた強くなる。</p>
       <div style="text-align:center;color:var(--gold);font-size:12px;margin-bottom:8px">${esc(best)} ・ 通算${META.runs}戦 / 捕獲${META.captures}回</div>
@@ -273,7 +284,7 @@ const UI={
   },
 
   htmlAltar(){
-    const rows=ALTAR.map(a=>{
+    const row=a=>{
       const lv=altarLv(a.id);
       const atMax=lv>=a.max;
       const cost=atMax?0:a.costs[lv];
@@ -284,12 +295,29 @@ const UI={
         ${atMax?'<span style="color:var(--vio);font-size:11px">極まった</span>'
           :`<button class="sub" data-act="altar" data-arg="${a.id}" ${META.orbs<cost?'disabled':''}>◉${cost}</button>`}
       </div>`;
+    };
+    const heroRows=ALTAR.filter(a=>!a.side).map(row).join('');
+    const nightRows=ALTAR.filter(a=>a.side==='night').map(row).join('');
+    const shaveRows=Object.keys(LUMINA_UPG).map(id=>{
+      const r=luminaRank(id);
+      const cost=shaveCost(r);
+      return `<div class="lrow">
+        <div class="info"><div class="nm">${esc(LUMINA_UPG[id].name)} <b style="color:var(--gold)">${r?genNum(r):'—'}</b><span style="color:var(--dim)">/${LUMINA_UPG[id].max}</span></div>
+        <div class="ds">${esc(LUMINA_UPG[id].fx)} を彼女は積んでいる</div></div>
+        ${r>0?`<button class="sub" data-act="shave" data-arg="${id}" ${META.orbs<cost?'disabled':''}>削ぐ ◉${cost}</button>`
+          :'<span style="color:var(--dim);font-size:11px">なし</span>'}
+      </div>`;
     }).join('');
     return `
       <h2>◉ オーブの祭壇 <span style="font-size:12px;color:var(--vio)">オーブ ${Math.floor(META.orbs)}</span></h2>
-      <p style="font-size:11.5px">攻撃・状態異常・捕獲で得たオーブを捧げ、<b>ルミナの初期状態そのもの</b>を書き換える。<br>
-      書き換えは<b>世代リセット後も残り続ける</b>、唯一の爪痕。</p>
-      <div class="list">${rows}</div>
+      <p style="font-size:11.5px">攻撃・状態異常・捕獲で得たオーブを捧げる。<b>すべて世代リセット後も残り続ける</b>。</p>
+      <h3 style="color:var(--vio)">ルミナの初期状態を書き換える</h3>
+      <div class="list">${heroRows}</div>
+      <h3 style="color:var(--pink);margin-top:14px">夜側の軍備</h3>
+      <div class="list">${nightRows}</div>
+      <h3 style="color:var(--gold);margin-top:14px">ルミナの自己強化を削ぐ <span style="font-size:11px;color:var(--dim);font-weight:normal">(彼女がコインで積んだ強化を1段引き剥がす)</span></h3>
+      <div class="note" style="margin:2px 0 6px">彼女の貯えコイン: ${Math.floor((META.lumina&&META.lumina.coins)||0)} — 夜明けごとに自動で買い足してくるので、削ぎ続けるか元を断つかはあなた次第。</div>
+      <div class="list">${shaveRows}</div>
       <div class="row"><button data-act="go" data-arg="home">← もどる</button></div>`;
   },
 
@@ -429,7 +457,7 @@ const UI={
       const el=document.createElement('div');
       el.className='hcard';
       el.dataset.id=slot.id;
-      el.innerHTML=`<div class="cost"></div><div class="combo" hidden></div><div class="nm">${esc(m.name)}</div><div class="cd" style="height:0%"></div>`;
+      el.innerHTML=`<div class="cost"></div><div class="combo" hidden></div><div class="cnt"></div><div class="nm">${esc(m.name)}</div><div class="cd" style="height:0%"></div>`;
       el.insertBefore(makeIconCanvas(slot.id,44), el.firstChild);
       row.appendChild(el);
     }
@@ -449,6 +477,13 @@ const UI={
       const f=FORMATIONS[fid];
       return `<div class="fchip ${fid===this.selForm?'sel':''}" data-id="${fid}">${esc(f.name)} <span class="fc">×${f.count}</span></div>`;
     }).join('');
+  },
+  /* 陣形の実効頭数(基礎+夜の深まり+軍団旗)。ヒロインLvで×4→×8のように育つ */
+  formLiveCount(fid){
+    const f=FORMATIONS[fid];
+    if(fid==='single'||!G.B) return f.count;
+    const night=Math.min(BAL.NIGHT_UNIT_MAX, Math.floor(G.B.hero.level/BAL.NIGHT_UNIT_LV));
+    return f.count+night+altarLv('legion');
   },
   syncBattleButtons(){
     if(!G.B) return;
@@ -474,6 +509,14 @@ const UI={
       const on=!!(cb && B.time-cb.t<=BAL.COMBO_WINDOW && cb.n>=2);
       cEl.hidden=!on;
       if(on) cEl.textContent='×'+cb.n;
+      // 次に出したときの召喚数(コンボ・夜の深まり込み)
+      const nextCombo=(cb && B.time-cb.t<=BAL.COMBO_WINDOW)?Math.min(BAL.COMBO_MAX,cb.n+1):1;
+      el.querySelector('.cnt').textContent=MONSTERS[id].boss?'':spawnCountFor(id,this.selForm,nextCombo)+'体';
+    }
+    // 陣形チップの実効頭数(彼女のLvで育つ)
+    for(const fEl of $('formrow').children){
+      const fc=fEl.querySelector('.fc');
+      if(fc) fc.textContent='×'+this.formLiveCount(fEl.dataset.id);
     }
   },
 };

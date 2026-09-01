@@ -149,7 +149,7 @@ function startBattle(){
   UI.enterBattle();
   bgmStart('battle');
 }
-function enMax(){ return Math.min(BAL.EN_MAX, BAL.EN_BASE + BAL.EN_PER_LV*(G.B?G.B.hero.level:1)); }
+function enMax(){ return Math.min(BAL.EN_MAX, BAL.EN_BASE + 6*altarLv('encap') + BAL.EN_PER_LV*(G.B?G.B.hero.level:1)); }
 
 function endBattle(outcome){
   const B=G.B;
@@ -1002,14 +1002,14 @@ function weaponsUpdate(dt){
     if(p.boltT<=0){
       const evo=p.evo.sstar>0;
       const lv=p.wp.bolt;
-      const shots=evo?6:Math.min(4,1+Math.floor(lv/2));
+      const shots=evo?7:Math.min(5,1+Math.ceil(lv*0.8));   // 手数で強くなる
       // 回復が要るときは燭台を狙う
       const wantProp=p.propTarget && !p.propTarget.dead &&
         (p.hp<p.maxHp*0.55 || nearestEnemies(1,300).length===0);
       if(wantProp){
         const t=p.propTarget;
         const d=Math.hypot(t.x-p.x,t.y-p.y);
-        if(d<460 && B.bullets.length<90){
+        if(d<460 && B.bullets.length<150){
           p.boltT=0.55;
           const a=Math.atan2((t.y-10)-(p.y-14), t.x-p.x);
           B.bullets.push({x:p.x,y:p.y-14,vx:Math.cos(a)*460,vy:Math.sin(a)*460,
@@ -1019,8 +1019,8 @@ function weaponsUpdate(dt){
         }else p.boltT=0.15;
       }else{
         const ts=nearestEnemies(shots,evo?640:560);
-        if(ts.length && B.bullets.length<90){
-          p.boltT=(evo?0.62:0.8)*Math.pow(0.87,lv-1);
+        if(ts.length && B.bullets.length<150){
+          p.boltT=(evo?0.55:0.7)*Math.pow(0.87,lv-1);
           for(let i=0;i<shots;i++){
             const t=ts[Math.min(i,ts.length-1)];
             const dx=t.x-p.x, dy=(t.y-t.r)-(p.y-14);
@@ -1043,8 +1043,8 @@ function weaponsUpdate(dt){
     if(p.novaT<=0){
       const evo=p.evo.sburst>0;
       const lv=p.wp.nova;
-      p.novaT=(evo?4.2:4.6)-0.35*(lv-1);
-      const R=(evo?165:90+16*(lv-1)), dmg=(evo?34:16+7*(lv-1));
+      p.novaT=(evo?4.0:4.3)-0.4*(lv-1);
+      const R=(evo?180:100+20*(lv-1)), dmg=(evo?34:16+7*(lv-1));
       p.novaAnim=0.5; p.novaR=R;
       G.shake=Math.min(7,G.shake+3);
       S.nova();
@@ -1069,9 +1069,9 @@ function weaponsUpdate(dt){
     p.whipT-=dt*atkMult;
     if(p.whipT<=0){
       const evo=p.evo.srush>0, lv=p.wp.whip;
-      p.whipT=(evo?0.72:1.12)*Math.pow(0.9,lv-1);
+      p.whipT=(evo?0.65:1.0)*Math.pow(0.9,lv-1);
       p.whipSide*=-1;
-      const range=evo?150:95+9*lv, half=evo?150:40+4*lv;
+      const range=evo?165:105+11*lv, half=evo?165:46+5*lv;
       const dmg=evo?22:10+4*(lv-1);
       p.whipAnim=0.16;
       p.whipDir=evo?0:(p.whipSide>0?p.face:-p.face);   // 0=全方位
@@ -1099,16 +1099,16 @@ function weaponsUpdate(dt){
     if(p.rainT<=0){
       const evo=p.evo.scomet>0, lv=p.wp.rain;
       p.rainT=(evo?1.5:2.3)*Math.pow(0.88,lv-1);
-      const drops=evo?5:1+Math.floor(lv/2);
+      const drops=evo?6:1+Math.ceil(lv/2);
       const ts=nearestEnemies(drops*2,540);
       let fired=false;
       for(let i=0;i<drops;i++){
         const t=ts.length?ts[(Math.random()*ts.length)|0]:null;
         if(!t) break;
         const tx=t.x+rand(-26,26), ty=t.y+rand(-16,16);
-        if(B.bullets.length<120){
+        if(B.bullets.length<170){
           B.bullets.push({kind:'rain', x:tx+rand(-40,40), y:ty-300, tx, ty,
-            vx:0, vy:540, dmg:evo?26:12+5*(lv-1), splash:evo?70:42, life:1.0, last:null, evo});
+            vx:0, vy:540, dmg:evo?26:12+5*(lv-1), splash:evo?76:48, life:1.0, last:null, evo});
           fired=true;
         }
       }
@@ -1122,8 +1122,8 @@ function weaponsUpdate(dt){
     if(p.crossT<=0){
       const evo=p.evo.sjudge>0, lv=p.wp.cross;
       const ts=nearestEnemies(1,500);
-      if(ts.length && B.bullets.length<120){
-        p.crossT=(evo?1.4:1.9)*Math.pow(0.9,lv-1);
+      if(ts.length && B.bullets.length<170){
+        p.crossT=(evo?1.3:1.7)*Math.pow(0.9,lv-1);
         const a=Math.atan2((ts[0].y-ts[0].r)-(p.y-12), ts[0].x-p.x);
         const sp=evo?430:360;
         B.bullets.push({kind:'cross', x:p.x, y:p.y-12, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp,
@@ -1137,7 +1137,7 @@ function weaponsUpdate(dt){
 function orbPos(i,n){
   const p=G.B.hero;
   const evo=p.evo.sring>0;
-  const R=(evo?66:52)+3*Math.max(1,p.wp.orb);
+  const R=(evo?70:56)+4*Math.max(1,p.wp.orb);
   const a=p.orbAng + i*TAU/n;
   return {x:p.x+Math.cos(a)*R, y:p.y-10+Math.sin(a)*R*0.9};
 }
@@ -1235,12 +1235,14 @@ function spawnUnit(id, x, y, o){
   const heroLv=(B.hero&&B.hero.level)||1;
   const nscale=Math.min(1,(d.lv-1)/2);
   const night=MONSTERS[id].boss?1:1+Math.min(BAL.NIGHT_STAT_CAP, BAL.NIGHT_STAT_LV*Math.max(0,heroLv-1))*nscale;
+  const flesh=1+0.10*altarLv('mhp');           // 魔性の肉(オーブ・HPのみ)
   const pm=(o.mult||1)*night;
   const u={
     id, x, y,
-    hp:d.hp*elite*pm, maxHp:d.hp*elite*pm, spd:MONSTERS[id].spd, r:MONSTERS[id].r*(elite>1?1.2:1),
+    hp:d.hp*elite*pm*flesh, maxHp:d.hp*elite*pm*flesh, spd:MONSTERS[id].spd, r:MONSTERS[id].r*(elite>1?1.2:1),
     dmg:d.dmg*elite*pm, xp:Math.round(MONSTERS[id].xp*(1+0.1*(d.lv-1))*(elite>1?1.6:1)),
-    enVal:o.enVal||0, boss:!!MONSTERS[id].boss, lv:d.lv, elite:elite>1,
+    enVal:o.enVal||0, gemMul:o.gemMul!==undefined?o.gemMul:1,
+    boss:!!MONSTERS[id].boss, lv:d.lv, elite:elite>1,
     t:rand(10), joff:rand(TAU), hitFlash:0, orbCd:0, stun:0, dead:false,
     dormant:!!o.dormant, dormT:0, state:'chase', limb:null, seenT:0,
   };
@@ -1309,12 +1311,14 @@ function killEnemy(e){
     G.shake=Math.min(10,G.shake+7);
     S.clear();
   }else{
-    dropGem(e.x,e.y,Math.max(1,Math.round(e.xp*0.8)));
+    const gv=Math.round(e.xp*0.8*(e.gemMul!==undefined?e.gemMul:1));
+    if(gv>0) dropGem(e.x,e.y,gv);
+    else if(Math.random()<0.3) dropGem(e.x,e.y,1);   // チャフはたまにしか光らない
   }
 }
 function dropGem(x,y,v){
   const B=G.B;
-  if(B.gems.length>220){ B.gems[(Math.random()*B.gems.length)|0].v+=v; return; }
+  if(B.gems.length>320){ B.gems[(Math.random()*B.gems.length)|0].v+=v; return; }
   B.gems.push({x,y,v,t:rand(10),sp:0});
 }
 function spawnCloud(x,y,r,life,rate){
@@ -1414,7 +1418,7 @@ function enemiesUpdate(dt){
       const n=p.wp.orb;
       for(let i=0;i<n;i++){
         const o=orbPos(i,n);
-        if(Math.hypot(e.x-o.x,(e.y-e.r)-o.y)<e.r+(evo?13:9)){
+        if(Math.hypot(e.x-o.x,(e.y-e.r)-o.y)<e.r+(evo?14:11)){
           damageEnemy(e,(evo?16:11+4*(p.wp.orb-1)));
           if(evo) p.hp=Math.min(p.maxHp,p.hp+1);
           e.orbCd=0.4;
@@ -1812,6 +1816,23 @@ function openChest(){
 
 /* ================= カードプレイ(プレイヤー側) ================= */
 function handSlot(id){ return G.B.hand.find(h=>h.id===id); }
+/* 1キャストの頭数(コンボ・夜の深まり・練度・群れ倍化・軍団旗を全部込みで) */
+function spawnCountFor(id, formId, comboN){
+  const B=G.B, f=FORMATIONS[formId], m0=MONSTERS[id];
+  if(m0.boss) return 1;
+  if(m0.solo) return Math.min(f.count,4);   // solo(小淫魔/ガス玉)は最大4体まで
+  const multi=(formId!=='single');
+  if(!multi) return f.count;
+  const clv=(META.cards[id]&&META.cards[id].lv)||1;
+  const pscale=Math.min(1,(clv-1)/2);
+  const comboExtra=Math.floor(((comboN||1)-1)/BAL.COMBO_UNIT_PER);
+  const nightExtra=Math.min(BAL.NIGHT_UNIT_MAX, Math.floor(B.hero.level/BAL.NIGHT_UNIT_LV));
+  const lvExtra=Math.floor((clv-1)/2);
+  const legion=altarLv('legion');              // 夜の軍団旗(オーブ・永続)
+  const extra=Math.floor((comboExtra+nightExtra)*pscale)+lvExtra+legion;
+  const sw=(m0.swarm||1)>1 && clv>=2 ? m0.swarm : 1;
+  return Math.ceil((f.count+extra)*sw);
+}
 function playCost(id, formId){
   const lv=(META.cards[id]&&META.cards[id].lv)||1;
   const f=FORMATIONS[formId];
@@ -1837,7 +1858,7 @@ function playCard(id, formId){
   const p=B.hero, f=FORMATIONS[formId], cost=chk.cost;
   B.en-=cost;
   const slot=handSlot(id);
-  slot.cdMax=BAL.CARD_CD_BASE+cost*BAL.CARD_CD_COST;
+  slot.cdMax=(BAL.CARD_CD_BASE+cost*BAL.CARD_CD_COST)*(1-0.12*altarLv('cdcut'));
   slot.cdT=slot.cdMax;
   S.summon();
 
@@ -1866,19 +1887,12 @@ function playCard(id, formId){
     floatTxt(p.x, p.y-92, 'コンボ×'+comboN+'!', '#ffd76a', 12, 1.2);
     sfx(420+60*comboN, 700, 0.12, 'triangle', 0.05);
   }
-  // 夜の深まり: 彼女のLvに応じて多数陣形の頭数も増える(こちらも練度でスケール)
-  const comboExtra=Math.floor((comboN-1)/BAL.COMBO_UNIT_PER);
-  const nightExtra=Math.min(BAL.NIGHT_UNIT_MAX, Math.floor(p.level/BAL.NIGHT_UNIT_LV));
-  const extra=Math.floor((comboExtra+nightExtra)*pscale);
-  const multi=(formId==='scatter'||formId==='wave'||formId==='ring'||formId==='ambush');
-  const m0=MONSTERS[id];
-  // solo(小淫魔/ガス玉)は数が増えない。swarm持ち(鈍足の群れ)は頭数が倍化する(Lv2+)
-  const sw=(m0.swarm||1)>1 && clv>=2 ? m0.swarm : 1;
-  const lvExtra=Math.floor((clv-1)/2);   // カードLvは頭数で強くなる(Lv3:+1 / Lv5:+2)
-  let n=f.count;
-  if(!m0.solo && multi) n=Math.ceil((f.count+extra+lvExtra)*sw);
+  // 頭数はコンボ・夜の深まり・練度・群れ倍化・軍団旗を全部込みで決まる
+  const n=spawnCountFor(id, formId, comboN);
   const per=cost/n;
-  const so={enVal:per, mult:comboMult};
+  // ボーナス頭数ぶんのジェムは薄める——群れの雑魚は彼女の経験値の泉にならない
+  const gemMul=Math.min(1, f.count/n);
+  const so={enVal:per, mult:comboMult, gemMul};
 
   if(formId==='scatter'||formId==='single'){
     for(let i=0;i<n;i++){
@@ -1933,6 +1947,27 @@ function autoDirector(dt){
   const has=id=>B.hand.some(h=>h.id===id);
   const ready=(id,f)=>canPlay(id,f).ok;
 
+  // EN方針: いちばん重いカードを出せるだけの残高は温存しつつ、
+  // 溢れそうなら惜しまず全力で吐き出して画面を埋める
+  const costsArr=B.hand.filter(sl=>!MONSTERS[sl.id].boss).map(sl=>playCost(sl.id,bestForm(['wave','scatter'])));
+  const reserve=costsArr.length?Math.max(...costsArr):0;
+  const flush=B.en>enMax()*0.8;
+
+  // 0) 開幕の物量: 序盤は安い群れを惜しまず撒いて、最初からモンスターまみれにする
+  if(B.time<50 && alive.length<44){
+    let cheap=null, cc=1e9;
+    for(const sl of B.hand){
+      if(MONSTERS[sl.id].boss||MONSTERS[sl.id].solo) continue;
+      const c=playCost(sl.id,'scatter');
+      if(c<cc){ cc=c; cheap=sl.id; }
+    }
+    if(cheap){
+      const f=bestForm(['wave','scatter']);
+      if(ready(cheap,f)){ playCard(cheap,f); return; }
+      if(ready(cheap,'scatter')){ playCard(cheap,'scatter'); return; }
+    }
+  }
+
   // 1) 拘束中・押し倒し中は畳みかける(最大2プレイ)
   if(held){
     let plays=0;
@@ -1958,13 +1993,13 @@ function autoDirector(dt){
     }
   }
 
-  // 3) 拘束役の維持
-  if(binderN===0){
+  // 3) 拘束役の維持(常に4体以上。物量の海でも拘束の圧を絶やさない)
+  if(binderN<4){
     for(const id of ['gtent','worm','flower']){
       if(!has(id)) continue;
-      const f=id==='flower'?bestForm(['ambush','scatter']):bestForm(['single','scatter']);
+      const f=id==='flower'?bestForm(['ambush','scatter']):bestForm(['wave','scatter']);
       const chk=canPlay(id,f);
-      if(chk.ok && B.en>=chk.cost+4){ playCard(id,f); return; }
+      if(chk.ok && B.en>=chk.cost+(binderN===0?0:4)){ playCard(id,f); return; }
     }
   }
 
@@ -2014,19 +2049,24 @@ function autoDirector(dt){
     }
   }
 
-  // 7) EN満杯なら大きく使う(包囲)
-  if(B.en>enMax()*0.9){
-    for(const id of ['ghost','goblin','mistslime','slime','worm','slug']){
+  // 7) ENが溢れそうなら全力放出(1tickで最大4プレイ・半分まで使い切る)
+  if(flush){
+    let plays=0;
+    for(const id of ['gtent','ghost','goblin','mistslime','slime','worm','slug','leech']){
+      if(plays>=4 || B.en<enMax()*0.5) break;
       if(!has(id)) continue;
       const f=bestForm(['ring','wave','scatter']);
-      if(ready(id,f)){ playCard(id,f); return; }
+      if(ready(id,f)){ playCard(id,f); plays++; }
     }
+    if(plays>0) return;
   }
 
-  // 8) 圧が切れているなら安価に補充
-  if(alive.length<5 && B.en>enMax()*0.45){
+  // 8) 圧が切れているなら安価に補充(ただし大物ぶんのENは温存)
+  if(alive.length<10){
     for(const id of ['goblin','slug','worm','ghost','slime']){
-      if(has(id) && ready(id,'scatter')){ playCard(id,'scatter'); return; }
+      if(!has(id)) continue;
+      const chk=canPlay(id,'scatter');
+      if(chk.ok && B.en-chk.cost>=Math.min(reserve*0.7,14)){ playCard(id,'scatter'); return; }
     }
   }
 }
@@ -2079,7 +2119,7 @@ function battleTick(dt){
   pickupsUpdate(dt);
 
   // EN回復
-  B.en=Math.min(enMax(), B.en+(BAL.EN_REGEN+BAL.EN_REGEN_LV*p.level)*dt);
+  B.en=Math.min(enMax(), B.en+(BAL.EN_REGEN+0.12*altarLv('enregen')+BAL.EN_REGEN_LV*p.level)*dt);
   for(const slot of B.hand){ if(slot.cdT>0) slot.cdT-=dt; }
 
   // 燭台の追加出現

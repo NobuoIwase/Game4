@@ -7,11 +7,11 @@
 const BAL={
   RUN_TIME:300,            // 1戦=5分(v0.5で試験延長)
   GEN_LEN:4,               // この戦数ごとにヒロインの経験がリセット
-  FIELD_CAP:180,           // 場に出せる魔物の上限(超えると召喚不可)
-  EN_BASE:12, EN_PER_LV:3, EN_MAX:60,
-  EN_REGEN:0.78, EN_REGEN_LV:0.07,
-  EN_START:10,
-  CARD_CD_BASE:1.5, CARD_CD_COST:0.11,   // カードCD = BASE + コスト×COST
+  FIELD_CAP:260,           // 場に出せる魔物の上限(超えると召喚不可)——画面を埋める
+  EN_BASE:14, EN_PER_LV:3, EN_MAX:80,
+  EN_REGEN:0.9, EN_REGEN_LV:0.08,
+  EN_START:12,
+  CARD_CD_BASE:1.2, CARD_CD_COST:0.09,   // カードCD = BASE + コスト×COST
 
   /* --- ヒロインの視界と思考(v0.4.1: 人間らしさ) --- */
   SIGHT_MARGIN:30,         // 画面端+これだけが視界。外の敵は存在に気づかない
@@ -22,10 +22,10 @@ const BAL={
   DIVE_T:1.7,              // 意を決して入る時間(この間ガス回避を無視)
 
   /* --- コンボ(同一カード連打) --- */
-  COMBO_WINDOW:9,          // この秒数内に同じカードを出すと連鎖
+  COMBO_WINDOW:10,         // この秒数内に同じカードを出すと連鎖
   COMBO_MAX:5,
   COMBO_STAT:0.12,         // 1連鎖ごとの召喚hp/dmgボーナス
-  COMBO_UNIT_PER:2,        // 2連鎖ごとに多数陣形+1体
+  COMBO_UNIT_PER:1,        // 1連鎖ごとに多数陣形+1体(コンボ=数)
 
   /* --- 夜の深まり(ヒロインLv連動で夜側が強くなる) --- */
   NIGHT_UNIT_LV:4,         // 彼女のLvこれごとに多数陣形+1体(最大+4)
@@ -231,6 +231,17 @@ const ALTAR=[
     desc:'集中の芯を曇らせる。判断と反応が僅かに遅れる。', fx:'反応 -12%/段階' },
   { id:'stamina', name:'倦怠の澱', max:3, costs:[14,26,44],
     desc:'身体の芯に疲労を澱ませる。スタミナの上限と回復が落ちる。', fx:'スタミナ上限 -12/段階' },
+  /* --- 夜側の軍備(プレイヤー側の強化) --- */
+  { id:'encap', name:'夜気の器', max:3, costs:[12,24,40], side:'night',
+    desc:'夜の気を蓄える器を広げる。', fx:'EN上限 +6/段階' },
+  { id:'enregen', name:'湧き出る瘴気', max:3, costs:[12,24,40], side:'night',
+    desc:'夜の気の湧きを速める。', fx:'EN回復 +0.12/s/段階' },
+  { id:'cdcut', name:'素早き喚起', max:3, costs:[14,26,44], side:'night',
+    desc:'召喚の詠唱が短くなる。', fx:'カードCD -12%/段階' },
+  { id:'legion', name:'夜の軍団旗', max:2, costs:[20,40], side:'night',
+    desc:'多数陣形の基礎頭数が増える。', fx:'陣形+1体/段階' },
+  { id:'mhp', name:'魔性の肉', max:3, costs:[14,26,44], side:'night',
+    desc:'召喚される魔物の肉体が強靭になる。', fx:'魔物HP +10%/段階' },
 ];
 const altarLv=id=>META.altar[id]||0;
 
@@ -247,6 +258,7 @@ const LUMINA_UPG={
 };
 const luminaUpCost=(id,rank)=>Math.round(LUMINA_UPG[id].base*Math.pow(1.5,rank));
 const luminaRank=id=>((META.lumina&&META.lumina.upg)||{})[id]||0;
+const shaveCost=rank=>Math.round(6+3*rank);   // 自己強化を1段削ぐオーブ費用
 
 /* ---------------- ヒロインの武器/パッシブ ---------------- */
 const UPG={
