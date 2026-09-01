@@ -1057,8 +1057,7 @@ function drawHUD(g){
   const slv=sensLvOf(p);
   if(slv>0) chips.push(['sens','敏感'+ROMANS[slv]]);
   if(p.slow>0) chips.push(['slow','粘液']);
-  const cmx=charmMaxLv(p);
-  if(cmx>0) chips.push(['charm','魅了'+ROMANS[cmx]+(p.charms.length>1?' ×'+p.charms.length:'')]);
+  for(const c of p.charms) chips.push(['charm','魅了'+ROMANS[c.lv]+' '+((MONSTERS[c.id]&&MONSTERS[c.id].name)||c.id)]);
   if(p.exhausted) chips.push(['pinned','疲弊']);
   g.font='bold 10px '+FONT;
   for(const [id,txt] of chips){
@@ -1240,13 +1239,19 @@ function draw(){
       else if(restraintCount(p)>0) drawStruggleRing(g,p);
     }
     if(heatVis>=30) drawHeatFx(g,p.x,p.y,p.anim,heatVis);
-    // 魅了の糸(対象ごと。深いほど濃い)
+    // 魅了の糸(種族ごとに、最寄りの個体へ。深いほど濃い)
     for(const c of p.charms){
-      if(!c.mon||c.mon.dead) continue;
+      let cm=null, cd=1e9;
+      for(const e of B.enemies){
+        if(e.dead||e.dormant||e.id!==c.id) continue;
+        const d2=Math.hypot(e.x-p.x,e.y-p.y);
+        if(d2<cd){ cd=d2; cm=e; }
+      }
+      if(!cm) continue;
       g.save();
       g.globalAlpha=(0.25+0.18*c.lv)+0.2*Math.sin(p.anim*6);
       g.strokeStyle='#ffb3cf'; g.lineWidth=1+0.4*c.lv; g.setLineDash([4,5]);
-      g.beginPath(); g.moveTo(p.x,p.y-30); g.lineTo(c.mon.x,c.mon.y-c.mon.r); g.stroke();
+      g.beginPath(); g.moveTo(p.x,p.y-30); g.lineTo(cm.x,cm.y-cm.r); g.stroke();
       g.setLineDash([]);
       g.restore();
     }

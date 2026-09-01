@@ -69,9 +69,20 @@ function sensLvOf(h){
   const g=h.sensit;
   return g>=BAL.SENSIT_TH[2]?3 : g>=BAL.SENSIT_TH[1]?2 : g>=BAL.SENSIT_TH[0]?1 : 0;
 }
-function charmEntry(h,mon){ return h.charms.find(c=>c.mon===mon); }
-function charmLvFor(h,mon){ const c=charmEntry(h,mon); return c?c.lv:0; }
+/* 魅了は「種族(モンスターid)ごと」に持つ。同じ種族ならどの個体にも効く */
+function charmEntry(h,id){ return h.charms.find(c=>c.id===id); }
+function charmLvFor(h,mon){ const c=charmEntry(h,mon.id); return c?c.lv:0; }
 function charmMaxLv(h){ return h.charms.reduce((m,c)=>Math.max(m,c.lv),0); }
+function nearestOfId(id){
+  const B=G.B, p=B.hero;
+  let best=null, bd=1e9;
+  for(const e of B.enemies){
+    if(e.dead||e.dormant||e.state==='attached'||e.id!==id) continue;
+    const d=Math.hypot(e.x-p.x,e.y-p.y);
+    if(d<bd){ bd=d; best=e; }
+  }
+  return best;
+}
 
 function heroFocus(h){
   const aph=h.heatLv>0 ? 0.2+0.1*h.heatLv+(h.waveDur>0?0.1:0) : h.aphro/100*0.2;
@@ -155,15 +166,16 @@ function awardAil(type){
   const rt=B.ailRateT[type]||0;
   if(B.time-rt>2){ B.ailRateT[type]=B.time; B.orbFrag+=BAL.ORB_PER_AIL; B.ailCount++; }
 }
-/* 魅了(v0.4): 対象別・レベル制。接触のたびその個体への段階が上がる。
+/* 魅了(v0.4): 種族別・レベル制。接触のたびその種族への段階が上がる。
+   同じ種族ならどの個体にも効果が及ぶ。
    Lv1=与ダメ減 / Lv2=+無意識に寄る発作 / Lv3=+接触で魅了拘束 */
 function applyCharm(mon){
   const h=G.B.hero;
   if(!mon||mon.dead) return;
   const res=1+0.35*(h.resist.charm||0);
-  let c=charmEntry(h,mon);
+  let c=charmEntry(h,mon.id);
   if(!c){
-    c={mon, lv:0, t:0, driftCd:BAL.CHARM_DRIFT_CD*rand(0.5,0.9)};
+    c={id:mon.id, lv:0, t:0, driftCd:BAL.CHARM_DRIFT_CD*rand(0.5,0.9)};
     h.charms.push(c);
   }
   c.lv=Math.min(3,c.lv+1);
@@ -172,15 +184,15 @@ function applyCharm(mon){
   heroBubble(h,[
     '','え…なんで、めが…はなせな…',
     'だめ…みちゃだめ、なのに…',
-    'あのこの、そばに…いたい……',
+    'このこ達の、そばに…いたい……',
   ][c.lv],true);
   S.charm();
   awardAil('charm');
 }
-function removeCharm(h,mon){
-  const i=h.charms.findIndex(c=>c.mon===mon);
+function removeCharm(h,id){
+  const i=h.charms.findIndex(c=>c.id===id);
   if(i>=0) h.charms.splice(i,1);
-  if(h.charmDrift&&h.charmDrift.mon===mon) h.charmDrift=null;
+  if(h.charmDrift&&h.charmDrift.id===id) h.charmDrift=null;
 }
 /* 媚薬=敏感化: 快感の入りを増幅する下地 */
 function applySensit(amount){
@@ -428,7 +440,7 @@ function releaseCharmBind(sane){
   h.charmBind=null; h.charmSanity=0;
   B.pinScene=null;
   if(sane && mon && !mon.dead){
-    removeCharm(h,mon);
+    removeCharm(h,mon.id);                    // 我に返れば、その種族への魅了ごと吹き飛ぶ
     h.resist.charm=(h.resist.charm||0)+2;
     mon.stun=1.2;
     mon.hp-=mon.maxHp*0.35;
@@ -490,30 +502,30 @@ function condTick(h,dt){
     }
   }
   if(h.slow>0) h.slow-=dt;
-  // 魅了: 対象別の持続と発作
+  // 魅了: 種族別の持続と発作(個体が死んでも種族への魅了は時間まで残る)
   for(let i=h.charms.length-1;i>=0;i--){
     const c=h.charms[i];
-    if(!c.mon||c.mon.dead){ h.charms.splice(i,1); continue; }
     c.t-=dt;
     if(c.t<=0){
       c.lv--;
       if(c.lv<=0){ h.charms.splice(i,1); heroBubble(h,'…あれ? わたし、なにを…'); continue; }
       c.t=BAL.CHARM_DUR*0.7;
     }
-    // Lv2+: 無意識に寄っていく発作
+    // Lv2+: 無意識に寄っていく発作(その種族の最寄り個体が場にいる時だけ)
     if(c.lv>=2 && !h.charmDrift && !h.pinned && !h.charmBind && attachCount(h)===0){
       c.driftCd-=dt;
       if(c.driftCd<=0){
         c.driftCd=BAL.CHARM_DRIFT_CD*rand(0.85,1.2);
-        h.charmDrift={mon:c.mon, t:BAL.CHARM_DRIFT_T*c.lv+(c.lv>=3?0.8:0)};
-        heroBubble(h,pickRand(['……あのこ、どこ…','ちがう、いま戦ってる、のに…','あし、が…かってに…']),true);
+        if(nearestOfId(c.id)){
+          h.charmDrift={id:c.id, t:BAL.CHARM_DRIFT_T*c.lv+(c.lv>=3?0.8:0)};
+          heroBubble(h,pickRand(['……あのこ達、どこ…','ちがう、いま戦ってる、のに…','あし、が…かってに…']),true);
+        }
       }
     }
   }
   if(h.charmDrift){
-    const d=h.charmDrift;
-    d.t-=dt;
-    if(d.t<=0||!d.mon||d.mon.dead) h.charmDrift=null;
+    h.charmDrift.t-=dt;
+    if(h.charmDrift.t<=0) h.charmDrift=null;
   }
   for(const k in h.resist) h.resist[k]=Math.max(0,h.resist[k]-dt*0.04);
   // 吸い付き: 快感を注ぎ続ける(死んだ個体は外す)
@@ -683,18 +695,22 @@ function aiUpdate(dt){
       dx+=ax*1.5; dy+=ay*1.5;
     }
   }
-  // 魅了の発作: 無意識にその個体へ寄っていく(Lv2+)。Lv3で触れると魅了拘束
-  if(p.charmDrift && p.charmDrift.mon && !p.charmDrift.mon.dead){
-    const cm=p.charmDrift.mon;
-    const cd=Math.hypot(cm.x-p.x,cm.y-p.y)||1;
-    dx=(cm.x-p.x)/cd; dy=(cm.y-p.y)/cd;
-    dx+=Math.sin(B.time*2.4)*0.15; dy+=Math.cos(B.time*2.1)*0.15;
-    state='charmwalk';
-    if(charmLvFor(p,cm)>=3 && cd<cm.r+p.r+6){
-      enterCharmBind(cm);
-      return;
+  // 魅了の発作: 無意識にその種族の最寄り個体へ寄っていく(Lv2+)。Lv3で触れると魅了拘束
+  if(p.charmDrift){
+    const cm=nearestOfId(p.charmDrift.id);
+    if(!cm){ p.charmDrift=null; }
+    else{
+      const cd=Math.hypot(cm.x-p.x,cm.y-p.y)||1;
+      dx=(cm.x-p.x)/cd; dy=(cm.y-p.y)/cd;
+      dx+=Math.sin(B.time*2.4)*0.15; dy+=Math.cos(B.time*2.1)*0.15;
+      state='charmwalk';
+      if(charmLvFor(p,cm)>=3 && cd<cm.r+p.r+6){
+        enterCharmBind(cm);
+        return;
+      }
     }
   }
+  if(state==='charmwalk'){ /* 発作が操舵を上書きしている */ }
   // 発情の波(Lv2+): 熱に負けて、いちばん近い魔物へふらふらと寄ってしまう
   else if(p.waveDur>0 && p.heatLv>=2 && attachCount(p)===0){
     let ne=null, nd=1e9;
@@ -983,9 +999,7 @@ function killEnemy(e){
     if(h.suckers[sl].mon===e) h.suckers[sl]=null;
   }
   if(h.pinBy===e) h.pinBy=null;
-  // 魅了の対象が消えると我に返る
-  if(charmLvFor(h,e)>=2) heroBubble(h,'…あれ? いま、わたし…');
-  removeCharm(h,e);
+  // 縋りついていた個体が消えれば拘束は解ける(種族への魅了そのものは残る)
   if(h.charmBind && h.charmBind.mon===e) releaseCharmBind(false);
   const col=EN_COLORS[e.id]||['#fff','#aaa'];
   parts(e.x,e.y-e.r,e.boss?42:8,col,e.boss?220:110,0.55);
