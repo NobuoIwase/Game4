@@ -10,12 +10,14 @@ function newHero(){
   const aArmor=altarLv('armor'), aRegen=altarLv('regen'), aSpeed=altarLv('speed');
   const aSense=altarLv('sense'), aHeat=altarLv('heat'), aFocus=altarLv('focus');
   const aStam=altarLv('stamina');
+  const LU=(META.lumina&&META.lumina.upg)||{};
   const h={
     x:0, y:0, vx:0, vy:0, r:10,
-    maxHp:Math.round(140*(1+0.18*gb)), hp:0,
-    armor:Math.max(0, 6 + gb - aArmor),
-    regen:(0.7+0.15*gb)*(1-0.3*aRegen),
-    baseSpeed:150*(1-0.06*aSpeed),
+    maxHp:Math.round(140*(1+0.18*gb)*(1+0.08*(LU.vital||0))), hp:0,
+    armor:Math.max(0, 6 + gb - aArmor + Math.floor((LU.guard||0)*0.5)),
+    regen:(0.7+0.15*gb+0.08*(LU.bless||0))*(1-0.3*aRegen),
+    baseSpeed:150*(1-0.06*aSpeed)*(1+0.02*(LU.swift||0)),
+    dmgMult:1+0.06*(LU.zeal||0),
     level:1, xp:0, xpNeed:need(1),
     wp:{bolt:1, orb:0, nova:0, whip:0, rain:0, cross:0},
     ps:{speed:0, vital:0, magnet:0, haste:0, ward:0, growth:0},
@@ -33,7 +35,7 @@ function newHero(){
     strafeDir:Math.random()<0.5?-1:1, strafeT:2,
     bubble:'', bubbleT:0, bubbleCd:0, aiLabel:'けいかい中', aiState:'',
     /* --- スタミナ / 四肢拘束 / 押し倒し --- */
-    staminaMax:BAL.STAMINA_MAX-12*aStam,
+    staminaMax:BAL.STAMINA_MAX-12*aStam+6*(LU.grit||0),
     stamina:0,
     limbs:{armL:null, armR:null, legL:null, legR:null},
     suckers:{nipL:null, nipR:null, clit:null},   // 吸液羽虫の吸い付き
@@ -62,7 +64,7 @@ function newHero(){
     thinkT:0, steerX:0, steerY:0, steerState:'wait',
     diveT:0,
     /* --- 絶頂(v0.6) --- */
-    climaxT:0, climaxPhase:0, squirted:false,
+    climaxT:0, climaxPhase:0, squirted:false, refractT:0,
     bubblePrio:0,
   };
   // 戦闘経験の継承(世代内で強くなる)
@@ -85,6 +87,12 @@ function sensLvOf(h){
   return g>=BAL.SENSIT_TH[2]?3 : g>=BAL.SENSIT_TH[1]?2 : g>=BAL.SENSIT_TH[0]?1 : 0;
 }
 /* 魅了は「種族(モンスターid)ごと」に持つ。同じ種族ならどの個体にも効く */
+/* 練度による快感フィード係数: Lv1=35% / Lv2=67% / Lv3+=100%
+   (育っていない魔物は、触れても拙くて感じさせられない) */
+function unitPmul(mon){
+  const lv=(mon&&mon.lv)||1;
+  return 0.35+0.65*Math.min(1,(lv-1)/2);
+}
 function charmEntry(h,id){ return h.charms.find(c=>c.id===id); }
 function charmLvFor(h,mon){ const c=charmEntry(h,mon.id); return c?c.lv:0; }
 function charmMaxLv(h){ return h.charms.reduce((m,c)=>Math.max(m,c.lv),0); }
@@ -130,6 +138,7 @@ function startBattle(){
     lvCards:null, pinScene:null, pinSceneIdx:0, pinSceneT:0,
     combo:{}, lastPlay:null,
     climaxN:0, stains:[],
+    heroCoins:0, impBurstCd:0,
   };
   spawnInitialProps();
   G.mode='battle';
@@ -154,6 +163,10 @@ function endBattle(outcome){
   META.runs++;
   META.life.dmg+=Math.round(B.dmgDealt); META.life.ail+=B.ailCount; META.life.kills+=B.kills;
   META.life.climax=(META.life.climax||0)+B.climaxN;
+  // 夜明け: ルミナはコインを数え、自分を強化する(ヴァンサバのコイン強化に相当)
+  const coinGain=Math.round(B.heroCoins+(outcome==='survive'?40:10));
+  META.lumina.coins+=coinGain;
+  const shopped=luminaShop();
   META.rot.dmg+=Math.round(B.dmgDealt); META.rot.ail+=B.ailCount; META.rot.battles++;
   if(outcome==='capture'){ META.captures++; META.rot.captures++; }
   if(outcome==='capture' && (!META.best || B.time<META.best.time)){
@@ -171,7 +184,28 @@ function endBattle(outcome){
   G.mode='result';
   UI.showResult({outcome, essGain, orbGain, rotReset,
     time:B.time, kills:B.kills, dmg:Math.round(B.dmgDealt), ail:B.ailCount,
-    heroLv:B.hero.level, capturedBy:B.capturedBy, cause:B.captureCause, climax:B.climaxN});
+    heroLv:B.hero.level, capturedBy:B.capturedBy, cause:B.captureCause, climax:B.climaxN,
+    coins:coinGain, shop:shopped});
+}
+
+/* 夜明けの自己強化: 安い順に最大4件まで自動購入 */
+function luminaShop(){
+  const out=[];
+  const U=META.lumina.upg;
+  for(let i=0;i<4;i++){
+    let best=null, bc=1e9;
+    for(const id in LUMINA_UPG){
+      const r=U[id]||0;
+      if(r>=LUMINA_UPG[id].max) continue;
+      const c=luminaUpCost(id,r);
+      if(c<bc){ bc=c; best=id; }
+    }
+    if(!best || META.lumina.coins<bc) break;
+    META.lumina.coins-=bc;
+    U[best]=(U[best]||0)+1;
+    out.push(LUMINA_UPG[best].name+' '+genNum(U[best]));
+  }
+  return out;
 }
 
 /* ================= 状態付与 ================= */
@@ -200,7 +234,7 @@ function awardAil(type){
 function applyCharm(mon){
   const h=G.B.hero;
   if(!mon||mon.dead) return;
-  const res=1+0.35*(h.resist.charm||0);
+  const res=1+0.22*(h.resist.charm||0);
   let c=charmEntry(h,mon.id);
   if(!c){
     c={id:mon.id, lv:0, t:0, driftCd:BAL.CHARM_DRIFT_CD*rand(0.5,0.9)};
@@ -236,6 +270,7 @@ function applySensit(amount){
 /* 快感: 敏感化で増幅され、100で発情レベルが上がる */
 function applyPleasure(amount){
   const h=G.B.hero;
+  if(h.refractT>0) amount*=BAL.REFRACT_MULT;   // 不応期: 達した直後は入りが鈍い
   h.aphro=clamp(h.aphro+amount*h.sense*(1+BAL.SENSIT_AMP*sensLvOf(h)),0,100);
   if(h.aphro>=100 && h.climaxT<=0) enterClimax();
 }
@@ -271,6 +306,10 @@ function climaxTick(dt){
   const el=BAL.CLIMAX_DUR-h.climaxT;
   if(h.climaxPhase===0 && el>0.7){
     h.climaxPhase=1;
+    // 絶頂はスタミナを大きく持っていく——連続絶頂はやがて力尽きる
+    h.stamina=Math.max(0,h.stamina-BAL.CLIMAX_STAM_COST);
+    checkStaminaCollapse();
+    if(G.mode!=='battle'&&G.mode!=='levelup') return;
     if(h.squirted){
       spawnStain(h.x, h.y+2);
       heroBubble(h,'やだ、でて……とまんない……ぁ……っ',true,3);
@@ -287,6 +326,7 @@ function climaxTick(dt){
   if(Math.random()<dt*6) parts(h.x+rand(-12,12),h.y-rand(4,26),1,['#ffb3cf','#fff'],60,0.6);
   if(h.climaxT<=0){
     h.climaxT=0;
+    h.refractT=BAL.REFRACT_T;
     if(!h.pinned && !h.charmBind) B.pinScene=null;
     heatUp();
   }
@@ -453,7 +493,7 @@ function checkStaminaCollapse(){
   h.stamina=0;
   if(h.charmBind){
     beginCapture(h.charmBind.mon,'charm');
-  }else if(attachCount(h)>0||h.pinned){
+  }else if(attachCount(h)>0||h.pinned||suckCount(h)>0){
     const o=oldestRestraint(h);
     beginCapture(h.pinBy||(o&&o.at.mon)||null,'stamina');
   }else{
@@ -528,8 +568,10 @@ function releaseCharmBind(sane){
   h.charmBind=null; h.charmSanity=0;
   B.pinScene=null;
   if(sane && mon && !mon.dead){
-    removeCharm(h,mon.id);                    // 我に返れば、その種族への魅了ごと吹き飛ぶ
-    h.resist.charm=(h.resist.charm||0)+2;
+    // 我に返っても、惚れた記憶は一段しか薄れない(魅了は簡単には解けない)
+    const c=charmEntry(h,mon.id);
+    if(c){ c.lv--; c.t=BAL.CHARM_DUR*0.8; if(c.lv<=0) removeCharm(h,mon.id); }
+    h.resist.charm=(h.resist.charm||0)+1;
     mon.stun=1.2;
     mon.hp-=mon.maxHp*0.35;
     const a=rand(TAU);
@@ -597,7 +639,7 @@ function condTick(h,dt){
     if(c.t<=0){
       c.lv--;
       if(c.lv<=0){ h.charms.splice(i,1); heroBubble(h,'…あれ? わたし、なにを…'); continue; }
-      c.t=BAL.CHARM_DUR*0.7;
+      c.t=BAL.CHARM_DUR*0.8;
     }
     // Lv2+: 無意識に寄っていく発作(その種族の最寄り個体が場にいる時だけ)
     if(c.lv>=2 && !h.charmDrift && !h.pinned && !h.charmBind && attachCount(h)===0){
@@ -616,14 +658,23 @@ function condTick(h,dt){
     if(h.charmDrift.t<=0) h.charmDrift=null;
   }
   for(const k in h.resist) h.resist[k]=Math.max(0,h.resist[k]-dt*0.04);
-  // 吸い付き: 快感を注ぎ続ける(死んだ個体は外す)
+  if(h.refractT>0) h.refractT-=dt;
+  // 吸い付き: 快感を注ぎ続け、体液=スタミナも吸っていく(死んだ個体は外す)
   for(const sl of suckSlots(h)){
     const at=h.suckers[sl];
     if(!at.mon||at.mon.dead){ h.suckers[sl]=null; continue; }
-    applyPleasure(BAL.SUCK_PLEAS*dt);
+    applyPleasure(BAL.SUCK_PLEAS*unitPmul(at.mon)*dt);
   }
-  // 絡みつき中の微快感
-  if(attachCount(h)>0) applyPleasure(BAL.PLEAS_BINDER*attachCount(h)*dt);
+  if(!h.pinned && suckCount(h)>0){
+    h.stamina=Math.max(0,h.stamina-BAL.SUCK_STAM_DRAIN*suckCount(h)*dt);
+    checkStaminaCollapse();
+    if(G.mode!=='battle'&&G.mode!=='levelup') return;
+  }
+  // 絡みつき中の微快感(拘束役の練度でスケール)
+  for(const sl of attachedSlots(h)){
+    const m=h.limbs[sl].mon;
+    if(m&&!m.dead) applyPleasure(BAL.PLEAS_BINDER*unitPmul(m)*dt);
+  }
   // 2箇所以上絡みつかれていると体力がじわじわ奪われる
   if(!h.pinned && attachCount(h)>=2){
     h.stamina=Math.max(0,h.stamina-BAL.STAMINA_DRAG*dt);
@@ -1199,7 +1250,7 @@ function spawnUnit(id, x, y, o){
   if(id==='gas'){ u.puffT=rand(0.8,1.6); }
   if(id==='imp'){ u.orbitA=rand(TAU); u.orbitDir=Math.random()<0.5?-1:1; u.dodgeCd=0; u.teaseT=rand(1,3); }
   if(id==='flower'){ u.state='bud'; u.revealed=false; u.dotAcc=0; u.openT=0; }
-  if(id==='gtent'){ u.grabCd=1.5; u.whipT=0; u.state='idle'; }
+  if(id==='gtent'){ u.grabCd=2.5; u.whipT=0; u.state='idle'; }
   if(id==='slime'||id==='mistslime'){ u.trailT=0; }
   if(u.boss){ u.bstate='chase'; u.bt=3.2; u.cdx=0; u.cdy=0; }
   B.enemies.push(u);
@@ -1208,6 +1259,7 @@ function spawnUnit(id, x, y, o){
 }
 function damageEnemy(e,dmg){
   if(e.dead||e.dormant) return;
+  if(G.B&&G.B.hero.dmgMult) dmg*=G.B.hero.dmgMult;   // せいなる火力(自己強化)
   if(e.id==='flower') dmg*=(e.state==='bud'?0.5:1.3);
   // 魅了: その個体への攻撃は無意識に鈍る(Lvごとに与ダメ減)
   const cl=G.B?charmLvFor(G.B.hero,e):0;
@@ -1280,6 +1332,7 @@ function enemiesUpdate(dt){
     if(e.hitFlash>0) e.hitFlash-=dt;
     if(e.orbCd>0) e.orbCd-=dt;
     if(e.crossCd>0) e.crossCd-=dt;
+    if(e.nuzzleCd>0) e.nuzzleCd-=dt;
     e.seenT=inSight(e,p)?e.seenT+dt:0;   // 彼女の視界に入っている時間(反応遅れの基準)
 
     // 四肢に絡みつき/吸い付き中: ヒロインに追従するだけ
@@ -1431,12 +1484,25 @@ function impTick(e,dt,d,dx,dy){
   }
   // 煽り(近くにいるだけで媚薬と集中低下)
   if(d<120){
-    if(B.frameImp<BAL.IMP_TEASE_CAP){ B.frameImp++; applyPleasure(BAL.PLEAS_IMP*dt); }
     e.teaseT-=dt;
     if(e.teaseT<=0){
-      e.teaseT=rand(2.2,3.8);
-      floatTxt(e.x,e.y-e.r-12,pickRand(['♪','♡','ふふっ','こっちこっち♪']),'#ffb3cf',10,1);
-      if(Math.random()<0.4) heroBubble(p,pickRand(['み、みないでっ!','からかわないで!','うぅ…ちょこまかと…']));
+      e.teaseT=rand(1.8,3.2);
+      // 煽りのアクション(投げキッス・耳打ち)をした時だけ快感が入る。
+      // 全体で1秒に1回まで——数を並べても強くなりすぎない
+      if(B.impBurstCd<=0){
+        B.impBurstCd=BAL.IMP_BURST_CD;
+        applyPleasure(BAL.PLEAS_IMP_BURST*unitPmul(e));
+        // 投げキッスの軌跡
+        const n=5;
+        for(let i=0;i<n;i++){
+          const f=i/n;
+          parts(e.x+(p.x-e.x)*f, e.y-e.r+(p.y-14-(e.y-e.r))*f, 1, ['#ffb3cf','#ff86b3'], 30, 0.5);
+        }
+        floatTxt(e.x,e.y-e.r-12,pickRand(['ちゅ♡','ふーっ♡','ざぁこ♡']),'#ffb3cf',10,1);
+        if(Math.random()<0.5) heroBubble(p,pickRand(['ひゃっ…!? みみ、に……','や、いきを吹きかけ……っ','か、からかわないでっ…!']),false,2);
+      }else{
+        floatTxt(e.x,e.y-e.r-12,pickRand(['♪','ふふっ','こっちこっち♪']),'#ffb3cf',10,1);
+      }
     }
   }
 }
@@ -1471,22 +1537,23 @@ function gtentTick(e,dt,d,dx,dy){
   const holding=attachedSlots(p).some(sl=>p.limbs[sl].mon===e);
   if(holding){
     // 掴んでいる間はその場で締める
-    e.grabCd=2.5;
+    e.grabCd=3.5;
     return;
   }
   e.grabCd-=dt;
   if(e.whipT>0){
     e.whipT-=dt;
-    if(e.whipT<=0 && Math.hypot(p.x-e.x,p.y-e.y)<125){
-      if(attachMonster(e,'tether',{r:115})){
+    if(e.whipT<=0 && Math.hypot(p.x-e.x,p.y-e.y)<118){
+      if(attachMonster(e,'tether',{r:110})){
         hurtHero(e.dmg*0.5,e,{noKb:true});
       }
-      e.grabCd=4.5;
+      e.grabCd=6.5;
     }
     return;
   }
   e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt;
-  if(d<110 && e.grabCd<=0){ e.whipT=0.3; sfx(140,60,0.2,'sawtooth',0.07); }
+  // 溜めを長くして、彼女が反応して抜けられる余地を作る
+  if(d<105 && e.grabCd<=0){ e.whipT=0.5; sfx(140,60,0.2,'sawtooth',0.07); }
 }
 function leechTick(e,dt,d,dx,dy){
   // 素早く、緩く追尾——曲がりきれずに通り過ぎ、旋回してまた戻ってくる
@@ -1503,7 +1570,14 @@ function contactHit(e){
   const p=G.B.hero;
   if(e.id==='worm'){
     if(attachMonster(e,'cling')) return;   // 絡みつき成功時はダメージなし
-    hurtHero(e.dmg,e,{});
+    // 空きが無い=先客が愉しんでいる間、順番待ちのワームは噛まずに
+    // 肌を這い回って気持ちよくさせるだけ(ダメージなし)
+    if(!(e.nuzzleCd>0)){
+      e.nuzzleCd=1.4;
+      applyPleasure(2.4*unitPmul(e));
+      parts(p.x+rand(-8,8),p.y-rand(4,18),3,['#c9a06a','#ffb3cf'],70,0.4);
+      if(Math.random()<0.3) heroBubble(p,pickRand(['ま、まだ増え……ひゃっ','はって、のぼって……っ','やだ、くすぐった……ぁ']),false,2);
+    }
     return;
   }
   if(e.id==='leech'){
@@ -1679,6 +1753,7 @@ function pickupsUpdate(dt){
     if(d<16){
       gm.dead=true;
       p.xp+=gm.v*(1+0.12*p.ps.growth);   // ラーニングピアス
+      B.heroCoins+=gm.v*0.5;             // 彼女はコインも貯えている(夜明けの自己強化)
       S.gem();
       parts(p.x,p.y-14,3,['#8fd3ff','#fff'],70,0.3);
       maybeLevelup();
@@ -1799,8 +1874,9 @@ function playCard(id, formId){
   const m0=MONSTERS[id];
   // solo(小淫魔/ガス玉)は数が増えない。swarm持ち(鈍足の群れ)は頭数が倍化する(Lv2+)
   const sw=(m0.swarm||1)>1 && clv>=2 ? m0.swarm : 1;
+  const lvExtra=Math.floor((clv-1)/2);   // カードLvは頭数で強くなる(Lv3:+1 / Lv5:+2)
   let n=f.count;
-  if(!m0.solo && multi) n=Math.ceil((f.count+extra)*sw);
+  if(!m0.solo && multi) n=Math.ceil((f.count+extra+lvExtra)*sw);
   const per=cost/n;
   const so={enVal:per, mult:comboMult};
 
@@ -1989,8 +2065,8 @@ function battleTick(dt){
   else if(p.charmBind){ charmBindTick(dt); if(G.mode!=='battle') return; }
   for(const st of B.stains) st.t+=dt;
   B.stains=B.stains.filter(st=>st.t<st.life);
-  // 小淫魔: 近くの数を数える(集中低下)が、快感を注げるのは同時2体まで
-  B.frameImp=0;
+  // 小淫魔: 近くの数を数える(集中低下)。快感は煽りアクション時のみ(バーストCD持ち)
+  if(B.impBurstCd>0) B.impBurstCd-=dt;
   p.teaseN=0;
   for(const e of B.enemies){
     if(!e.dead&&e.id==='imp'&&Math.hypot(e.x-p.x,e.y-p.y)<120) p.teaseN++;

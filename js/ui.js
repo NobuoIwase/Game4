@@ -123,6 +123,10 @@ const UI={
   hideAll(){ this.root.innerHTML=''; G.screen=''; },
 
   show(name){
+    // 同じ画面の再描画(強化ボタン等)ではスクロール位置を保持する
+    const sameScreen=G.screen===name;
+    const prevScr=this.root.querySelector('.screen');
+    const keepScroll=sameScreen&&prevScr?prevScr.scrollTop:0;
     G.screen=name;
     G.mode='home';
     G.B=null;
@@ -134,6 +138,10 @@ const UI={
       altar:this.htmlAltar, status:this.htmlStatus}[name];
     this.root.innerHTML='<div class="screen"><div class="inner'+(name==='home'?'':' wide')+'" style="'+(name==='home'?'margin-top:120px;background:rgba(17,15,34,.86)':'')+'">'+fn.call(this)+'</div></div>';
     this.attachIcons();
+    if(keepScroll){
+      const scr=this.root.querySelector('.screen');
+      if(scr) scr.scrollTop=keepScroll;
+    }
   },
 
   attachIcons(){
@@ -156,7 +164,7 @@ const UI={
     const wipeArmed=this._wipeArm && performance.now()-this._wipeArm<3000;
     return `
       <h1>ルミナ・サバイバーズ</h1>
-      <div class="sub">v0.6 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
+      <div class="sub">v0.7 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
       <p>あなたは<b>夜側の指揮者</b>。デッキから魔物を差し向け、AIで戦う光の少女<b>「ルミナ」</b>を追い詰める。<br>
       彼女に魔物が倒されるほどあなたのエネルギーとエッセンスは増え、彼女もまた強くなる。</p>
       <div style="text-align:center;color:var(--gold);font-size:12px;margin-bottom:8px">${esc(best)} ・ 通算${META.runs}戦 / 捕獲${META.captures}回</div>
@@ -311,6 +319,15 @@ const UI={
       <div class="stcard"><h3>書き換え(祭壇・永続)</h3>
         <div class="kv"><div>${mods}</div></div>
       </div>
+      <div class="stcard"><h3>ルミナの自己強化 <span style="color:var(--dim);font-weight:normal">(彼女が夜明けに買う・永続)</span></h3>
+        <div class="kv">
+          ${Object.keys(LUMINA_UPG).map(id=>{
+            const r=luminaRank(id);
+            return `<div>${esc(LUMINA_UPG[id].name)} <b>${r?genNum(r):'—'}</b><span>/${LUMINA_UPG[id].max}</span></div>`;
+          }).join('')}
+        </div>
+        <div class="note">貯えたコイン: ${Math.floor((META.lumina&&META.lumina.coins)||0)} — 戦闘中に彼女が拾ったジェムの一部がコインになる。放っておくと数日で大幅に強くなる。</div>
+      </div>
       <div class="stcard"><h3>経過 — 堕ちの二軸 <span style="color:var(--dim);font-weight:normal">(世代内でリセット)</span></h3>
         <div class="kv spread"><div>肉体</div><div class="stagename">${bodyStg} (${Math.round(body)})</div></div>
         <div class="bar"><i style="width:${body}%;background:linear-gradient(90deg,#ff86b3,#ff5d7a)"></i></div>
@@ -350,11 +367,13 @@ const UI={
     this.root.innerHTML=`<div class="screen"><div class="inner" style="text-align:center;min-width:340px">
       <h2 style="color:${color}">${title}</h2>
       ${by?`<div style="font-size:12px;color:var(--body)">とどめ: ${esc(by)}${causeTxt?' — '+esc(causeTxt):''}</div>`:''}
+      ${sum.shop&&sum.shop.length?`<div class="note" style="color:var(--gold);margin:6px 0">——夜が明けて、ルミナは自分を強化した——<br>${sum.shop.map(esc).join(' ・ ')}</div>`:''}
       ${cgHtml}
       <div class="breakdown">
         経過時間 <b>${fmt(sum.time)}</b> ・ ルミナ Lv<b>${sum.heroLv}</b><br>
         討たれた魔物 <b>${sum.kills}</b>体 ・ 与ダメージ <b>${sum.dmg}</b> ・ 異常付与 <b>${sum.ail}</b>回${sum.climax?` ・ <span style="color:var(--pink)">絶頂 <b>${sum.climax}</b>回</span>`:''}<br>
-        ✦ エッセンス <b>+${sum.essGain}</b> ・ <span class="o">◉ オーブ <b>+${sum.orbGain}</b></span>
+        ✦ エッセンス <b>+${sum.essGain}</b> ・ <span class="o">◉ オーブ <b>+${sum.orbGain}</b></span><br>
+        <span style="color:var(--gold)">🪙 ルミナのコイン +${sum.coins||0}</span>
       </div>
       ${sceneHtml}
       ${sum.rotReset?`<div class="newbadge">⟳ ルミナの戦闘経験がリセットされた — 次より第${genNum(META.gen.idx)}世代</div>`:''}

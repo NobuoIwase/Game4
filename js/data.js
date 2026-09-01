@@ -66,9 +66,10 @@ const BAL={
   SENSIT_TH:[25,55,85],    // 敏感Ⅰ/Ⅱ/Ⅲ の閾値
   SENSIT_AMP:0.35,         // 快感増幅 /敏感Lv
   PLEAS_DECAY:0.6,         // 快感ゲージ自然減衰 /s
-  PLEAS_IMP:2.2,           // 小淫魔の煽り /s
+  PLEAS_IMP_BURST:4.5,     // 小淫魔の煽りアクション1回ぶんの快感(受動では上がらない)
+  IMP_BURST_CD:1.0,        // 煽りバーストの全体クールダウン(数で強くなりすぎ防止)
   PLEAS_GAS:1.8,           // ガス雲は快感も僅かに直接生む /s
-  PLEAS_BINDER:0.7,        // 絡みつき1体あたり /s
+  PLEAS_BINDER:0.5,        // 絡みつき1体あたり /s(練度でスケール)
   PLEAS_PIN:4,             // 押し倒し1拍あたり
   SUCK_PLEAS:2.6,          // 吸い付き1体あたり /s
   HEAT_LV_DUR:20,          // 発情1段階の持続(s)。切れると1段下がる
@@ -79,7 +80,7 @@ const BAL={
   WAVE_SPD:0.7,            // 波の間の移動速度
 
   /* --- 魅了(v0.4: 対象別・レベル制) --- */
-  CHARM_DUR:16,            // 1段階の持続(接触で更新)
+  CHARM_DUR:26,            // 1段階の持続(接触で更新)。簡単には解けない
   CHARM_DMG_CUT:0.25,      // 魅了対象への与ダメ減 /Lv(Lv3=75%減)
   CHARM_DRIFT_CD:6.5,      // 無意識に寄っていく発作の間隔(Lv2+)
   CHARM_DRIFT_T:1.2,       // 発作の基本時間 ×Lv
@@ -92,6 +93,7 @@ const BAL={
   RIP_NEED_SUCK:45,        // 引き離しに必要な抵抗
   SUCK_RIP_COST:7,         // 引き離し1回のスタミナ
   SUCK_SLOW:0.93,          // 1体あたりの移動低下(最大3体)
+  SUCK_STAM_DRAIN:0.5,     // 吸い付き1体あたりのスタミナ吸引 /s(吸"液"なので)
 
   STAMINA_DRAG:1.5,       // 2箇所以上絡みつかれている間のじわ削り /s
 
@@ -106,6 +108,9 @@ const BAL={
 
   /* --- 絶頂(v0.6) --- */
   CLIMAX_DUR:3.4,          // 絶頂の硬直時間: 脚が止まり、痙攣し、動けない
+  CLIMAX_STAM_COST:10,     // 絶頂1回のスタミナ消耗(連続絶頂はやがて力尽きる)
+  REFRACT_T:6,             // 絶頂後の不応期(s)
+  REFRACT_MULT:0.25,       // 不応期中の快感の入り
   SQUIRT_BASE:0.35,        // 潮吹き率 = BASE + 0.2×発情Lv + 0.12×敏感Lv
   STAIN_LIFE:70,           // 地面の染みの残留時間(s)
 };
@@ -175,7 +180,7 @@ const MONSTERS={
   },
   gtent:{
     name:'大触手', role:'融合・捕縛', cost:9, unlock:-1,
-    hp:150, spd:34, r:16, dmg:8, xp:12,
+    hp:115, spd:30, r:16, dmg:6.5, xp:12,
     desc:'【融合】地上ワーム×触手花。届く間合いから鞭を伸ばして四肢に絡め、その場から逃さない。',
     trait:'遠隔で四肢に蔦(繋留拘束)', fusion:['worm','flower'], fuseCost:550,
   },
@@ -187,7 +192,7 @@ const MONSTERS={
   },
 };
 const CARD_LV_MAX=5;
-const cardLvMult=lv=>({ hp:1+0.25*(lv-1), dmg:1+0.2*(lv-1) });
+const cardLvMult=lv=>({ hp:1+0.08*(lv-1), dmg:1+0.10*(lv-1) });   // Lvは主に頭数で強くなる
 const cardCost=(id,lv)=>{
   const b=MONSTERS[id].cost;
   return Math.max(1, b - (lv>=3?1:0) - (lv>=5?1:0));
@@ -228,6 +233,20 @@ const ALTAR=[
     desc:'身体の芯に疲労を澱ませる。スタミナの上限と回復が落ちる。', fx:'スタミナ上限 -12/段階' },
 ];
 const altarLv=id=>META.altar[id]||0;
+
+/* ---------------- ルミナの自己強化(ヴァンサバのコイン強化に相当) ----------------
+   彼女は戦闘で拾ったジェムをコインとして貯え、夜明けに自分を強化する。
+   世代リセットの影響を受けず永続——放っておくと1〜5日で大幅に強くなる。 */
+const LUMINA_UPG={
+  vital:{ name:'いのちの祝福', max:8, base:30, fx:'最大HP +8%' },
+  guard:{ name:'ひかりの護り', max:6, base:40, fx:'護り +0.5' },
+  bless:{ name:'いやしの加護', max:8, base:34, fx:'回復 +0.08/s' },
+  swift:{ name:'かぜの靴',     max:6, base:34, fx:'速度 +2%' },
+  grit: {name:'ねばりの心',    max:8, base:30, fx:'スタミナ上限 +6' },
+  zeal: {name:'せいなる火力',  max:8, base:36, fx:'与ダメ +6%' },
+};
+const luminaUpCost=(id,rank)=>Math.round(LUMINA_UPG[id].base*Math.pow(1.5,rank));
+const luminaRank=id=>((META.lumina&&META.lumina.upg)||{})[id]||0;
 
 /* ---------------- ヒロインの武器/パッシブ ---------------- */
 const UPG={

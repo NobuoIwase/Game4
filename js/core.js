@@ -158,6 +158,7 @@ function defaultMeta(){
     life:{ dmg:0, ail:0, kills:0, herBoss:0 },   // 通算記録
     rot:{ dmg:0, ail:0, captures:0, battles:0 }, // 世代内記録(リセットされる)
     best:null,
+    lumina:{ coins:0, upg:{vital:0,guard:0,bless:0,swift:0,grit:0,zeal:0} },  // 彼女の自己強化(永続)
     settings:{ autoplay:true },
   };
 }
@@ -173,6 +174,8 @@ function loadMeta(){
       META.life=Object.assign(defaultMeta().life, d.life);
       META.rot=Object.assign(defaultMeta().rot, d.rot);
       META.settings=Object.assign(defaultMeta().settings, d.settings);
+      META.lumina=Object.assign({coins:0,upg:{}}, d.lumina);
+      META.lumina.upg=Object.assign({vital:0,guard:0,bless:0,swift:0,grit:0,zeal:0}, (d.lumina||{}).upg);
       migrateCards();
     }
   }catch(e){}
