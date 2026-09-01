@@ -7,9 +7,29 @@
 const BAL={
   RUN_TIME:180,            // 1戦=3分
   GEN_LEN:4,               // この戦数ごとにヒロインの経験がリセット
-  EN_BASE:10, EN_PER_LV:2, EN_MAX:44,
-  EN_REGEN:0.62, EN_REGEN_LV:0.05,
-  EN_START:8,
+  EN_BASE:12, EN_PER_LV:3, EN_MAX:60,
+  EN_REGEN:0.78, EN_REGEN_LV:0.07,
+  EN_START:10,
+  CARD_CD_BASE:1.5, CARD_CD_COST:0.11,   // カードCD = BASE + コスト×COST
+
+  /* --- ヒロインの視界と思考(v0.4.1: 人間らしさ) --- */
+  SIGHT_MARGIN:30,         // 画面端+これだけが視界。外の敵は存在に気づかない
+  NOTICE_T:0.35,           // 視界に入ってから脅威と認識するまでの反応遅れ(集中低下で悪化)
+  THINK_MIN:0.13, THINK_MAX:0.34, // 操舵の再評価間隔(この間は前の判断で動き続ける)
+  DIVE_GEM_N:4,            // ガス溜まり内のジェムがこれ以上なら意を決して入る
+  DIVE_GEM_V:8,            //   または合計価値がこれ以上
+  DIVE_T:1.7,              // 意を決して入る時間(この間ガス回避を無視)
+
+  /* --- コンボ(同一カード連打) --- */
+  COMBO_WINDOW:9,          // この秒数内に同じカードを出すと連鎖
+  COMBO_MAX:5,
+  COMBO_STAT:0.12,         // 1連鎖ごとの召喚hp/dmgボーナス
+  COMBO_UNIT_PER:2,        // 2連鎖ごとに多数陣形+1体
+
+  /* --- 夜の深まり(ヒロインLv連動で夜側が強くなる) --- */
+  NIGHT_UNIT_LV:5,         // 彼女のLvこれごとに多数陣形+1体(最大+3)
+  NIGHT_STAT_LV:0.025,     // 彼女のLv-1ごとの召喚hp/dmg加算
+  NIGHT_STAT_CAP:0.5,
   EN_REFUND:0.6,           // ヒロインが倒したときのEN還元率(ユニット単価×係数)
   ESS_RATE:0.55,           // エッセンス=撃破xp×係数
   ORB_DMG_STEP:45,         // 与ダメこれごとにオーブ+1

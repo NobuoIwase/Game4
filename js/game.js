@@ -12,9 +12,9 @@ function newHero(){
   const aStam=altarLv('stamina');
   const h={
     x:0, y:0, vx:0, vy:0, r:10,
-    maxHp:Math.round(120*(1+0.18*gb)), hp:0,
-    armor:Math.max(0, 5 + gb - aArmor),
-    regen:(0.55+0.15*gb)*(1-0.3*aRegen),
+    maxHp:Math.round(140*(1+0.18*gb)), hp:0,
+    armor:Math.max(0, 6 + gb - aArmor),
+    regen:(0.7+0.15*gb)*(1-0.3*aRegen),
     baseSpeed:150*(1-0.06*aSpeed),
     level:1, xp:0, xpNeed:need(1),
     wp:{bolt:1, orb:0, nova:0}, ps:{speed:0, vital:0, magnet:0},
@@ -49,6 +49,9 @@ function newHero(){
     stumbleT:rand(2,3), stumbleDur:0,
     propTarget:null,
     prevX:0, prevY:0,
+    /* --- 思考の拍 / 意を決した突入(v0.4.1) --- */
+    thinkT:0, steerX:0, steerY:0, steerState:'wait',
+    diveT:0,
   };
   // 戦闘経験の継承(世代内で強くなる)
   if(gb>=1) h.wp.bolt=2;
@@ -113,6 +116,7 @@ function startBattle(){
     bossUsed:false, capturedBy:null, captureCause:'', captureT:0, winT:0,
     ailRateT:{}, chestIdx:0, propT:BAL.PROP_RESPAWN,
     lvCards:null, pinScene:null, pinSceneIdx:0, pinSceneT:0,
+    combo:{}, lastPlay:null,
   };
   spawnInitialProps();
   G.mode='battle';
@@ -577,35 +581,126 @@ function aiUpdate(dt){
     return;
   }
 
+  if(p.diveT>0) p.diveT-=dt;
+
+  const foc=heroFocus(p);
+
+  p.strafeT-=dt;
+  if(p.strafeT<=0){ p.strafeDir*=-1; p.strafeT=rand(2,4.5); }
+
+  // 魅了拘束の接触だけは毎フレーム判定(発作中に触れた瞬間へ反応)
+  if(p.charmDrift){
+    const cm=nearestOfId(p.charmDrift.id);
+    if(cm && charmLvFor(p,cm)>=3 && Math.hypot(cm.x-p.x,cm.y-p.y)<cm.r+p.r+6){
+      enterCharmBind(cm);
+      return;
+    }
+  }
+
+  // ---- 思考の拍 ----
+  // 一定間隔でしか判断を更新しない。集中が低いほど判断が遅れ、
+  // 判断の合間は前の判断のまま動き続ける(境界でのガクガクを消し、考えている風の間を作る)
+  p.thinkT-=dt;
+  if(p.thinkT<=0){
+    p.thinkT=BAL.THINK_MIN+(BAL.THINK_MAX-BAL.THINK_MIN)*(1-foc)+rand(0,0.06);
+    aiDecide(foc);
+  }
+
+  let dx=p.steerX, dy=p.steerY;
+  const state=p.steerState;
+
+  // 媚薬・煽りによるノイズ(思考の乱れ)
+  if(foc<1){
+    const n=(1-foc)*1.1;
+    dx+=Math.sin(B.time*3.1+p.anim*7)*n;
+    dy+=Math.cos(B.time*2.7+p.anim*5)*n;
+  }
+
+  const m=Math.hypot(dx,dy);
+  const tvx=m>0.001?dx/m*st.speed:0;
+  const tvy=m>0.001?dy/m*st.speed:0;
+  const k=Math.min(1,dt*6.5*foc);
+  p.vx+=(tvx-p.vx)*k; p.vy+=(tvy-p.vy)*k;
+  p.x+=p.vx*dt; p.y+=p.vy*dt;
+
+  // 繋留(蔦)による引き戻し
+  for(const sl of attachedSlots(p)){
+    const at=p.limbs[sl];
+    if(at.kind!=='tether'||!at.mon||at.mon.dead) continue;
+    const anch=at.mon;
+    const dx2=p.x-anch.x, dy2=p.y-anch.y;
+    const d2=Math.hypot(dx2,dy2)||0.001;
+    if(d2>at.r){
+      p.x=anch.x+dx2/d2*at.r;
+      p.y=anch.y+dy2/d2*at.r;
+    }
+  }
+
+  // 抵抗ゲージ: 移動量で蓄積
+  const moved=Math.hypot(p.x-p.prevX,p.y-p.prevY);
+  if(restraintCount(p)>0) addStruggle(moved*BAL.STRUGGLE_MOVE_RATE);
+
+  if(Math.abs(p.vx)>12) p.face=p.vx>0?1:-1;
+  p.moving=Math.hypot(p.vx,p.vy)>30;
+
+  const LBL={flee:'かいひ行動!', boss:'ボスかいひ!!', gem:'ジェム回収', heart:'ハートへ!',
+    prop:'燭台をこわして回復!', chest:'たからばこへ!', kite:'まちうけ・けん制', wait:'けいかい中',
+    struggle:'ふりほどこうともがいている!',
+    charmwalk:'ふらふらと、ちかづいていく…', heatwalk:'熱にまけて、よろめき寄る…'};
+  const BBL={flee:'にげなきゃ〜!', boss:'おっきいのこわい!!', gem:'キラキラかいしゅう♪',
+    heart:'ハートみっけ!', prop:'燭台こわして回復しなきゃ', chest:'たからばこだ〜!',
+    kite:'このきょりキープ…', wait:'つぎはどこから…?', struggle:'はなれてよ〜っ!',
+    charmwalk:'…なんで、あしが…', heatwalk:'…あつくて、なにも…'};
+  p.aiLabel=LBL[state];
+  if(state!==p.aiState){ p.aiState=state; heroBubble(p,BBL[state]); }
+}
+
+/* 視界: 画面(カメラは彼女を追う)内+マージンだけが見えている */
+function inSight(e,p){
+  return Math.abs(e.x-p.x)<W/2+BAL.SIGHT_MARGIN && Math.abs(e.y-p.y)<H/2+BAL.SIGHT_MARGIN;
+}
+function cloudAt(x,y){
+  for(const c of G.B.clouds){ if(Math.hypot(x-c.x,y-c.y)<c.r) return c; }
+  return null;
+}
+function cloudWorth(cl){
+  let n=0,v=0;
+  for(const gm of G.B.gems){ if(Math.hypot(gm.x-cl.x,gm.y-cl.y)<cl.r+8){ n++; v+=gm.v; } }
+  return {n,v};
+}
+/* 判断本体: 「見えている」敵だけを材料に進路と行動を決め、p.steer* に書き込む。
+   思考の拍(aiUpdate)からのみ呼ばれる */
+function aiDecide(foc){
+  const B=G.B, p=B.hero;
   let ax=0, ay=0, threat=0, bossNear=false;
   for(const e of B.enemies){
     if(e.dead||e.dormant||e.state==='attached') continue;
     if(e.id==='flower' && !e.revealed) continue;
     if(e.id==='imp') continue;                                 // 小淫魔からは逃げない(脅威と認識しない)
+    // 画面外の敵は存在に気づかない。視界に入ってからも反応までの遅れがある
+    if(!inSight(e,p) || e.seenT < BAL.NOTICE_T*(1.4-0.4*foc)) continue;
     const dx=p.x-e.x, dy=p.y-e.y;
     const d=Math.hypot(dx,dy)||0.001;
     const DANGER={flower:130, gtent:90, slug:55, worm:55, gas:60, slime:110, leech:60};
     const danger=(e.boss?280:(DANGER[e.id]!==undefined?DANGER[e.id]:150))+e.r;
     if(d<danger){
       let w=1-d/danger; w=w*w*(e.boss?3:1);
-      w*=1-0.28*charmLvFor(p,e);                               // 魅了された相手は脅威と思えない
+      w*=1-0.28*charmLvFor(p,e);                               // 魅了された種族は脅威と思えない
       threat+=w; ax+=dx/d*w; ay+=dy/d*w;
       if(e.boss) bossNear=true;
     }
   }
-  // 粘液・ガス雲の回避(集中が低いと避けきれない)
-  const foc=heroFocus(p);
+  // 粘液・ガス雲の回避(集中が低いと避けきれない。意を決した間は避けない)
   for(const tr of B.trails){
     const dx=p.x-tr.x, dy=p.y-tr.y, d=Math.hypot(dx,dy)||0.001;
     if(d<40){ ax+=dx/d*0.35; ay+=dy/d*0.35; }
   }
-  for(const c of B.clouds){
-    const dx=p.x-c.x, dy=p.y-c.y, d=Math.hypot(dx,dy)||0.001;
-    if(d<c.r+30){ ax+=dx/d*0.35*foc; ay+=dy/d*0.35*foc; }
+  if(p.diveT<=0){
+    for(const c of B.clouds){
+      const dx=p.x-c.x, dy=p.y-c.y, d=Math.hypot(dx,dy)||0.001;
+      if(d<c.r+30){ ax+=dx/d*0.35*foc; ay+=dy/d*0.35*foc; }
+    }
   }
-
-  p.strafeT-=dt;
-  if(p.strafeT<=0){ p.strafeDir*=-1; p.strafeT=rand(2,4.5); }
 
   let dx=0, dy=0, state='wait';
 
@@ -663,10 +758,25 @@ function aiUpdate(dt){
       }
     }
     if(!target){
-      let td=430;
+      // ジェム回収。ガス溜まりの中のジェムは基本見送る——
+      // ただし中のジェムが多ければ、意を決して取りに入る
+      let bestGm=null, bd=430, bestCl=null;
       for(const gm of B.gems){
         const d=Math.hypot(gm.x-p.x,gm.y-p.y);
-        if(d<td){ td=d; target=gm; kind='gem'; }
+        if(d>=bd) continue;
+        const cl=cloudAt(gm.x,gm.y);
+        if(cl && p.diveT<=0){
+          const w=cloudWorth(cl);
+          if(w.n<BAL.DIVE_GEM_N && w.v<BAL.DIVE_GEM_V) continue;   // 割に合わない: 諦める
+        }
+        bd=d; bestGm=gm; bestCl=cl;
+      }
+      if(bestGm){
+        target=bestGm; kind='gem';
+        if(bestCl && p.diveT<=0){
+          p.diveT=BAL.DIVE_T;
+          heroBubble(p,'……すぅ。ちょっとだけ、だからっ');
+        }
       }
     }
     if(target){
@@ -679,6 +789,7 @@ function aiUpdate(dt){
       let ne=null, nd=1e9;
       for(const e of B.enemies){
         if(e.dead||e.dormant||e.state==='attached'||e.id==='imp') continue;
+        if(!inSight(e,p)) continue;
         const d=Math.hypot(e.x-p.x,e.y-p.y);
         if(d<nd){ nd=d; ne=e; }
       }
@@ -695,7 +806,7 @@ function aiUpdate(dt){
       dx+=ax*1.5; dy+=ay*1.5;
     }
   }
-  // 魅了の発作: 無意識にその種族の最寄り個体へ寄っていく(Lv2+)。Lv3で触れると魅了拘束
+  // 魅了の発作: 無意識にその種族の最寄り個体へ寄っていく(Lv2+)
   if(p.charmDrift){
     const cm=nearestOfId(p.charmDrift.id);
     if(!cm){ p.charmDrift=null; }
@@ -704,15 +815,10 @@ function aiUpdate(dt){
       dx=(cm.x-p.x)/cd; dy=(cm.y-p.y)/cd;
       dx+=Math.sin(B.time*2.4)*0.15; dy+=Math.cos(B.time*2.1)*0.15;
       state='charmwalk';
-      if(charmLvFor(p,cm)>=3 && cd<cm.r+p.r+6){
-        enterCharmBind(cm);
-        return;
-      }
     }
   }
-  if(state==='charmwalk'){ /* 発作が操舵を上書きしている */ }
   // 発情の波(Lv2+): 熱に負けて、いちばん近い魔物へふらふらと寄ってしまう
-  else if(p.waveDur>0 && p.heatLv>=2 && attachCount(p)===0){
+  if(state!=='charmwalk' && p.waveDur>0 && p.heatLv>=2 && attachCount(p)===0){
     let ne=null, nd=1e9;
     for(const e of B.enemies){
       if(e.dead||e.dormant||e.state==='attached') continue;
@@ -726,50 +832,7 @@ function aiUpdate(dt){
       state='heatwalk';
     }
   }
-  // 媚薬・煽りによるノイズ(思考の乱れ)
-  if(foc<1){
-    const n=(1-foc)*1.1;
-    dx+=Math.sin(B.time*3.1+p.anim*7)*n;
-    dy+=Math.cos(B.time*2.7+p.anim*5)*n;
-  }
-
-  const m=Math.hypot(dx,dy);
-  const tvx=m>0.001?dx/m*st.speed:0;
-  const tvy=m>0.001?dy/m*st.speed:0;
-  const k=Math.min(1,dt*8*foc);
-  p.vx+=(tvx-p.vx)*k; p.vy+=(tvy-p.vy)*k;
-  p.x+=p.vx*dt; p.y+=p.vy*dt;
-
-  // 繋留(蔦)による引き戻し
-  for(const sl of attachedSlots(p)){
-    const at=p.limbs[sl];
-    if(at.kind!=='tether'||!at.mon||at.mon.dead) continue;
-    const anch=at.mon;
-    const dx2=p.x-anch.x, dy2=p.y-anch.y;
-    const d2=Math.hypot(dx2,dy2)||0.001;
-    if(d2>at.r){
-      p.x=anch.x+dx2/d2*at.r;
-      p.y=anch.y+dy2/d2*at.r;
-    }
-  }
-
-  // 抵抗ゲージ: 移動量で蓄積
-  const moved=Math.hypot(p.x-p.prevX,p.y-p.prevY);
-  if(restraintCount(p)>0) addStruggle(moved*BAL.STRUGGLE_MOVE_RATE);
-
-  if(Math.abs(p.vx)>12) p.face=p.vx>0?1:-1;
-  p.moving=Math.hypot(p.vx,p.vy)>30;
-
-  const LBL={flee:'かいひ行動!', boss:'ボスかいひ!!', gem:'ジェム回収', heart:'ハートへ!',
-    prop:'燭台をこわして回復!', chest:'たからばこへ!', kite:'まちうけ・けん制', wait:'けいかい中',
-    struggle:'ふりほどこうともがいている!',
-    charmwalk:'ふらふらと、ちかづいていく…', heatwalk:'熱にまけて、よろめき寄る…'};
-  const BBL={flee:'にげなきゃ〜!', boss:'おっきいのこわい!!', gem:'キラキラかいしゅう♪',
-    heart:'ハートみっけ!', prop:'燭台こわして回復しなきゃ', chest:'たからばこだ〜!',
-    kite:'このきょりキープ…', wait:'つぎはどこから…?', struggle:'はなれてよ〜っ!',
-    charmwalk:'…なんで、あしが…', heatwalk:'…あつくて、なにも…'};
-  p.aiLabel=LBL[state];
-  if(state!==p.aiState){ p.aiState=state; heroBubble(p,BBL[state]); }
+  p.steerX=dx; p.steerY=dy; p.steerState=state;
 }
 
 /* ================= ヒロイン武器 ================= */
@@ -778,6 +841,7 @@ function nearestEnemies(n,maxD){
   const arr=[];
   for(const e of B.enemies){
     if(e.dead||e.dormant||e.state==='attached') continue;
+    if(!inSight(e,p)) continue;                       // 見えていない敵は撃てない
     const d=Math.hypot(e.x-p.x,e.y-p.y);
     // 魅了された相手は狙いが後回しになる(距離に下駄)
     arr.push({e, d:d+charmLvFor(p,e)*140});
@@ -948,13 +1012,17 @@ function spawnUnit(id, x, y, o){
   o=o||{};
   const B=G.B, d=unitDef(id);
   const elite=o.elite||1;
+  // 夜の深まり: 彼女が育つほど、召喚される魔物も強くなる
+  const heroLv=(B.hero&&B.hero.level)||1;
+  const night=MONSTERS[id].boss?1:1+Math.min(BAL.NIGHT_STAT_CAP, BAL.NIGHT_STAT_LV*Math.max(0,heroLv-1));
+  const pm=(o.mult||1)*night;
   const u={
     id, x, y,
-    hp:d.hp*elite, maxHp:d.hp*elite, spd:MONSTERS[id].spd, r:MONSTERS[id].r*(elite>1?1.2:1),
-    dmg:d.dmg*elite, xp:Math.round(MONSTERS[id].xp*(1+0.1*(d.lv-1))*(elite>1?1.6:1)),
+    hp:d.hp*elite*pm, maxHp:d.hp*elite*pm, spd:MONSTERS[id].spd, r:MONSTERS[id].r*(elite>1?1.2:1),
+    dmg:d.dmg*elite*pm, xp:Math.round(MONSTERS[id].xp*(1+0.1*(d.lv-1))*(elite>1?1.6:1)),
     enVal:o.enVal||0, boss:!!MONSTERS[id].boss, lv:d.lv, elite:elite>1,
     t:rand(10), joff:rand(TAU), hitFlash:0, orbCd:0, stun:0, dead:false,
-    dormant:!!o.dormant, dormT:0, state:'chase', limb:null,
+    dormant:!!o.dormant, dormT:0, state:'chase', limb:null, seenT:0,
   };
   if(id==='worm'){ u.pounceCd=rand(1,2); u.pounceT=0; }
   if(id==='slug'){ u.charmCd=0; }
@@ -1042,6 +1110,7 @@ function enemiesUpdate(dt){
     e.t+=dt;
     if(e.hitFlash>0) e.hitFlash-=dt;
     if(e.orbCd>0) e.orbCd-=dt;
+    e.seenT=inSight(e,p)?e.seenT+dt:0;   // 彼女の視界に入っている時間(反応遅れの基準)
 
     // 四肢に絡みつき/吸い付き中: ヒロインに追従するだけ
     if(e.state==='attached'){
@@ -1476,7 +1545,7 @@ function playCard(id, formId){
   const p=B.hero, f=FORMATIONS[formId], cost=chk.cost;
   B.en-=cost;
   const slot=handSlot(id);
-  slot.cdMax=2.2+cost*0.16;
+  slot.cdMax=BAL.CARD_CD_BASE+cost*BAL.CARD_CD_COST;
   slot.cdT=slot.cdMax;
   S.summon();
 
@@ -1490,11 +1559,30 @@ function playCard(id, formId){
     G.shake=Math.min(8,G.shake+5);
     return true;
   }
-  const n=f.count, per=cost/n;
+
+  // コンボ: 同じカードを窓内に重ねるほど、召喚が強く・多くなる
+  const cb=B.combo[id];
+  const comboN=(cb && B.time-cb.t<=BAL.COMBO_WINDOW)?Math.min(BAL.COMBO_MAX,cb.n+1):1;
+  B.combo[id]={n:comboN, t:B.time};
+  B.lastPlay={id, t:B.time};
+  const comboMult=1+BAL.COMBO_STAT*(comboN-1);
+  const comboExtra=Math.floor((comboN-1)/BAL.COMBO_UNIT_PER);
+  if(comboN>=2){
+    floatTxt(p.x, p.y-92, 'コンボ×'+comboN+'!', '#ffd76a', 12, 1.2);
+    sfx(420+60*comboN, 700, 0.12, 'triangle', 0.05);
+  }
+  // 夜の深まり: 彼女のLvに応じて多数陣形の頭数も増える
+  const nightExtra=Math.min(3, Math.floor(p.level/BAL.NIGHT_UNIT_LV));
+  const multi=(formId==='scatter'||formId==='wave'||formId==='ring'||formId==='ambush');
+  const n=f.count+(multi?comboExtra+nightExtra:0);
+  const per=cost/n;
+  const so={enVal:per, mult:comboMult};
+
   if(formId==='scatter'||formId==='single'){
     for(let i=0;i<n;i++){
       const a=rand(TAU);
-      spawnUnit(id, p.x+Math.cos(a)*560, p.y+Math.sin(a)*560, {enVal:per, elite:f.elite||1});
+      spawnUnit(id, p.x+Math.cos(a)*560, p.y+Math.sin(a)*560,
+        Object.assign({elite:f.elite||1}, so));
     }
   }else if(formId==='wave'){
     const a=rand(TAU);
@@ -1502,7 +1590,7 @@ function playCard(id, formId){
     const px=-Math.sin(a), py=Math.cos(a);
     for(let i=0;i<n;i++){
       const off=(i-(n-1)/2)*55;
-      spawnUnit(id, cx+px*off, cy+py*off, {enVal:per});
+      spawnUnit(id, cx+px*off, cy+py*off, so);
     }
   }else if(formId==='ambush'){
     const vd=Math.hypot(p.vx,p.vy);
@@ -1510,13 +1598,13 @@ function playCard(id, formId){
     for(let i=0;i<n;i++){
       const d2=rand(240,380), spread=rand(-0.5,0.5);
       spawnUnit(id, p.x+Math.cos(ang+spread)*d2, p.y+Math.sin(ang+spread)*d2,
-        {enVal:per, dormant:id!=='flower'});
+        Object.assign({dormant:id!=='flower'}, so));
     }
   }else if(formId==='ring'){
     const rot=rand(TAU);
     for(let i=0;i<n;i++){
       const a=rot+i*TAU/n+rand(-0.12,0.12);
-      spawnUnit(id, p.x+Math.cos(a)*300, p.y+Math.sin(a)*225, {enVal:per});
+      spawnUnit(id, p.x+Math.cos(a)*300, p.y+Math.sin(a)*225, so);
     }
   }
   return true;
@@ -1534,7 +1622,7 @@ function autoDirector(dt){
   if(!B.auto) return;
   B.autoT-=dt;
   if(B.autoT>0) return;
-  B.autoT=0.55;
+  B.autoT=0.42;
   const p=B.hero;
   const alive=B.enemies.filter(e=>!e.dead);
   const hpRatio=p.hp/p.maxHp;
@@ -1556,9 +1644,11 @@ function autoDirector(dt){
     if(plays>0) return;
   }
 
-  // 2) スタミナが削れているなら拘束役を追加投入(押し倒しの好機)
+  // 2) 好機に拘束役を追加投入: スタミナ薄・ガス溜まりへの突入中・発情の波
+  //    (足が止まる/鈍る瞬間 = 拘束の差し込み所)
   const binderN=alive.filter(e=>BINDERS.includes(e.id)).length;
-  if(stamRatio<0.45 && binderN<4){
+  const distracted=!!cloudAt(p.x,p.y-12)||p.diveT>0||p.waveDur>0;
+  if((stamRatio<0.45||distracted) && binderN<4){
     for(const id of ['worm','gtent','flower']){
       if(!has(id)) continue;
       const f=id==='flower'?bestForm(['ambush','scatter']):bestForm(['wave','scatter']);
@@ -1573,6 +1663,17 @@ function autoDirector(dt){
       const f=id==='flower'?bestForm(['ambush','scatter']):bestForm(['single','scatter']);
       const chk=canPlay(id,f);
       if(chk.ok && B.en>=chk.cost+4){ playCard(id,f); return; }
+    }
+  }
+
+  // 3.5) コンボ継続: 直前カードの連鎖が生きていて余裕があれば重ねる
+  const lp=B.lastPlay;
+  if(lp && !MONSTERS[lp.id].boss && B.combo[lp.id]){
+    const cb=B.combo[lp.id];
+    if(B.time-cb.t<=BAL.COMBO_WINDOW-1.5 && cb.n<BAL.COMBO_MAX && has(lp.id)){
+      const f=bestForm(['wave','scatter']);
+      const chk=canPlay(lp.id,f);
+      if(chk.ok && B.en>=chk.cost+6){ playCard(lp.id,f); return; }
     }
   }
 

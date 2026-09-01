@@ -156,7 +156,7 @@ const UI={
     const wipeArmed=this._wipeArm && performance.now()-this._wipeArm<3000;
     return `
       <h1>ルミナ・サバイバーズ</h1>
-      <div class="sub">v0.4 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
+      <div class="sub">v0.4.1 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
       <p>あなたは<b>夜側の指揮者</b>。デッキから魔物を差し向け、AIで戦う光の少女<b>「ルミナ」</b>を追い詰める。<br>
       彼女に魔物が倒されるほどあなたのエネルギーとエッセンスは増え、彼女もまた強くなる。</p>
       <div style="text-align:center;color:var(--gold);font-size:12px;margin-bottom:8px">${esc(best)} ・ 通算${META.runs}戦 / 捕獲${META.captures}回</div>
@@ -409,7 +409,7 @@ const UI={
       const el=document.createElement('div');
       el.className='hcard';
       el.dataset.id=slot.id;
-      el.innerHTML=`<div class="cost"></div><div class="nm">${esc(m.name)}</div><div class="cd" style="height:0%"></div>`;
+      el.innerHTML=`<div class="cost"></div><div class="combo" hidden></div><div class="nm">${esc(m.name)}</div><div class="cd" style="height:0%"></div>`;
       el.insertBefore(makeIconCanvas(slot.id,44), el.firstChild);
       row.appendChild(el);
     }
@@ -448,6 +448,12 @@ const UI={
       el.classList.toggle('off',!chk.ok);
       const cdH=slot&&slot.cdT>0?clamp(slot.cdT/(slot.cdMax||1),0,1)*100:0;
       el.querySelector('.cd').style.height=cdH.toFixed(0)+'%';
+      // コンボ連鎖の残り表示
+      const cb=B.combo&&B.combo[id];
+      const cEl=el.querySelector('.combo');
+      const on=!!(cb && B.time-cb.t<=BAL.COMBO_WINDOW && cb.n>=2);
+      cEl.hidden=!on;
+      if(on) cEl.textContent='×'+cb.n;
     }
   },
 };
