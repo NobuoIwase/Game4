@@ -61,6 +61,9 @@ function newHero(){
     /* --- 思考の拍 / 意を決した突入(v0.4.1) --- */
     thinkT:0, steerX:0, steerY:0, steerState:'wait',
     diveT:0,
+    /* --- 絶頂(v0.6) --- */
+    climaxT:0, climaxPhase:0, squirted:false,
+    bubblePrio:0,
   };
   // 戦闘経験の継承(世代内で強くなる)
   if(gb>=1) h.wp.bolt=2;
@@ -126,6 +129,7 @@ function startBattle(){
     ailRateT:{}, chestIdx:0, propT:BAL.PROP_RESPAWN,
     lvCards:null, pinScene:null, pinSceneIdx:0, pinSceneT:0,
     combo:{}, lastPlay:null,
+    climaxN:0, stains:[],
   };
   spawnInitialProps();
   G.mode='battle';
@@ -149,6 +153,7 @@ function endBattle(outcome){
   META.essence+=essGain; META.orbs+=orbGain;
   META.runs++;
   META.life.dmg+=Math.round(B.dmgDealt); META.life.ail+=B.ailCount; META.life.kills+=B.kills;
+  META.life.climax=(META.life.climax||0)+B.climaxN;
   META.rot.dmg+=Math.round(B.dmgDealt); META.rot.ail+=B.ailCount; META.rot.battles++;
   if(outcome==='capture'){ META.captures++; META.rot.captures++; }
   if(outcome==='capture' && (!META.best || B.time<META.best.time)){
@@ -166,13 +171,23 @@ function endBattle(outcome){
   G.mode='result';
   UI.showResult({outcome, essGain, orbGain, rotReset,
     time:B.time, kills:B.kills, dmg:Math.round(B.dmgDealt), ail:B.ailCount,
-    heroLv:B.hero.level, capturedBy:B.capturedBy, cause:B.captureCause});
+    heroLv:B.hero.level, capturedBy:B.capturedBy, cause:B.captureCause, climax:B.climaxN});
 }
 
 /* ================= 状態付与 ================= */
-function heroBubble(h,txt,force){
-  if(!force && h.bubbleCd>0) return;
-  h.bubble=txt; h.bubbleT=1.7; h.bubbleCd=0.9;
+/* 台詞の優先度:
+   0=平常のおしゃべり / 1=状態の変化 / 2=エロ状態の台詞 / 3=絶頂・拘束の核心台詞。
+   高優先の台詞は言い終わるまで低優先に潰されない(あっちこっち切り替わらない) */
+function heroBubble(h,txt,force,prio){
+  prio=prio||0;
+  const cur=h.bubbleT>0?(h.bubblePrio||0):-1;
+  if(prio<cur) return;
+  if(prio===cur && !force && h.bubbleT>0.5) return;
+  if(!force && prio===0 && h.bubbleCd>0) return;
+  h.bubble=txt;
+  h.bubbleT=prio>=2?2.6:1.7;
+  h.bubbleCd=0.9;
+  h.bubblePrio=prio;
 }
 function awardAil(type){
   const B=G.B;
@@ -198,7 +213,7 @@ function applyCharm(mon){
     '','え…なんで、めが…はなせな…',
     'だめ…みちゃだめ、なのに…',
     'このこ達の、そばに…いたい……',
-  ][c.lv],true);
+  ][c.lv],true,2);
   S.charm();
   awardAil('charm');
 }
@@ -214,7 +229,7 @@ function applySensit(amount){
   h.sensit=clamp(h.sensit+amount*h.sense,0,100);
   const after=sensLvOf(h);
   if(after>before){
-    heroBubble(h,['','なんか、あまいにおい…','はだが、ひりひりする…','ふれられただけで、こんな…'][after]);
+    heroBubble(h,['','なんか、あまいにおい…','はだが、ひりひりする…','ふれられただけで、こんな…'][after],false,1);
     awardAil('sens');
   }
 }
@@ -222,7 +237,66 @@ function applySensit(amount){
 function applyPleasure(amount){
   const h=G.B.hero;
   h.aphro=clamp(h.aphro+amount*h.sense*(1+BAL.SENSIT_AMP*sensLvOf(h)),0,100);
-  if(h.aphro>=100) heatUp();
+  if(h.aphro>=100 && h.climaxT<=0) enterClimax();
+}
+/* ================= 絶頂 =================
+   快感100で絶頂。脚が止まり、痙攣して動けない。終わると発情が一段深まる */
+function enterClimax(){
+  const B=G.B, h=B.hero;
+  if(h.climaxT>0) return;
+  h.climaxT=BAL.CLIMAX_DUR;
+  h.climaxPhase=0;
+  h.vx=0; h.vy=0;
+  h.squirted=Math.random()<Math.min(0.95, BAL.SQUIRT_BASE+0.2*h.heatLv+0.12*sensLvOf(h));
+  B.climaxN++;
+  heroBubble(h,'や、だめ、いま……きちゃ……あ、ぁあああっ——!',true,3);
+  if(B.climaxN===1) setBanner('絶頂','ルミナは立っていられない','#ff5d9e');
+  if(!h.pinned && !h.charmBind){
+    B.pinScene=sceneFor('climax','default');
+    B.pinSceneIdx=0; B.pinSceneT=0;
+  }
+  parts(h.x,h.y-18,20,['#ff9ec2','#ff5d9e','#fff'],150,0.8);
+  sfx(620,980,0.5,'sine',0.08);
+  S.charm();
+  G.shake=Math.min(8,G.shake+4);
+  awardAil('climax');
+}
+function climaxTick(dt){
+  const B=G.B, h=B.hero;
+  h.climaxT-=dt;
+  if(!h.pinned && !h.charmBind){
+    B.pinSceneT+=dt;
+    if(B.pinScene && B.pinSceneT>2.6){ B.pinSceneT=0; B.pinSceneIdx++; }
+  }
+  const el=BAL.CLIMAX_DUR-h.climaxT;
+  if(h.climaxPhase===0 && el>0.7){
+    h.climaxPhase=1;
+    if(h.squirted){
+      spawnStain(h.x, h.y+2);
+      heroBubble(h,'やだ、でて……とまんない……ぁ……っ',true,3);
+      parts(h.x,h.y-4,16,['#bcd4ff','#e8f0ff'],130,0.6);
+      sfx(500,180,0.3,'sine',0.05);
+    }else{
+      heroBubble(h,'びくっ、びくって……とまら、な……っ',true,3);
+    }
+  }
+  if(h.climaxPhase===1 && el>2.3){
+    h.climaxPhase=2;
+    heroBubble(h,'……は……ぁ……あし、ちから……はいらな……',true,3);
+  }
+  if(Math.random()<dt*6) parts(h.x+rand(-12,12),h.y-rand(4,26),1,['#ffb3cf','#fff'],60,0.6);
+  if(h.climaxT<=0){
+    h.climaxT=0;
+    if(!h.pinned && !h.charmBind) B.pinScene=null;
+    heatUp();
+  }
+}
+/* 潮の染み: 地面にしばらく残る */
+function spawnStain(x,y){
+  const B=G.B;
+  if(B.stains.length>30) B.stains.shift();
+  B.stains.push({x,y,r:rand(11,16),t:0,life:BAL.STAIN_LIFE,rot:rand(TAU),
+    r2:rand(0.55,0.8)});
 }
 function heatUp(){
   const h=G.B.hero;
@@ -234,7 +308,7 @@ function heatUp(){
     '','あつい……へんに、なりそ…っ',
     'だめ、あたまの奥、とけ…ちゃ…',
     'もう…がまん、できな……っ',
-  ][h.heatLv],true);
+  ][h.heatLv],true,2);
   if(h.heatLv>=2) setBanner('発情 Lv'+h.heatLv,'波が来るたび、彼女の脚が止まる','#ff5d9e');
   parts(h.x,h.y-20,14,['#ff9ec2','#ff5d9e'],120,0.7);
   sfx(520,860,0.4,'sine',0.07);
@@ -258,7 +332,7 @@ function attachMonster(mon, kind, opt){
   h.limbs[slot]={mon, kind, need, r:opt.r||0, t:B.time};
   mon.state='attached'; mon.limb=slot; mon.stun=0;
   h.resist.bound=(h.resist.bound||0)+1;
-  heroBubble(h, pickRand(['からみついてる…っ!','はなれてっ…!','やだ、脚に…っ!']), true);
+  heroBubble(h, pickRand(['からみついてる…っ!','はなれてっ…!','やだ、脚に…っ!']), true, 2);
   S.bind();
   parts(h.x,h.y-14,10,['#c98cff','#8458d8'],110,0.5);
   awardAil('bound');
@@ -310,7 +384,7 @@ function attachSucker(mon){
   const slot=free[(Math.random()*free.length)|0];
   h.suckers[slot]={mon, t:B.time, need:BAL.RIP_NEED_SUCK/(1+0.1*(h.resist.bound||0))};
   mon.state='attached'; mon.suck=slot; mon.stun=0;
-  heroBubble(h, pickRand(['ひゃんっ!? す、吸わないでっ…!','やっ、そんなとこ…っ!','はねおと…どこ——ひゃうっ!?']), true);
+  heroBubble(h, pickRand(['ひゃんっ!? す、吸わないでっ…!','やっ、そんなとこ…っ!','はねおと…どこ——ひゃうっ!?']), true, 2);
   S.bind();
   parts(h.x,h.y-16,8,['#ff9d8a','#ffc2b0'],100,0.5);
   awardAil('suck');
@@ -354,7 +428,7 @@ function oldestRestraint(h){
 function addStruggle(amount){
   const h=G.B.hero;
   if(restraintCount(h)===0||h.pinned||h.charmBind) return;
-  if(h.stamina<=0) return;
+  if(h.stamina<=0||h.climaxT>0) return;
   h.struggle+=amount*(h.heatLv>0?1-0.1*h.heatLv:1);
   const o=oldestRestraint(h);
   if(o && h.struggle>=o.at.need){
@@ -384,7 +458,7 @@ function checkStaminaCollapse(){
     beginCapture(h.pinBy||(o&&o.at.mon)||null,'stamina');
   }else{
     h.exhausted=true;
-    heroBubble(h,'はぁ……はぁ……',true);
+    heroBubble(h,'はぁ……はぁ……',true,2);
   }
 }
 /* --- 押し倒し --- */
@@ -397,7 +471,7 @@ function enterPin(mon){
   B.pinScene=sceneFor('pin', mon?mon.id:'default');
   B.pinSceneIdx=0; B.pinSceneT=0;
   setBanner('押し倒された!','もがいて逃れろ——スタミナかHPが尽きれば敗北','#ff5d7a');
-  heroBubble(h,'はなれて……っ!',true);
+  heroBubble(h,'はなれて……っ!',true,2);
   S.capture();
   G.shake=Math.min(9,G.shake+5);
   awardAil('pinned');
@@ -410,7 +484,7 @@ function pinTick(dt){
   if(h.pinT<=0){
     h.pinT=BAL.PIN_PULSE_T;
     h.stamina-=BAL.PIN_PULSE_COST;
-    h.pinEscape+=BAL.PIN_ESCAPE_GAIN*(h.heatLv>0?1-0.1*h.heatLv:1)*rand(0.85,1.15);
+    h.pinEscape+=BAL.PIN_ESCAPE_GAIN*(h.heatLv>0?1-0.1*h.heatLv:1)*(h.climaxT>0?0.25:1)*rand(0.85,1.15);
     applyPleasure(BAL.PLEAS_PIN);
     parts(h.x+rand(-10,10),h.y-rand(4,22),3,['#fff','#c98cff'],90,0.4);
     // 絡みつき中のモンスターがじわじわ削る(貫通)
@@ -424,7 +498,7 @@ function pinTick(dt){
       h.pinned=false; h.pinBy=null; h.pinEscape=0; h.struggle=0;
       for(const sl of attachedSlots(h)) detachLimb(sl,{fling:true});
       h.ifr=1.2;
-      heroBubble(h,'まだ……まけないっ!',true);
+      heroBubble(h,'まだ……まけないっ!',true,2);
       setBanner('振りほどいた!','ルミナは立ち上がった','#8fd3ff');
       B.pinScene=null;
     }
@@ -443,7 +517,7 @@ function enterCharmBind(mon){
   B.pinScene=sceneFor('charmbind', mon.id);
   B.pinSceneIdx=0; B.pinSceneT=0;
   setBanner('魅了拘束!','ルミナは自分から縋りついた——正気に戻れば振りほどける','#ff86b3');
-  heroBubble(h,'あったかい……ちがう、これ、ちがうのに……',true);
+  heroBubble(h,'あったかい……ちがう、これ、ちがうのに……',true,3);
   S.capture();
   awardAil('charmbind');
 }
@@ -463,7 +537,7 @@ function releaseCharmBind(sane){
     parts(mon.x,mon.y,8,['#fff','#ffb3cf'],140,0.5);
     if(mon.hp<=0) killEnemy(mon);
     h.ifr=1.2;
-    heroBubble(h,'——はっ!? わ、わたし、なにをっ…!?',true);
+    heroBubble(h,'——はっ!? わ、わたし、なにをっ…!?',true,3);
     setBanner('正気に戻った!','ルミナは我に返り、振りほどいた','#8fd3ff');
   }
 }
@@ -483,7 +557,7 @@ function charmBindTick(dt){
   if(h.charmBindT<=0){
     h.charmBindT=BAL.CHARM_BIND_PULSE;
     h.stamina-=BAL.CHARM_BIND_STAM;
-    h.charmSanity+=BAL.CHARM_BIND_SANITY*(h.heatLv>0?0.75:1)*rand(0.85,1.15);
+    h.charmSanity+=BAL.CHARM_BIND_SANITY*(h.heatLv>0?0.75:1)*(h.climaxT>0?0.25:1)*rand(0.85,1.15);
     checkStaminaCollapse();
     if(G.mode!=='battle'&&G.mode!=='levelup') return;
     if(h.charmSanity>=100) releaseCharmBind(true);
@@ -511,7 +585,7 @@ function condTick(h,dt){
       if(h.waveT<=0){
         h.waveDur=BAL.WAVE_DUR_BASE+BAL.WAVE_DUR_LV*h.heatLv;
         h.waveT=Math.max(3,BAL.WAVE_CD_BASE-BAL.WAVE_CD_LV*h.heatLv)+rand(-0.8,0.8);
-        if(!h.pinned&&!h.charmBind) heroBubble(h,pickRand(['……っ、また、きて…っ','あついの…きちゃ…っ','ひざ、ふるえ…っ']));
+        if(!h.pinned&&!h.charmBind&&h.climaxT<=0) heroBubble(h,pickRand(['……っ、また、きて…っ','あついの…きちゃ…っ','ひざ、ふるえ…っ']),false,2);
       }
     }
   }
@@ -532,7 +606,7 @@ function condTick(h,dt){
         c.driftCd=BAL.CHARM_DRIFT_CD*rand(0.85,1.2);
         if(nearestOfId(c.id)){
           h.charmDrift={id:c.id, t:BAL.CHARM_DRIFT_T*c.lv+(c.lv>=3?0.8:0)};
-          heroBubble(h,pickRand(['……あのこ達、どこ…','ちがう、いま戦ってる、のに…','あし、が…かってに…']),true);
+          heroBubble(h,pickRand(['……あのこ達、どこ…','ちがう、いま戦ってる、のに…','あし、が…かってに…']),true,2);
         }
       }
     }
@@ -557,7 +631,7 @@ function condTick(h,dt){
     if(G.mode!=='battle'&&G.mode!=='levelup') return;
   }
   // スタミナ回復
-  if(!h.pinned && !h.charmBind && attachCount(h)===0){
+  if(!h.pinned && !h.charmBind && h.climaxT<=0 && attachCount(h)===0){
     const rg=h.heatLv>0?BAL.STAMINA_REGEN_HEAT:BAL.STAMINA_REGEN;
     h.stamina=Math.min(h.staminaMax,h.stamina+rg*dt);
     if(h.exhausted && h.stamina>25){ h.exhausted=false; heroBubble(h,'……よし、いける'); }
@@ -565,7 +639,7 @@ function condTick(h,dt){
   // 発情の波のふらつき
   if(h.stumbleDur>0) h.stumbleDur-=dt;
   h.stumbleT-=dt;
-  if(h.waveDur>0 && h.stumbleT<=0 && !h.pinned && !h.charmBind){
+  if(h.waveDur>0 && h.stumbleT<=0 && !h.pinned && !h.charmBind && h.climaxT<=0){
     h.stumbleT=rand(1.8,3.0); h.stumbleDur=0.35;
     heroBubble(h,'あしが…もつれ…っ');
   }
@@ -584,10 +658,11 @@ function aiUpdate(dt){
   const B=G.B, p=B.hero, st=heroStat(p);
   p.prevX=p.x; p.prevY=p.y;
 
-  if(p.pinned || p.charmBind || p.stumbleDur>0){
+  if(p.pinned || p.charmBind || p.climaxT>0 || p.stumbleDur>0){
     p.vx*=Math.pow(0.001,dt); p.vy*=Math.pow(0.001,dt);
     p.moving=false;
-    p.aiLabel=p.pinned?'おさえこまれている!!':(p.charmBind?'みりょうされて、はなれない…!!':'ふらつき…');
+    p.aiLabel=p.climaxT>0?'ぜっちょう……!!'
+      :(p.pinned?'おさえこまれている!!':(p.charmBind?'みりょうされて、はなれない…!!':'ふらつき…'));
     return;
   }
 
@@ -662,7 +737,12 @@ function aiUpdate(dt){
     kite:'このきょりキープ…', wait:'つぎはどこから…?', struggle:'はなれてよ〜っ!',
     charmwalk:'…なんで、あしが…', heatwalk:'…あつくて、なにも…'};
   p.aiLabel=LBL[state];
-  if(state!==p.aiState){ p.aiState=state; heroBubble(p,BBL[state]); }
+  if(state!==p.aiState){
+    p.aiState=state;
+    // エロ状態が乗っている間は、のんきなおしゃべりを封じる(台詞の主導権はエロ側)
+    const ero=p.heatLv>0||p.aphro>=45||restraintCount(p)>0||p.climaxT>0||p.charms.length>0;
+    if(!ero) heroBubble(p,BBL[state]);
+  }
 }
 
 /* 視界: 画面(カメラは彼女を追う)内+マージンだけが見えている */
@@ -862,7 +942,7 @@ function nearestEnemies(n,maxD){
 }
 function weaponsUpdate(dt){
   const B=G.B, p=B.hero;
-  const atkMult=((p.pinned||p.charmBind)?0:1)*Math.pow(0.75,armCount(p))   // 腕を拘束されるほど攻撃が乱れる
+  const atkMult=((p.pinned||p.charmBind||p.climaxT>0)?0:1)*Math.pow(0.75,armCount(p))   // 腕を拘束されるほど攻撃が乱れる
     *(p.waveDur>0?BAL.WAVE_ATK:1)                                           // 発情の波の間は手が止まりがち
     *(1+0.08*p.ps.haste);                                                   // クイックリボン
   if(atkMult<=0) return;
@@ -1252,7 +1332,7 @@ function enemiesUpdate(dt){
       leechTick(e,dt,d,dx,dy);
     }else{
       // slug / goblin / ghost / slime / mistslime: 通常追跡
-      const rush=(attachCount(p)>0||p.pinned||p.charmBind) && d<300 ? 1.9 : 1;
+      const rush=(attachCount(p)>0||p.pinned||p.charmBind||p.climaxT>0) && d<300 ? 1.9 : 1;
       const ox=Math.cos(e.joff)*14, oy=Math.sin(e.joff)*14;
       const tx=p.x+ox-e.x, ty=p.y+oy-e.y;
       const td=Math.hypot(tx,ty)||0.001;
@@ -1302,7 +1382,7 @@ function enemiesUpdate(dt){
 }
 function wormTick(e,dt,d,dx,dy){
   const p=G.B.hero;
-  const rush=(attachCount(p)>0||p.pinned||p.charmBind) && d<300 ? 1.7 : 1;
+  const rush=(attachCount(p)>0||p.pinned||p.charmBind||p.climaxT>0) && d<300 ? 1.7 : 1;
   if(e.pounceT>0){
     e.pounceT-=dt;
     e.x+=e.cdx*240*dt; e.y+=e.cdy*240*dt;
@@ -1487,7 +1567,7 @@ function beginCapture(src,cause){
   B.hero.pinned=true;
   const bub={stamina:'ちから、が……はいらな……', charm:'だって……はなれたく、な……', hp:'そんな……っ'};
   const sub={stamina:'ルミナは力尽き、組み伏せられた', charm:'ルミナは魅了に蕩けたまま、力尽きた', hp:'ルミナは魔物たちに捕らえられた'};
-  heroBubble(B.hero, bub[cause]||bub.hp, true);
+  heroBubble(B.hero, bub[cause]||bub.hp, true, 3);
   setBanner('敗北 — 観測終了', sub[cause]||sub.hp,'#c98cff');
   S.capture();
   G.shake=Math.min(10,G.shake+6);
@@ -1773,7 +1853,7 @@ function autoDirector(dt){
   const alive=B.enemies.filter(e=>!e.dead);
   const hpRatio=p.hp/p.maxHp;
   const stamRatio=p.stamina/p.staminaMax;
-  const held=attachCount(p)>0||p.pinned||!!p.charmBind;
+  const held=attachCount(p)>0||p.pinned||!!p.charmBind||p.climaxT>0;
   const has=id=>B.hand.some(h=>h.id===id);
   const ready=(id,f)=>canPlay(id,f).ok;
 
@@ -1886,6 +1966,7 @@ function battleTick(dt){
     for(const sl of attachedSlots(p)) p.limbs[sl]=null;
     for(const sl of suckSlots(p)) p.suckers[sl]=null;
     p.pinned=false; p.charmBind=null; p.charmDrift=null; p.charms.length=0;
+    p.climaxT=0;
     B.pinScene=null;
     setBanner('✨ 生存 ✨','ルミナは今夜も守りきった','#ffd76a');
     heroBubble(p,'やりきったよ〜!',true);
@@ -1903,8 +1984,11 @@ function battleTick(dt){
   p.hp=Math.min(p.maxHp,p.hp+p.regen*dt);   // 清廉のご加護
 
   condTick(p,dt);
+  if(p.climaxT>0){ climaxTick(dt); }
   if(p.pinned){ pinTick(dt); if(G.mode!=='battle') return; }
   else if(p.charmBind){ charmBindTick(dt); if(G.mode!=='battle') return; }
+  for(const st of B.stains) st.t+=dt;
+  B.stains=B.stains.filter(st=>st.t<st.life);
   // 小淫魔: 近くの数を数える(集中低下)が、快感を注げるのは同時2体まで
   B.frameImp=0;
   p.teaseN=0;

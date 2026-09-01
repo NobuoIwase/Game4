@@ -103,6 +103,11 @@ const BAL={
   CHEST_TIMES:[40,110,180,250],
 
   IMP_TEASE_CAP:2,         // 快感を注げる小淫魔は同時2体まで(数で強くなりすぎ防止)
+
+  /* --- 絶頂(v0.6) --- */
+  CLIMAX_DUR:3.4,          // 絶頂の硬直時間: 脚が止まり、痙攣し、動けない
+  SQUIRT_BASE:0.35,        // 潮吹き率 = BASE + 0.2×発情Lv + 0.12×敏感Lv
+  STAIN_LIFE:70,           // 地面の染みの残留時間(s)
 };
 
 /* ---------------- モンスターカード ----------------
@@ -268,6 +273,7 @@ const AILMENTS={
   charm:{ name:'魅了', color:'#ffb3cf', icon:'✦' },
   charmbind:{ name:'魅了拘束', color:'#ff86b3', icon:'✦' },
   suck:{ name:'吸い付き', color:'#ff9d8a', icon:'♡' },
+  climax:{ name:'絶頂', color:'#ff5d9e', icon:'♡' },
 };
 const LIMBS=['armL','armR','legL','legR'];
 const LIMB_NAMES={armL:'左腕', armR:'右腕', legL:'左脚', legR:'右脚'};

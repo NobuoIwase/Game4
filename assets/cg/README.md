@@ -1,14 +1,27 @@
-# assets/cg — 敗北スチル置き場
+# 画像スロット(assets/cg/)
 
-敗北(捕獲)リザルトに表示する画像をここに置く。システムは以下の順で探し、
-最初に見つかったものを表示する(無ければ注記のみ表示):
+NovelAI等で作った画像をこのフォルダに置くと、ゲーム内の各場面に表示されます。
+無いスロットは何も表示されません(エラーにならない)。
 
-1. `defeat_<モンスターid>.png` — とどめ/押し倒しの主ごとの差分
-   (id例: worm / slug / gas / imp / flower / gtent / ghost / slime / mistslime / vampi)
-2. `defeat.png` — 共通フォールバック
+## 敗北スチル(リザルト画面)
+- `defeat_<モンスターid>.png` … そのモンスターにとどめを刺された時
+- `defeat.png` … 汎用フォールバック(現在: ルミナのドット絵を配置済み)
 
-推奨: 横長 (例 960×540 / 4:3可)。PNG想定(コード側は拡張子直書きのため合わせること)。
+## 戦闘中カットイン(画面右にウィンドウ表示)
+- `pin_<モンスターid>.png` → `pin.png` … 押し倒し中
+- `charmbind_<モンスターid>.png` → `charmbind.png` … 魅了拘束中
+- `climax.png` … 絶頂中
 
-※画像はリポジトリ管理者が用意して配置する。ここに置いたファイルは
-GitHub Pages にもそのまま公開される点に注意(公開したくない画像を置く場合は
-Pages運用の見直しが必要)。
+モンスターid: slug / worm / ghost / slime / gas / imp / flower /
+goblin / leech / mistslime / gtent / vampi
+
+## ドット化ツール
+
+NovelAIの画像をゲームの雰囲気に合わせてドット絵化できます:
+
+```
+python3 tools/pixelate.py 入力.png assets/cg/pin_worm.png --height 208 --colors 24
+```
+
+ヒロインのスプライト(戦闘中の見た目)は `assets/sprites/lumina.png`(35×52)。
+差し替えると見た目が変わります。ファイルを消すと従来のベクタ描画に戻ります。

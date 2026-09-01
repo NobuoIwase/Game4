@@ -125,6 +125,22 @@ function drawProp(g,pr){
   }
   g.restore();
 }
+function drawStain(g,st){
+  // 潮の染み: 濡れて光る水たまり。ゆっくり乾く
+  const fade=st.t>st.life*0.7 ? 1-(st.t-st.life*0.7)/(st.life*0.3) : 1;
+  const grow=Math.min(1, st.t*2.5);
+  g.save();
+  g.translate(st.x,st.y);
+  g.rotate(st.rot);
+  g.globalAlpha=0.4*fade;
+  g.fillStyle='rgba(40,54,96,0.8)';
+  g.beginPath(); g.ellipse(0,0,st.r*grow,st.r*st.r2*grow,0,0,TAU); g.fill();
+  g.globalAlpha=0.25*fade;
+  g.fillStyle='rgba(150,180,230,0.9)';
+  g.beginPath(); g.ellipse(-st.r*0.2,-st.r*0.12,st.r*0.55*grow,st.r*st.r2*0.4*grow,0,0,TAU); g.fill();
+  g.globalAlpha=1;
+  g.restore();
+}
 function drawTrail(g,tr){
   const a=clamp(1-tr.t/tr.life,0,1)*0.4;
   g.fillStyle='rgba(120,230,190,'+(a*0.55).toFixed(3)+')';
@@ -186,7 +202,61 @@ function bowShape(g,x,y,s,color){
 }
 
 /* ---------------- ルミナ ---------------- */
+/* ドット絵スプライト(assets/sprites/lumina.png)。
+   読み込めた場合はベクタ絵の代わりに使う(無ければ従来描画へフォールバック) */
+const LUMINA_SPR=new Image();
+let LUMINA_OK=false;
+LUMINA_SPR.onload=()=>{ LUMINA_OK=true; };
+LUMINA_SPR.onerror=()=>{ LUMINA_OK=false; };
+LUMINA_SPR.src='assets/sprites/lumina.png';
+
+function drawGirlSprite(g,x,y,opt){
+  const t=opt.t, mood=opt.mood||'normal', moving=opt.moving, heat=opt.heat||0;
+  const bound=mood==='bound', pinned=mood==='pinned', climax=mood==='climax';
+  const s=1.05;
+  g.save();
+  g.translate(x,y);
+  g.fillStyle='rgba(8,8,26,0.35)';
+  g.beginPath(); g.ellipse(0,1,12,3.6,0,0,TAU); g.fill();
+  const bob = pinned?Math.sin(t*15)*0.6
+            : bound?Math.sin(t*22)*0.8
+            : climax?0
+            : moving?-Math.abs(Math.sin(t*9))*2.4 : Math.sin(t*2.6)*0.9;
+  let jx=0;
+  if(climax) jx=Math.sin(t*46)*1.7;             // 痙攣の横ぶれ
+  g.translate(jx, bob + (pinned?5:0) + (climax?3:0));
+  if(bound) g.rotate(Math.sin(t*17)*0.05);
+  if(pinned) g.rotate(Math.sin(t*9)*0.07);
+  if(climax) g.rotate(Math.sin(t*30)*0.05);     // びくっ、びくっ
+  const sy=(pinned?0.84:1)*(climax?1-Math.abs(Math.sin(t*13))*0.09:1);
+  g.imageSmoothingEnabled=false;
+  const w=LUMINA_SPR.width*s, hgt=LUMINA_SPR.height*s*sy;
+  if(G.hurtFlash>0.15) g.filter='brightness(1.6) saturate(1.3)';
+  else if(climax) g.filter='saturate(1.35) hue-rotate(-10deg) brightness(1.08)';
+  else if(heat>=60) g.filter='saturate(1.25) hue-rotate(-8deg) brightness(1.04)';
+  g.drawImage(LUMINA_SPR, Math.round(-w/2), Math.round(-hgt+2), Math.round(w), Math.round(hgt));
+  g.filter='none';
+  // 頬の火照り(ドットの上に重ねる)
+  if(heat>=30||climax){
+    g.globalAlpha=climax?0.6:Math.min(0.5,(heat-30)/70*0.6);
+    g.fillStyle='#ff86a8';
+    g.fillRect(-9,Math.round(-hgt*0.62),4,2);
+    g.fillRect(5,Math.round(-hgt*0.62),4,2);
+    g.globalAlpha=1;
+  }
+  // 絶頂の白い明滅
+  if(climax){
+    const fl=Math.max(0,Math.sin(t*26));
+    g.globalAlpha=fl*0.16;
+    g.fillStyle='#fff';
+    g.beginPath(); g.arc(0,-hgt*0.5,hgt*0.62,0,TAU); g.fill();
+    g.globalAlpha=1;
+  }
+  g.restore();
+}
 function drawGirl(g,x,y,opt){
+  if(LUMINA_OK){ drawGirlSprite(g,x,y,opt); return; }
+  if(opt.mood==='climax') opt=Object.assign({},opt,{mood:'pinned'});
   const t=opt.t, face=opt.face||1, moving=opt.moving, mood=opt.mood||'normal';
   const heat=opt.heat||0;
   const s=opt.scale||1.15;
@@ -944,9 +1014,47 @@ function drawBanner(g){
   }
   g.restore();
 }
+/* えっちシーンのカットインCG(assets/cg/ に画像を置くと表示される):
+   押し倒し: pin_<id>.png → pin.png / 魅了拘束: charmbind_<id>.png → charmbind.png /
+   絶頂: climax.png。無ければ何も出さない */
+const CG_CACHE={};
+function getCG(names){
+  for(const n of names){
+    const k='assets/cg/'+n;
+    if(CG_CACHE[k]===undefined){
+      CG_CACHE[k]='loading';
+      const im=new Image();
+      im.onload=()=>{ CG_CACHE[k]=im; };
+      im.onerror=()=>{ CG_CACHE[k]=null; };
+      im.src=k;
+    }
+    const v=CG_CACHE[k];
+    if(v && v!=='loading') return v;
+  }
+  return null;
+}
+function drawCutin(g){
+  const B=G.B; if(!B) return;
+  const h=B.hero;
+  let im=null;
+  if(h.pinned){ const id=h.pinBy?h.pinBy.id:'default'; im=getCG(['pin_'+id+'.png','pin.png']); }
+  else if(h.charmBind){ im=getCG(['charmbind_'+h.charmBind.mon.id+'.png','charmbind.png']); }
+  else if(h.climaxT>0){ im=getCG(['climax.png']); }
+  if(!im) return;
+  const pw=168, ph=Math.min(232, pw*im.height/im.width);
+  const px=W-pw-14, py=H/2-ph/2-20;
+  g.save();
+  g.globalAlpha=0.96;
+  rr(g,px-5,py-5,pw+10,ph+10,10);
+  g.fillStyle='rgba(14,10,28,0.85)'; g.fill();
+  g.strokeStyle='rgba(255,110,150,0.6)'; g.lineWidth=1.4; g.stroke();
+  g.imageSmoothingEnabled=false;
+  g.drawImage(im,px,py,pw,ph);
+  g.restore();
+}
 function drawPinScene(g){
   const B=G.B;
-  if(!B||!(B.hero.pinned||B.hero.charmBind)||!B.pinScene||!B.pinScene.beats||!B.pinScene.beats.length) return;
+  if(!B||!(B.hero.pinned||B.hero.charmBind||B.hero.climaxT>0)||!B.pinScene||!B.pinScene.beats||!B.pinScene.beats.length) return;
   const beat=B.pinScene.beats[B.pinSceneIdx % B.pinScene.beats.length];
   g.save();
   const w2=Math.min(640,W-80);
@@ -1051,6 +1159,7 @@ function drawHUD(g){
   let sx=10, sy=76;
   const chips=[];
   const atk=attachCount(p);
+  if(p.climaxT>0) chips.push(['climax','絶頂!!']);
   if(p.pinned) chips.push(['pinned','押し倒し']);
   else if(p.charmBind) chips.push(['charmbind','魅了拘束']);
   else if(atk>0){
@@ -1082,7 +1191,7 @@ function drawHUD(g){
   g.font='9px '+FONT; g.fillStyle='rgba(130,140,180,0.55)'; g.textAlign='left';
   g.fillText('enemies:'+B.enemies.length+' fps:'+Math.round(G.fps)+(TS>1?' x'+TS:''), 12, H-6);
   g.textAlign='right'; g.fillStyle='rgba(255,255,255,0.3)'; g.font='bold 10px '+FONT;
-  g.fillText('v0.5 侵蝕デッキ', W-12, H-6);
+  g.fillText('v0.6 侵蝕デッキ', W-12, H-6);
 }
 function drawCards(g){
   const B=G.B, c=B.lvCards; if(!c) return;
@@ -1239,6 +1348,7 @@ function draw(){
   if(inBattle){
     const B=G.B, p=B.hero;
     drawLight(g,p.x,p.y);
+    for(const st of B.stains) drawStain(g,st);
     for(const tr of B.trails) drawTrail(g,tr);
     for(const c of B.clouds) drawCloud(g,c);
     for(const s of B.spawnFx) drawSummonFx(g,s);
@@ -1276,6 +1386,7 @@ function draw(){
     // ルミナ
     const heatVis=p.heatLv>0?100:p.aphro;
     const mood = (G.mode==='captured'||p.pinned||p.charmBind)?'pinned'
+               : p.climaxT>0?'climax'
                : attachCount(p)>0?'bound'
                : G.mode==='survived'?'happy'
                : (G.hurtFlash>0.15?'hurt':'normal');
@@ -1411,7 +1522,7 @@ function draw(){
     g.fillRect(0,0,W,H);
   }
   if(['battle','levelup','captured','survived'].includes(G.mode) && G.B) drawHUD(g);
-  if(G.mode==='battle') drawPinScene(g);
+  if(G.mode==='battle'){ drawCutin(g); drawPinScene(g); }
   if(G.mode==='levelup') drawCards(g);
   drawBanner(g);
 }

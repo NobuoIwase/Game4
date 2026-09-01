@@ -156,7 +156,7 @@ const UI={
     const wipeArmed=this._wipeArm && performance.now()-this._wipeArm<3000;
     return `
       <h1>ルミナ・サバイバーズ</h1>
-      <div class="sub">v0.5 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
+      <div class="sub">v0.6 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
       <p>あなたは<b>夜側の指揮者</b>。デッキから魔物を差し向け、AIで戦う光の少女<b>「ルミナ」</b>を追い詰める。<br>
       彼女に魔物が倒されるほどあなたのエネルギーとエッセンスは増え、彼女もまた強くなる。</p>
       <div style="text-align:center;color:var(--gold);font-size:12px;margin-bottom:8px">${esc(best)} ・ 通算${META.runs}戦 / 捕獲${META.captures}回</div>
@@ -325,6 +325,7 @@ const UI={
           <div>総与ダメージ <b>${META.life.dmg}</b></div>
           <div>異常付与 <b>${META.life.ail}</b></div>
           <div>彼女に討たれた魔物 <b>${META.life.kills}</b></div>
+          <div>通算絶頂 <b>${META.life.climax||0}</b>回</div>
           <div>彼女のボス討伐 <b>${META.life.herBoss}</b></div>
         </div>
       </div>
@@ -352,7 +353,7 @@ const UI={
       ${cgHtml}
       <div class="breakdown">
         経過時間 <b>${fmt(sum.time)}</b> ・ ルミナ Lv<b>${sum.heroLv}</b><br>
-        討たれた魔物 <b>${sum.kills}</b>体 ・ 与ダメージ <b>${sum.dmg}</b> ・ 異常付与 <b>${sum.ail}</b>回<br>
+        討たれた魔物 <b>${sum.kills}</b>体 ・ 与ダメージ <b>${sum.dmg}</b> ・ 異常付与 <b>${sum.ail}</b>回${sum.climax?` ・ <span style="color:var(--pink)">絶頂 <b>${sum.climax}</b>回</span>`:''}<br>
         ✦ エッセンス <b>+${sum.essGain}</b> ・ <span class="o">◉ オーブ <b>+${sum.orbGain}</b></span>
       </div>
       ${sceneHtml}
