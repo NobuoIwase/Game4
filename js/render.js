@@ -9,6 +9,7 @@ const EN_COLORS={
   gas:['#ff9ec2','#d86aa0'], flower:['#e86a9c','#8fe8c9'],
   mistslime:['#ffc2d8','#8fe8c9'], gtent:['#a06ac9','#5a3a7a'],
   vampi:['#c04a6a','#ffd76a','#fff'],
+  goblin:['#8fd36a','#4a7a3a'], leech:['#ffb3a0','#d87a6a'],
 };
 
 /* ---------------- 世界 ---------------- */
@@ -379,8 +380,40 @@ function drawAttachments(g,h){
     }
   }
 }
+function drawSuckers(g,h){
+  // 吸液羽虫の吸い付き: 胸の先・脚の間で羽を震わせながら脈打つ
+  for(const sl of SUCKS){
+    const at=h.suckers[sl];
+    if(!at||!at.mon||at.mon.dead) continue;
+    const p=suckAnchor(h,sl);
+    const t=h.anim*1.3+sl.length;
+    const puls=1+Math.sin(t*6)*0.16;
+    g.save();
+    g.translate(p.x,p.y);
+    // 羽の残像
+    const wf=Math.sin(t*34)*0.6;
+    g.fillStyle='rgba(255,225,235,0.45)';
+    for(const sd of [-1,1]){
+      g.save();
+      g.rotate(sd*(0.6+wf*0.4));
+      g.beginPath(); g.ellipse(0,-6,2.6,5.5,0,0,TAU); g.fill();
+      g.restore();
+    }
+    // 肉質の体(吸い付いて脈打つ)
+    const grad=g.createRadialGradient(-1,-2,1,0,0,6.5*puls);
+    grad.addColorStop(0,'#ffc7b5');
+    grad.addColorStop(1,'#d87a6a');
+    g.fillStyle=grad;
+    g.beginPath(); g.ellipse(0,-1,5.6*puls,4.4*puls,Math.sin(t*2)*0.2,0,TAU); g.fill();
+    // 吸引の波紋
+    g.strokeStyle='rgba(255,157,138,'+(0.5+0.3*Math.sin(t*6)).toFixed(2)+')';
+    g.lineWidth=1.1;
+    g.beginPath(); g.arc(0,-1,7.5+Math.sin(t*6)*1.5,0,TAU); g.stroke();
+    g.restore();
+  }
+}
 function drawStruggleRing(g,h){
-  const o=oldestAttachment(h);
+  const o=oldestRestraint(h);
   if(!o) return;
   const pr=clamp(h.struggle/o.at.need,0,1);
   g.save();
@@ -407,6 +440,21 @@ function drawPinGauge(g,h){
   g.fillStyle='#fff'; g.font='bold 7px '+FONT;
   g.textAlign='center'; g.textBaseline='middle';
   g.fillText('だっしゅつ',0,0.5);
+  g.restore();
+}
+function drawCharmBindGauge(g,h){
+  if(!h.charmBind) return;
+  const pr=clamp(h.charmSanity/100,0,1);
+  g.save();
+  g.translate(h.x,h.y-62);
+  rr(g,-30,-5,60,10,5);
+  g.fillStyle='rgba(40,16,40,0.85)'; g.fill();
+  if(pr>0){ rr(g,-30,-5,60*pr,10,5); g.fillStyle='#8fd3ff'; g.fill(); }
+  rr(g,-30,-5,60,10,5);
+  g.strokeStyle='rgba(255,150,190,0.8)'; g.lineWidth=1.2; g.stroke();
+  g.fillStyle='#fff'; g.font='bold 7px '+FONT;
+  g.textAlign='center'; g.textBaseline='middle';
+  g.fillText('しょうき',0,0.5);
   g.restore();
 }
 function drawHeatFx(g,x,y,t,heat){
@@ -447,6 +495,8 @@ function drawEnemy(g,e){
   else if(e.id==='imp') drawImp(g,e);
   else if(e.id==='flower') drawFlower(g,e);
   else if(e.id==='gtent') drawGtent(g,e);
+  else if(e.id==='goblin') drawGoblin(g,e);
+  else if(e.id==='leech') drawLeech(g,e);
   else drawBoss(g,e);
 
   if(e.hitFlash>0){
@@ -526,6 +576,87 @@ function drawWormG(g,e){
   g.beginPath(); g.ellipse(hx+r*0.15,-r*0.5,r*0.26,r*0.26*open,0,0,TAU); g.fill();
   g.fillStyle='#5a3a2a';
   g.beginPath(); g.ellipse(hx+r*0.15,-r*0.5,r*0.14,r*0.14*open,0,0,TAU); g.fill();
+  g.restore();
+}
+function drawGoblin(g,e){
+  // 緑色のチビ。よちよちと群れる
+  const r=e.r, wob=Math.sin(e.t*9)*0.1;
+  g.save();
+  g.rotate(wob);
+  // 脚(ちょこちょこ)
+  g.strokeStyle='#4a7a3a'; g.lineWidth=2.4; g.lineCap='round';
+  for(const sd of [-1,1]){
+    const st=Math.sin(e.t*11+sd)*2.4;
+    g.beginPath(); g.moveTo(sd*2.6,-r*0.3); g.lineTo(sd*3.4+st,1.4); g.stroke();
+  }
+  // 胴(ぼろ布)
+  g.fillStyle='#6a5340';
+  g.beginPath();
+  g.moveTo(-r*0.55,-r*0.2);
+  g.lineTo(r*0.55,-r*0.2);
+  g.lineTo(r*0.4,-r*0.95);
+  g.lineTo(-r*0.4,-r*0.95);
+  g.closePath(); g.fill();
+  // 腕(こん棒を振り回す)
+  g.strokeStyle='#7ab84a'; g.lineWidth=2.6;
+  const sw=Math.sin(e.t*7)*0.5;
+  g.beginPath(); g.moveTo(-r*0.5,-r*0.7); g.lineTo(-r*0.95,-r*0.5+sw*2); g.stroke();
+  g.beginPath(); g.moveTo(r*0.5,-r*0.7); g.lineTo(r*0.9,-r*0.95+sw*3); g.stroke();
+  g.strokeStyle='#8a6a4a'; g.lineWidth=3;
+  g.beginPath(); g.moveTo(r*0.9,-r*0.95+sw*3); g.lineTo(r*1.15,-r*1.4+sw*3); g.stroke();
+  // 頭(でかい・尖り耳)
+  g.fillStyle='#8fd36a';
+  g.beginPath(); g.arc(0,-r*1.25,r*0.62,0,TAU); g.fill();
+  g.fillStyle='#7ab84a';
+  for(const sd of [-1,1]){
+    g.beginPath();
+    g.moveTo(sd*r*0.5,-r*1.35);
+    g.lineTo(sd*r*1.05,-r*1.5+Math.sin(e.t*5+sd)*1);
+    g.lineTo(sd*r*0.5,-r*1.15);
+    g.closePath(); g.fill();
+  }
+  // 顔(ニタァ)
+  g.fillStyle='#2a3a1f';
+  g.beginPath(); g.arc(-r*0.22,-r*1.32,1.5,0,TAU); g.fill();
+  g.beginPath(); g.arc(r*0.22,-r*1.32,1.5,0,TAU); g.fill();
+  g.strokeStyle='#2a3a1f'; g.lineWidth=1.2;
+  g.beginPath(); g.arc(0,-r*1.18,r*0.3,0.15*Math.PI,0.85*Math.PI); g.stroke();
+  g.restore();
+}
+function drawLeech(g,e){
+  // 吸液羽虫: 肉質の小さな羽虫
+  const r=e.r;
+  const ang=(e.lvx!==undefined&&e.lvx!==null)?Math.atan2(e.lvy||0,e.lvx||1):0;
+  g.save();
+  g.translate(0,-r*0.8);
+  // 羽(高速ではためく半透明)
+  const wf=Math.sin(e.t*40)*0.7;
+  g.fillStyle='rgba(255,225,235,0.5)';
+  for(const sd of [-1,1]){
+    g.save();
+    g.rotate(sd*(0.5+wf*0.45));
+    g.beginPath(); g.ellipse(0,-r*0.75,r*0.42,r*0.95,0,0,TAU); g.fill();
+    g.restore();
+  }
+  // 体(肉っぽい楕円・節)
+  g.rotate(ang*0.25);
+  const grad=g.createRadialGradient(-r*0.2,-r*0.25,r*0.15,0,0,r*1.05);
+  grad.addColorStop(0,'#ffc7b5');
+  grad.addColorStop(1,'#d87a6a');
+  g.fillStyle=grad;
+  g.beginPath(); g.ellipse(0,0,r*1.0,r*0.72,0,0,TAU); g.fill();
+  g.strokeStyle='rgba(170,80,70,0.5)'; g.lineWidth=1;
+  for(let i=-1;i<=1;i++){
+    g.beginPath(); g.arc(i*r*0.34,0,r*0.6,Math.PI*0.25,Math.PI*0.75); g.stroke();
+  }
+  // 吸い口(先端の丸い口・すぼまり)
+  g.fillStyle='#b85a52';
+  g.beginPath(); g.arc(r*0.85,0,r*0.34,0,TAU); g.fill();
+  g.fillStyle='#ffd8cc';
+  g.beginPath(); g.arc(r*0.88,0,r*0.16*(1+Math.sin(e.t*10)*0.4),0,TAU); g.fill();
+  // 点目
+  g.fillStyle='#5a2a2a';
+  g.beginPath(); g.arc(r*0.45,-r*0.3,1.2,0,TAU); g.fill();
   g.restore();
 }
 function drawGas(g,e){
@@ -815,7 +946,7 @@ function drawBanner(g){
 }
 function drawPinScene(g){
   const B=G.B;
-  if(!B||!B.hero.pinned||!B.pinScene||!B.pinScene.beats||!B.pinScene.beats.length) return;
+  if(!B||!(B.hero.pinned||B.hero.charmBind)||!B.pinScene||!B.pinScene.beats||!B.pinScene.beats.length) return;
   const beat=B.pinScene.beats[B.pinSceneIdx % B.pinScene.beats.length];
   g.save();
   const w2=Math.min(640,W-80);
@@ -914,14 +1045,20 @@ function drawHUD(g){
   const chips=[];
   const atk=attachCount(p);
   if(p.pinned) chips.push(['pinned','押し倒し']);
+  else if(p.charmBind) chips.push(['charmbind','魅了拘束']);
   else if(atk>0){
     const names=attachedSlots(p).map(sl=>LIMB_NAMES[sl]).join('・');
     chips.push(['bound','拘束 '+names]);
   }
-  if(p.heatT>0) chips.push(['heat','発情 '+Math.ceil(p.heatT)]);
-  else if(p.aphro>=8) chips.push(['aphro','媚薬 '+Math.round(p.aphro)+'%']);
+  const sk=suckCount(p);
+  if(sk>0) chips.push(['suck','吸い付き '+suckSlots(p).map(sl=>SUCK_NAMES[sl]).join('・')]);
+  if(p.heatLv>0) chips.push(['heat','発情'+ROMANS[p.heatLv]+(p.waveDur>0?' 波!':'')]);
+  if(p.aphro>=8) chips.push(['aphro','快感 '+Math.round(p.aphro)+'%']);
+  const slv=sensLvOf(p);
+  if(slv>0) chips.push(['sens','敏感'+ROMANS[slv]]);
   if(p.slow>0) chips.push(['slow','粘液']);
-  if(p.charm>0) chips.push(['charm','魅了 '+p.charm.toFixed(1)]);
+  const cmx=charmMaxLv(p);
+  if(cmx>0) chips.push(['charm','魅了'+ROMANS[cmx]+(p.charms.length>1?' ×'+p.charms.length:'')]);
   if(p.exhausted) chips.push(['pinned','疲弊']);
   g.font='bold 10px '+FONT;
   for(const [id,txt] of chips){
@@ -939,7 +1076,7 @@ function drawHUD(g){
   g.font='9px '+FONT; g.fillStyle='rgba(130,140,180,0.55)'; g.textAlign='left';
   g.fillText('enemies:'+B.enemies.length+' fps:'+Math.round(G.fps)+(TS>1?' x'+TS:''), 12, H-6);
   g.textAlign='right'; g.fillStyle='rgba(255,255,255,0.3)'; g.font='bold 10px '+FONT;
-  g.fillText('v0.3 侵蝕デッキ', W-12, H-6);
+  g.fillText('v0.4 侵蝕デッキ', W-12, H-6);
 }
 function drawCards(g){
   const B=G.B, c=B.lvCards; if(!c) return;
@@ -1086,8 +1223,8 @@ function draw(){
       }
     }
     // ルミナ
-    const heatVis=p.heatT>0?100:p.aphro;
-    const mood = (G.mode==='captured'||p.pinned)?'pinned'
+    const heatVis=p.heatLv>0?100:p.aphro;
+    const mood = (G.mode==='captured'||p.pinned||p.charmBind)?'pinned'
                : attachCount(p)>0?'bound'
                : G.mode==='survived'?'happy'
                : (G.hurtFlash>0.15?'hurt':'normal');
@@ -1096,17 +1233,20 @@ function draw(){
     drawGirl(g,p.x,p.y,{t:p.anim,face:p.face,moving:p.moving&&G.mode==='battle',mood,heat:heatVis});
     g.globalAlpha=1;
     drawAttachments(g,p);
+    drawSuckers(g,p);
     if(G.mode==='battle'){
       if(p.pinned) drawPinGauge(g,p);
-      else if(attachCount(p)>0) drawStruggleRing(g,p);
+      else if(p.charmBind) drawCharmBindGauge(g,p);
+      else if(restraintCount(p)>0) drawStruggleRing(g,p);
     }
     if(heatVis>=30) drawHeatFx(g,p.x,p.y,p.anim,heatVis);
-    if(p.charm>0 && p.charmBy && !p.charmBy.dead){
-      const cb=p.charmBy;
+    // 魅了の糸(対象ごと。深いほど濃い)
+    for(const c of p.charms){
+      if(!c.mon||c.mon.dead) continue;
       g.save();
-      g.globalAlpha=0.5+0.3*Math.sin(p.anim*6);
-      g.strokeStyle='#ffb3cf'; g.lineWidth=1.4; g.setLineDash([4,5]);
-      g.beginPath(); g.moveTo(p.x,p.y-30); g.lineTo(cb.x,cb.y-cb.r); g.stroke();
+      g.globalAlpha=(0.25+0.18*c.lv)+0.2*Math.sin(p.anim*6);
+      g.strokeStyle='#ffb3cf'; g.lineWidth=1+0.4*c.lv; g.setLineDash([4,5]);
+      g.beginPath(); g.moveTo(p.x,p.y-30); g.lineTo(c.mon.x,c.mon.y-c.mon.r); g.stroke();
       g.setLineDash([]);
       g.restore();
     }
@@ -1164,9 +1304,10 @@ function draw(){
   }
   if(inBattle){
     const p=G.B.hero;
-    const hv=p.heatT>0?100:p.aphro;
+    const hv=p.heatLv>0?100:p.aphro;
     if(hv>=60){
-      const a=(hv-60)/40*0.09;
+      let a=(hv-60)/40*0.09;
+      if(p.waveDur>0) a+=0.05+0.03*Math.sin(performance.now()*0.008);   // 波の間は明滅
       g.fillStyle='rgba(255,110,160,'+a.toFixed(3)+')';
       g.fillRect(0,0,W,H);
     }
@@ -1203,6 +1344,8 @@ function makeIconCanvas(id,size){
   else if(id==='imp') drawImp(g,fake);
   else if(id==='flower') drawFlower(g,fake);
   else if(id==='gtent') drawGtent(g,fake);
+  else if(id==='goblin') drawGoblin(g,fake);
+  else if(id==='leech') drawLeech(g,fake);
   else drawBoss(g,fake);
   return c;
 }

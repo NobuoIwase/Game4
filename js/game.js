@@ -27,12 +27,21 @@ function newHero(){
     staminaMax:BAL.STAMINA_MAX-12*aStam,
     stamina:0,
     limbs:{armL:null, armR:null, legL:null, legR:null},
+    suckers:{nipL:null, nipR:null, clit:null},   // 吸液羽虫の吸い付き
     struggle:0,
     pinned:false, pinBy:null, pinT:0, pinEscape:0,
     exhausted:false,               // スタミナ0で四肢が自由だった場合の疲弊
-    /* --- 媚薬 / 発情 / その他状態 --- */
-    aphro:18*aHeat, heatT:0,
-    slow:0, charm:0, charmBy:null,
+    /* --- 敏感化 / 快感 / 発情(v0.4) --- */
+    sensit:26*aHeat, sensitFloor:26*aHeat,   // 敏感化ゲージ(祭壇分は下限)
+    aphro:0,                                  // 快感ゲージ 0-100
+    heatLv:0, heatT:0,                        // 発情レベル(0-3)と残り時間
+    waveT:0, waveDur:0,                       // 発情の波
+    /* --- 魅了(対象別) / その他状態 --- */
+    charms:[],                                // {mon,lv,t,driftCd}
+    charmDrift:null,                          // {mon,t} 無意識に寄る発作
+    charmBind:null,                           // {mon} 魅了拘束
+    charmBindT:0, charmSanity:0,
+    slow:0,
     teaseN:0,                      // 近くの小淫魔の数(集中低下)
     resist:{bound:0, charm:0},
     sense:1+0.18*aSense,
@@ -53,16 +62,28 @@ const attachedSlots=h=>LIMBS.filter(k=>h.limbs[k]);
 const attachCount=h=>attachedSlots(h).length;
 const armCount=h=>['armL','armR'].filter(k=>h.limbs[k]).length;
 const legCount=h=>['legL','legR'].filter(k=>h.limbs[k]).length;
+const suckSlots=h=>SUCKS.filter(k=>h.suckers[k]);
+const suckCount=h=>suckSlots(h).length;
+const restraintCount=h=>attachCount(h)+suckCount(h);
+function sensLvOf(h){
+  const g=h.sensit;
+  return g>=BAL.SENSIT_TH[2]?3 : g>=BAL.SENSIT_TH[1]?2 : g>=BAL.SENSIT_TH[0]?1 : 0;
+}
+function charmEntry(h,mon){ return h.charms.find(c=>c.mon===mon); }
+function charmLvFor(h,mon){ const c=charmEntry(h,mon); return c?c.lv:0; }
+function charmMaxLv(h){ return h.charms.reduce((m,c)=>Math.max(m,c.lv),0); }
 
 function heroFocus(h){
-  const aph=h.heatT>0 ? 0.35 : h.aphro/100*0.2;
+  const aph=h.heatLv>0 ? 0.2+0.1*h.heatLv+(h.waveDur>0?0.1:0) : h.aphro/100*0.2;
   return clamp(1 - aph - h.focusPen - 0.08*Math.min(2,h.teaseN), 0.25, 1);
 }
 function heroStat(h){
   let spd=h.baseSpeed*(1+0.10*h.ps.speed);
   spd*=Math.pow(0.72, legCount(h));
+  spd*=Math.pow(BAL.SUCK_SLOW, suckCount(h));
   if(h.slow>0) spd*=0.55;
-  if(h.heatT>0) spd*=0.88;
+  if(h.heatLv>0) spd*=1-0.04*h.heatLv;
+  if(h.waveDur>0) spd*=BAL.WAVE_SPD;
   if(h.exhausted) spd*=0.7;
   return { speed:spd, magnet:90+45*h.ps.magnet };
 }
@@ -134,29 +155,65 @@ function awardAil(type){
   const rt=B.ailRateT[type]||0;
   if(B.time-rt>2){ B.ailRateT[type]=B.time; B.orbFrag+=BAL.ORB_PER_AIL; B.ailCount++; }
 }
-function applyCharm(dur,src){
+/* 魅了(v0.4): 対象別・レベル制。接触のたびその個体への段階が上がる。
+   Lv1=与ダメ減 / Lv2=+無意識に寄る発作 / Lv3=+接触で魅了拘束 */
+function applyCharm(mon){
   const h=G.B.hero;
-  const eff=dur*h.sense/(1+0.35*(h.resist.charm||0));
-  if(eff<0.4) return;
-  h.charm=Math.max(h.charm,eff);
-  h.charmBy=src||null;
+  if(!mon||mon.dead) return;
+  const res=1+0.35*(h.resist.charm||0);
+  let c=charmEntry(h,mon);
+  if(!c){
+    c={mon, lv:0, t:0, driftCd:BAL.CHARM_DRIFT_CD*rand(0.5,0.9)};
+    h.charms.push(c);
+  }
+  c.lv=Math.min(3,c.lv+1);
+  c.t=BAL.CHARM_DUR*h.sense/res;
   h.resist.charm=(h.resist.charm||0)+1;
-  heroBubble(h,'え…なんで、めが…はなせな…');
+  heroBubble(h,[
+    '','え…なんで、めが…はなせな…',
+    'だめ…みちゃだめ、なのに…',
+    'あのこの、そばに…いたい……',
+  ][c.lv],true);
   S.charm();
   awardAil('charm');
 }
-function applyAphro(amount){
+function removeCharm(h,mon){
+  const i=h.charms.findIndex(c=>c.mon===mon);
+  if(i>=0) h.charms.splice(i,1);
+  if(h.charmDrift&&h.charmDrift.mon===mon) h.charmDrift=null;
+}
+/* 媚薬=敏感化: 快感の入りを増幅する下地 */
+function applySensit(amount){
   const h=G.B.hero;
-  const before=h.aphro;
-  h.aphro=clamp(h.aphro+amount*h.sense,0,100);
-  if(before<50&&h.aphro>=50) heroBubble(h,'なんか、あまいにおい…');
-  if(h.aphro>=100 && h.heatT<=0){
-    h.heatT=BAL.HEAT_DUR;
-    heroBubble(h,'あつい……へんに、なりそ…っ',true);
-    parts(h.x,h.y-20,14,['#ff9ec2','#ff5d9e'],120,0.7);
-    sfx(520,860,0.4,'sine',0.07);
-    awardAil('heat');
+  const before=sensLvOf(h);
+  h.sensit=clamp(h.sensit+amount*h.sense,0,100);
+  const after=sensLvOf(h);
+  if(after>before){
+    heroBubble(h,['','なんか、あまいにおい…','はだが、ひりひりする…','ふれられただけで、こんな…'][after]);
+    awardAil('sens');
   }
+}
+/* 快感: 敏感化で増幅され、100で発情レベルが上がる */
+function applyPleasure(amount){
+  const h=G.B.hero;
+  h.aphro=clamp(h.aphro+amount*h.sense*(1+BAL.SENSIT_AMP*sensLvOf(h)),0,100);
+  if(h.aphro>=100) heatUp();
+}
+function heatUp(){
+  const h=G.B.hero;
+  h.heatLv=Math.min(3,h.heatLv+1);
+  h.heatT=BAL.HEAT_LV_DUR;
+  h.aphro=BAL.HEAT_AFTER;
+  h.waveT=rand(2,4); h.waveDur=0;
+  heroBubble(h,[
+    '','あつい……へんに、なりそ…っ',
+    'だめ、あたまの奥、とけ…ちゃ…',
+    'もう…がまん、できな……っ',
+  ][h.heatLv],true);
+  if(h.heatLv>=2) setBanner('発情 Lv'+h.heatLv,'波が来るたび、彼女の脚が止まる','#ff5d9e');
+  parts(h.x,h.y-20,14,['#ff9ec2','#ff5d9e'],120,0.7);
+  sfx(520,860,0.4,'sine',0.07);
+  awardAil('heat');
 }
 
 /* ================= 四肢拘束 ================= */
@@ -215,27 +272,78 @@ function limbAnchor(h,slot){
   const off={armL:[-8,-21], armR:[8,-21], legL:[-3.5,-5], legR:[3.5,-5]}[slot];
   return { x:h.x+off[0]*s, y:h.y+off[1]*s };
 }
-function oldestAttachment(h){
-  let best=null, bs=null;
+function suckAnchor(h,slot){
+  const s=1.15;
+  const off={nipL:[-4.5,-23], nipR:[4.5,-23], clit:[0,-7]}[slot];
+  return { x:h.x+off[0]*s, y:h.y+off[1]*s };
+}
+/* --- 吸液羽虫の吸い付き(四肢拘束とは別枠。拘束レベルを問わず付く) --- */
+function attachSucker(mon){
+  const B=G.B, h=B.hero;
+  const free=SUCKS.filter(s=>!h.suckers[s]);
+  if(!free.length) return false;
+  const slot=free[(Math.random()*free.length)|0];
+  h.suckers[slot]={mon, t:B.time, need:BAL.RIP_NEED_SUCK/(1+0.1*(h.resist.bound||0))};
+  mon.state='attached'; mon.suck=slot; mon.stun=0;
+  heroBubble(h, pickRand(['ひゃんっ!? す、吸わないでっ…!','やっ、そんなとこ…っ!','はねおと…どこ——ひゃうっ!?']), true);
+  S.bind();
+  parts(h.x,h.y-16,8,['#ff9d8a','#ffc2b0'],100,0.5);
+  awardAil('suck');
+  return true;
+}
+function detachSucker(slot, opt){
+  const h=G.B.hero;
+  const at=h.suckers[slot];
+  if(!at) return;
+  opt=opt||{};
+  h.suckers[slot]=null;
+  const mon=at.mon;
+  if(mon && !mon.dead){
+    mon.state='chase'; mon.suck=null;
+    const p=suckAnchor(h,slot);
+    mon.x=p.x+rand(-8,8); mon.y=p.y+rand(-4,4);
+    mon.lvx=null; mon.lvy=null;
+    if(opt.fling){
+      mon.stun=1.2;
+      mon.hp-=mon.maxHp*0.35;
+      const a=rand(TAU);
+      mon.x+=Math.cos(a)*34; mon.y+=Math.sin(a)*34;
+      parts(mon.x,mon.y,6,['#fff','#ff9d8a'],130,0.5);
+      if(mon.hp<=0) killEnemy(mon);
+    }
+  }
+}
+/* 最も古い拘束(四肢+吸い付きを通しで見る)。抵抗ゲージはこれを剥がす */
+function oldestRestraint(h){
+  let best=null, bs=null, bkind=null;
   for(const sl of LIMBS){
     const at=h.limbs[sl];
-    if(at && (!best || at.t<best.t)){ best=at; bs=sl; }
+    if(at && (!best || at.t<best.t)){ best=at; bs=sl; bkind='limb'; }
   }
-  return bs?{slot:bs, at:best}:null;
+  for(const sl of SUCKS){
+    const at=h.suckers[sl];
+    if(at && (!best || at.t<best.t)){ best=at; bs=sl; bkind='suck'; }
+  }
+  return bs?{kind:bkind, slot:bs, at:best}:null;
 }
 function addStruggle(amount){
   const h=G.B.hero;
-  if(attachCount(h)===0||h.pinned) return;
+  if(restraintCount(h)===0||h.pinned||h.charmBind) return;
   if(h.stamina<=0) return;
-  h.struggle+=amount*(h.heatT>0?0.7:1);
-  const o=oldestAttachment(h);
+  h.struggle+=amount*(h.heatLv>0?1-0.1*h.heatLv:1);
+  const o=oldestRestraint(h);
   if(o && h.struggle>=o.at.need){
     h.struggle=0;
-    detachLimb(o.slot,{fling:true});
-    h.stamina-=BAL.STAMINA_RIP_COST;
+    if(o.kind==='limb'){
+      detachLimb(o.slot,{fling:true});
+      h.stamina-=BAL.STAMINA_RIP_COST;
+    }else{
+      detachSucker(o.slot,{fling:true});
+      h.stamina-=BAL.SUCK_RIP_COST;
+    }
     heroBubble(h,'えいっ…!');
     sfx(300,700,0.15,'triangle',0.07);
-    floatTxt(h.x,h.y-52,'ふりほどいた!','#8fd3ff',11,1);
+    floatTxt(h.x,h.y-52,o.kind==='limb'?'ふりほどいた!':'ひきはがした!','#8fd3ff',11,1);
     checkStaminaCollapse();
   }
 }
@@ -243,8 +351,10 @@ function checkStaminaCollapse(){
   const h=G.B.hero;
   if(h.stamina>0) return;
   h.stamina=0;
-  if(attachCount(h)>0||h.pinned){
-    const o=oldestAttachment(h);
+  if(h.charmBind){
+    beginCapture(h.charmBind.mon,'charm');
+  }else if(attachCount(h)>0||h.pinned){
+    const o=oldestRestraint(h);
     beginCapture(h.pinBy||(o&&o.at.mon)||null,'stamina');
   }else{
     h.exhausted=true;
@@ -254,6 +364,7 @@ function checkStaminaCollapse(){
 /* --- 押し倒し --- */
 function enterPin(mon){
   const B=G.B, h=B.hero;
+  if(h.charmBind) releaseCharmBind(false);   // 押し倒しは魅了拘束を上書きする
   h.pinned=true; h.pinBy=mon||null;
   h.pinT=BAL.PIN_PULSE_T; h.pinEscape=0;
   h.vx=0; h.vy=0;
@@ -273,7 +384,8 @@ function pinTick(dt){
   if(h.pinT<=0){
     h.pinT=BAL.PIN_PULSE_T;
     h.stamina-=BAL.PIN_PULSE_COST;
-    h.pinEscape+=BAL.PIN_ESCAPE_GAIN*(h.heatT>0?0.7:1)*rand(0.85,1.15);
+    h.pinEscape+=BAL.PIN_ESCAPE_GAIN*(h.heatLv>0?1-0.1*h.heatLv:1)*rand(0.85,1.15);
+    applyPleasure(BAL.PLEAS_PIN);
     parts(h.x+rand(-10,10),h.y-rand(4,22),3,['#fff','#c98cff'],90,0.4);
     // 絡みつき中のモンスターがじわじわ削る(貫通)
     for(const sl of attachedSlots(h)){
@@ -292,19 +404,126 @@ function pinTick(dt){
     }
   }
 }
+/* --- 魅了拘束(魅了Lv3で自分から縋りつく特殊拘束) --- */
+function enterCharmBind(mon){
+  const B=G.B, h=B.hero;
+  if(h.pinned||h.charmBind) return;
+  h.charmBind={mon};
+  h.charmBindT=BAL.CHARM_BIND_PULSE;
+  h.charmSanity=0;
+  h.charmDrift=null;
+  h.vx=0; h.vy=0;
+  mon.stun=0;
+  B.pinScene=sceneFor('charmbind', mon.id);
+  B.pinSceneIdx=0; B.pinSceneT=0;
+  setBanner('魅了拘束!','ルミナは自分から縋りついた——正気に戻れば振りほどける','#ff86b3');
+  heroBubble(h,'あったかい……ちがう、これ、ちがうのに……',true);
+  S.capture();
+  awardAil('charmbind');
+}
+function releaseCharmBind(sane){
+  const B=G.B, h=B.hero;
+  if(!h.charmBind) return;
+  const mon=h.charmBind.mon;
+  h.charmBind=null; h.charmSanity=0;
+  B.pinScene=null;
+  if(sane && mon && !mon.dead){
+    removeCharm(h,mon);
+    h.resist.charm=(h.resist.charm||0)+2;
+    mon.stun=1.2;
+    mon.hp-=mon.maxHp*0.35;
+    const a=rand(TAU);
+    mon.x+=Math.cos(a)*30; mon.y+=Math.sin(a)*30;
+    parts(mon.x,mon.y,8,['#fff','#ffb3cf'],140,0.5);
+    if(mon.hp<=0) killEnemy(mon);
+    h.ifr=1.2;
+    heroBubble(h,'——はっ!? わ、わたし、なにをっ…!?',true);
+    setBanner('正気に戻った!','ルミナは我に返り、振りほどいた','#8fd3ff');
+  }
+}
+function charmBindTick(dt){
+  const B=G.B, h=B.hero;
+  const mon=h.charmBind.mon;
+  B.pinSceneT+=dt;
+  if(B.pinScene && B.pinSceneT>2.6){ B.pinSceneT=0; B.pinSceneIdx++; }
+  if(!mon||mon.dead||mon.dormant){
+    releaseCharmBind(false);
+    heroBubble(h,'……はっ!? いまの、なに…',true);
+    return;
+  }
+  applyPleasure(BAL.CHARM_BIND_PLEAS*dt);
+  if(Math.random()<dt*3) parts(h.x+rand(-14,14),h.y-rand(8,30),1,['#ffb3cf','#ff86b3'],50,0.7);
+  h.charmBindT-=dt;
+  if(h.charmBindT<=0){
+    h.charmBindT=BAL.CHARM_BIND_PULSE;
+    h.stamina-=BAL.CHARM_BIND_STAM;
+    h.charmSanity+=BAL.CHARM_BIND_SANITY*(h.heatLv>0?0.75:1)*rand(0.85,1.15);
+    checkStaminaCollapse();
+    if(G.mode!=='battle'&&G.mode!=='levelup') return;
+    if(h.charmSanity>=100) releaseCharmBind(true);
+  }
+}
 
 /* ================= 状態tick ================= */
 function condTick(h,dt){
-  // 媚薬 / 発情
-  if(h.heatT>0){
+  const B=G.B;
+  // 快感の自然減衰
+  if(h.aphro>0) h.aphro=Math.max(0,h.aphro-BAL.PLEAS_DECAY*dt);
+  // 敏感化の自然減衰(祭壇分は下限として残る)
+  if(h.sensit>h.sensitFloor) h.sensit=Math.max(h.sensitFloor,h.sensit-BAL.SENSIT_DECAY*dt);
+  // 発情: レベル制+定期的な波
+  if(h.heatLv>0){
     h.heatT-=dt;
-    if(h.heatT<=0){ h.heatT=0; h.aphro=BAL.HEAT_AFTER; heroBubble(h,'……いまの、なに…'); }
-  }else if(h.aphro>0){
-    h.aphro=Math.max(0,h.aphro-BAL.APHRO_DECAY*dt);
+    if(h.heatT<=0){
+      h.heatLv--;
+      if(h.heatLv>0){ h.heatT=BAL.HEAT_LV_DUR*0.7; }
+      else{ h.waveDur=0; heroBubble(h,'……いまの、なに…'); }
+    }
+    if(h.waveDur>0){ h.waveDur-=dt; }
+    else{
+      h.waveT-=dt;
+      if(h.waveT<=0){
+        h.waveDur=BAL.WAVE_DUR_BASE+BAL.WAVE_DUR_LV*h.heatLv;
+        h.waveT=Math.max(3,BAL.WAVE_CD_BASE-BAL.WAVE_CD_LV*h.heatLv)+rand(-0.8,0.8);
+        if(!h.pinned&&!h.charmBind) heroBubble(h,pickRand(['……っ、また、きて…っ','あついの…きちゃ…っ','ひざ、ふるえ…っ']));
+      }
+    }
   }
   if(h.slow>0) h.slow-=dt;
-  if(h.charm>0){ h.charm-=dt; if(h.charm<=0) h.charmBy=null; }
+  // 魅了: 対象別の持続と発作
+  for(let i=h.charms.length-1;i>=0;i--){
+    const c=h.charms[i];
+    if(!c.mon||c.mon.dead){ h.charms.splice(i,1); continue; }
+    c.t-=dt;
+    if(c.t<=0){
+      c.lv--;
+      if(c.lv<=0){ h.charms.splice(i,1); heroBubble(h,'…あれ? わたし、なにを…'); continue; }
+      c.t=BAL.CHARM_DUR*0.7;
+    }
+    // Lv2+: 無意識に寄っていく発作
+    if(c.lv>=2 && !h.charmDrift && !h.pinned && !h.charmBind && attachCount(h)===0){
+      c.driftCd-=dt;
+      if(c.driftCd<=0){
+        c.driftCd=BAL.CHARM_DRIFT_CD*rand(0.85,1.2);
+        h.charmDrift={mon:c.mon, t:BAL.CHARM_DRIFT_T*c.lv+(c.lv>=3?0.8:0)};
+        heroBubble(h,pickRand(['……あのこ、どこ…','ちがう、いま戦ってる、のに…','あし、が…かってに…']),true);
+      }
+    }
+  }
+  if(h.charmDrift){
+    const d=h.charmDrift;
+    d.t-=dt;
+    if(d.t<=0||!d.mon||d.mon.dead) h.charmDrift=null;
+  }
   for(const k in h.resist) h.resist[k]=Math.max(0,h.resist[k]-dt*0.04);
+  // 吸い付き: 快感を注ぎ続ける(死んだ個体は外す)
+  for(const sl of suckSlots(h)){
+    const at=h.suckers[sl];
+    if(!at.mon||at.mon.dead){ h.suckers[sl]=null; continue; }
+    applyPleasure(BAL.SUCK_PLEAS*dt);
+  }
+  // 絡みつき中の微快感
+  if(attachCount(h)>0) applyPleasure(BAL.PLEAS_BINDER*attachCount(h)*dt);
   // 2箇所以上絡みつかれていると体力がじわじわ奪われる
   if(!h.pinned && attachCount(h)>=2){
     h.stamina=Math.max(0,h.stamina-BAL.STAMINA_DRAG*dt);
@@ -312,23 +531,23 @@ function condTick(h,dt){
     if(G.mode!=='battle'&&G.mode!=='levelup') return;
   }
   // スタミナ回復
-  if(!h.pinned && attachCount(h)===0){
-    const rg=h.heatT>0?BAL.STAMINA_REGEN_HEAT:BAL.STAMINA_REGEN;
+  if(!h.pinned && !h.charmBind && attachCount(h)===0){
+    const rg=h.heatLv>0?BAL.STAMINA_REGEN_HEAT:BAL.STAMINA_REGEN;
     h.stamina=Math.min(h.staminaMax,h.stamina+rg*dt);
     if(h.exhausted && h.stamina>25){ h.exhausted=false; heroBubble(h,'……よし、いける'); }
   }
-  // 発情のふらつき
+  // 発情の波のふらつき
   if(h.stumbleDur>0) h.stumbleDur-=dt;
   h.stumbleT-=dt;
-  if(h.heatT>0 && h.stumbleT<=0 && !h.pinned){
-    h.stumbleT=rand(2.2,3.6); h.stumbleDur=0.35;
+  if(h.waveDur>0 && h.stumbleT<=0 && !h.pinned && !h.charmBind){
+    h.stumbleT=rand(1.8,3.0); h.stumbleDur=0.35;
     heroBubble(h,'あしが…もつれ…っ');
   }
-  // ガス雲の吸引
-  const B=G.B;
+  // ガス雲=媚薬(敏感化)の吸引
   for(const c of B.clouds){
     if(Math.hypot(h.x-c.x,(h.y-12)-c.y)<c.r){
-      applyAphro(c.rate*dt);
+      applySensit(c.rate*dt);
+      applyPleasure(BAL.PLEAS_GAS*dt);
       break;
     }
   }
@@ -339,10 +558,10 @@ function aiUpdate(dt){
   const B=G.B, p=B.hero, st=heroStat(p);
   p.prevX=p.x; p.prevY=p.y;
 
-  if(p.pinned || p.stumbleDur>0){
+  if(p.pinned || p.charmBind || p.stumbleDur>0){
     p.vx*=Math.pow(0.001,dt); p.vy*=Math.pow(0.001,dt);
     p.moving=false;
-    p.aiLabel=p.pinned?'おさえこまれている!!':'ふらつき…';
+    p.aiLabel=p.pinned?'おさえこまれている!!':(p.charmBind?'みりょうされて、はなれない…!!':'ふらつき…');
     return;
   }
 
@@ -350,14 +569,14 @@ function aiUpdate(dt){
   for(const e of B.enemies){
     if(e.dead||e.dormant||e.state==='attached') continue;
     if(e.id==='flower' && !e.revealed) continue;
-    if(e===p.charmBy) continue;
     if(e.id==='imp') continue;                                 // 小淫魔からは逃げない(脅威と認識しない)
     const dx=p.x-e.x, dy=p.y-e.y;
     const d=Math.hypot(dx,dy)||0.001;
-    const DANGER={flower:130, gtent:90, slug:55, worm:55, gas:60, slime:110};
+    const DANGER={flower:130, gtent:90, slug:55, worm:55, gas:60, slime:110, leech:60};
     const danger=(e.boss?280:(DANGER[e.id]!==undefined?DANGER[e.id]:150))+e.r;
     if(d<danger){
       let w=1-d/danger; w=w*w*(e.boss?3:1);
+      w*=1-0.28*charmLvFor(p,e);                               // 魅了された相手は脅威と思えない
       threat+=w; ax+=dx/d*w; ay+=dy/d*w;
       if(e.boss) bossNear=true;
     }
@@ -464,6 +683,33 @@ function aiUpdate(dt){
       dx+=ax*1.5; dy+=ay*1.5;
     }
   }
+  // 魅了の発作: 無意識にその個体へ寄っていく(Lv2+)。Lv3で触れると魅了拘束
+  if(p.charmDrift && p.charmDrift.mon && !p.charmDrift.mon.dead){
+    const cm=p.charmDrift.mon;
+    const cd=Math.hypot(cm.x-p.x,cm.y-p.y)||1;
+    dx=(cm.x-p.x)/cd; dy=(cm.y-p.y)/cd;
+    dx+=Math.sin(B.time*2.4)*0.15; dy+=Math.cos(B.time*2.1)*0.15;
+    state='charmwalk';
+    if(charmLvFor(p,cm)>=3 && cd<cm.r+p.r+6){
+      enterCharmBind(cm);
+      return;
+    }
+  }
+  // 発情の波(Lv2+): 熱に負けて、いちばん近い魔物へふらふらと寄ってしまう
+  else if(p.waveDur>0 && p.heatLv>=2 && attachCount(p)===0){
+    let ne=null, nd=1e9;
+    for(const e of B.enemies){
+      if(e.dead||e.dormant||e.state==='attached') continue;
+      const d=Math.hypot(e.x-p.x,e.y-p.y);
+      if(d<nd){ nd=d; ne=e; }
+    }
+    if(ne && nd<260){
+      const k2=p.heatLv>=3?0.9:0.5;
+      const ex=(ne.x-p.x)/nd, ey=(ne.y-p.y)/nd;
+      dx=dx*(1-k2)+ex*k2; dy=dy*(1-k2)+ey*k2;
+      state='heatwalk';
+    }
+  }
   // 媚薬・煽りによるノイズ(思考の乱れ)
   if(foc<1){
     const n=(1-foc)*1.1;
@@ -493,17 +739,19 @@ function aiUpdate(dt){
 
   // 抵抗ゲージ: 移動量で蓄積
   const moved=Math.hypot(p.x-p.prevX,p.y-p.prevY);
-  if(attachCount(p)>0) addStruggle(moved*BAL.STRUGGLE_MOVE_RATE);
+  if(restraintCount(p)>0) addStruggle(moved*BAL.STRUGGLE_MOVE_RATE);
 
   if(Math.abs(p.vx)>12) p.face=p.vx>0?1:-1;
   p.moving=Math.hypot(p.vx,p.vy)>30;
 
   const LBL={flee:'かいひ行動!', boss:'ボスかいひ!!', gem:'ジェム回収', heart:'ハートへ!',
     prop:'燭台をこわして回復!', chest:'たからばこへ!', kite:'まちうけ・けん制', wait:'けいかい中',
-    struggle:'ふりほどこうともがいている!'};
+    struggle:'ふりほどこうともがいている!',
+    charmwalk:'ふらふらと、ちかづいていく…', heatwalk:'熱にまけて、よろめき寄る…'};
   const BBL={flee:'にげなきゃ〜!', boss:'おっきいのこわい!!', gem:'キラキラかいしゅう♪',
     heart:'ハートみっけ!', prop:'燭台こわして回復しなきゃ', chest:'たからばこだ〜!',
-    kite:'このきょりキープ…', wait:'つぎはどこから…?', struggle:'はなれてよ〜っ!'};
+    kite:'このきょりキープ…', wait:'つぎはどこから…?', struggle:'はなれてよ〜っ!',
+    charmwalk:'…なんで、あしが…', heatwalk:'…あつくて、なにも…'};
   p.aiLabel=LBL[state];
   if(state!==p.aiState){ p.aiState=state; heroBubble(p,BBL[state]); }
 }
@@ -514,16 +762,18 @@ function nearestEnemies(n,maxD){
   const arr=[];
   for(const e of B.enemies){
     if(e.dead||e.dormant||e.state==='attached') continue;
-    if(e===p.charmBy) continue;
     const d=Math.hypot(e.x-p.x,e.y-p.y);
-    if(d<maxD) arr.push({e,d});
+    // 魅了された相手は狙いが後回しになる(距離に下駄)
+    arr.push({e, d:d+charmLvFor(p,e)*140});
+    if(d>=maxD) arr.pop();
   }
   arr.sort((a,b)=>a.d-b.d);
   return arr.slice(0,n).map(o=>o.e);
 }
 function weaponsUpdate(dt){
   const B=G.B, p=B.hero;
-  const atkMult=(p.pinned?0:1)*Math.pow(0.75,armCount(p));   // 腕を拘束されるほど攻撃が乱れる
+  const atkMult=((p.pinned||p.charmBind)?0:1)*Math.pow(0.75,armCount(p))   // 腕を拘束されるほど攻撃が乱れる
+    *(p.waveDur>0?BAL.WAVE_ATK:1);                                          // 発情の波の間は手が止まりがち
   if(atkMult<=0) return;
   if(p.wp.bolt>0){
     p.boltT-=dt*atkMult;
@@ -543,7 +793,7 @@ function weaponsUpdate(dt){
           B.bullets.push({x:p.x,y:p.y-14,vx:Math.cos(a)*460,vy:Math.sin(a)*460,
             dmg:13+4*(lv-1), pierce:0, life:1.2, last:null, evo:false});
           S.pew();
-          if(attachCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN);
+          if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN);
         }else p.boltT=0.15;
       }else{
         const ts=nearestEnemies(shots,evo?640:560);
@@ -558,7 +808,7 @@ function weaponsUpdate(dt){
               dmg:(evo?18:13+4*(lv-1)), pierce:evo?2:(lv>=4?1:0), life:1.3, last:null, evo});
           }
           S.pew();
-          if(attachCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN);
+          if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN);
         }else if(!ts.length){ p.boltT=0.12; }
       }
     }
@@ -577,7 +827,7 @@ function weaponsUpdate(dt){
       G.shake=Math.min(7,G.shake+3);
       S.nova();
       for(const e of B.enemies){
-        if(e.dead||e.dormant||e===p.charmBy) continue;
+        if(e.dead||e.dormant) continue;
         const dx=e.x-p.x, dy=e.y-p.y, d=Math.hypot(dx,dy);
         if(d<R+e.r){
           damageEnemy(e,dmg);                        // 絡みついた個体もノヴァでは剥がし得る
@@ -589,7 +839,7 @@ function weaponsUpdate(dt){
       }
       if(evo){ for(const gm of B.gems){ if(Math.hypot(gm.x-p.x,gm.y-p.y)<R*2) gm.sp=Math.max(gm.sp,700); } }
       parts(p.x,p.y-10,evo?24:14,['#fff','#ffd76a','#8fd3ff'],evo?200:140,0.5);
-      if(attachCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN);
+      if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN);
     }
   }
 }
@@ -692,6 +942,7 @@ function spawnUnit(id, x, y, o){
   };
   if(id==='worm'){ u.pounceCd=rand(1,2); u.pounceT=0; }
   if(id==='slug'){ u.charmCd=0; }
+  if(id==='leech'){ u.lvx=null; u.lvy=null; u.suck=null; }
   if(id==='gas'){ u.puffT=rand(0.8,1.6); }
   if(id==='imp'){ u.orbitA=rand(TAU); u.orbitDir=Math.random()<0.5?-1:1; u.dodgeCd=0; u.teaseT=rand(1,3); }
   if(id==='flower'){ u.state='bud'; u.revealed=false; u.dotAcc=0; u.openT=0; }
@@ -705,6 +956,12 @@ function spawnUnit(id, x, y, o){
 function damageEnemy(e,dmg){
   if(e.dead||e.dormant) return;
   if(e.id==='flower') dmg*=(e.state==='bud'?0.5:1.3);
+  // 魅了: その個体への攻撃は無意識に鈍る(Lvごとに与ダメ減)
+  const cl=G.B?charmLvFor(G.B.hero,e):0;
+  if(cl>0){
+    dmg*=Math.max(0.1,1-BAL.CHARM_DMG_CUT*cl);
+    if(Math.random()<0.15) floatTxt(e.x,e.y-e.r-14,'……てかげん?','#ffb3cf',9,0.8);
+  }
   e.hp-=dmg; e.hitFlash=0.12;
   floatDmg(e.x,e.y-e.r-4,dmg);
   if(e.hp<=0) killEnemy(e);
@@ -722,12 +979,19 @@ function killEnemy(e){
   for(const sl of attachedSlots(h)){
     if(h.limbs[sl].mon===e) h.limbs[sl]=null;
   }
+  for(const sl of suckSlots(h)){
+    if(h.suckers[sl].mon===e) h.suckers[sl]=null;
+  }
   if(h.pinBy===e) h.pinBy=null;
+  // 魅了の対象が消えると我に返る
+  if(charmLvFor(h,e)>=2) heroBubble(h,'…あれ? いま、わたし…');
+  removeCharm(h,e);
+  if(h.charmBind && h.charmBind.mon===e) releaseCharmBind(false);
   const col=EN_COLORS[e.id]||['#fff','#aaa'];
   parts(e.x,e.y-e.r,e.boss?42:8,col,e.boss?220:110,0.55);
   S.hit();
   if(e.id==='gas'){ // 断末魔の大放出
-    spawnCloud(e.x,e.y,70,7,BAL.APHRO_GAS*1.2);
+    spawnCloud(e.x,e.y,70,7,BAL.SENSIT_GAS*1.2);
   }
   B.en=Math.min(enMax(), B.en+e.enVal*BAL.EN_REFUND);
   B.essence+=e.xp*BAL.ESS_RATE;
@@ -765,10 +1029,15 @@ function enemiesUpdate(dt){
     if(e.hitFlash>0) e.hitFlash-=dt;
     if(e.orbCd>0) e.orbCd-=dt;
 
-    // 四肢に絡みつき中: ヒロインに追従するだけ
+    // 四肢に絡みつき/吸い付き中: ヒロインに追従するだけ
     if(e.state==='attached'){
-      const anch=limbAnchor(p,e.limb);
+      const anch=e.suck?suckAnchor(p,e.suck):limbAnchor(p,e.limb);
       e.x=anch.x; e.y=anch.y;
+      continue;
+    }
+    // 魅了拘束の相手: 彼女に縋りつかれてその場を動かない
+    if(p.charmBind && p.charmBind.mon===e){
+      e.x+=Math.sin(e.t*3)*2*dt; e.y+=Math.cos(e.t*2.6)*2*dt;
       continue;
     }
 
@@ -806,9 +1075,11 @@ function enemiesUpdate(dt){
       flowerTick(e,dt,d);
     }else if(e.id==='gtent'){
       gtentTick(e,dt,d,dx,dy);
+    }else if(e.id==='leech'){
+      leechTick(e,dt,d,dx,dy);
     }else{
-      // slug / ghost / slime / mistslime: 通常追跡
-      const rush=(attachCount(p)>0||p.pinned) && d<300 ? 1.9 : 1;
+      // slug / goblin / ghost / slime / mistslime: 通常追跡
+      const rush=(attachCount(p)>0||p.pinned||p.charmBind) && d<300 ? 1.9 : 1;
       const ox=Math.cos(e.joff)*14, oy=Math.sin(e.joff)*14;
       const tx=p.x+ox-e.x, ty=p.y+oy-e.y;
       const td=Math.hypot(tx,ty)||0.001;
@@ -825,14 +1096,14 @@ function enemiesUpdate(dt){
         e.trailT-=dt;
         if(e.trailT<=0){
           e.trailT=0.75;
-          spawnCloud(e.x,e.y,26,3.5,BAL.APHRO_GAS*0.6);
+          spawnCloud(e.x,e.y,26,3.5,BAL.SENSIT_GAS*0.6);
         }
       }
     }
     if(e.id==='slug' && e.charmCd>0) e.charmCd-=dt;
 
     // オーブ被弾
-    if(p.wp.orb>0 && e.orbCd<=0 && e!==p.charmBy){
+    if(p.wp.orb>0 && e.orbCd<=0){
       const evo=p.evo.sring>0;
       const n=p.wp.orb;
       for(let i=0;i<n;i++){
@@ -858,7 +1129,7 @@ function enemiesUpdate(dt){
 }
 function wormTick(e,dt,d,dx,dy){
   const p=G.B.hero;
-  const rush=(attachCount(p)>0||p.pinned) && d<300 ? 1.7 : 1;
+  const rush=(attachCount(p)>0||p.pinned||p.charmBind) && d<300 ? 1.7 : 1;
   if(e.pounceT>0){
     e.pounceT-=dt;
     e.x+=e.cdx*240*dt; e.y+=e.cdy*240*dt;
@@ -879,7 +1150,7 @@ function gasTick(e,dt,d,dx,dy){
   e.puffT-=dt;
   if(e.puffT<=0){
     e.puffT=3.2;
-    spawnCloud(e.x,e.y-4,62,6.5,BAL.APHRO_GAS);
+    spawnCloud(e.x,e.y-4,62,6.5,BAL.SENSIT_GAS);
     sfx(200,90,0.3,'sine',0.03);
   }
 }
@@ -907,7 +1178,7 @@ function impTick(e,dt,d,dx,dy){
   }
   // 煽り(近くにいるだけで媚薬と集中低下)
   if(d<120){
-    applyAphro(BAL.APHRO_IMP*dt);
+    applyPleasure(BAL.PLEAS_IMP*dt);
     e.teaseT-=dt;
     if(e.teaseT<=0){
       e.teaseT=rand(2.2,3.8);
@@ -964,6 +1235,17 @@ function gtentTick(e,dt,d,dx,dy){
   e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt;
   if(d<110 && e.grabCd<=0){ e.whipT=0.3; sfx(140,60,0.2,'sawtooth',0.07); }
 }
+function leechTick(e,dt,d,dx,dy){
+  // 素早く、緩く追尾——曲がりきれずに通り過ぎ、旋回してまた戻ってくる
+  if(e.lvx===undefined||e.lvx===null){ e.lvx=dx/d*e.spd; e.lvy=dy/d*e.spd; }
+  const turn=2.2;
+  e.lvx+=((dx/d)*e.spd-e.lvx)*Math.min(1,turn*dt);
+  e.lvy+=((dy/d)*e.spd-e.lvy)*Math.min(1,turn*dt);
+  const v=Math.hypot(e.lvx,e.lvy)||1;
+  e.lvx*=e.spd/v; e.lvy*=e.spd/v;
+  e.x+=e.lvx*dt+Math.sin(e.t*9+e.joff)*14*dt;
+  e.y+=e.lvy*dt+Math.cos(e.t*8+e.joff)*14*dt;
+}
 function contactHit(e){
   const p=G.B.hero;
   if(e.id==='worm'){
@@ -971,11 +1253,16 @@ function contactHit(e){
     hurtHero(e.dmg,e,{});
     return;
   }
+  if(e.id==='leech'){
+    // 拘束レベルを問わず、空いた場所に吸い付く。満員なら掠めるだけ
+    if(!attachSucker(e)) applyPleasure(3);
+    return;
+  }
   if(e.id==='slug'){
     if(e.charmCd<=0){
       e.charmCd=6;
-      applyCharm(2.2,e);
-      applyAphro(4);
+      applyCharm(e);
+      applySensit(BAL.SENSIT_SLUG);
     }
     hurtHero(e.dmg,e,{});
     return;
@@ -988,7 +1275,7 @@ function hurtHero(dmg,src,opt){
   const B=G.B, p=B.hero;
   opt=opt||{};
   const atk=attachCount(p);
-  const mult=p.pinned?BAL.PIN_DMG_MULT:(atk>0?BAL.ATTACH_DMG_MULT:1);
+  const mult=p.pinned?BAL.PIN_DMG_MULT:((atk>0||p.charmBind)?BAL.ATTACH_DMG_MULT:1);
   const armor=opt.pierce?0:Math.max(0,p.armor-atk);
   const net=Math.max(0, dmg*mult-armor);
   if(net<=0){
@@ -1025,8 +1312,10 @@ function beginCapture(src,cause){
   B.capturedBy=src?src.id:'default';
   B.captureCause=cause||'hp';
   B.hero.pinned=true;
-  heroBubble(B.hero, cause==='stamina'?'ちから、が……はいらな……':'そんな……っ', true);
-  setBanner('敗北 — 観測終了', cause==='stamina'?'ルミナは力尽き、組み伏せられた':'ルミナは魔物たちに捕らえられた','#c98cff');
+  const bub={stamina:'ちから、が……はいらな……', charm:'だって……はなれたく、な……', hp:'そんな……っ'};
+  const sub={stamina:'ルミナは力尽き、組み伏せられた', charm:'ルミナは魅了に蕩けたまま、力尽きた', hp:'ルミナは魔物たちに捕らえられた'};
+  heroBubble(B.hero, bub[cause]||bub.hp, true);
+  setBanner('敗北 — 観測終了', sub[cause]||sub.hp,'#c98cff');
   S.capture();
   G.shake=Math.min(10,G.shake+6);
 }
@@ -1040,7 +1329,7 @@ function bulletsUpdate(dt){
     if(Math.random()<0.3) parts(b.x,b.y,1,['#ffd76a','#fff'],20,0.25);
     let hit=false;
     for(const e of B.enemies){
-      if(e.dead||e.dormant||e===b.last||e===B.hero.charmBy||e.state==='attached') continue;
+      if(e.dead||e.dormant||e===b.last||e.state==='attached') continue;
       if(Math.hypot(e.x-b.x,(e.y-e.r*0.6)-b.y)<e.r+5){
         damageEnemy(e,b.dmg);
         parts(b.x,b.y,4,['#ffd76a','#fff'],100,0.3);
@@ -1221,7 +1510,7 @@ function playCard(id, formId){
 
 /* ================= オート指揮 ================= */
 const BINDERS=['worm','gtent','flower'];
-const PRESSURE=['ghost','mistslime','slime','slug'];
+const PRESSURE=['ghost','goblin','mistslime','slime','slug'];
 function bestForm(prefer){
   for(const f of prefer){ if(META.formations.includes(f)) return f; }
   return META.formations[0];
@@ -1236,7 +1525,7 @@ function autoDirector(dt){
   const alive=B.enemies.filter(e=>!e.dead);
   const hpRatio=p.hp/p.maxHp;
   const stamRatio=p.stamina/p.staminaMax;
-  const held=attachCount(p)>0||p.pinned;
+  const held=attachCount(p)>0||p.pinned||!!p.charmBind;
   const has=id=>B.hand.some(h=>h.id===id);
   const ready=(id,f)=>canPlay(id,f).ok;
 
@@ -1273,11 +1562,24 @@ function autoDirector(dt){
     }
   }
 
-  // 4) ガスの維持(場に無ければ)
-  if(has('gas') && !alive.some(e=>e.id==='gas') && p.aphro<70){
+  // 4) ガスの維持(場に無ければ)——媚薬=敏感化の下地を作る
+  if(has('gas') && !alive.some(e=>e.id==='gas') && sensLvOf(p)<2){
     const f=bestForm(['single','scatter']);
     const chk=canPlay('gas',f);
     if(chk.ok && B.en>=chk.cost+4){ playCard('gas',f); return; }
+  }
+
+  // 4.5) 敏感化が乗っているなら吸液羽虫で快感を注ぐ
+  if(has('leech') && (sensLvOf(p)>=1||p.aphro>30) && alive.filter(e=>e.id==='leech').length<3){
+    const f=bestForm(['wave','scatter']);
+    const chk=canPlay('leech',f);
+    if(chk.ok && B.en>=chk.cost+3){ playCard('leech',f); return; }
+  }
+
+  // 4.6) 魅了の種まき: ナメクジが場に薄ければ足す(段階UPは接触の積み重ね)
+  if(has('slug') && alive.filter(e=>e.id==='slug').length<2 && charmMaxLv(p)<3 && B.time>15){
+    const chk=canPlay('slug','scatter');
+    if(chk.ok && B.en>=chk.cost+5){ playCard('slug','scatter'); return; }
   }
 
   // 5) 小淫魔を1体まとわりつかせる
@@ -1297,7 +1599,7 @@ function autoDirector(dt){
 
   // 7) EN満杯なら大きく使う(包囲)
   if(B.en>enMax()*0.9){
-    for(const id of ['ghost','mistslime','slime','worm','slug']){
+    for(const id of ['ghost','goblin','mistslime','slime','worm','slug']){
       if(!has(id)) continue;
       const f=bestForm(['ring','wave','scatter']);
       if(ready(id,f)){ playCard(id,f); return; }
@@ -1306,7 +1608,7 @@ function autoDirector(dt){
 
   // 8) 圧が切れているなら安価に補充
   if(alive.length<5 && B.en>enMax()*0.45){
-    for(const id of ['slug','worm','ghost','slime']){
+    for(const id of ['goblin','slug','worm','ghost','slime']){
       if(has(id) && ready(id,'scatter')){ playCard(id,'scatter'); return; }
     }
   }
@@ -1321,7 +1623,9 @@ function battleTick(dt){
     for(const e of B.enemies) parts(e.x,e.y-e.r,6,['#fff','#8fd3ff'],130,0.6);
     B.enemies.length=0;
     for(const sl of attachedSlots(p)) p.limbs[sl]=null;
-    p.pinned=false;
+    for(const sl of suckSlots(p)) p.suckers[sl]=null;
+    p.pinned=false; p.charmBind=null; p.charmDrift=null; p.charms.length=0;
+    B.pinScene=null;
     setBanner('✨ 生存 ✨','ルミナは今夜も守りきった','#ffd76a');
     heroBubble(p,'やりきったよ〜!',true);
     G.mode='survived'; B.winT=1.8;
@@ -1338,6 +1642,7 @@ function battleTick(dt){
 
   condTick(p,dt);
   if(p.pinned){ pinTick(dt); if(G.mode!=='battle') return; }
+  else if(p.charmBind){ charmBindTick(dt); if(G.mode!=='battle') return; }
   aiUpdate(dt);
   weaponsUpdate(dt);
   bulletsUpdate(dt);

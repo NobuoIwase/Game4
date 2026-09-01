@@ -35,12 +35,41 @@ const BAL={
   ATTACH_DMG_MULT:1.3,     // 四肢拘束中の被ダメ倍率
   PIN_DMG_MULT:1.5,        // 押し倒し中の被ダメ倍率
 
-  /* --- 媚薬 / 発情 --- */
-  APHRO_DECAY:0.6,         // 媚薬ゲージ自然減衰 /s
-  APHRO_GAS:9,             // ガス雲の中 /s
-  APHRO_IMP:2.2,           // 小淫魔が近くにいる /s
-  HEAT_DUR:10,             // 発情状態の持続
-  HEAT_AFTER:35,           // 発情終了後の媚薬ゲージ
+  /* --- 媚薬=敏感化 / 快感 / 発情(v0.4) ---
+     媚薬は即座に快感を生まず「敏感化」を積む。
+     敏感化は快感の入りを増幅し、快感100で発情レベルが上がる。 */
+  SENSIT_DECAY:1.1,        // 敏感化ゲージ自然減衰 /s
+  SENSIT_GAS:8,            // ガス雲の中 /s(媚薬=敏感化源)
+  SENSIT_SLUG:6,           // ナメクジ接触
+  SENSIT_TH:[25,55,85],    // 敏感Ⅰ/Ⅱ/Ⅲ の閾値
+  SENSIT_AMP:0.35,         // 快感増幅 /敏感Lv
+  PLEAS_DECAY:0.6,         // 快感ゲージ自然減衰 /s
+  PLEAS_IMP:2.2,           // 小淫魔の煽り /s
+  PLEAS_GAS:1.8,           // ガス雲は快感も僅かに直接生む /s
+  PLEAS_BINDER:0.7,        // 絡みつき1体あたり /s
+  PLEAS_PIN:4,             // 押し倒し1拍あたり
+  SUCK_PLEAS:2.6,          // 吸い付き1体あたり /s
+  HEAT_LV_DUR:20,          // 発情1段階の持続(s)。切れると1段下がる
+  HEAT_AFTER:40,           // 発情昇段後の快感ゲージ
+  WAVE_CD_BASE:9, WAVE_CD_LV:1.5,   // 発情の波の間隔 = BASE-LV×Lv
+  WAVE_DUR_BASE:2.0, WAVE_DUR_LV:0.8, // 波の持続 = BASE+LV×Lv
+  WAVE_ATK:0.55,           // 波の間の攻撃レート
+  WAVE_SPD:0.7,            // 波の間の移動速度
+
+  /* --- 魅了(v0.4: 対象別・レベル制) --- */
+  CHARM_DUR:16,            // 1段階の持続(接触で更新)
+  CHARM_DMG_CUT:0.25,      // 魅了対象への与ダメ減 /Lv(Lv3=75%減)
+  CHARM_DRIFT_CD:6.5,      // 無意識に寄っていく発作の間隔(Lv2+)
+  CHARM_DRIFT_T:1.2,       // 発作の基本時間 ×Lv
+  CHARM_BIND_PULSE:0.9,    // 魅了拘束の正気拍
+  CHARM_BIND_STAM:4,       // 1拍のスタミナ
+  CHARM_BIND_SANITY:15,    // 1拍の正気ゲージ
+  CHARM_BIND_PLEAS:5,      // 魅了拘束中の快感 /s
+
+  /* --- 吸液羽虫 --- */
+  RIP_NEED_SUCK:45,        // 引き離しに必要な抵抗
+  SUCK_RIP_COST:7,         // 引き離し1回のスタミナ
+  SUCK_SLOW:0.93,          // 1体あたりの移動低下(最大3体)
 
   STAMINA_DRAG:1.5,       // 2箇所以上絡みつかれている間のじわ削り /s
 
@@ -59,8 +88,19 @@ const MONSTERS={
   slug:{
     name:'ナメクジ', role:'接触魅了', cost:2, unlock:0,
     hp:14, spd:34, r:10, dmg:2, xp:2,
-    desc:'のろく弱いが、触れられると目が離せなくなる。魅了された相手を彼女は撃てない。',
-    trait:'接触で【魅了】+微媚薬',
+    desc:'のろく弱いが、触れるたびその個体への魅了が一段深まる。魅了された相手への攻撃は鈍り、深まると自分から寄っていってしまう。',
+    trait:'接触で【魅了】段階UP(対象別)',
+  },
+  goblin:{
+    name:'ゴブリン', role:'群れ', cost:2, unlock:80,
+    hp:13, spd:66, r:9, dmg:4, xp:2,
+    desc:'緑色のチビ。一匹では何もできず、群れて囲んで小突くしか能がない。数だけは湧く。',
+  },
+  leech:{
+    name:'吸液羽虫', role:'吸い付き', cost:3, unlock:120,
+    hp:8, spd:105, r:7, dmg:0, xp:2,
+    desc:'肉質の小さな羽虫。素早く掠めるように飛び、触れた瞬間に胸の先や脚の間へ吸い付いて快感を注ぎ続ける。拘束の有無を問わず取り付く。',
+    trait:'接触で吸い付き(快感+微スロウ、3箇所まで)',
   },
   worm:{
     name:'地上ワーム', role:'四肢拘束', cost:3, unlock:0,
@@ -151,7 +191,7 @@ const ALTAR=[
   { id:'sense', name:'感応増幅', max:3, costs:[14,26,44],
     desc:'媚薬・魅了・拘束への感受性を高める。効きが深く、抜けにくくなる。', fx:'異常効果 +18%/段階' },
   { id:'heat', name:'媚薬の残滓', max:2, costs:[16,32],
-    desc:'戦闘開始時から媚薬ゲージが僅かに溜まっている。', fx:'初期媚薬 +18/段階' },
+    desc:'戦闘開始時から肌が僅かに敏感になっている(敏感化の下限が上がり、減衰しきらない)。', fx:'初期敏感 +26/段階' },
   { id:'focus', name:'朧の霞', max:2, costs:[16,32],
     desc:'集中の芯を曇らせる。判断と反応が僅かに遅れる。', fx:'反応 -12%/段階' },
   { id:'stamina', name:'倦怠の澱', max:3, costs:[14,26,44],
@@ -184,13 +224,19 @@ const need=l=>Math.floor(6 + l*3.2 + l*l*0.18);
 const AILMENTS={
   bound:{ name:'拘束', color:'#c98cff', icon:'⛓' },
   pinned:{ name:'押し倒し', color:'#ff5d7a', icon:'✖' },
-  aphro:{ name:'媚薬', color:'#ff9ec2', icon:'✿' },
+  aphro:{ name:'快感', color:'#ff9ec2', icon:'✿' },
+  sens:{ name:'敏感化', color:'#ffb3cf', icon:'✿' },
   heat:{ name:'発情', color:'#ff5d9e', icon:'♨' },
   slow:{ name:'粘液', color:'#8fe8c9', icon:'〰' },
   charm:{ name:'魅了', color:'#ffb3cf', icon:'✦' },
+  charmbind:{ name:'魅了拘束', color:'#ff86b3', icon:'✦' },
+  suck:{ name:'吸い付き', color:'#ff9d8a', icon:'♡' },
 };
 const LIMBS=['armL','armR','legL','legR'];
 const LIMB_NAMES={armL:'左腕', armR:'右腕', legL:'左脚', legR:'右脚'};
+const SUCKS=['nipL','nipR','clit'];
+const SUCK_NAMES={nipL:'胸(左)', nipR:'胸(右)', clit:'秘部'};
+const ROMANS=['','Ⅰ','Ⅱ','Ⅲ'];
 
 /* ---------------- 堕ち二軸(観測記録用・世代内でリセット) ---------------- */
 const FALL_BODY_STAGES=[[0,'不惑'],[25,'綻び'],[50,'馴染み'],[72,'熟れ'],[90,'崩れ']];

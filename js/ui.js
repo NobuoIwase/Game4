@@ -156,7 +156,7 @@ const UI={
     const wipeArmed=this._wipeArm && performance.now()-this._wipeArm<3000;
     return `
       <h1>ルミナ・サバイバーズ</h1>
-      <div class="sub">v0.3 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
+      <div class="sub">v0.4 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
       <p>あなたは<b>夜側の指揮者</b>。デッキから魔物を差し向け、AIで戦う光の少女<b>「ルミナ」</b>を追い詰める。<br>
       彼女に魔物が倒されるほどあなたのエネルギーとエッセンスは増え、彼女もまた強くなる。</p>
       <div style="text-align:center;color:var(--gold);font-size:12px;margin-bottom:8px">${esc(best)} ・ 通算${META.runs}戦 / 捕獲${META.captures}回</div>
@@ -304,7 +304,7 @@ const UI={
           <div>護り <b>${preview.armor}</b></div>
           <div>回復 <b>${preview.regen.toFixed(2)}/s</b></div>
           <div>基礎速度 <b>${Math.round(preview.baseSpeed)}</b></div>
-          <div>初期媚薬 <b>${Math.round(preview.aphro)}%</b></div>
+          <div>初期敏感 <b>${Math.round(preview.sensit)}%</b></div>
         </div>
         <div class="note">次の戦闘開始時の実効値(世代内継承+書き換え適用後)。</div>
       </div>
@@ -340,7 +340,7 @@ const UI={
     const title=cap?'★ 捕獲成功':(sum.outcome==='survive'?'守りきられた……':'撤退……');
     const color=cap?'var(--vio)':'var(--gold)';
     const by=cap&&sum.capturedBy&&MONSTERS[sum.capturedBy]?MONSTERS[sum.capturedBy].name:null;
-    const causeTxt=cap?(sum.cause==='stamina'?'スタミナが尽き、組み伏せられた':'体力が尽きた'):null;
+    const causeTxt=cap?({stamina:'スタミナが尽き、組み伏せられた', charm:'魅了に蕩けたまま、力尽きた', hp:'体力が尽きた'}[sum.cause]||'体力が尽きた'):null;
     const scene=cap?sceneFor('capture',sum.capturedBy):null;
     const sceneHtml=cap?(scene
       ? `<div id="sceneBox"><b>${esc(scene.title||'')}</b>\n${scene.beats.map(esc).join('\n\n')}</div>`
