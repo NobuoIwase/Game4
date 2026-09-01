@@ -13,13 +13,13 @@ function newHero(){
   const LU=(META.lumina&&META.lumina.upg)||{};
   const h={
     x:0, y:0, vx:0, vy:0, r:10,
-    maxHp:Math.round(140*(1+0.18*gb)*(1+0.08*(LU.vital||0))), hp:0,
-    armor:Math.max(0, 6 + gb - aArmor + Math.floor((LU.guard||0)*0.5)),
-    regen:(0.7+0.15*gb+0.08*(LU.bless||0))*(1-0.3*aRegen),
-    baseSpeed:150*(1-0.06*aSpeed)*(1+0.02*(LU.swift||0)),
+    maxHp:Math.round(175*(1+0.18*gb)*(1+0.08*(LU.vital||0))), hp:0,
+    armor:Math.max(0, 7 + gb - aArmor + Math.floor((LU.guard||0)*0.5)),
+    regen:(0.9+0.15*gb+0.08*(LU.bless||0))*(1-0.3*aRegen),
+    baseSpeed:154*(1-0.06*aSpeed)*(1+0.02*(LU.swift||0)),
     dmgMult:1+0.06*(LU.zeal||0),
     level:1, xp:0, xpNeed:need(1),
-    wp:{bolt:1, orb:0, nova:0, whip:0, rain:0, cross:0},
+    wp:{bolt:2, orb:1, nova:0, whip:0, rain:0, cross:0},
     ps:{speed:0, vital:0, magnet:0, haste:0, ward:0, growth:0},
     evo:{sstar:0, sring:0, sburst:0, srush:0, scomet:0, sjudge:0},
     boltT:0.6, novaT:2.5, orbAng:0, novaAnim:0, novaR:0,
@@ -68,9 +68,9 @@ function newHero(){
     bubblePrio:0,
   };
   // 戦闘経験の継承(世代内で強くなる)
-  if(gb>=1) h.wp.bolt=2;
-  if(gb>=2) h.wp.orb=1;
-  if(gb>=3){ h.wp.nova=1; h.ps.speed=1; }
+  if(gb>=1) h.wp.bolt=3;
+  if(gb>=2){ h.wp.orb=2; h.wp.nova=1; }
+  if(gb>=3){ h.ps.speed=1; h.ps.haste=1; }
   h.hp=h.maxHp;
   h.stamina=h.staminaMax;
   return h;
@@ -1013,7 +1013,7 @@ function weaponsUpdate(dt){
           p.boltT=0.55;
           const a=Math.atan2((t.y-10)-(p.y-14), t.x-p.x);
           B.bullets.push({x:p.x,y:p.y-14,vx:Math.cos(a)*460,vy:Math.sin(a)*460,
-            dmg:13+4*(lv-1), pierce:0, life:1.2, last:null, evo:false});
+            dmg:15+5*(lv-1), pierce:0, life:1.2, last:null, evo:false});
           S.pew();
           if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN);
         }else p.boltT=0.15;
@@ -1027,7 +1027,7 @@ function weaponsUpdate(dt){
             const sp=evo?520:460, spread=(i-(shots-1)/2)*0.06;
             const a=Math.atan2(dy,dx)+spread;
             B.bullets.push({x:p.x,y:p.y-14,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,
-              dmg:(evo?18:13+4*(lv-1)), pierce:evo?2:(lv>=4?1:0), life:1.3, last:null, evo});
+              dmg:(evo?21:15+5*(lv-1)), pierce:evo?2:(lv>=4?1:0), life:1.3, last:null, evo});
           }
           S.pew();
           if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN);
@@ -1044,7 +1044,7 @@ function weaponsUpdate(dt){
       const evo=p.evo.sburst>0;
       const lv=p.wp.nova;
       p.novaT=(evo?4.2:4.6)-0.35*(lv-1);
-      const R=(evo?165:85+16*(lv-1)), dmg=(evo?30:14+6*(lv-1));
+      const R=(evo?165:90+16*(lv-1)), dmg=(evo?34:16+7*(lv-1));
       p.novaAnim=0.5; p.novaR=R;
       G.shake=Math.min(7,G.shake+3);
       S.nova();
@@ -1415,7 +1415,7 @@ function enemiesUpdate(dt){
       for(let i=0;i<n;i++){
         const o=orbPos(i,n);
         if(Math.hypot(e.x-o.x,(e.y-e.r)-o.y)<e.r+(evo?13:9)){
-          damageEnemy(e,(evo?14:9+3*(p.wp.orb-1)));
+          damageEnemy(e,(evo?16:11+4*(p.wp.orb-1)));
           if(evo) p.hp=Math.min(p.maxHp,p.hp+1);
           e.orbCd=0.4;
           parts(o.x,o.y,3,['#fff','#ffd76a'],90,0.3);

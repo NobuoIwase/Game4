@@ -7,7 +7,7 @@
 const BAL={
   RUN_TIME:300,            // 1戦=5分(v0.5で試験延長)
   GEN_LEN:4,               // この戦数ごとにヒロインの経験がリセット
-  FIELD_CAP:160,           // 場に出せる魔物の上限(超えると召喚不可)
+  FIELD_CAP:180,           // 場に出せる魔物の上限(超えると召喚不可)
   EN_BASE:12, EN_PER_LV:3, EN_MAX:60,
   EN_REGEN:0.78, EN_REGEN_LV:0.07,
   EN_START:10,
@@ -202,15 +202,15 @@ const FUSION_IDS=['mistslime','gtent'];
 
 /* ---------------- 陣形(出現方法) ---------------- */
 const FORMATIONS={
-  scatter:{ name:'散開', count:3, factor:1.6, unlock:0,
-    desc:'遠巻きの3方向から放つ。基本の出し方。' },
-  single:{ name:'精鋭', count:1, factor:0.9, unlock:200, elite:1.5,
-    desc:'1体だけを強化(HP/攻撃×1.5)して送り込む。' },
-  wave:{ name:'突撃列', count:5, factor:2.4, unlock:160,
+  scatter:{ name:'散開', count:4, factor:1.7, unlock:0,
+    desc:'遠巻きの4方向から放つ。基本の出し方。' },
+  single:{ name:'精鋭', count:1, factor:0.9, unlock:200, elite:1.6,
+    desc:'1体だけを強化(HP/攻撃×1.6)して送り込む。' },
+  wave:{ name:'突撃列', count:7, factor:2.6, unlock:160,
     desc:'一方向から横列で押し寄せる。' },
-  ambush:{ name:'潜伏', count:2, factor:1.5, unlock:280,
+  ambush:{ name:'潜伏', count:3, factor:1.6, unlock:280,
     desc:'進行方向の先に伏せて置く。設置系・鈍足と好相性。' },
-  ring:{ name:'包囲円陣', count:8, factor:3.8, unlock:380,
+  ring:{ name:'包囲円陣', count:10, factor:4.0, unlock:380,
     desc:'楕円の円陣で取り囲み、輪を締める。' },
 };
 
