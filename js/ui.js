@@ -52,9 +52,12 @@ const UI={
       case 'battle':
         if(!META.deck.length){ S.deny(); return; }
         this.hideAll(); startBattle(); break;
-      case 'deckAdd':
-        if(META.deck.length<6 && !META.deck.includes(arg)){ META.deck.push(arg); saveMeta(); S.pick(); }
-        this.show('deck'); break;
+      case 'deckAdd':{
+        const t=tierOf(arg);
+        const n=META.deck.filter(id=>tierOf(id)===t).length;
+        if(n<TIER_CAP[t] && !META.deck.includes(arg)){ META.deck.push(arg); saveMeta(); S.pick(); }
+        else S.deny();
+        this.show('deck'); break; }
       case 'deckRem':
         META.deck=META.deck.filter(x=>x!==arg); saveMeta();
         this.show('deck'); break;
@@ -175,7 +178,7 @@ const UI={
     const wipeArmed=this._wipeArm && performance.now()-this._wipeArm<3000;
     return `
       <h1>ルミナ・サバイバーズ</h1>
-      <div class="sub">v0.9 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
+      <div class="sub">v1.0 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
       <p>あなたは<b>夜側の指揮者</b>。デッキから魔物を差し向け、AIで戦う光の少女<b>「ルミナ」</b>を追い詰める。<br>
       彼女に魔物が倒されるほどあなたのエネルギーとエッセンスは増え、彼女もまた強くなる。</p>
       <div style="text-align:center;color:var(--gold);font-size:12px;margin-bottom:8px">${esc(best)} ・ 通算${META.runs}戦 / 捕獲${META.captures}回</div>
@@ -203,27 +206,29 @@ const UI={
   },
 
   htmlDeck(){
-    const slots=META.deck.map(id=>{
-      const m=MONSTERS[id], lv=META.cards[id].lv;
-      return `<div class="mcard sel" data-act="deckRem" data-arg="${id}" style="cursor:pointer" title="クリックで外す">
+    // 階級ごとに枠がある: 雑魚2 / 中型2 / 大型1 / ボス1(大型は精鋭・双璧のみ、ボスは単騎)
+    const card=(id,sel)=>{
+      const m=MONSTERS[id], lv=(META.cards[id]&&META.cards[id].lv)||1;
+      return `<div class="mcard ${sel?'sel':''} t-${tierOf(id)}" data-act="${sel?'deckRem':'deckAdd'}" data-arg="${id}" style="cursor:pointer" title="${sel?'クリックで外す':'クリックで追加'}">
         <div class="cost">${cardCost(id,lv)}</div><div class="lv">Lv${lv}</div>
         <div data-icon="${id}" data-size="44"></div>
         <div class="nm">${esc(m.name)}</div>
-        <div class="st">クリックで外す</div></div>`;
-    }).join('') || '<p style="text-align:center">デッキが空です。下から追加してください。</p>';
-    const pool=Object.keys(MONSTERS).filter(id=>META.cards[id]&&META.cards[id].owned&&!META.deck.includes(id)).map(id=>{
-      const m=MONSTERS[id], lv=META.cards[id].lv;
-      return `<div class="mcard" data-act="deckAdd" data-arg="${id}" style="cursor:pointer" title="クリックで追加">
-        <div class="cost">${cardCost(id,lv)}</div><div class="lv">Lv${lv}</div>
-        <div data-icon="${id}" data-size="44"></div>
-        <div class="nm">${esc(m.name)}</div>
-        <div class="st">${esc(m.role)}${m.trait?'<br>'+esc(m.trait):''}</div></div>`;
-    }).join('') || '<p>追加できるカードがありません。</p>';
+        <div class="st">${sel?'クリックで外す':esc(m.role)+(m.trait?'<br>'+esc(m.trait):'')}</div></div>`;
+    };
+    const sections=TIERS.map(t=>{
+      const inDeck=META.deck.filter(id=>tierOf(id)===t);
+      const pool=Object.keys(MONSTERS).filter(id=>tierOf(id)===t&&META.cards[id]&&META.cards[id].owned&&!META.deck.includes(id));
+      const empties=Math.max(0,TIER_CAP[t]-inDeck.length);
+      const slots=inDeck.map(id=>card(id,true)).join('')+
+        Array.from({length:empties},()=>`<div class="mcard empty"><div class="nm">空き枠</div><div class="st">${esc(TIER_NAMES[t])}を1枚</div></div>`).join('');
+      const forms=TIER_FORMS[t]?TIER_FORMS[t].map(f=>esc(FORMATIONS[f].name)).join('/'):'全陣形';
+      return `<h2 style="font-size:14px" class="tier-h t-${t}">${esc(TIER_NAMES[t])} <span style="font-size:11px;color:var(--dim)">(${inDeck.length}/${TIER_CAP[t]}) 陣形: ${forms}</span></h2>
+        <div class="cards">${slots}${pool.map(id=>card(id,false)).join('')}</div>`;
+    }).join('');
     return `
       <h2>🃏 デッキ編成 <span style="font-size:12px;color:var(--dim)">(${META.deck.length}/6)</span></h2>
-      <div class="cards">${slots}</div>
-      <h2 style="font-size:14px">所持カード</h2>
-      <div class="cards">${pool}</div>
+      <div class="note">雑魚・中型は全陣形で出せる。大型は<b>精鋭/双璧</b>の少数精鋭のみ、ボスは<b>単騎</b>。戦闘中に彼女が開けた宝箱からは、ランダムな魔物がこちらの手札に加わる(その戦闘限り・枚数制限なし)。</div>
+      ${sections}
       <div class="note">陣形は戦闘中に選択します。解放済み: ${META.formations.map(f=>esc(FORMATIONS[f].name)).join(' / ')}</div>
       <div class="row"><button data-act="go" data-arg="home">← もどる</button><button class="gold" data-act="battle">▶ このデッキで出撃</button></div>`;
   },
@@ -238,7 +243,7 @@ const UI={
         const mult=cardLvMult(st.lv);
         rows.push(`<div class="lrow">
           <div data-icon="${id}" data-size="40"></div>
-          <div class="info"><div class="nm">${esc(m.name)} <span style="color:var(--gold)">Lv${st.lv}</span></div>
+          <div class="info"><div class="nm">${esc(m.name)} <span class="tierlbl t-${tierOf(id)}">${esc(TIER_NAMES[tierOf(id)])}</span> <span style="color:var(--gold)">Lv${st.lv}</span></div>
           <div class="ds">HP${Math.round(m.hp*mult.hp)} / 攻${Math.round(m.dmg*mult.dmg)} / コスト${cardCost(id,st.lv)} — ${esc(m.desc)}</div></div>
           ${atMax?'<span style="color:var(--gold);font-size:11px">MAX</span>'
             :`<button class="sub" data-act="upcard" data-arg="${id}" ${META.essence<cost?'disabled':''}>強化 ✦${cost}</button>`}
@@ -246,7 +251,7 @@ const UI={
       }else if(m.unlock>=0 && !m.fusion){
         rows.push(`<div class="lrow" style="opacity:.8">
           <div data-icon="${id}" data-size="40"></div>
-          <div class="info"><div class="nm">${esc(m.name)}</div><div class="ds">${esc(m.desc)}</div></div>
+          <div class="info"><div class="nm">${esc(m.name)} <span class="tierlbl t-${tierOf(id)}">${esc(TIER_NAMES[tierOf(id)])}</span></div><div class="ds">${esc(m.desc)}</div></div>
           <button class="sub" data-act="unlock" data-arg="${id}" ${META.essence<m.unlock?'disabled':''}>解放 ✦${m.unlock}</button>
         </div>`);
       }
@@ -455,9 +460,10 @@ const UI={
     for(const slot of G.B.hand){
       const m=MONSTERS[slot.id];
       const el=document.createElement('div');
-      el.className='hcard';
+      el.className='hcard t-'+tierOf(slot.id)+(slot.temp?' temp':'');
       el.dataset.id=slot.id;
-      el.innerHTML=`<div class="cost"></div><div class="combo" hidden></div><div class="cnt"></div><div class="nm">${esc(m.name)}</div><div class="cd" style="height:0%"></div>`;
+      const tg={fodder:'雑',mid:'中',large:'大',boss:'王'}[tierOf(slot.id)];
+      el.innerHTML=`<div class="cost"></div><div class="tg">${slot.temp?'客':tg}</div><div class="combo" hidden></div><div class="cnt"></div><div class="nm">${esc(m.name)}</div><div class="cd" style="height:0%"></div>`;
       el.insertBefore(makeIconCanvas(slot.id,44), el.firstChild);
       row.appendChild(el);
     }
@@ -511,7 +517,10 @@ const UI={
       if(on) cEl.textContent='×'+cb.n;
       // 次に出したときの召喚数(コンボ・夜の深まり込み)
       const nextCombo=(cb && B.time-cb.t<=BAL.COMBO_WINDOW)?Math.min(BAL.COMBO_MAX,cb.n+1):1;
-      el.querySelector('.cnt').textContent=MONSTERS[id].boss?'':spawnCountFor(id,this.selForm,nextCombo)+'体';
+      // 大型・ボスは陣形が精鋭型へ丸められる——丸めた先の陣形名を添える
+      const rf=resolveForm(id,this.selForm);
+      const n=spawnCountFor(id,rf,nextCombo);
+      el.querySelector('.cnt').textContent=MONSTERS[id].boss?'単騎':((rf!==this.selForm?FORMATIONS[rf].name+' ':'')+n+'体');
     }
     // 陣形チップの実効頭数(彼女のLvで育つ)
     for(const fEl of $('formrow').children){

@@ -19,11 +19,12 @@ function newHero(){
     baseSpeed:154*(1-0.06*aSpeed)*(1+0.02*(LU.swift||0)),
     dmgMult:1+0.06*(LU.zeal||0),
     level:1, xp:0, xpNeed:need(1),
-    wp:{bolt:2, orb:1, nova:0, whip:0, rain:0, cross:0},
-    ps:{speed:0, vital:0, magnet:0, haste:0, ward:0, growth:0},
-    evo:{sstar:0, sring:0, sburst:0, srush:0, scomet:0, sjudge:0},
+    wp:{bolt:2, orb:1, nova:0, whip:0, rain:0, cross:0, sanct:0, blade:0, thunder:0, holy:0},
+    ps:{speed:0, vital:0, magnet:0, haste:0, ward:0, growth:0, area:0, dup:0, luck:0, endure:0},
+    evo:{sstar:0, sring:0, sburst:0, srush:0, scomet:0, sjudge:0, gsanct:0, kblade:0, judgment:0, spring:0},
     boltT:0.6, novaT:2.5, orbAng:0, novaAnim:0, novaR:0,
     whipT:1.1, whipAnim:0, whipDir:1, whipSide:1, whipR:0, rainT:2.2, crossT:1.6,
+    sanctT:0, sanctPulse:0, bladeT:1.0, thunderT:2.0, holyT:2.4,
     /* 今夜の好み: ビルド選択の癖(戦闘ごとにランダム)。
        噛み合わない好みを引いた夜は、シナジー不足でDPSが枯れる */
     taste:(()=>{
@@ -122,6 +123,8 @@ function heroStat(h){
   return { speed:spd, magnet:90+45*h.ps.magnet };
 }
 const curLv=k=>UPG[k].kind==='wp' ? G.B.hero.wp[k] : G.B.hero.ps[k];
+const areaMult=h=>1+0.10*(h.ps.area||0);      // ひろがるろうそく
+const dupN=h=>(h.ps.dup||0);                   // ふたごの鏡(投射+1)
 
 /* ================= 戦闘開始/終了 ================= */
 function startBattle(){
@@ -139,6 +142,7 @@ function startBattle(){
     combo:{}, lastPlay:null,
     climaxN:0, stains:[],
     heroCoins:0, impBurstCd:0,
+    zones:[], fx:[], items:[], whiteFlash:0, gifts:0, gropeCd:0,
   };
   spawnInitialProps();
   G.mode='battle';
@@ -356,18 +360,18 @@ function heatUp(){
 }
 
 /* ================= 四肢拘束 ================= */
-function freeSlotFor(kind){
+function freeSlotFor(kind, legFirst){
   const h=G.B.hero;
-  const order = kind==='tether' ? ['legL','legR','armL','armR'] : shuffle(LIMBS.slice());
+  const order = (kind==='tether'||legFirst) ? ['legL','legR','armL','armR'] : shuffle(LIMBS.slice());
   for(const s of order){ if(!h.limbs[s]) return s; }
   return null;
 }
 function attachMonster(mon, kind, opt){
   const B=G.B, h=B.hero;
   opt=opt||{};
-  const slot=freeSlotFor(kind);
+  const slot=freeSlotFor(kind, opt.legFirst);
   if(!slot) return false;
-  const needBase=kind==='tether'?BAL.RIP_NEED_TETHER:BAL.RIP_NEED_CLING;
+  const needBase=(kind==='tether'?BAL.RIP_NEED_TETHER:BAL.RIP_NEED_CLING)*(opt.needMul||1);
   const need=needBase/(1+0.12*(h.resist.bound||0));
   h.limbs[slot]={mon, kind, need, r:opt.r||0, t:B.time};
   mon.state='attached'; mon.limb=slot; mon.stun=0;
@@ -822,13 +826,15 @@ function aiDecide(foc){
     if(!inSight(e,p) || e.seenT < BAL.NOTICE_T*(1.4-0.4*foc)) continue;
     const dx=p.x-e.x, dy=p.y-e.y;
     const d=Math.hypot(dx,dy)||0.001;
-    const DANGER={flower:130, gtent:90, slug:55, worm:55, gas:60, slime:110, leech:60};
-    const danger=(e.boss?280:(DANGER[e.id]!==undefined?DANGER[e.id]:150))+e.r;
+    const DANGER={flower:130, gtent:90, slug:55, worm:55, gas:60, slime:110, leech:60,
+                  hand:50, serpent:120, moth:70, pot:95, slugqueen:80, dreamtree:125};
+    const mobileBoss=e.boss && MONSTERS[e.id].spd>0;         // 動かないボス(淫夢の樹)からは逃げ回らない
+    const danger=(mobileBoss?280:(DANGER[e.id]!==undefined?DANGER[e.id]:150))+e.r;
     if(d<danger){
-      let w=1-d/danger; w=w*w*(e.boss?3:1);
+      let w=1-d/danger; w=w*w*(mobileBoss?3:1);
       w*=1-0.28*charmLvFor(p,e);                               // 魅了された種族は脅威と思えない
       threat+=w; ax+=dx/d*w; ay+=dy/d*w;
-      if(e.boss) bossNear=true;
+      if(mobileBoss) bossNear=true;
     }
   }
   // 粘液・ガス雲の回避(集中が低いと避けきれない。意を決した間は避けない)
@@ -889,6 +895,14 @@ function aiDecide(foc){
           if(d<pd){ pd=d; target=pr; kind='prop'; }
         }
         if(target) p.propTarget=target;
+      }
+    }
+    if(!target && threat<0.6){
+      // 燭台からこぼれた品(全消去/全回収/流星群)は多少の脅威があっても拾いに行く
+      let td=480;
+      for(const it of B.items){
+        const d=Math.hypot(it.x-p.x,it.y-p.y);
+        if(d<td){ td=d; target=it; kind='item'; }
       }
     }
     if(!target && threat<0.3){
@@ -1002,7 +1016,7 @@ function weaponsUpdate(dt){
     if(p.boltT<=0){
       const evo=p.evo.sstar>0;
       const lv=p.wp.bolt;
-      const shots=evo?7:Math.min(5,1+Math.ceil(lv*0.8));   // 手数で強くなる
+      const shots=(evo?7:Math.min(5,1+Math.ceil(lv*0.8)))+dupN(p);   // 手数で強くなる
       // 回復が要るときは燭台を狙う
       const wantProp=p.propTarget && !p.propTarget.dead &&
         (p.hp<p.maxHp*0.55 || nearestEnemies(1,300).length===0);
@@ -1044,7 +1058,7 @@ function weaponsUpdate(dt){
       const evo=p.evo.sburst>0;
       const lv=p.wp.nova;
       p.novaT=(evo?4.0:4.3)-0.4*(lv-1);
-      const R=(evo?180:100+20*(lv-1)), dmg=(evo?34:16+7*(lv-1));
+      const R=(evo?180:100+20*(lv-1))*areaMult(p), dmg=(evo?34:16+7*(lv-1));
       p.novaAnim=0.5; p.novaR=R;
       G.shake=Math.min(7,G.shake+3);
       S.nova();
@@ -1071,7 +1085,7 @@ function weaponsUpdate(dt){
       const evo=p.evo.srush>0, lv=p.wp.whip;
       p.whipT=(evo?0.65:1.0)*Math.pow(0.9,lv-1);
       p.whipSide*=-1;
-      const range=evo?165:105+11*lv, half=evo?165:46+5*lv;
+      const range=(evo?165:105+11*lv)*areaMult(p), half=(evo?165:46+5*lv)*areaMult(p);
       const dmg=evo?22:10+4*(lv-1);
       p.whipAnim=0.16;
       p.whipDir=evo?0:(p.whipSide>0?p.face:-p.face);   // 0=全方位
@@ -1099,7 +1113,7 @@ function weaponsUpdate(dt){
     if(p.rainT<=0){
       const evo=p.evo.scomet>0, lv=p.wp.rain;
       p.rainT=(evo?1.5:2.3)*Math.pow(0.88,lv-1);
-      const drops=evo?6:1+Math.ceil(lv/2);
+      const drops=(evo?6:1+Math.ceil(lv/2))+dupN(p);
       const ts=nearestEnemies(drops*2,540);
       let fired=false;
       for(let i=0;i<drops;i++){
@@ -1108,7 +1122,7 @@ function weaponsUpdate(dt){
         const tx=t.x+rand(-26,26), ty=t.y+rand(-16,16);
         if(B.bullets.length<170){
           B.bullets.push({kind:'rain', x:tx+rand(-40,40), y:ty-300, tx, ty,
-            vx:0, vy:540, dmg:evo?26:12+5*(lv-1), splash:evo?76:48, life:1.0, last:null, evo});
+            vx:0, vy:540, dmg:evo?26:12+5*(lv-1), splash:(evo?76:48)*areaMult(p), life:1.0, last:null, evo});
           fired=true;
         }
       }
@@ -1126,18 +1140,105 @@ function weaponsUpdate(dt){
         p.crossT=(evo?1.3:1.7)*Math.pow(0.9,lv-1);
         const a=Math.atan2((ts[0].y-ts[0].r)-(p.y-12), ts[0].x-p.x);
         const sp=evo?430:360;
-        B.bullets.push({kind:'cross', x:p.x, y:p.y-12, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp,
-          spd:sp, dmg:evo?20:9+4*(lv-1), retT:evo?0.55:0.42, ret:false, life:2.4, last:null, evo});
+        const nC=1+dupN(p);
+        for(let i=0;i<nC;i++){
+          const a2=a+(i-(nC-1)/2)*0.4;
+          B.bullets.push({kind:'cross', x:p.x, y:p.y-12, vx:Math.cos(a2)*sp, vy:Math.sin(a2)*sp,
+            spd:sp, dmg:evo?20:9+4*(lv-1), retT:evo?0.55:0.42, ret:false, life:2.4, last:null, evo});
+        }
         sfx(320,180,0.12,'square',0.04);
         if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN);
       }else p.crossT=0.15;
+    }
+  }
+  /* --- せいいき: 常時の光の領域。触れた敵を焼き続ける。進化=広域+自己回復 --- */
+  if(p.wp.sanct>0){
+    const evo=p.evo.gsanct>0, lv=p.wp.sanct;
+    p.sanctPulse+=dt*atkMult;
+    p.sanctR=((evo?130:70+8*lv))*areaMult(p);
+    if(p.sanctPulse>=0.5){
+      p.sanctPulse-=0.5;
+      const dmg=evo?14:6+3*(lv-1);
+      let hit=false;
+      for(const e of B.enemies){
+        if(e.dead||e.dormant) continue;
+        if(Math.hypot(e.x-p.x,e.y-(p.y-8))<p.sanctR+e.r){ damageEnemy(e,dmg); hit=true; }
+      }
+      if(evo) p.hp=Math.min(p.maxHp,p.hp+0.6);
+      if(hit && restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN*0.5);
+    }
+  }
+  /* --- ひかりの刃: 向いている方向へ刃を投げる(貫通1)。進化=前後に嵐 --- */
+  if(p.wp.blade>0){
+    p.bladeT-=dt*atkMult;
+    if(p.bladeT<=0){
+      const evo=p.evo.kblade>0, lv=p.wp.blade;
+      p.bladeT=(evo?0.42:0.85)*Math.pow(0.9,lv-1);
+      const n=(evo?4:1+Math.floor(lv/2))+dupN(p);
+      const dirs=evo?[p.face,-p.face]:[p.face];
+      for(const dir of dirs){
+        for(let i=0;i<n;i++){
+          if(B.bullets.length>=170) break;
+          const spread=(i-(n-1)/2)*0.07;
+          const sp=580;
+          B.bullets.push({kind:'blade', x:p.x+dir*8, y:p.y-14+(i-(n-1)/2)*4, vx:Math.cos(spread)*sp*dir, vy:Math.sin(spread)*sp,
+            dmg:evo?16:10+3*(lv-1), pierce:evo?3:1, life:0.9, last:null, evo});
+        }
+      }
+      sfx(700,300,0.06,'square',0.03);
+      if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN*0.6);
+    }
+  }
+  /* --- てんらい: 見えている敵の頭上に雷を落とす(ランダム)。進化=一斉 --- */
+  if(p.wp.thunder>0){
+    p.thunderT-=dt*atkMult;
+    if(p.thunderT<=0){
+      const evo=p.evo.judgment>0, lv=p.wp.thunder;
+      const n=(evo?6:1+Math.floor((lv+1)/2))+dupN(p);
+      const ts=nearestEnemies(n*3,440);
+      if(ts.length){
+        p.thunderT=(evo?2.0:2.6)*Math.pow(0.9,lv-1);
+        const splash=(evo?52:34)*areaMult(p), dmg=evo?30:18+6*(lv-1);
+        const picked=shuffle(ts.slice()).slice(0,n);
+        for(const t of picked){
+          for(const e of B.enemies){
+            if(e.dead||e.dormant) continue;
+            if(Math.hypot(e.x-t.x,e.y-t.y)<splash+e.r) damageEnemy(e,dmg);
+          }
+          B.fx.push({kind:'bolt', x:t.x, y:t.y-t.r, t:0, life:0.22});
+          parts(t.x,t.y-t.r,7,['#fff','#8fd3ff','#ffd76a'],120,0.4);
+        }
+        sfx(900,120,0.14,'sawtooth',0.05);
+        G.shake=Math.min(6,G.shake+2);
+        if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN*0.8);
+      }else p.thunderT=0.2;
+    }
+  }
+  /* --- せいすい: 聖水を投げ、地面に清めの水溜まりを残す(継続ダメージ) --- */
+  if(p.wp.holy>0){
+    p.holyT-=dt*atkMult;
+    if(p.holyT<=0){
+      const evo=p.evo.spring>0, lv=p.wp.holy;
+      const n=(evo?3:1+Math.floor(lv/3))+dupN(p);
+      const ts=nearestEnemies(n*2,420);
+      if(ts.length){
+        p.holyT=(evo?2.4:2.8)*Math.pow(0.9,lv-1);
+        for(let i=0;i<n;i++){
+          const t=ts[(Math.random()*ts.length)|0];
+          if(B.zones.length>24) B.zones.shift();
+          B.zones.push({x:t.x+rand(-20,20), y:t.y+rand(-12,12), r:(evo?72:46+4*lv)*areaMult(p),
+            t:0, life:evo?6:3.5, dmg:evo?9:5+2*(lv-1), tick:0, evo});
+          parts(t.x,t.y,6,['#8fd3ff','#e8f4ff'],90,0.4);
+        }
+        sfx(520,700,0.1,'sine',0.04);
+      }else p.holyT=0.2;
     }
   }
 }
 function orbPos(i,n){
   const p=G.B.hero;
   const evo=p.evo.sring>0;
-  const R=(evo?70:56)+4*Math.max(1,p.wp.orb);
+  const R=((evo?70:56)+4*Math.max(1,p.wp.orb))*areaMult(p);
   const a=p.orbAng + i*TAU/n;
   return {x:p.x+Math.cos(a)*R, y:p.y-10+Math.sin(a)*R*0.9};
 }
@@ -1162,9 +1263,11 @@ function maybeLevelup(){
 function offerLevelup(){
   const B=G.B, p=B.hero;
   const wpCount=Object.values(p.wp).filter(v=>v>0).length;
+  const psCount=Object.values(p.ps).filter(v=>v>0).length;
   const avail=Object.keys(UPG).filter(k=>{
     if(curLv(k)>=UPG[k].max) return false;
     if(UPG[k].kind==='wp' && curLv(k)===0 && wpCount>=4) return false;   // 武器枠は4つまで
+    if(UPG[k].kind==='ps' && curLv(k)===0 && psCount>=4) return false;   // パッシブ枠も4つ
     return true;
   });
   const evos=readyEvos();
@@ -1204,6 +1307,7 @@ function applyUpg(k){
   if(UPG[k].kind==='wp') p.wp[k]++; else p.ps[k]++;
   if(k==='vital'){ p.maxHp=Math.round(p.maxHp)+25; p.hp=Math.min(p.maxHp,p.hp+25); }
   if(k==='ward'){ p.armor++; }
+  if(k==='endure'){ const add=Math.round(p.staminaMax*0.1); p.staminaMax+=add; p.stamina=Math.min(p.staminaMax,p.stamina+add); }
   floatTxt(p.x,p.y-64,UPG[k].name+' Lv'+curLv(k)+'!','#ffd76a',13,1.5);
   heroBubble(p,'つよくなった♪',true);
 }
@@ -1255,6 +1359,14 @@ function spawnUnit(id, x, y, o){
   if(id==='gtent'){ u.grabCd=2.5; u.whipT=0; u.state='idle'; }
   if(id==='slime'||id==='mistslime'){ u.trailT=0; }
   if(u.boss){ u.bstate='chase'; u.bt=3.2; u.cdx=0; u.cdy=0; }
+  /* v1.0 追加種 */
+  if(id==='hand'){ u.gropeCd=0; u.retreatT=0; }
+  if(id==='serpent'){ u.biteCd=0; }
+  if(id==='moth'){ u.orbitA=rand(TAU); u.orbitDir=Math.random()<0.5?-1:1; u.dustT=rand(0.6,1.6); u.swoopCd=rand(3,5); u.swoopT=0; u.cdx=0; u.cdy=0; }
+  if(id==='pot'){ u.grabCd=1.5; u.eatN=0; }
+  if(id==='slugqueen'){ u.charmCd=0; u.pulseCd=rand(3,5); }
+  if(id==='dreamtree'){ u.spawnCd=2.5; u.rootCd=3; }
+  u.parent=o.parent||null;
   B.enemies.push(u);
   B.spawnFx.push({x,y,t:0,r:MONSTERS[id].r+8, dormant:u.dormant});
   return u;
@@ -1311,15 +1423,17 @@ function killEnemy(e){
     G.shake=Math.min(10,G.shake+7);
     S.clear();
   }else{
-    const gv=Math.round(e.xp*0.8*(e.gemMul!==undefined?e.gemMul:1));
-    if(gv>0) dropGem(e.x,e.y,gv);
-    else if(Math.random()<0.3) dropGem(e.x,e.y,1);   // チャフはたまにしか光らない
+    // 基礎頭数ぶんは通常ジェム、頭数ボーナスぶんは【ロージェム】(光るが経験値は薄い)。
+    // 大量に拾う気持ちよさは残しつつ、物量が彼女の経験値の泉にはならない
+    const gm=e.gemMul!==undefined?e.gemMul:1;
+    if(Math.random()<gm) dropGem(e.x,e.y,Math.max(1,Math.round(e.xp*0.8)));
+    else dropGem(e.x,e.y,BAL.LOGEM_V,true);
   }
 }
-function dropGem(x,y,v){
+function dropGem(x,y,v,lo){
   const B=G.B;
-  if(B.gems.length>320){ B.gems[(Math.random()*B.gems.length)|0].v+=v; return; }
-  B.gems.push({x,y,v,t:rand(10),sp:0});
+  if(B.gems.length>BAL.GEM_CAP){ B.gems[(Math.random()*B.gems.length)|0].v+=v; return; }
+  B.gems.push({x,y,v,t:rand(10),sp:0,lo:!!lo});
 }
 function spawnCloud(x,y,r,life,rate){
   const B=G.B;
@@ -1363,7 +1477,9 @@ function enemiesUpdate(dt){
     }
 
     if(e.stun>0){ e.stun-=dt; }
-    else if(e.boss){
+    else if(e.id==='dreamtree'){
+      dreamtreeTick(e,dt,d);
+    }else if(e.boss){
       e.bt-=dt;
       if(e.bstate==='chase'){
         e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt;
@@ -1387,6 +1503,16 @@ function enemiesUpdate(dt){
       gtentTick(e,dt,d,dx,dy);
     }else if(e.id==='leech'){
       leechTick(e,dt,d,dx,dy);
+    }else if(e.id==='hand'){
+      handTick(e,dt,d,dx,dy);
+    }else if(e.id==='serpent'){
+      serpentTick(e,dt,d,dx,dy);
+    }else if(e.id==='moth'){
+      mothTick(e,dt,d,dx,dy);
+    }else if(e.id==='pot'){
+      potTick(e,dt,d);
+    }else if(e.id==='slugqueen'){
+      queenTick(e,dt,d,dx,dy);
     }else{
       // slug / goblin / ghost / slime / mistslime: 通常追跡
       const rush=(attachCount(p)>0||p.pinned||p.charmBind||p.climaxT>0) && d<300 ? 1.9 : 1;
@@ -1410,7 +1536,7 @@ function enemiesUpdate(dt){
         }
       }
     }
-    if(e.id==='slug' && e.charmCd>0) e.charmCd-=dt;
+    if((e.id==='slug'||e.id==='slugqueen') && e.charmCd>0) e.charmCd-=dt;
 
     // オーブ被弾
     if(p.wp.orb>0 && e.orbCd<=0){
@@ -1430,7 +1556,7 @@ function enemiesUpdate(dt){
 
     // 接触
     if(!e.dead && !e.dormant && e.state!=='attached' && p.ifr<=0
-       && e.id!=='flower' && e.id!=='imp' && e.id!=='gas'
+       && e.id!=='flower' && e.id!=='imp' && e.id!=='gas' && e.id!=='pot'
        && Math.hypot(e.x-p.x,e.y-p.y)<e.r+p.r){
       contactHit(e);
     }
@@ -1570,6 +1696,134 @@ function leechTick(e,dt,d,dx,dy){
   e.x+=e.lvx*dt+Math.sin(e.t*9+e.joff)*14*dt;
   e.y+=e.lvy*dt+Math.cos(e.t*8+e.joff)*14*dt;
 }
+/* ---- v1.0 追加種 ---- */
+function handTick(e,dt,d,dx,dy){
+  const p=G.B.hero;
+  if(e.gropeCd>0) e.gropeCd-=dt;
+  if(e.retreatT>0){
+    // まさぐって満足→少し離れて、また這い寄る
+    e.retreatT-=dt;
+    e.x-=dx/d*e.spd*0.9*dt; e.y-=dy/d*e.spd*0.9*dt;
+    return;
+  }
+  const rush=(attachCount(p)>0||p.pinned||p.charmBind||p.climaxT>0) && d<300 ? 1.8 : 1;
+  const crawl=0.65+0.35*Math.abs(Math.sin(e.t*9+e.joff));   // 指を動かすような小刻みな前進
+  const ox=Math.cos(e.joff)*10, oy=Math.sin(e.joff)*10;
+  const tx=p.x+ox-e.x, ty=p.y+oy-e.y, td=Math.hypot(tx,ty)||0.001;
+  e.x+=tx/td*e.spd*rush*crawl*dt; e.y+=ty/td*e.spd*rush*crawl*dt;
+}
+function serpentTick(e,dt,d,dx,dy){
+  const p=G.B.hero;
+  if(e.biteCd>0) e.biteCd-=dt;
+  const rush=(attachCount(p)>0||p.pinned||p.charmBind||p.climaxT>0) && d<300 ? 1.6 : 1;
+  const sw=Math.sin(e.t*7+e.joff)*34;                         // 蛇行
+  e.x+=(dx/d*e.spd*rush + (-dy/d)*sw)*dt;
+  e.y+=(dy/d*e.spd*rush + (dx/d)*sw)*dt;
+}
+function mothTick(e,dt,d,dx,dy){
+  const B=G.B, p=B.hero;
+  if(e.swoopT>0){
+    // 翼で肌を撫でる急降下: 彼女を通り抜ける
+    e.swoopT-=dt;
+    e.x+=e.cdx*e.spd*3.2*dt; e.y+=e.cdy*e.spd*3.2*dt;
+    if(Math.random()<0.6) parts(e.x,e.y-e.r,1,['#ffb3cf','#ffd6e6'],30,0.7);
+  }else{
+    e.swoopCd-=dt;
+    e.orbitA+=e.orbitDir*0.9*dt;
+    const R=120+Math.sin(e.t*1.3+e.joff)*18;
+    const tx=p.x+Math.cos(e.orbitA)*R, ty=p.y-10+Math.sin(e.orbitA)*R*0.75;
+    const md=Math.hypot(tx-e.x,ty-e.y)||0.001;
+    const sp=Math.min(md, e.spd*1.6*dt);
+    e.x+=(tx-e.x)/md*sp; e.y+=(ty-e.y)/md*sp;
+    if(e.swoopCd<=0 && d<200){
+      e.swoopCd=rand(4,6); e.swoopT=Math.min(1.1,(d+60)/(e.spd*3.2));
+      e.cdx=dx/d; e.cdy=dy/d;
+      sfx(500,300,0.2,'sine',0.04);
+    }
+  }
+  // 鱗粉: 旋回しながら媚薬雲を撒き続ける
+  e.dustT-=dt;
+  if(e.dustT<=0){
+    e.dustT=1.6;
+    spawnCloud(e.x,e.y+4,36,3.4,BAL.SENSIT_GAS*0.7);
+  }
+}
+function potTick(e,dt,d){
+  const B=G.B, p=B.hero;
+  const holding=attachedSlots(p).some(sl=>p.limbs[sl].mon===e);
+  if(e.grabCd>0) e.grabCd-=dt;
+  // ジェムを吸い込んで喰う(彼女の磁力に捕まっていないものだけ)→ 夜側のENに
+  let ate=0;
+  for(const gm of B.gems){
+    if(gm.dead||gm.sp>0) continue;
+    const gx=e.x-gm.x, gy=(e.y-6)-gm.y, gd=Math.hypot(gx,gy)||0.001;
+    if(gd>170) continue;
+    const mv=Math.min(gd, 140*dt);
+    gm.x+=gx/gd*mv; gm.y+=gy/gd*mv;
+    if(gd<10){
+      gm.dead=true; ate++; e.eatN++;
+      B.en=Math.min(enMax(), B.en+(gm.lo?0.15:0.4));
+    }
+  }
+  if(ate>0){
+    B.gems=B.gems.filter(g=>!g.dead);
+    parts(e.x,e.y-14,3,['#8fd3ff','#c98cff'],60,0.4);
+    if(Math.random()<0.35) floatTxt(e.x,e.y-e.r-14,'+EN','#c98cff',9,0.6);
+  }
+  if(holding){ e.grabCd=4; return; }
+  // 取り返しに近づいた脚を、壺の縁から伸びた触手が繋ぐ
+  if(d<74 && e.grabCd<=0){
+    if(attachMonster(e,'tether',{r:90})){
+      heroBubble(p,pickRand(['ジェム、かえして……って、あし、が!?','つぼ、から……なにか、のびて……','やだ、ひっぱら……はなし、て……っ']),true,2);
+    }
+    e.grabCd=7;
+  }
+}
+function queenTick(e,dt,d,dx,dy){
+  const B=G.B, p=B.hero;
+  const rush=(attachCount(p)>0||p.pinned||p.charmBind||p.climaxT>0) && d<300 ? 1.5 : 1;
+  e.x+=dx/d*e.spd*rush*dt; e.y+=dy/d*e.spd*rush*dt;
+  // 甘い脈動: 届く範囲なら「ナメクジ女王という種族」への魅了が一段深まる
+  e.pulseCd-=dt;
+  if(e.pulseCd<=0){
+    e.pulseCd=7;
+    B.fx.push({kind:'pulse', x:e.x, y:e.y-e.r*0.6, t:0, life:0.8, r:110, col:'#ffb3cf'});
+    sfx(180,420,0.5,'sine',0.05);
+    if(d<110 && !p.pinned){
+      applyCharm(e);
+      applySensit(BAL.SENSIT_SLUG);
+    }
+  }
+}
+function dreamtreeTick(e,dt,d){
+  const B=G.B, p=B.hero;
+  if(e.rootCd>0) e.rootCd-=dt;
+  e.spawnCd-=dt;
+  const holding=attachedSlots(p).some(sl=>p.limbs[sl].mon===e);
+  // 幹の洞からワームを産み続ける(自前の子は8体まで。無償なのでロージェムしか落とさない)
+  if(e.spawnCd<=0){
+    e.spawnCd=5;
+    const kids=B.enemies.filter(k=>!k.dead&&k.parent===e).length;
+    if(kids<8 && B.enemies.length<BAL.FIELD_CAP){
+      const a=rand(TAU);
+      spawnUnit('worm', e.x+Math.cos(a)*26, e.y+Math.sin(a)*14, {enVal:0, gemMul:0, mult:1.2, parent:e});
+      parts(e.x,e.y-e.r,8,['#e86a9c','#5a3a7a'],90,0.5);
+    }
+  }
+  // 根の繋留
+  if(!holding && d<150 && e.rootCd<=0){
+    if(attachMonster(e,'tether',{r:130})){
+      heroBubble(p,pickRand(['ね、が……あし、に……っ','うごか、ない……ひっぱられ……','やだ、木に、ひきずられ……っ']),true,2);
+    }
+    e.rootCd=7;
+  }
+  // 甘香の領域: 近いほど身体が熱を覚える
+  if(d<120 && !p.pinned){
+    applySensit(3*dt);
+    applyPleasure(2.0*dt*(holding?1.6:1));
+    if(Math.random()<dt*0.25) heroBubble(p,pickRand(['はな、の、においが……','ちかづくと、あつく……','こんな、におい、で……っ']),false,1);
+  }
+}
 function contactHit(e){
   const p=G.B.hero;
   if(e.id==='worm'){
@@ -1587,6 +1841,42 @@ function contactHit(e){
   if(e.id==='leech'){
     // 拘束レベルを問わず、空いた場所に吸い付く。満員なら掠めるだけ
     if(!attachSucker(e)) applyPleasure(3);
+    return;
+  }
+  if(e.id==='hand'){
+    // まさぐり: ダメージは無い。ひとしきり触って満足すると少し離れる(全体で0.3秒に1回まで)
+    if(e.gropeCd>0 || G.B.gropeCd>0) return;
+    e.gropeCd=2.4; e.retreatT=0.7; G.B.gropeCd=0.3;
+    applyPleasure(2.2*unitPmul(e));
+    parts(p.x+rand(-8,8),p.y-rand(6,22),4,['#d8c8ff','#ffb3cf'],70,0.4);
+    floatTxt(p.x+rand(-12,12),p.y-40,pickRand(['さわ…','にぎ…','もぞ…']),'#d8c8ff',9,0.7);
+    if(Math.random()<0.3) heroBubble(p,pickRand(['ひゃっ、て、手が……どこ、さわって……っ','やっ、そこ、つかまないで……っ','なんで、手だけ……ぬるって……っ']),false,2);
+    return;
+  }
+  if(e.id==='serpent'){
+    // まず脚に巻きつく。空きが無ければ噛む
+    if(attachMonster(e,'cling',{legFirst:true, needMul:1.2})){
+      heroBubble(p,pickRand(['やっ、あし、に……まきつ……っ','ぬるって……へび!? や、のぼって……','はなれ、て……あし、うごかな……っ']),true,2);
+      return;
+    }
+    if(e.biteCd<=0){ e.biteCd=1.2; hurtHero(e.dmg,e,{}); }
+    return;
+  }
+  if(e.id==='moth'){
+    // 翼が擦れる: 鱗粉を直接浴びる
+    applySensit(7); applyPleasure(3*unitPmul(e));
+    p.slow=Math.max(p.slow,0.5);
+    hurtHero(e.dmg,e,{noKb:true});
+    if(Math.random()<0.5) heroBubble(p,pickRand(['ふわ……っ、はねが、こすれ……','こな、が……すっちゃ……けほっ','あまい……あたま、ぼうっと……']),false,2);
+    return;
+  }
+  if(e.id==='slugqueen'){
+    if(e.charmCd<=0){ e.charmCd=6; applyCharm(e); applySensit(BAL.SENSIT_SLUG); }
+    hurtHero(e.dmg,e,{});
+    return;
+  }
+  if(e.id==='dreamtree'){
+    if(e.rootCd<=0 && attachMonster(e,'tether',{r:130})) e.rootCd=7;
     return;
   }
   if(e.id==='slug'){
@@ -1730,17 +2020,72 @@ function spawnInitialProps(){
     B.props.push({x:Math.cos(a)*d, y:Math.sin(a)*d, hp:BAL.PROP_HP, max:BAL.PROP_HP, t:rand(10)});
   }
 }
+/* 燭台の品(回復ハート以外)。彼女が拾った瞬間に発動する */
+const ITEM_DEF={
+  wipe:  {name:'聖光の閃き', col:'#fff6d8', sub:'視界の魔物を一掃した'},
+  vacuum:{name:'星の吸引',   col:'#8fd3ff', sub:'場のジェムを全部引き寄せた'},
+  bonus: {name:'流星群',     col:'#ffd76a', sub:'ボーナス攻撃!'},
+};
 function damageProp(pr,dmg){
-  const B=G.B;
+  const B=G.B, p=B.hero;
   pr.hp-=dmg;
   parts(pr.x,pr.y-14,3,['#ffd76a','#c9a06a'],80,0.35);
   if(pr.hp<=0 && !pr.dead){
     pr.dead=true;
     parts(pr.x,pr.y-10,14,['#ffd76a','#fff','#c9a06a'],160,0.6);
     sfx(320,120,0.2,'square',0.07);
-    if(Math.random()<0.75) B.hearts.push({x:pr.x,y:pr.y,t:0});
-    else for(let i=0;i<3;i++) dropGem(pr.x+rand(-16,16),pr.y+rand(-10,10),2);
     B.props=B.props.filter(q=>q!==pr);
+    // 品が出るのは30%(+よつばのクローバー4%/Lv)。内訳: 回復20 / 全消去5 / 全回収3 / ボーナス攻撃2。外れは小ジェム
+    const itemP=BAL.PROP_ITEM+0.04*(p.ps.luck||0);
+    if(Math.random()<itemP){
+      const tot=BAL.PROP_HEAL+BAL.PROP_WIPE+BAL.PROP_VACUUM+BAL.PROP_BONUS;
+      const r=Math.random()*tot;
+      if(r<BAL.PROP_HEAL) B.hearts.push({x:pr.x,y:pr.y,t:0});
+      else{
+        const kind=r<BAL.PROP_HEAL+BAL.PROP_WIPE?'wipe':(r<BAL.PROP_HEAL+BAL.PROP_WIPE+BAL.PROP_VACUUM?'vacuum':'bonus');
+        B.items.push({kind, x:pr.x, y:pr.y, t:0});
+        setBanner('燭台から '+ITEM_DEF[kind].name+' が こぼれた','ルミナが拾うと発動する','#8fd3ff');
+      }
+    }else{
+      const n=1+((Math.random()*3)|0);
+      for(let i=0;i<n;i++) dropGem(pr.x+rand(-16,16),pr.y+rand(-10,10),2);
+    }
+  }
+}
+function applyItem(kind){
+  const B=G.B, p=B.hero;
+  const def=ITEM_DEF[kind];
+  setBanner(def.name, def.sub, def.col);
+  if(kind==='wipe'){
+    // 画面全消去(ボスは残る)
+    B.whiteFlash=0.45;
+    let n=0;
+    for(const e of B.enemies){
+      if(e.dead||e.boss) continue;
+      if(!inSight(e,p) && Math.hypot(e.x-p.x,e.y-p.y)>520) continue;
+      killEnemy(e); n++;
+    }
+    B.enemies=B.enemies.filter(e=>!e.dead);
+    heroBubble(p,'ひかり、はらって——!',true,2);
+    S.clear(); G.shake=Math.min(10,G.shake+6);
+    floatTxt(p.x,p.y-70,n+'体 消滅','#fff6d8',13,1.2);
+  }else if(kind==='vacuum'){
+    // 全エネルギー回収: 場の全ジェムが彼女へ飛ぶ
+    for(const gm of B.gems) gm.sp=Math.max(gm.sp,900);
+    heroBubble(p,'ぜんぶ、あたしのっ!',true,2);
+    S.gem();
+  }else if(kind==='bonus'){
+    // 流星群: 視界内の魔物の上へ大粒のスターレインを連続で落とす
+    const tg=B.enemies.filter(e=>!e.dead&&!e.dormant&&inSight(e,p));
+    const n=14;
+    for(let i=0;i<n;i++){
+      const t=tg.length?tg[(Math.random()*tg.length)|0]:null;
+      const tx=t?t.x+rand(-24,24):p.x+rand(-220,220), ty=t?t.y+rand(-14,14):p.y+rand(-140,140);
+      B.bullets.push({kind:'rain', x:tx+rand(-40,40), y:ty-300-i*40, tx, ty,
+        vx:0, vy:520, dmg:30, splash:60, life:1.0+i*0.08, last:null, evo:true});
+    }
+    heroBubble(p,'ほし、ふって——!',true,2);
+    S.boss();
   }
 }
 function pickupsUpdate(dt){
@@ -1776,6 +2121,13 @@ function pickupsUpdate(dt){
     }
   }
   B.hearts=B.hearts.filter(h=>!h.dead);
+  for(const it of B.items){
+    it.t+=dt;
+    const dx=p.x-it.x, dy=(p.y-10)-it.y, d=Math.hypot(dx,dy)||0.001;
+    if(d<st.magnet*1.2){ const mv=Math.min(d,420*dt); it.x+=dx/d*mv; it.y+=dy/d*mv; }
+    if(d<18){ it.dead=true; applyItem(it.kind); if(G.mode!=='battle') break; }
+  }
+  B.items=B.items.filter(it=>!it.dead);
   for(const c of B.chests){
     c.t+=dt;
     if(!c.taken && Math.hypot(c.x-p.x,c.y-(p.y-6))<22){
@@ -1799,11 +2151,14 @@ function openChest(){
   const evos=readyEvos();
   if(evos.length){ applyUpg('EVO:'+evos[0]); return; }
   const wpCount=Object.values(p.wp).filter(v=>v>0).length;
+  const psCount=Object.values(p.ps).filter(v=>v>0).length;
   const avail=Object.keys(UPG).filter(k=>{
     if(curLv(k)>=UPG[k].max) return false;
-    if(UPG[k].kind==='wp' && curLv(k)===0 && wpCount>=4) return false;   // 武器枠は4つまで
+    if(UPG[k].kind==='wp' && curLv(k)===0 && wpCount>=4) return false;
+    if(UPG[k].kind==='ps' && curLv(k)===0 && psCount>=4) return false;
     return true;
   });
+  chestGift();   // 宝箱の裏側: 夜側にもランダムな魔物が加勢する
   if(avail.length){
     const k=pickRand(avail);
     applyUpg(k);
@@ -1814,15 +2169,48 @@ function openChest(){
   }
 }
 
+/* 宝箱の裏側: 彼女が宝箱を開けるたび、夜側にもランダムな魔物が加勢する。
+   この戦闘に限り編成枚数を超えて手札に加わる(temp)。
+   手札に素材が揃っていれば、融合体へ【進化】して現れることもある */
+function chestGift(){
+  const B=G.B;
+  const inHand=id=>B.hand.some(h=>h.id===id);
+  let pick=null, evolved=false;
+  if(Math.random()<0.5){
+    const fus=FUSION_IDS.filter(id=>!inHand(id) && MONSTERS[id].fusion.every(f=>inHand(f)));
+    if(fus.length){ pick=pickRand(fus); evolved=true; }
+  }
+  if(!pick){
+    const pool=Object.keys(MONSTERS).filter(id=>!MONSTERS[id].boss && !MONSTERS[id].fusion && !inHand(id));
+    if(!pool.length) return;
+    pick=pickRand(pool);
+  }
+  B.hand.push({id:pick, cdT:0, cdMax:1, temp:true});
+  B.gifts++;
+  if(typeof UI!=='undefined') UI.buildHand();
+  const m=MONSTERS[pick];
+  setBanner(evolved?'進化!  '+m.name:'加勢!  '+m.name,
+    (evolved?'宝箱の闇で素材が融合した':'宝箱の底から這い出た')+' — この戦闘のみ手札に加わる', '#c98cff');
+  S.summon();
+}
+
 /* ================= カードプレイ(プレイヤー側) ================= */
 function handSlot(id){ return G.B.hand.find(h=>h.id===id); }
+/* 階級による陣形の制限: 大型は精鋭/双璧のみ、ボスは単騎。許されない陣形は許可陣形へ丸める */
+function resolveForm(id, formId){
+  const allow=TIER_FORMS[tierOf(id)];
+  if(!allow || allow.includes(formId)) return formId;
+  for(const f of allow){ if(META.formations.includes(f)) return f; }
+  return allow[0];
+}
 /* 1キャストの頭数(コンボ・夜の深まり・練度・群れ倍化・軍団旗を全部込みで) */
 function spawnCountFor(id, formId, comboN){
+  formId=resolveForm(id,formId);
   const B=G.B, f=FORMATIONS[formId], m0=MONSTERS[id];
   if(m0.boss) return 1;
   if(m0.solo) return Math.min(f.count,4);   // solo(小淫魔/ガス玉)は最大4体まで
-  const multi=(formId!=='single');
-  if(!multi) return f.count;
+  const multi=(formId!=='single' && formId!=='duo');   // 精鋭型は頭数ボーナスが乗らない(少数精鋭)
+  if(!multi || tierOf(id)==='large') return f.count;
   const clv=(META.cards[id]&&META.cards[id].lv)||1;
   const pscale=Math.min(1,(clv-1)/2);
   const comboExtra=Math.floor(((comboN||1)-1)/BAL.COMBO_UNIT_PER);
@@ -1834,6 +2222,7 @@ function spawnCountFor(id, formId, comboN){
   return Math.ceil((f.count+extra)*sw);
 }
 function playCost(id, formId){
+  formId=resolveForm(id,formId);
   const lv=(META.cards[id]&&META.cards[id].lv)||1;
   const f=FORMATIONS[formId];
   if(MONSTERS[id].boss) return cardCost(id,lv);
@@ -1842,6 +2231,7 @@ function playCost(id, formId){
 function canPlay(id, formId){
   const B=G.B;
   if(!B || G.mode!=='battle') return {ok:false};
+  formId=resolveForm(id,formId);
   const slot=handSlot(id);
   if(!slot) return {ok:false};
   if(slot.cdT>0) return {ok:false, why:'cd'};
@@ -1853,6 +2243,7 @@ function canPlay(id, formId){
 }
 function playCard(id, formId){
   const B=G.B;
+  formId=resolveForm(id,formId);
   const chk=canPlay(id,formId);
   if(!chk.ok){ if(chk.why==='en') S.deny(); return false; }
   const p=B.hero, f=FORMATIONS[formId], cost=chk.cost;
@@ -1865,7 +2256,8 @@ function playCard(id, formId){
   if(MONSTERS[id].boss){
     B.bossUsed=true;
     const a=rand(TAU);
-    spawnUnit(id, p.x+Math.cos(a)*620, p.y+Math.sin(a)*620, {enVal:cost});
+    const dist=MONSTERS[id].spd>0?620:320;   // 動かないボス(淫夢の樹)は近くに根を張る
+    spawnUnit(id, p.x+Math.cos(a)*dist, p.y+Math.sin(a)*dist, {enVal:cost});
     setBanner('⚠ ボス召喚!', MONSTERS[id].name, '#ff6b81');
     heroBubble(p,'おおきいの きた…!?',true);
     S.boss();
@@ -1894,7 +2286,7 @@ function playCard(id, formId){
   const gemMul=Math.min(1, f.count/n);
   const so={enVal:per, mult:comboMult, gemMul};
 
-  if(formId==='scatter'||formId==='single'){
+  if(formId==='scatter'||formId==='single'||formId==='duo'){
     for(let i=0;i<n;i++){
       const a=rand(TAU);
       spawnUnit(id, p.x+Math.cos(a)*560, p.y+Math.sin(a)*560,
@@ -1927,8 +2319,8 @@ function playCard(id, formId){
 }
 
 /* ================= オート指揮 ================= */
-const BINDERS=['worm','gtent','flower'];
-const PRESSURE=['ghost','goblin','mistslime','slime','slug'];
+const BINDERS=['worm','serpent','gtent','flower','pot','dreamtree'];
+const PRESSURE=['ghost','goblin','hand','serpent','mistslime','slime','slug'];
 function bestForm(prefer){
   for(const f of prefer){ if(META.formations.includes(f)) return f; }
   return META.formations[0];
@@ -1986,7 +2378,7 @@ function autoDirector(dt){
   const binderN=alive.filter(e=>BINDERS.includes(e.id)).length;
   const distracted=!!cloudAt(p.x,p.y-12)||p.diveT>0||p.waveDur>0;
   if((stamRatio<0.45||distracted) && binderN<4){
-    for(const id of ['worm','gtent','flower']){
+    for(const id of ['worm','serpent','gtent','flower']){
       if(!has(id)) continue;
       const f=id==='flower'?bestForm(['ambush','scatter']):bestForm(['wave','scatter']);
       if(ready(id,f)){ playCard(id,f); return; }
@@ -1995,7 +2387,7 @@ function autoDirector(dt){
 
   // 3) 拘束役の維持(常に4体以上。物量の海でも拘束の圧を絶やさない)
   if(binderN<4){
-    for(const id of ['gtent','worm','flower']){
+    for(const id of ['gtent','serpent','worm','flower']){
       if(!has(id)) continue;
       const f=id==='flower'?bestForm(['ambush','scatter']):bestForm(['wave','scatter']);
       const chk=canPlay(id,f);
@@ -2041,6 +2433,16 @@ function autoDirector(dt){
     if(chk.ok && B.en>=chk.cost+4){ playCard('imp',f); return; }
   }
 
+  // 5.5) 大型: 場に大型が居なければ精鋭/双璧で1枚置く(少数精鋭)
+  if(B.time>40 && !alive.some(e=>tierOf(e.id)==='large')){
+    for(const slot of B.hand){
+      if(tierOf(slot.id)!=='large') continue;
+      const f=resolveForm(slot.id, bestForm(['duo','single']));
+      const chk=canPlay(slot.id,f);
+      if(chk.ok && B.en>=chk.cost+6){ playCard(slot.id,f); return; }
+    }
+  }
+
   // 6) ボス: 中盤以降・EN潤沢・彼女が万全でないとき
   for(const slot of B.hand){
     if(!MONSTERS[slot.id].boss) continue;
@@ -2052,7 +2454,7 @@ function autoDirector(dt){
   // 7) ENが溢れそうなら全力放出(1tickで最大4プレイ・半分まで使い切る)
   if(flush){
     let plays=0;
-    for(const id of ['gtent','ghost','goblin','mistslime','slime','worm','slug','leech']){
+    for(const id of ['gtent','ghost','serpent','goblin','hand','mistslime','slime','worm','slug','leech','slugqueen','moth']){
       if(plays>=4 || B.en<enMax()*0.5) break;
       if(!has(id)) continue;
       const f=bestForm(['ring','wave','scatter']);
@@ -2063,7 +2465,7 @@ function autoDirector(dt){
 
   // 8) 圧が切れているなら安価に補充(ただし大物ぶんのENは温存)
   if(alive.length<10){
-    for(const id of ['goblin','slug','worm','ghost','slime']){
+    for(const id of ['goblin','hand','slug','worm','ghost','slime','serpent']){
       if(!has(id)) continue;
       const chk=canPlay(id,'scatter');
       if(chk.ok && B.en-chk.cost>=Math.min(reserve*0.7,14)){ playCard(id,'scatter'); return; }
@@ -2105,6 +2507,22 @@ function battleTick(dt){
   else if(p.charmBind){ charmBindTick(dt); if(G.mode!=='battle') return; }
   for(const st of B.stains) st.t+=dt;
   B.stains=B.stains.filter(st=>st.t<st.life);
+  // きよめの泉(聖水の領域)・演出FX・閃光・まさぐりの全体ゲート
+  for(const z of B.zones){
+    z.t+=dt; z.tick-=dt;
+    if(z.tick<=0){
+      z.tick=0.4;
+      for(const e of B.enemies){
+        if(e.dead||e.dormant||e.state==='attached') continue;
+        if(Math.hypot(e.x-z.x,e.y-z.y)<z.r+e.r*0.5) damageEnemy(e,z.dmg);
+      }
+    }
+  }
+  B.zones=B.zones.filter(z=>z.t<z.life);
+  for(const f of B.fx) f.t+=dt;
+  B.fx=B.fx.filter(f=>f.t<f.life);
+  if(B.whiteFlash>0) B.whiteFlash-=dt;
+  if(B.gropeCd>0) B.gropeCd-=dt;
   // 小淫魔: 近くの数を数える(集中低下)。快感は煽りアクション時のみ(バーストCD持ち)
   if(B.impBurstCd>0) B.impBurstCd-=dt;
   p.teaseN=0;
@@ -2150,7 +2568,7 @@ function capturedTick(dt){
   for(const e of B.enemies){
     if(e.dead||e.state==='attached') continue;
     const dx=p.x-e.x, dy=p.y-e.y, d=Math.hypot(dx,dy)||1;
-    if(d>36){ e.x+=dx/d*60*dt; e.y+=dy/d*60*dt; }
+    if(d>36 && MONSTERS[e.id].spd>0){ e.x+=dx/d*60*dt; e.y+=dy/d*60*dt; }
     e.t+=dt;
   }
   if(Math.random()<dt*10) parts(p.x+rand(-20,20),p.y-rand(0,26),1,['#c98cff','#8458d8','#ff86b3'],40,0.8);

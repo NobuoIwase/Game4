@@ -97,10 +97,15 @@ const BAL={
 
   STAMINA_DRAG:1.5,       // 2箇所以上絡みつかれている間のじわ削り /s
 
-  /* --- 燭台(回復) --- */
+  /* --- 燭台(回復・アイテム) v1.0 ---
+     アイテムは30%(幸運で増): 回復20% / 浄化(画面全消去)5% / 収集(全ジェム回収)3% / 星の審判(ボーナス攻撃)2% */
   PROP_HP:24,
   PROP_INIT:6,             // 初期配置数
   PROP_RESPAWN:26,         // 追加出現間隔(s)
+  PROP_ITEM:0.30,          // アイテムが出る確率(基礎)
+  PROP_HEAL:20, PROP_WIPE:5, PROP_VACUUM:3, PROP_BONUS:2,   // 30の内訳
+  LOGEM_V:0.5,             // ロージェム(頭数ボーナス分の雑魚が落とす)の経験値
+  GEM_CAP:600,
 
   CHEST_TIMES:[40,110,180,250],
 
@@ -120,77 +125,123 @@ const BAL={
    xp: ヒロインが倒したとき彼女に入る経験値 = プレイヤーが得るエッセンス。 */
 const MONSTERS={
   slug:{
-    name:'ナメクジ', role:'接触魅了', cost:2, unlock:0,
+    name:'ナメクジ', role:'接触魅了', cost:2, unlock:0, tier:'fodder',
     hp:14, spd:34, r:10, dmg:2, xp:2, swarm:2,
     desc:'のろく弱いが、触れるたび「ナメクジという種族」への魅了が一段深まる。魅了された種族への攻撃は鈍り、深まるとどの個体にでも自分から寄っていってしまう。',
     trait:'接触で【魅了】段階UP(種族別)。Lv2+で群れ倍化',
   },
   goblin:{
-    name:'ゴブリン', role:'群れ', cost:2, unlock:80,
+    name:'ゴブリン', role:'群れ', cost:2, unlock:80, tier:'fodder',
     hp:13, spd:66, r:9, dmg:4, xp:2, swarm:2,
     desc:'緑色のチビ。一匹では何もできず、群れて囲んで小突くしか能がない。数だけは湧く。',
     trait:'Lv2+で群れ倍化',
   },
   leech:{
-    name:'吸液羽虫', role:'吸い付き', cost:3, unlock:120,
+    name:'吸液羽虫', role:'吸い付き', cost:3, unlock:120, tier:'fodder',
     hp:8, spd:105, r:7, dmg:0, xp:2,
     desc:'肉質の小さな羽虫。素早く掠めるように飛び、触れた瞬間に胸の先や脚の間へ吸い付いて快感を注ぎ続ける。拘束の有無を問わず取り付く。',
     trait:'接触で吸い付き(快感+微スロウ、3箇所まで)',
   },
   worm:{
-    name:'地上ワーム', role:'四肢拘束', cost:3, unlock:0,
+    name:'地上ワーム', role:'四肢拘束', cost:3, unlock:0, tier:'fodder',
     hp:18, spd:38, r:10, dmg:2, xp:2, swarm:2,
     desc:'のろく弱いが、触れると腕や脚に絡みつく。絡まれた分だけ彼女は鈍り、引き剥がしはスタミナを削る。',
     trait:'接触で四肢に絡みつく【拘束】。Lv2+で群れ倍化',
   },
   ghost:{
-    name:'ゴースト', role:'主力・圧', cost:3, unlock:0,
+    name:'ゴースト', role:'主力・圧', cost:3, unlock:0, tier:'mid',
     hp:24, spd:64, r:11, dmg:7, xp:3,
     desc:'ゆらゆらと回り込む主力打点。拘束で鈍った相手に群がらせる。',
   },
   slime:{
-    name:'粘スライム', role:'粘液の跡', cost:3, unlock:60,
+    name:'粘スライム', role:'粘液の跡', cost:3, unlock:60, tier:'fodder',
     hp:20, spd:52, r:11, dmg:5, xp:2,
     desc:'進んだ跡に粘液を残す。踏んだヒロインは移動が鈍る。',
     trait:'移動跡に粘液(スロウ)',
   },
   gas:{
-    name:'ガス玉', role:'媚薬ガス', cost:4, unlock:200,
+    name:'ガス玉', role:'媚薬ガス', cost:4, unlock:200, tier:'mid',
     hp:16, spd:22, r:11, dmg:0, xp:3, solo:true,
     desc:'ふわふわと漂い、桃色の媚薬ガスを吹き出してその場に滞留させる。吸えば媚薬ゲージがじわりと溜まる。倒すと最後に大きく弾ける。',
     trait:'媚薬ガス滞留(吸うと蓄積)',
   },
   imp:{
-    name:'小淫魔', role:'煽り・じらし', cost:5, unlock:280,
+    name:'小淫魔', role:'煽り・じらし', cost:5, unlock:280, tier:'mid',
     hp:20, spd:120, r:8, dmg:0, xp:5, solo:true,
     desc:'攻撃はしない。ヒロインの周りをパタパタと飛び回って煽り、集中を乱し、媚薬を薫らせる。すばしこく撃ち落としにくい。',
     trait:'まとわり煽り(媚薬+集中低下)',
   },
   flower:{
-    name:'触手花', role:'設置罠・蔦', cost:5, unlock:450,
+    name:'触手花', role:'設置罠・蔦', cost:5, unlock:450, tier:'mid',
     hp:60, spd:0, r:13, dmg:0, xp:5,
     desc:'その場で待つ肉花。近づいた獲物の脚に蔦を絡め、その場に繋ぎ止めて締め上げる。',
     trait:'待ち伏せ→脚に蔦(繋留拘束+dot)',
   },
   mistslime:{
-    name:'霧香スライム', role:'融合・ガスの跡', cost:6, unlock:-1,
+    name:'霧香スライム', role:'融合・ガスの跡', cost:6, unlock:-1, tier:'mid',
     hp:34, spd:48, r:12, dmg:4, xp:6,
     desc:'【融合】粘スライム×ガス玉。進んだ跡が媚薬の霧になる。逃げ道そのものを桃色に染める。',
     trait:'移動跡が媚薬ガスに', fusion:['slime','gas'], fuseCost:400,
   },
   gtent:{
-    name:'大触手', role:'融合・捕縛', cost:9, unlock:-1,
+    name:'大触手', role:'融合・捕縛', cost:9, unlock:-1, tier:'large',
     hp:115, spd:30, r:16, dmg:6.5, xp:12,
     desc:'【融合】地上ワーム×触手花。届く間合いから鞭を伸ばして四肢に絡め、その場から逃さない。',
     trait:'遠隔で四肢に蔦(繋留拘束)', fusion:['worm','flower'], fuseCost:550,
   },
+  /* ---- v1.0 追加: 雑魚 ---- */
+  hand:{
+    name:'這い寄る手', role:'まさぐり', cost:2, unlock:100, tier:'fodder',
+    hp:10, spd:58, r:8, dmg:0, xp:1, swarm:2,
+    desc:'手首から先だけの、青白い手。地面を這って寄り、触れた場所をひとしきりまさぐって満足すると、少し離れてまた這い寄る。',
+    trait:'接触でまさぐり(快感バースト・ダメージなし)。Lv2+で群れ倍化',
+  },
+  /* ---- v1.0 追加: 中型 ---- */
+  serpent:{
+    name:'淫蛇', role:'脚絡み', cost:4, unlock:260, tier:'mid',
+    hp:30, spd:72, r:11, dmg:4, xp:4,
+    desc:'紫の鱗のぬめる蛇。素早く滑り寄り、まず脚から巻きついて歩みを奪う。空きが無ければ噛む。',
+    trait:'接触で脚優先の【拘束】(絡みつき)。空きなら噛みつき',
+  },
+  /* ---- v1.0 追加: 大型(精鋭型) ---- */
+  moth:{
+    name:'媚蛾', role:'鱗粉の雨', cost:8, unlock:520, tier:'large',
+    hp:140, spd:44, r:15, dmg:3, xp:10,
+    desc:'翼幅の広い桃色の大蛾。彼女の周りを大きく旋回しながら媚薬の鱗粉を撒き続け、擦れた翼で肌を撫でていく。',
+    trait:'旋回しながら媚薬雲を連続散布',
+  },
+  pot:{
+    name:'触手壺', role:'ジェム喰い', cost:7, unlock:480, tier:'large',
+    hp:160, spd:0, r:16, dmg:0, xp:10,
+    desc:'口を開けた肉の壺。周囲のジェムを吸い込んで喰い、夜側のエネルギーに変える。取り返しに近づいた脚を、壺の縁から伸びた触手が繋ぐ。',
+    trait:'ジェム吸収→EN還元。近寄ると脚に触手(繋留拘束)',
+  },
+  slugqueen:{
+    name:'ナメクジ女王', role:'魅了の脈動', cost:8, unlock:560, tier:'large',
+    hp:150, spd:26, r:17, dmg:3, xp:10,
+    desc:'背に王冠めいた襞を持つ大ナメクジ。数秒ごとに甘い脈動を放ち、届く範囲の彼女を種族ごと魅了していく。',
+    trait:'定期的な魅了パルス(範囲)+接触魅了',
+  },
+  /* ---- v1.0 追加: ボス ---- */
+  dreamtree:{
+    name:'淫夢の樹', role:'ボス・巣', cost:24, unlock:1100, tier:'boss',
+    hp:800, spd:0, r:30, dmg:0, xp:55, boss:true,
+    desc:'桃色の花を咲かせた黒い樹。根を伸ばして近づく者の脚を繋ぎ、幹の洞から地上ワームを生み続ける。花の香は甘く、近いほど身体が熱を覚える。召喚は1戦に1度。',
+    trait:'根の繋留/ワーム生成/甘香の領域',
+  },
   vampi:{
-    name:'ヴァンピロード', role:'ボス', cost:26, unlock:900,
+    name:'ヴァンピロード', role:'ボス', cost:26, unlock:900, tier:'boss',
     hp:950, spd:55, r:28, dmg:20, xp:60, boss:true,
     desc:'夜の統率者。突進で薙ぎ払い、掠めた相手をよろめかせる。召喚は1戦に1度。',
     trait:'突進/接触よろめき',
   },
 };
+/* 階級: 雑魚/中型は全陣形、大型は精鋭型のみ、ボスは単騎 */
+const TIERS=['fodder','mid','large','boss'];
+const TIER_NAMES={fodder:'雑魚', mid:'中型', large:'大型', boss:'ボス'};
+const TIER_CAP={fodder:2, mid:2, large:1, boss:1};          // デッキ枠(計6)
+const TIER_FORMS={fodder:null, mid:null, large:['single','duo'], boss:['single']};  // null=全陣形
+const tierOf=id=>MONSTERS[id].tier||(MONSTERS[id].boss?'boss':'mid');
 const CARD_LV_MAX=5;
 const cardLvMult=lv=>({ hp:1+0.08*(lv-1), dmg:1+0.10*(lv-1) });   // Lvは主に頭数で強くなる
 const cardCost=(id,lv)=>{
@@ -212,6 +263,8 @@ const FORMATIONS={
     desc:'進行方向の先に伏せて置く。設置系・鈍足と好相性。' },
   ring:{ name:'包囲円陣', count:10, factor:4.0, unlock:380,
     desc:'楕円の円陣で取り囲み、輪を締める。' },
+  duo:{ name:'双璧', count:2, factor:1.8, unlock:300, elite:1.25,
+    desc:'2体を強化(×1.25)して並べる。大型向きの少数精鋭。' },
 };
 
 /* ---------------- 祭壇(オーブによる初期状態の書き換え) ----------------
@@ -268,12 +321,20 @@ const UPG={
   whip:  {name:'プリズムウィップ', d1:'ひかりのムチが',  d2:'まえをなぎはらう', max:5, kind:'wp'},
   rain:  {name:'スターレイン',     d1:'ながれ星が',      d2:'ふりそそぐ',      max:5, kind:'wp'},
   cross: {name:'クロスブーメラン', d1:'ひかりの十字が',  d2:'いって、もどる',  max:5, kind:'wp'},
+  sanct: {name:'せいいき',         d1:'まわりの光が',    d2:'ふれた敵をやく',  max:5, kind:'wp'},
+  blade: {name:'ひかりの刃',       d1:'むいた方向へ',    d2:'刃をとばす',      max:5, kind:'wp'},
+  thunder:{name:'てんらい',        d1:'いかずちが',      d2:'ランダムにおちる', max:5, kind:'wp'},
+  holy:  {name:'せいすい',         d1:'なげた聖水が',    d2:'地面をきよめる',  max:5, kind:'wp'},
   speed: {name:'スピードシューズ', d1:'いどう速度',      d2:'+10%',            max:3, kind:'ps'},
   vital: {name:'マックスハート',   d1:'さいだいHP+25',   d2:'いまも回復する',   max:3, kind:'ps'},
   magnet:{name:'ジェムマグネット', d1:'ジェムの回収',    d2:'はんいUP',        max:3, kind:'ps'},
   haste: {name:'クイックリボン',   d1:'こうげき速度',    d2:'+8%',             max:3, kind:'ps'},
   ward:  {name:'プチバリア',       d1:'まもり',          d2:'+1',              max:3, kind:'ps'},
   growth:{name:'ラーニングピアス', d1:'けいけんち',      d2:'+12%',            max:3, kind:'ps'},
+  area:  {name:'ひろがるろうそく', d1:'こうげき範囲',    d2:'+10%',            max:3, kind:'ps'},
+  dup:   {name:'ふたごの鏡',       d1:'とうしゃ数',      d2:'+1',              max:2, kind:'ps'},
+  luck:  {name:'よつばのクローバー', d1:'燭台のアイテム', d2:'でやすく',        max:3, kind:'ps'},
+  endure:{name:'ねばりのリボン',   d1:'スタミナ上限',    d2:'+10%',            max:3, kind:'ps'},
 };
 /* 融合進化(本家の進化に相当): baseがLv最大+ペアパッシブLv2以上で解禁 */
 const EVOS={
@@ -289,6 +350,14 @@ const EVOS={
     d1:'すい星のむれを', d2:'ふらせる' },
   sjudge:{ name:'ジャッジメントクロス', base:'cross', pair:'ward',
     d1:'大十字が何度も', d2:'つらぬきかえす' },
+  gsanct:{ name:'だいせいいき', base:'sanct', pair:'endure',
+    d1:'ひろい聖域が', d2:'やきながら癒す' },
+  kblade:{ name:'せんじん', base:'blade', pair:'dup',
+    d1:'刃のあらしが', d2:'前後にはしる' },
+  judgment:{ name:'しんばつ', base:'thunder', pair:'luck',
+    d1:'雷の柱が', d2:'いっせいにおちる' },
+  spring:{ name:'きよめの泉', base:'holy', pair:'area',
+    d1:'ひろい聖なる泉が', d2:'ながく残る' },
 };
 const need=l=>Math.floor(6 + l*3.2 + l*l*0.18);
 

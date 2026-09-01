@@ -195,6 +195,9 @@ function migrateCards(){
     META.cards[id].owned=true;
   }
   META.deck=(META.deck||[]).filter(id=>META.cards[id]&&META.cards[id].owned);
+  // 階級ごとの枠(雑魚2/中型2/大型1/ボス1)に収める(v1.0)
+  const tcnt={};
+  META.deck=META.deck.filter(id=>{ const t=tierOf(id); tcnt[t]=(tcnt[t]||0)+1; return tcnt[t]<=TIER_CAP[t]; });
   if(!META.deck.length) META.deck=['slug','worm','ghost'];
   META.formations=(META.formations||['scatter']).filter(f=>FORMATIONS[f]);
   if(!META.formations.includes('scatter')) META.formations.unshift('scatter');
