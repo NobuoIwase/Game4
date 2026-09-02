@@ -155,6 +155,9 @@ function startBattle(){
     codexSeen:{}, metCd:{}, recentMet:{},             // 図鑑の記録用
   };
   spawnInitialProps();
+  // 描き込みスプライトの事前焼き(デッキの種族×位相を最初の数十フレームで焼いておく)
+  G.gfxLv=2; G.prebake=[];
+  for(const id of new Set(META.deck.concat(['hand','worm']))){ if(MONSTERS[id]&&!MONSTERS[id].boss&&!MONSTERS[id].item){ for(let k=0;k<16;k++) for(let v=0;v<3;v++) G.prebake.push({id, t:k/8, vari:v}); } }
   G.mode='battle';
   G.cam.x=0; G.cam.y=0;
   setBanner('第'+genNum(META.gen.idx)+'世代 — 戦歴 '+(META.gen.battle+1)+'/'+BAL.GEN_LEN,
@@ -1692,6 +1695,7 @@ function spawnUnit(id, x, y, o){
     boss:!!MONSTERS[id].boss, lv:d.lv, elite:elite>1,
     t:rand(10), joff:rand(TAU), hitFlash:0, orbCd:0, stun:0, dead:false,
     dormant:!!o.dormant, dormT:0, state:'chase', limb:null, seenT:0,
+    vari:(Math.random()*3)|0,                 // 描き込みの個体差(顔・色)
   };
   if(id==='worm'){ u.pounceCd=rand(1,2); u.pounceT=0; }
   if(id==='slug'){ u.charmCd=0; }

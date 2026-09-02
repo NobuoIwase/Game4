@@ -164,7 +164,7 @@ function defaultMeta(){
     rot:{ dmg:0, ail:0, captures:0, battles:0 }, // 世代内記録(リセットされる)
     best:null,
     lumina:{ coins:0, upg:{vital:0,guard:0,bless:0,swift:0,grit:0,zeal:0} },  // 彼女の自己強化(永続)
-    settings:{ autoplay:true, gfx:'hd' },   // gfx: 'hd'=描き込み / 'pixel'=ドット
+    settings:{ autoplay:true, gfx:'hd', gfxAuto:true },   // gfx: 'hd'=描き込み / 'pixel'=ドット。gfxAuto: fps低下で装飾を自動で省く
   };
 }
 let META=defaultMeta();
