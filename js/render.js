@@ -808,12 +808,12 @@ function drawEnemy(g,e){
   let ent=null;
   if(gfxHd()){
     if(e.boss) drawEnemyShaded(g,e);
-    else { ent=drawEnemyCached(g,e); if(gfxLv()>=2 && MON_OVER[e.id]) MON_OVER[e.id](g,e); }
+    else { ent=drawEnemyCached(g,e); if(ent && MON_IRIS[e.id]) MON_IRIS[e.id](g,e); if(gfxLv()>=2 && MON_OVER[e.id]) MON_OVER[e.id](g,e); }
   }else drawBody(g,e);
 
   if(e.hitFlash>0){
     g.globalAlpha=Math.min(1,e.hitFlash*6)*0.75;
-    if(ent) g.drawImage(flashOf(ent),-ent.R,-ent.oy);
+    if(ent) g.drawImage(flashOf(ent),-ent.R,-ent.oy,ent.S,ent.S);
     else { g.fillStyle='#ffffff'; g.beginPath(); g.arc(0,-e.r*0.9,e.r*1.05,0,TAU); g.fill(); }
     g.globalAlpha=1;
   }
@@ -857,13 +857,23 @@ function drawBody(g,e){
   else drawBoss(g,e);
 }
 /* v1.3 描き込み: 本体を一度オフスクリーンに描き、暗い縁取り・左上からの光・右下の陰・ハイライトを重ねる */
-const SHADE_CV=document.createElement('canvas'); SHADE_CV.width=256; SHADE_CV.height=256;
+const SHADE_CV=document.createElement('canvas'); SHADE_CV.width=512; SHADE_CV.height=512;
 const SG=SHADE_CV.getContext('2d');
-const SIL_CV=document.createElement('canvas'); SIL_CV.width=256; SIL_CV.height=256;
+const SIL_CV=document.createElement('canvas'); SIL_CV.width=512; SIL_CV.height=512;
 const SIL=SIL_CV.getContext('2d');
 /* v1.4 描き込み(セル調): 本体をオフスクリーンに描き、AO → 種族色の色トレス線 → 本体 → 影の帯2段 → 左上のリム を焼く。
    結果は種族×半径×精鋭×個体差×状態×アニメ位相(16コマ/2秒)でキャッシュし、以後は drawImage 1回。 */
-const OUT_CV=document.createElement('canvas'); OUT_CV.width=OUT_CV.height=256; const OUTG=OUT_CV.getContext('2d');
+const OUT_CV=document.createElement('canvas'); OUT_CV.width=OUT_CV.height=512; const OUTG=OUT_CV.getContext('2d');
+/* 焼き解像度: 端末の実ピクセル/ワールドpx(dpr×viewScale)に合わせて1〜2倍で焼き、等倍に縮めて置く(1倍で焼いて拡大するとぼやける) */
+function gfxK(){ return (gfxLv()<=1||(G.kCap||2)<2)?1:clamp(Math.ceil((dpr||1)*(viewScale||1)-0.1),1,2); }   // fps が落ちて装飾を省く段・キャッシュが溢れた戦闘では1倍に戻す
+/* キャッシュ溢れの検知: 焼き予算が使い切られ続け、かつキャッシュが満杯なら「働き集合が入らない」——その戦闘は1倍焼きへ落とす(2倍は容量4倍) */
+let THRASH_N=0;
+function thrashGuard(){
+  if((G.kCap||2)<2){ THRASH_N=0; return; }
+  // 満杯で予算を使い切ったフレームは+1、そうでないフレームは-0.25(6割方の飽和が1.5秒続けば落とす)
+  if(BAKE_N>=BAKE_MAX && SPR_CACHE.size>=sprMax()) THRASH_N+=1; else THRASH_N=Math.max(0,THRASH_N-0.25);
+  if(THRASH_N>=40){ G.kCap=1; THRASH_N=0; }
+}
 const OUTLINE_COL={};
 (function(){
   const T=[42,26,62];
@@ -887,46 +897,48 @@ function glow(g,x,y,r,rgb,alpha){
     t.fillStyle=gr; t.fillRect(0,0,64,64); GLOW[rgb]=c; }
   const a=g.globalAlpha; g.globalAlpha=a*alpha; g.drawImage(c,x-r,y-r,r*2,r*2); g.globalAlpha=a;
 }
-function renderShaded(cg,e,R,S,oy){
-  SG.setTransform(1,0,0,1,0,0); SG.globalCompositeOperation='source-over'; SG.clearRect(0,0,S,S);
-  SG.save(); SG.translate(R,oy); drawBody(SG,e); SG.restore();
+function renderShaded(cg,e,R,S,oy,k){
+  k=k||1; const SP=S*k;   // SP: 実ピクセル寸。本体は k 倍で描き、合成は実ピクセルで行う(帯の幅・線の太さはワールドpxで一定)
+  SG.setTransform(1,0,0,1,0,0); SG.globalCompositeOperation='source-over'; SG.clearRect(0,0,SP,SP);
+  SG.save(); SG.setTransform(k,0,0,k,R*k,oy*k); drawBody(SG,e); SG.restore();
   // AO: 足元へ紫に沈む
   SG.globalCompositeOperation='source-atop';
-  const ao=SG.createLinearGradient(0,oy-e.r*2.2,0,oy+e.r*0.5); ao.addColorStop(0,SHADOW_COL+'0)'); ao.addColorStop(1,SHADOW_COL+'0.26)');
-  SG.fillStyle=ao; SG.fillRect(0,0,S,S); SG.globalCompositeOperation='source-over';
+  const ao=SG.createLinearGradient(0,(oy-e.r*2.2)*k,0,(oy+e.r*0.5)*k); ao.addColorStop(0,SHADOW_COL+'0)'); ao.addColorStop(1,SHADOW_COL+'0.26)');
+  SG.fillStyle=ao; SG.fillRect(0,0,SP,SP); SG.globalCompositeOperation='source-over';
   // sil(col,dx,dy): 本体マスクを col で塗る。ずらし付きなら「ずらした本体」を引いて片側の帯だけ残す
   const sil=(col,dx,dy)=>{
-    SIL.setTransform(1,0,0,1,0,0); SIL.globalCompositeOperation='source-over'; SIL.clearRect(0,0,S,S);
-    SIL.drawImage(SHADE_CV,0,0,S,S,0,0,S,S);
-    if(dx||dy){ SIL.globalCompositeOperation='destination-out'; SIL.drawImage(SHADE_CV,0,0,S,S,dx,dy,S,S); }
-    SIL.globalCompositeOperation='source-in'; SIL.fillStyle=col; SIL.fillRect(0,0,S,S); SIL.globalCompositeOperation='source-over';
+    SIL.setTransform(1,0,0,1,0,0); SIL.globalCompositeOperation='source-over'; SIL.clearRect(0,0,SP,SP);
+    SIL.drawImage(SHADE_CV,0,0,SP,SP,0,0,SP,SP);
+    if(dx||dy){ SIL.globalCompositeOperation='destination-out'; SIL.drawImage(SHADE_CV,0,0,SP,SP,dx*k,dy*k,SP,SP); }
+    SIL.globalCompositeOperation='source-in'; SIL.fillStyle=col; SIL.fillRect(0,0,SP,SP); SIL.globalCompositeOperation='source-over';
   };
-  sil(e.elite?OUTLINE_ELITE:(OUTLINE_COL[e.id]||OUTLINE_DEF),0,0);          // 色トレス線(1px)
-  for(const [dx,dy] of [[-1,0],[1,0],[0,-1],[0,1]]) cg.drawImage(SIL_CV,0,0,S,S,dx,dy,S,S);
-  cg.drawImage(SHADE_CV,0,0,S,S,0,0,S,S);
+  sil(e.elite?OUTLINE_ELITE:(OUTLINE_COL[e.id]||OUTLINE_DEF),0,0);          // 色トレス線(1ワールドpx)
+  for(const [dx,dy] of [[-1,0],[1,0],[0,-1],[0,1]]) cg.drawImage(SIL_CV,0,0,SP,SP,dx*k,dy*k,SP,SP);
+  cg.drawImage(SHADE_CV,0,0,SP,SP,0,0,SP,SP);
   const k1=e.r<12?1.3:1.8, k2=k1*2.2, tr=TRANSLUCENT.has(e.id)?0.5:1;         // 左上からの光: 右下に帯
-  sil(SHADOW_COL+(0.22*tr)+')',-k2,-k2*1.3); cg.drawImage(SIL_CV,0,0,S,S,0,0,S,S);   // 広く淡い
-  sil(SHADOW_COL+(0.50*tr)+')',-k1,-k1*1.3); cg.drawImage(SIL_CV,0,0,S,S,0,0,S,S);   // 狭く硬い(セルの段)
-  sil(RIM_COL,1,1.3);                          cg.drawImage(SIL_CV,0,0,S,S,0,0,S,S);   // 左上のリム
+  sil(SHADOW_COL+(0.22*tr)+')',-k2,-k2*1.3); cg.drawImage(SIL_CV,0,0,SP,SP,0,0,SP,SP);   // 広く淡い
+  sil(SHADOW_COL+(0.50*tr)+')',-k1,-k1*1.3); cg.drawImage(SIL_CV,0,0,SP,SP,0,0,SP,SP);   // 狭く硬い(セルの段)
+  sil(RIM_COL,1,1.3);                          cg.drawImage(SIL_CV,0,0,SP,SP,0,0,SP,SP);   // 左上のリム
 }
-/* ボス(≤3体)はキャッシュせず毎フレーム同じパスで合成 */
-function drawEnemyShaded(g,e){
+/* ボス(≤3体)とアイコンはキャッシュせず毎フレーム同じパスで合成。kOpt: 焼き倍率の指定(アイコン用) */
+function drawEnemyShaded(g,e,kOpt){
   const R=Math.ceil(e.r*2.8)+8, S=R*2; if(S>256){ drawBody(g,e); return; }
-  OUTG.setTransform(1,0,0,1,0,0); OUTG.clearRect(0,0,S,S); renderShaded(OUTG,e,R,S,R*1.4);
-  g.drawImage(OUT_CV,0,0,S,S,-R,-R*1.4,S,S);
+  const k=Math.max(1,Math.min(kOpt||gfxK(), Math.floor(512/S))), SP=S*k;
+  OUTG.setTransform(1,0,0,1,0,0); OUTG.clearRect(0,0,SP,SP); renderShaded(OUTG,e,R,S,R*1.4,k);
+  g.drawImage(OUT_CV,0,0,SP,SP,-R,-R*1.4,S,S);
 }
-const SPR_CACHE=new Map(); const SPR_CACHE_MAX=900;
+const SPR_CACHE=new Map(); const sprMax=()=>gfxK()>1?480:900;   // 2倍焼きは1枚4倍の容量なので上限を下げる(溢れたら thrashGuard が1倍へ)
 const q8=a=>((Math.round(a/(TAU/8))%8)+8)%8;
 const tq=e=>Math.floor((((e.t+e.joff)%2)+2)%2*8)/8;   // 量子化した本体時刻(オーバーレイを焼いたコマに合わせる)
 let BAKE_N=0; const BAKE_MAX=6;                          // 1フレームの焼き上限。draw() 冒頭で0に戻す
+let FRAME_N=0;                                           // 描画フレーム番号(LRU の「このフレームで触った」印)
 function gfxLv(){ return (META.settings&&META.settings.gfxAuto===false)?2:(G.gfxLv===undefined?2:G.gfxLv); }
+const VARI_SPECIES=new Set(['goblin','slug','moth']);   // 個体差で絵が変わる種族だけ鍵に vari を含める(他は3倍の焼き直しになるだけ)
 function spriteKey(e){
   const lv=gfxLv();
   let ph=Math.floor((((e.t+e.joff)%2)+2)%2*8); if(lv===0) ph&=~1;
-  const vr=lv===0?0:(e.vari||0);
+  const vr=(lv===0||!VARI_SPECIES.has(e.id))?0:(e.vari||0);
   let st='';
-  const p=G.B&&G.B.hero;
-  const look=p?q8(Math.atan2((p.y-10)-(e.y-e.r),p.x-e.x)):0;
   switch(e.id){
     case 'worm': st=e.pounceT>0?'p':''; break;
     case 'flower': st=e.state+(e.revealed?'r':''); break;
@@ -936,20 +948,25 @@ function spriteKey(e){
     case 'hand': st=e.retreatT>0?'b':''; break;
     case 'leech': st=q8(Math.atan2(e.lvy||0,e.lvx||1)); break;
     case 'moth': st=e.swoopT>0?'s':''; break;
-    case 'slugqueen': st=(e.pulseCd||9)<1?'p':''; break;
+    case 'slugqueen': st=(e.pulseCd||9)<1?'p'+Math.min(3,Math.floor((1-Math.max(0,e.pulseCd||0))*4)):''; break;
+    case 'gas': st=String(Math.min(3,Math.floor(Math.max(0,1-((e.puffT===undefined?3.2:e.puffT)/3.2))*4))); break;
     case 'tower': st=Math.floor(Math.max(0,1-((e.pulseCd||4)/4))*4); break;
-    case 'eye': st=look+'g'+Math.min(2,Math.floor(clamp(1-((e.gazeCd===undefined?3:e.gazeCd)/1.2),0,1)*3)); break;
-    case 'gazer': st=q8(e.lookA||0)+(e.gzState||'')+Math.min(3,Math.floor((e.gzState==='aim'?clamp(1-(e.gzT||0)/BAL.GAZE_AIM,0,1):(e.gzState==='flash'?1:0))*4)); break;
-    case 'beamer': st=q8(e.lookA||0)+(e.bmState||'')+q8(e.bmAng||0)+(e.bmState==='aim'?Math.min(3,Math.floor(clamp(1-e.bmT/BAL.BEAM_AIM,0,1)*4)):0); break;
+    case 'eye': st='g'+Math.min(2,Math.floor(clamp(1-((e.gazeCd===undefined?3:e.gazeCd)/1.2),0,1)*3)); break;                 // 視線は MON_IRIS が生で描くので鍵に含めない
+    case 'gazer': st=(e.gzState||'')+Math.min(3,Math.floor((e.gzState==='aim'?clamp(1-(e.gzT||0)/BAL.GAZE_AIM,0,1):(e.gzState==='flash'?1:0))*4)); break;
+    case 'beamer': st=(e.bmState||'')+(e.bmState==='aim'?Math.min(3,Math.floor(clamp(1-e.bmT/BAL.BEAM_AIM,0,1)*4)):0); break;
   }
-  return e.id+'|'+Math.round(e.r)+'|'+(e.elite?'E':'')+vr+'|'+st+'|'+ph;
+  return e.id+'|'+Math.round(e.r)+'|'+(e.elite?'E':'')+vr+'|'+st+'|'+ph+'|'+gfxK();
 }
+let NO_IRIS=false;   // 焼き中は目玉の虹彩・瞳・照射触手の水晶を描かない(視線で鍵が8倍に膨れるので、MON_IRIS が毎フレーム生で重ねる)
 function bakeSprite(e,key,R,S){
-  const cv=document.createElement('canvas'); cv.width=S; cv.height=S; const cg=cv.getContext('2d');
+  const k=gfxK();
+  const cv=document.createElement('canvas'); cv.width=S*k; cv.height=S*k; const cg=cv.getContext('2d');
   const t0=e.t, jo=e.joff; e.t=Math.floor((((e.t+e.joff)%2)+2)%2*8)/8+0.0001; e.joff=0;
-  renderShaded(cg,e,R,S,R*1.4); e.t=t0; e.joff=jo;
-  const ent={cv,R,oy:R*1.4,fl:null};
-  if(SPR_CACHE.size>=SPR_CACHE_MAX) SPR_CACHE.delete(SPR_CACHE.keys().next().value);
+  NO_IRIS=!!MON_IRIS[e.id];
+  try{ renderShaded(cg,e,R,S,R*1.4,k); } finally { NO_IRIS=false; }
+  e.t=t0; e.joff=jo;
+  const ent={cv,R,oy:R*1.4,S,fl:null,hit:FRAME_N};
+  const mx=sprMax(); while(SPR_CACHE.size>=mx) SPR_CACHE.delete(SPR_CACHE.keys().next().value);
   SPR_CACHE.set(key,ent); return ent;
 }
 /* 被弾フラッシュ: 白いシルエット(遅延生成) */
@@ -962,12 +979,13 @@ function drawEnemyCached(g,e){
   const R=Math.ceil(e.r*2.8)+8, S=R*2; if(S>256){ drawBody(g,e); return null; }
   const key=spriteKey(e); let ent=SPR_CACHE.get(key);
   if(!ent){ if(BAKE_N>=BAKE_MAX){ drawBody(g,e); return null; } BAKE_N++; ent=bakeSprite(e,key,R,S); }   // 予算超過: この1フレームは素で描く
-  g.drawImage(ent.cv,-ent.R,-ent.oy); return ent;
+  else if(ent.hit!==FRAME_N){ ent.hit=FRAME_N; SPR_CACHE.delete(key); SPR_CACHE.set(key,ent); }        // LRU: 使った鍵を末尾へ(先頭から追い出す)。FIFOだと2秒周期の位相が戻る前に消えて焼き直しが止まらない
+  g.drawImage(ent.cv,-ent.R,-ent.oy,ent.S,ent.S); return ent;
 }
 /* 事前焼き: startBattle で積んだ G.prebake(種族×位相×個体差)を毎フレーム数体ずつ焼く */
 function prebakeStep(){
   if(!G.prebake||!G.prebake.length||!gfxHd()) return;
-  while(G.prebake.length && BAKE_N<BAKE_MAX){
+  while(G.prebake.length && BAKE_N<BAKE_MAX && SPR_CACHE.size<sprMax()*0.85){   // 上限近くまで焼くと実戦の分を追い出すので手前で止める
     const it=G.prebake.pop();
     const fe=fakeEnemy(it.id); fe.t=it.t; fe.vari=it.vari; fe.x=0; fe.y=0;
     const R=Math.ceil(fe.r*2.8)+8, S=R*2; if(S>256) continue;
@@ -982,6 +1000,12 @@ function fpsGuard(){
   if(G.fps<40){ G.hiT=0; G.lowT=(G.lowT||0)+fdt; if(G.lowT>2 && gfxLv()>0){ G.gfxLv=gfxLv()-1; G.lowT=0; } }
   else if(G.fps>55){ G.lowT=0; G.hiT=(G.hiT||0)+fdt; if(G.hiT>8 && gfxLv()<2){ G.gfxLv=gfxLv()+1; G.hiT=0; } }
 }
+/* 焼き絵の上に必ず重ねる部分: 目玉系の虹彩・瞳(視線が滑らかに追う)と照射触手の水晶。焼きの鍵から視線を外せる */
+const MON_IRIS={
+  gazer(g,e){ const gl=e.gzState==='aim'?clamp(1-(e.gzT||0)/BAL.GAZE_AIM,0,1):(e.gzState==='flash'?1:0); g.save(); g.translate(0,-e.r); drawIris(g,e.r*0.95,e.lookA||0,gl); g.restore(); },
+  eye(g,e){ const gl=clamp(1-((e.gazeCd===undefined?3:e.gazeCd)/1.2),0,1); const oy=-e.r*1.2+Math.sin(tq(e)*3)*2; g.save(); g.translate(0,oy); drawIris(g,e.r*0.9,eyeLookA(e,oy),gl,gl>0.3?'#b46cff':'#7a3ff2'); g.restore(); },
+  beamer(g,e){ drawBeamerCrystal(g,e,Math.sin(tq(e)*1.1)*2,-e.r*1.4); },
+};
 /* 焼いた絵の上に重ねる生きた部分(≤3回の塗り)。ゴーストの瞳は彼女を追い、小淫魔は近づくと頰を染め、目玉は瞬く */
 const MON_OVER={
   ghost(g,e){
@@ -1019,7 +1043,7 @@ function fakeEnemy(id){
     hp:1, maxHp:1, hitFlash:0, dormant:false,
     pulseCd:5, grabCd:0, swoopT:0, dustT:1, gropeCd:0, retreatT:0, spawnCd:5, rootCd:5, eatN:0, lvx:null, lvy:null,
     gzState:'idle', gzAng:-Math.PI/2, bmState:'idle', bmAng:-Math.PI/2, lookA:-Math.PI/2, gazeCd:3, denyCd:8, bmT:1, gzT:1,
-    eyes:[0,1,2].map(i=>({base:(-Math.PI/2)+(i-1)*1.05, dx:Math.cos((-Math.PI/2)+(i-1)*1.05)*MONSTERS[id].r*1.15, dy:Math.sin((-Math.PI/2)+(i-1)*1.05)*MONSTERS[id].r*0.55-MONSTERS[id].r*0.9, ang:-Math.PI/2, state:'idle', t:1})) };
+    eyes:[0,1,2].map(i=>({base:(-Math.PI/2)+(i-1)*1.05, dx:Math.cos((-Math.PI/2)+(i-1)*1.05)*MONSTERS[id].r*1.9, dy:Math.sin((-Math.PI/2)+(i-1)*1.05)*MONSTERS[id].r*0.8-MONSTERS[id].r*1.7, ang:-Math.PI/2, state:'idle', t:1})) };
 }
 function drawDormant(g,e){
   g.fillStyle='rgba(60,50,90,0.8)';
@@ -1057,6 +1081,9 @@ function drawSlug(g,e){
     g.fillStyle='#3a4a1f';
     g.beginPath(); g.arc(wx+sd*2+tip,-r*1.28,1.4,0.15*Math.PI,0.85*Math.PI); g.fill();   // 半眼
   }
+  // 背の斑点(模様。個体で並びが違う)
+  g.fillStyle='rgba(90,120,40,0.5)';
+  for(let i=0;i<4;i++){ const px=-r*0.6+i*r*0.32+(v*0.07*r), py=-r*0.55-Math.sin(i*1.7+v)*r*0.1; g.beginPath(); g.ellipse(px,py,r*0.1,r*0.07,0.3,0,TAU); g.fill(); }
   // 足の濡れた帯、背を流れる光沢、涎
   g.fillStyle='rgba(70,90,30,0.45)';
   g.beginPath(); g.ellipse(0,-r*0.05,r*0.9,r*0.12,0,0,TAU); g.fill();
@@ -1084,6 +1111,9 @@ function drawWormG(g,e){
     const sy=-r*0.42-Math.abs(Math.sin(e.t*7-i*1.1))*1.6;
     g.fillStyle=i%2?'#c9a06a':'#b8905a';
     g.beginPath(); g.arc(sx,sy,r*(0.46+i*0.07),0,TAU); g.fill();
+    // 節の環(模様)
+    g.strokeStyle='rgba(110,75,40,0.55)'; g.lineWidth=1;
+    g.beginPath(); g.arc(sx,sy,r*(0.46+i*0.07)*0.82,Math.PI*0.25,Math.PI*1.75,false); g.stroke();
   }
   const hx=Math.sin(e.t*7)*1.6+r*0.3;
   g.fillStyle='#7a5a3a';
@@ -1115,6 +1145,11 @@ function drawGoblin(g,e){
   g.lineTo(r*0.4,-r*0.95);
   g.lineTo(-r*0.4,-r*0.95);
   g.closePath(); g.fill();
+  // 布の格子(模様)
+  g.save(); g.clip();
+  g.strokeStyle='rgba(30,20,20,0.35)'; g.lineWidth=0.8;
+  for(let k=-2;k<=2;k++){ g.beginPath(); g.moveTo(-r*0.6,-r*0.95+k*r*0.2+r*0.4); g.lineTo(r*0.6,-r*0.95+k*r*0.2+r*0.4); g.stroke(); g.beginPath(); g.moveTo(k*r*0.22,-r); g.lineTo(k*r*0.22,-r*0.1); g.stroke(); }
+  g.restore();
   // 腕(こん棒を振り回す)
   g.strokeStyle='#7ab84a'; g.lineWidth=2.6;
   const sw=Math.sin(e.t*7)*0.5;
@@ -1258,6 +1293,7 @@ function drawImp(g,e,pal){
   g.lineTo(r*0.4,-r*0.35);
   g.quadraticCurveTo(r*0.55,-r*0.45,r*0.32,-r*0.95);
   g.closePath(); g.fill();
+  if(pal.pattern){ g.fillStyle=pal.pattern; for(let i=0;i<4;i++){ g.beginPath(); g.arc(-r*0.24+i*r*0.16,-r*0.6+(i%2)*r*0.12,0.9,0,TAU); g.fill(); } }   // 衣の模様
   // 腕(ちょいちょいと手招き)
   g.strokeStyle=pal.skin; g.lineWidth=1.6;
   const beck=Math.sin(e.t*6)*1.4;
@@ -1307,6 +1343,8 @@ function drawGhost(g,e){
   g.closePath(); g.fill(); g.stroke();
   const core=g.createRadialGradient(0,-r*0.9,0,0,-r*0.9,r*0.35); core.addColorStop(0,'rgba(200,210,255,0.35)'); core.addColorStop(1,'rgba(200,210,255,0)');
   g.fillStyle=core; g.beginPath(); g.arc(0,-r*0.9,r*0.35,0,TAU); g.fill();   // 魂の芯
+  g.strokeStyle='rgba(150,160,220,0.35)'; g.lineWidth=0.8;   // 布の流れ(模様)
+  for(let i=0;i<3;i++){ g.beginPath(); g.moveTo(-r*0.5+i*r*0.45,-r*0.55); g.quadraticCurveTo(-r*0.35+i*r*0.45+Math.sin(ph+i)*2,-r*0.3,-r*0.5+i*r*0.45,-r*0.1); g.stroke(); }
   g.fillStyle='#2f3358';
   g.beginPath(); g.ellipse(-r*0.32,-r*1.05,r*0.13,r*0.22,0,0,TAU); g.fill();
   g.beginPath(); g.ellipse(r*0.32,-r*1.05,r*0.13,r*0.22,0,0,TAU); g.fill();
@@ -1320,6 +1358,9 @@ function drawSlime(g,e,mist){
   g.beginPath(); g.ellipse(0,-r*0.55,r*wob,r*0.8/wob,0,0,TAU); g.fill();
   g.fillStyle=mist?'rgba(255,200,225,0.6)':'rgba(150,240,210,0.55)';
   g.beginPath(); g.ellipse(-r*0.3,-r*0.85,r*0.34,r*0.22,-0.5,0,TAU); g.fill();
+  // 中の気泡(模様)
+  g.fillStyle=mist?'rgba(255,230,240,0.45)':'rgba(200,255,235,0.4)';
+  for(let i=0;i<3;i++){ const bx=(i-1)*r*0.32, by=-r*0.45-((e.t*0.4+i*0.33)%1)*r*0.5; g.beginPath(); g.arc(bx,by,r*0.07+i*0.5,0,TAU); g.fill(); }
   g.fillStyle=mist?'#5a2440':'#1f4a3c';
   g.beginPath(); g.arc(-r*0.28,-r*0.6,r*0.11,0,TAU); g.fill();
   g.beginPath(); g.arc(r*0.28,-r*0.6,r*0.11,0,TAU); g.fill();
@@ -1457,6 +1498,10 @@ function drawSerpent(g,e){
     g.beginPath(); g.arc(sx,sy,r*(0.42-i*0.035),0,TAU); g.fill();
     g.fillStyle='rgba(232,200,255,0.45)';
     g.beginPath(); g.ellipse(sx,sy+r*0.1,r*(0.26-i*0.02),r*0.08,0,0,TAU); g.fill();
+    // 鱗の菱形(模様)
+    g.save(); g.translate(sx,sy-r*0.12); g.rotate(Math.PI/4);
+    g.fillStyle='rgba(60,30,110,0.5)'; const q=r*(0.11-i*0.008); g.fillRect(-q/2,-q/2,q,q);
+    g.restore();
   }
   // 頭
   const hy=-r*0.35+Math.sin(ph)*r*0.28;
@@ -1706,6 +1751,8 @@ function drawSpore(g,e){
   grad.addColorStop(0,'rgba(230,245,255,0.9)'); grad.addColorStop(1,'rgba(127,184,224,0.45)');
   g.fillStyle=grad;
   g.beginPath(); g.ellipse(0,0,r*(1+ph*0.06),r*0.7*(1-ph*0.06),0,0,TAU); g.fill();
+  g.fillStyle='rgba(120,170,220,0.45)';
+  for(let i=0;i<5;i++){ const a=-Math.PI*0.9+i*0.45; g.beginPath(); g.arc(Math.cos(a)*r*0.55,Math.sin(a)*r*0.4,r*0.09,0,TAU); g.fill(); }   // 傘の斑点(模様)
   g.strokeStyle='rgba(255,224,102,'+(0.4+0.4*Math.max(0,Math.sin(e.t*9))).toFixed(2)+')'; g.lineWidth=1.2;
   for(let i=0;i<3;i++){
     const a=e.t*4+i*TAU/3;
@@ -1748,20 +1795,15 @@ function drawEye(g,e){
   g.beginPath(); g.arc(0,0,r*0.95,0.2*Math.PI,0.8*Math.PI); g.fill();
   g.strokeStyle='rgba(200,80,110,0.5)'; g.lineWidth=0.8;
   for(let i=0;i<5;i++){ const a=i*TAU/5+0.4; g.beginPath(); g.moveTo(Math.cos(a)*r*0.5,Math.sin(a)*r*0.5); g.lineTo(Math.cos(a)*r*0.92,Math.sin(a)*r*0.92); g.stroke(); }
-  const p=G.B&&G.B.hero; let lx=0,ly=0;
-  if(p){ const dx=p.x-e.x, dy=(p.y-20)-(e.y-r*1.2), dd=Math.hypot(dx,dy)||1; lx=dx/dd*r*0.3; ly=dy/dd*r*0.3; }
-  g.fillStyle=gl>0.3?'#b46cff':'#7a3ff2';
-  g.beginPath(); g.arc(lx,ly,r*0.42,0,TAU); g.fill();
-  g.fillStyle='#120a1e';
-  g.beginPath(); g.arc(lx,ly,r*0.2*(1-gl*0.4),0,TAU); g.fill();
-  g.fillStyle='rgba(255,255,255,0.8)';
-  g.beginPath(); g.arc(lx-r*0.14,ly-r*0.16,r*0.08,0,TAU); g.fill();
+  if(!NO_IRIS) drawIris(g,r*0.9,eyeLookA(e,-r*1.2),gl,gl>0.3?'#b46cff':'#7a3ff2');
   g.restore();
 }
+/* 覗き目玉の視線: 眼の位置(e.x, e.y+oy)から彼女の胸元へ */
+function eyeLookA(e,oy){ const p=G.B&&G.B.hero; if(!p) return -Math.PI/2; return Math.atan2((p.y-20)-(e.y+oy), p.x-e.x); }
 function drawSuccubus(g,e){
   // 寸止めの淫魔: 小淫魔の姉。色が深く、指先に「栓」の光
   g.save();
-  drawImp(g,e,{wing:'#7a2a5a',tail:'#b8407a',heart:'#ff5d9e',skin:'#f4d2c4',dress:'#b8306a',head:'#f7dccf',hair:'#5a2a6a',horn:'#f0e0ff',face:'#3a1226',blush:'rgba(255,90,140,0.55)'});
+  drawImp(g,e,{wing:'#7a2a5a',tail:'#b8407a',heart:'#ff5d9e',skin:'#f4d2c4',dress:'#b8306a',head:'#f7dccf',hair:'#5a2a6a',horn:'#f0e0ff',face:'#3a1226',blush:'rgba(255,90,140,0.55)',pattern:'rgba(255,200,230,0.7)'});
   const r=e.r*1.15, ch=Math.max(0,1-((e.denyCd===undefined?8:e.denyCd)/1.5));
   if(ch>0){
     g.globalAlpha=ch;
@@ -1797,9 +1839,12 @@ function drawTentacleBase(g,r,t,n,col){
   for(let i=0;i<n;i++){
     const a=Math.PI*0.15+i*(Math.PI*0.7/(n-1));
     const ph=Math.sin(t*2+i*1.3);
-    g.beginPath(); g.moveTo(Math.cos(a)*r*0.5,-r*0.2);
-    g.quadraticCurveTo(Math.cos(a)*r*1.2+ph*4, r*0.1, Math.cos(a)*r*1.5+ph*6, r*0.45);
-    g.stroke();
+    const x0=Math.cos(a)*r*0.5, y0=-r*0.2, cx=Math.cos(a)*r*1.2+ph*4, cy=r*0.1, x1=Math.cos(a)*r*1.5+ph*6, y1=r*0.45;
+    g.beginPath(); g.moveTo(x0,y0); g.quadraticCurveTo(cx,cy,x1,y1); g.stroke();
+    // 吸盤の模様
+    g.fillStyle='rgba(200,150,220,0.5)';
+    for(let k=1;k<=2;k++){ const q=k/3, bx=(1-q)*(1-q)*x0+2*(1-q)*q*cx+q*q*x1, by=(1-q)*(1-q)*y0+2*(1-q)*q*cy+q*q*y1; g.beginPath(); g.arc(bx,by,r*0.05,0,TAU); g.fill(); }
+    g.strokeStyle=col;
   }
 }
 function drawEyeball(g,cx,cy,R,lookA,gl,irisCol){
@@ -1812,6 +1857,11 @@ function drawEyeball(g,cx,cy,R,lookA,gl,irisCol){
   g.beginPath(); g.arc(0,0,R,0.2*Math.PI,0.8*Math.PI); g.fill();   // 下瞼の陰(球に見える)
   g.strokeStyle='rgba(200,80,110,0.45)'; g.lineWidth=Math.max(0.8,R*0.05);
   for(let i=0;i<6;i++){ const a=i*TAU/6+0.3; g.beginPath(); g.moveTo(Math.cos(a)*R*0.45,Math.sin(a)*R*0.45); g.lineTo(Math.cos(a)*R*0.92,Math.sin(a)*R*0.92); g.stroke(); }
+  if(!NO_IRIS) drawIris(g,R,lookA,gl,irisCol);
+  g.restore();
+}
+/* 虹彩・瞳・ハイライト(視線 lookA 方向へ寄る)。焼き絵の上に生で重ねる部分 */
+function drawIris(g,R,lookA,gl,irisCol){
   const lx=Math.cos(lookA)*R*0.34, ly=Math.sin(lookA)*R*0.34;
   g.fillStyle=irisCol||(gl>0.3?'#c98cff':'#7a3ff2');
   g.beginPath(); g.arc(lx,ly,R*0.46,0,TAU); g.fill();
@@ -1819,7 +1869,6 @@ function drawEyeball(g,cx,cy,R,lookA,gl,irisCol){
   g.beginPath(); g.arc(lx,ly,R*0.22*(1-gl*0.45),0,TAU); g.fill();
   g.fillStyle='rgba(255,255,255,0.85)';
   g.beginPath(); g.arc(lx-R*0.15,ly-R*0.17,R*0.09,0,TAU); g.fill();
-  g.restore();
 }
 function drawGazer(g,e){
   const r=e.r, t=e.t;
@@ -1840,25 +1889,20 @@ function drawBeamer(g,e){
   g.beginPath(); g.moveTo(0,0); g.quadraticCurveTo(Math.sin(t*1.5)*4,-r*0.8, Math.sin(t*1.1)*2,-r*1.4); g.stroke();
   g.strokeStyle='#8a5aa8'; g.lineWidth=r*0.32;
   g.beginPath(); g.moveTo(0,-r*0.1); g.quadraticCurveTo(Math.sin(t*1.5)*4,-r*0.8, Math.sin(t*1.1)*2,-r*1.35); g.stroke();
-  // 先端の水晶の眼
-  const ex=Math.sin(t*1.1)*2, ey=-r*1.4;
-  g.save(); g.translate(ex,ey); g.rotate((e.lookA||0)+Math.PI/2);
-  g.shadowColor=aiming||firing?'#ffd76a':'#d8c8ff'; g.shadowBlur=aiming?10:6;
+  // 先端の水晶の眼(焼き中は描かず MON_IRIS.beamer が生で重ねる: 視線で回るので)
+  if(!NO_IRIS) drawBeamerCrystal(g,e,Math.sin(t*1.1)*2,-r*1.4);
+  // 照準線は焼いた絵の外(ワールド座標)で drawSightSectors が描く——焼き絵の中だと45px で切れ、角度も量子化される
+  g.restore();
+}
+function drawBeamerCrystal(g,e,ex,ey){
+  const r=e.r, aiming=e.bmState==='aim', firing=e.bmState==='fire';
+  g.save(); g.translate(ex,ey);
+  glow(g,0,0,r*1.1,aiming||firing?'255,215,106':'216,200,255',aiming?0.7:0.4);
+  g.rotate((e.lookA||0)+Math.PI/2);
   g.fillStyle=aiming?'#fff3c4':'#d8c8ff';
   g.beginPath(); g.moveTo(0,-r*0.6); g.lineTo(r*0.36,0); g.lineTo(0,r*0.45); g.lineTo(-r*0.36,0); g.closePath(); g.fill();
-  g.shadowBlur=0;
   g.fillStyle=aiming||firing?'#ff5d9e':'#5a3a7a';
   g.beginPath(); g.arc(0,-r*0.05,r*0.16,0,TAU); g.fill();
-  g.restore();
-  // 照準線(細い)
-  if(aiming){
-    const pr=clamp(1-e.bmT/BAL.BEAM_AIM,0,1);
-    g.globalAlpha=0.35+0.5*pr;
-    g.strokeStyle='#ff5d9e'; g.lineWidth=1; g.setLineDash([4,4]);
-    g.beginPath(); g.moveTo(ex,ey); g.lineTo(ex+Math.cos(e.bmAng)*BAL.BEAM_LEN, ey+Math.sin(e.bmAng)*BAL.BEAM_LEN); g.stroke();
-    g.setLineDash([]);
-    g.globalAlpha=1;
-  }
   g.restore();
 }
 function drawBossgazer(g,e){
@@ -1869,14 +1913,18 @@ function drawBossgazer(g,e){
   grad.addColorStop(0,'#5a3a7a'); grad.addColorStop(1,'#2a1a3e');
   g.fillStyle=grad;
   g.beginPath(); g.ellipse(0,-r*0.5,r*1.0,r*0.7,0,0,TAU); g.fill();
-  // 眼柄と三つの眼
+  // 三本の長い触手。先端に眼球(吸盤の列つき)。真ん中は本人を、両脇はずらした先を睨む
   for(const ey of (e.eyes||[])){
-    g.strokeStyle='#4a2a6a'; g.lineWidth=r*0.22; g.lineCap='round';
-    g.beginPath(); g.moveTo(ey.dx*0.3,-r*0.6); g.quadraticCurveTo(ey.dx*0.7, ey.dy-r*0.2, ey.dx, ey.dy); g.stroke();
+    const cx=ey.dx*0.55+Math.sin(t*1.3+ey.base)*r*0.15, cy=ey.dy*0.5-r*0.3;
+    g.strokeStyle='#3a1f5a'; g.lineWidth=r*0.3; g.lineCap='round';
+    g.beginPath(); g.moveTo(ey.dx*0.2,-r*0.7); g.quadraticCurveTo(cx,cy, ey.dx, ey.dy); g.stroke();
+    g.strokeStyle='#5a3a7a'; g.lineWidth=r*0.16;
+    g.beginPath(); g.moveTo(ey.dx*0.2,-r*0.7); g.quadraticCurveTo(cx,cy, ey.dx, ey.dy); g.stroke();
+    g.fillStyle='rgba(180,120,200,0.55)';
+    for(let k=1;k<=4;k++){ const q=k/5, bx=(1-q)*(1-q)*ey.dx*0.2+2*(1-q)*q*cx+q*q*ey.dx, by=(1-q)*(1-q)*(-r*0.7)+2*(1-q)*q*cy+q*q*ey.dy; g.beginPath(); g.arc(bx,by,r*0.045,0,TAU); g.fill(); }
     const glow=ey.state==='aim'?clamp(1-ey.t/(BAL.GAZE_AIM*1.1),0,1):(ey.state==='flash'?1:0);
-    const p=G.B&&G.B.hero;
-    const look=p?Math.atan2((p.y-10)-(e.y+ey.dy), p.x-(e.x+ey.dx)):ey.ang;
-    drawEyeball(g,ey.dx,ey.dy,r*0.42,look,glow);
+    const look=ey.state==='aim'?ey.ang:(G.B&&G.B.hero?Math.atan2((G.B.hero.y-10)-(e.y+ey.dy), G.B.hero.x-(e.x+ey.dx)):ey.ang);
+    drawEyeball(g,ey.dx,ey.dy,r*0.4,look,glow);
   }
   // 口(触手の胴の裂け目)
   g.fillStyle='#120a1e';
@@ -1887,6 +1935,21 @@ function drawBossgazer(g,e){
 function drawSightSectors(g,B){
   for(const e of B.enemies){
     if(e.dead||e.dormant) continue;
+    if(e.id==='beamer'){
+      // 絶頂照射の照準: 光条の通り道(幅=BEAM_W)を淡く示し、中心に流れる破線。最後の0.25秒(固定)は白く締まる
+      if(e.bmState!=='aim') continue;
+      const pr=clamp(1-e.bmT/BAL.BEAM_AIM,0,1);
+      const ox=e.x+Math.sin(e.t*1.1)*2, oy=e.y-e.r*1.4, ux=Math.cos(e.bmAng), uy=Math.sin(e.bmAng);
+      g.save();
+      g.globalAlpha=0.04+0.10*pr; g.strokeStyle='#ff5d9e'; g.lineWidth=BAL.BEAM_W; g.lineCap='butt';
+      g.beginPath(); g.moveTo(ox,oy); g.lineTo(ox+ux*BAL.BEAM_LEN, oy+uy*BAL.BEAM_LEN); g.stroke();
+      g.globalAlpha=0.35+0.55*pr; g.lineWidth=1.2; g.setLineDash([5,4]); g.lineDashOffset=-(performance.now()*0.02)%9;
+      g.beginPath(); g.moveTo(ox,oy); g.lineTo(ox+ux*BAL.BEAM_LEN, oy+uy*BAL.BEAM_LEN); g.stroke();
+      g.setLineDash([]);
+      if(e.bmT<=0.25){ g.globalAlpha=0.9; g.strokeStyle='#fff3c4'; g.lineWidth=1.6; g.beginPath(); g.moveTo(ox,oy); g.lineTo(ox+ux*BAL.BEAM_LEN, oy+uy*BAL.BEAM_LEN); g.stroke(); }
+      g.restore();
+      continue;
+    }
     if(e.id!=='gazer'&&e.id!=='bossgazer') continue;
     for(const ey of gazerEyes(e)){
       if(ey.state!=='aim') continue;
@@ -2202,7 +2265,7 @@ function drawHUD(g){
   const slv=sensLvOf(p);
   if(slv>0) chips.push(['sens','敏感'+ROMANS[slv]]);
   if(p.slow>0) chips.push(['slow','粘液']);
-  for(const c of p.charms) chips.push(['charm','魅了'+ROMANS[c.lv]+' '+((MONSTERS[c.id]&&MONSTERS[c.id].name)||c.id)]);
+  for(const c of p.charms) chips.push(['charm','魅了'+ROMANS[c.lv]+' '+((MONSTERS[c.id]&&MONSTERS[c.id].name)||c.id)+(c.lv<3?' '+Math.round(c.g||0)+'%':'')]);
   if(p.exhausted) chips.push(['pinned','疲弊']);
   if(p.freezeT>0) chips.push(['freeze','時間停止 '+Math.ceil(p.freezeT)+'s']);
   if(p.denyT>0) chips.push(['deny','寸止め '+Math.ceil(p.denyT)+'s']);
@@ -2233,7 +2296,7 @@ function drawHUD(g){
   g.font='9px '+FONT; g.fillStyle='rgba(130,140,180,0.55)'; g.textAlign='left';
   g.fillText('enemies:'+B.enemies.length+' fps:'+Math.round(G.fps)+(TS>1?' x'+TS:''), 12, H-6);
   g.textAlign='right'; g.fillStyle='rgba(255,255,255,0.3)'; g.font='bold 10px '+FONT;
-  g.fillText('v1.4 侵蝕デッキ', W-12, H-6);
+  g.fillText('v1.5 侵蝕デッキ', W-12, H-6);
 }
 function drawCards(g){
   const B=G.B, c=B.lvCards; if(!c) return;
@@ -2447,7 +2510,7 @@ function draw(){
   const g=ctx;
   g.setTransform(dpr*viewScale,0,0,dpr*viewScale,0,0);
   g.fillStyle='#151830'; g.fillRect(0,0,W,H);
-  BAKE_N=0; fpsGuard(); prebakeStep();
+  thrashGuard(); BAKE_N=0; FRAME_N++; fpsGuard(); prebakeStep();
 
   const inBattle=['battle','levelup','captured','survived','result'].includes(G.mode) && G.B;
   const sx=G.shake>0?rand(-G.shake,G.shake):0;
@@ -2686,12 +2749,14 @@ function draw(){
 /* ---------------- DOM用ミニアイコン ---------------- */
 function makeIconCanvas(id,size){
   const c=document.createElement('canvas');
-  c.width=size; c.height=size;
+  const d=Math.min(3,Math.max(1,Math.round(dpr||1)));      // アイコンも端末の実ピクセルで描く
+  c.width=size*d; c.height=size*d; c.style.width=c.style.height=size+'px';
   const g=c.getContext('2d');
+  g.scale(d,d);
   const fake=fakeEnemy(id);
   g.translate(size/2, size*0.72);
   const sc=size/(MONSTERS[id].r*(MONSTERS[id].boss?4.6:3.4));
   g.scale(sc,sc);
-  if(gfxHd()) drawEnemyShaded(g,fake); else drawBody(g,fake);   // アイコンも同じ絵で
+  if(gfxHd()) drawEnemyShaded(g,fake,clamp(Math.ceil(sc*d),1,3)); else drawBody(g,fake);   // アイコンも同じ絵で(拡大率ぶん高く焼く)
   return c;
 }

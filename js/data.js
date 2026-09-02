@@ -81,6 +81,11 @@ const BAL={
 
   /* --- 魅了(v0.4: 対象別・レベル制) --- */
   CHARM_DUR:26,            // 1段階の持続(接触で更新)。簡単には解けない
+  CHARM_GAUGE:100,         // 魅了は徐々に溜まり、ゲージが満ちると段階が上がる
+  CHARM_DECAY:5,           // ゲージの自然減衰 /s
+  CHARM_SLUG:45,           // ナメクジ接触1回ぶん
+  CHARM_QUEEN_PULSE:55, CHARM_QUEEN_TOUCH:40,
+  KNOW_MET2:4, KNOW_MET3:8,   // 学習: 何かされた回数で世代内の知識Lvが上がる
   CHARM_DMG_CUT:0.25,      // 魅了対象への与ダメ減 /Lv(Lv3=75%減)
   CHARM_DRIFT_CD:6.5,      // 無意識に寄っていく発作の間隔(Lv2+)
   CHARM_DRIFT_T:1.2,       // 発作の基本時間 ×Lv
@@ -121,11 +126,12 @@ const BAL={
   /* v1.3 */
   REENTER_D:780,           // 本家同様: これ以上離れた魔物は画面外の縁へ回り込んで再登場(同一個体)
   REENTER_R:560,           // 再登場時の距離(画面外すぐ)
-  GAZE_R:180, GAZE_ANG:1.25,   // ゲイザーの視界(半径・角度rad)。表示→閃光→催眠
+  GAZE_R:240, GAZE_ANG:0.8,    // ゲイザーの視界(半径・角度rad): 狭く、長く。表示→閃光→催眠
+  GAZE_BOSS_EXTRA:130,         // ボスゲイザーの視界はさらに長い(横幅は同じ)
   GAZE_AIM:1.4, GAZE_CD:5.5,
   HYPNO_LV_DUR:30,         // 催眠Lvが1段薄れるまでの秒数
   SELF_DUR:3.2, SELF_CD:9, // 催眠Ⅲ: その場で自慰を始める(秒)と再発の間隔
-  BEAM_AIM:0.5, BEAM_CD:9, BEAM_LEN:300, BEAM_W:14,   // 絶頂照射: 照準→発射。細く速い
+  BEAM_AIM:1.0, BEAM_CD:9, BEAM_LEN:300, BEAM_W:14,   // 絶頂照射: 照準1秒→発射。彼女が見て判断できる速さ(学習で避ける)
   MUSK_R:64,               // ゴブリンの雄臭が届く距離
   MUSK_SNIFF:1.6,          // 嗅ぐ発作の長さ
   GEM_CAP:600,
@@ -278,8 +284,8 @@ const MONSTERS={
     trait:'8秒ごとに【寸止め】(絶頂禁止7秒→切れた時に深い絶頂)。接触で快感',
   },
   gazer:{
-    name:'催眠ゲイザー', role:'催眠・視界', cost:9, unlock:650, tier:'large',
-    hp:220, spd:24, r:18, dmg:0, xp:12,
+    name:'催眠ゲイザー', role:'催眠・視界', cost:5, unlock:420, tier:'mid',
+    hp:70, spd:32, r:14, dmg:0, xp:5,
     desc:'触手の胴に据わった巨大な一つ目。瞳は常に彼女を追う。視界を紫に照らして狙いを定め、閃光で視界の中の者を催眠にかける。重ねられた催眠は判断を鈍らせ、抵抗を忘れさせ、その場で自分を慰めさせる。',
     trait:'視界(扇)を表示→閃光→【催眠Lv+1】。Ⅰ判断鈍化 / Ⅱ拘束に抵抗しない / Ⅲ自慰を始める',
   },
@@ -322,6 +328,17 @@ const TIER_CAP={fodder:3, mid:3, large:2, boss:1};          // デッキ枠(計9
 const DECK_CAP=Object.values(TIER_CAP).reduce((a,b)=>a+b,0);
 const TIER_FORMS={fodder:null, mid:null, large:['single','duo'], boss:['single']};  // null=全陣形
 const tierOf=id=>MONSTERS[id].tier||(MONSTERS[id].boss?'boss':'mid');
+/* ヒロインの学習(v1.5): 種族の脅威度(0-3)と、知ったあとの警戒半径。未知の相手は一律120で扱う */
+const SPEC_THREAT={
+  slug:1, goblin:0, leech:1, worm:1, ghost:0, slime:0, gas:1, imp:1, flower:2, mistslime:1, gtent:2,
+  hand:1, serpent:2, moth:1, pot:2, slugqueen:2, dreamtree:2, vampi:2,
+  spore:1, ghosthand:2, eye:1, succubus:3, gazer:3, beamer:3, bossgazer:3, web:2, tower:2,
+};
+const SPEC_DANGER={ flower:130, gtent:90, slug:55, worm:55, gas:60, slime:110, leech:60,
+  hand:50, serpent:120, moth:70, pot:95, slugqueen:80, dreamtree:125,
+  gazer:70, beamer:60, bossgazer:130, succubus:110, ghosthand:90, spore:60, eye:40, web:90, tower:60 };
+const TRAP_SPECIES=new Set(['flower','pot','web','dreamtree']);   // 知っていれば、そばのジェムは諦める
+const KNOW_NAMES=['未知','認識','理解','熟知'];
 const CARD_LV_MAX=5;
 const cardLvMult=lv=>({ hp:1+0.08*(lv-1), dmg:1+0.10*(lv-1) });   // Lvは主に頭数で強くなる
 const cardCost=(id,lv)=>{

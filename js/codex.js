@@ -290,7 +290,8 @@ CODEX.succubus={
 CODEX.gazer={
   lore:'触手の胴に据わった巨大な一つ目。瞳は常に標的を追い、視界を紫に照らしてから閃光で催眠にかける。催眠は自覚されない——だから「避けた」と本人は思う。重ねれば判断が鈍り、抵抗を忘れ、最後には人目も忘れて自分を慰めはじめる。',
   note:{
-    base:'催眠ゲイザー。大きい目玉。触手の上に乗ってる。ゆっくり。\n地面が紫に照らされたら、その扇の外へ出ること。光ったあと、少しぼんやりする。それだけ。',
+    title:'目玉のやつ',
+    base:'目玉のやつ。触手の上に、大きい目玉が乗ってる。ゆっくり。\n地面が紫に照らされたら、その扇の外へ出ること。光ったあと、少しぼんやりする。それだけ。',
     add:[
       '追記。光を見た。それだけ。\nそのあと、なにをしてたか、少し思い出せない。~~触られてた気がする~~ 疲れてただけだと思う。\n対策：扇の外へ。',
       '追記二。触手に巻かれた時、振りほどかなかった。振りほどく、という考えが、なかった。\n波が来た。~~光ってから、ずっと、あたたかくて~~\n※あの目玉のことを書こうとすると、なぜか筆が止まる。\n対策：近づかない。目を見ない。',
@@ -336,12 +337,13 @@ function codexStage(id){
   return 0;
 }
 const escC=s=>String(s).replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
-/* 手記の記法をHTMLへ: ~~取り消し~~ / {{乱れ}} / ※欄外 */
-function noteHtml(txt){
+/* 手記の記法をHTMLへ: ~~取り消し~~(heavy ならグリグリ消し) / 取り消し直後の一文は横に書きなぐった訂正 / {{乱れ}} / ※欄外 */
+function noteHtml(txt, heavy){
   return txt.split('\n').map(line=>{
     let l=escC(line);
-    l=l.replace(/~~(.+?)~~/g,'<s>$1</s>').replace(/\{\{(.+?)\}\}/g,'<span class="shaky">$1</span>');
-    if(line.startsWith('※')) return '<div class="margin">'+l+'</div>';
+    l=l.replace(/~~(.+?)~~\s*([^~。\n]*。?)/g,(m,a,b)=>'<s class="scr'+(heavy?' hard':'')+'">'+a+'</s>'+(b&&b.trim()?'<span class="scrawl">'+b+'</span>':''));
+    l=l.replace(/\{\{(.+?)\}\}/g,'<span class="shaky">$1</span>');
+    if(line.startsWith('※')) return '<div class="margin">↖ '+l.slice(1)+'</div>';
     return '<div>'+l+'</div>';
   }).join('');
 }

@@ -150,7 +150,7 @@ function defaultMeta(){
     v:3,
     essence:0, orbs:0,
     runs:0, captures:0,
-    gen:{ idx:1, battle:0 },              // 世代 / 世代内の戦闘数(0..GEN_LEN-1)
+    gen:{ idx:1, battle:0, know:{} },     // 世代 / 世代内の戦闘数(0..GEN_LEN-1) / 世代内の学習 {id:{met,cap}}
     cards:{ slug:{owned:true,lv:1}, worm:{owned:true,lv:1}, ghost:{owned:true,lv:1} },
     deck:['slug','worm','ghost'],
     formations:['scatter'],
@@ -175,7 +175,7 @@ function loadMeta(){
     if(d && (d.v===2||d.v===3)){
       META=Object.assign(defaultMeta(), d);
       META.v=3;
-      META.gen=Object.assign({idx:1,battle:0}, d.gen);
+      META.gen=Object.assign({idx:1,battle:0,know:{}}, d.gen); META.gen.know=META.gen.know||{};
       META.life=Object.assign(defaultMeta().life, d.life);
       for(const k of ['ailBy','capBy','capCause']) META.life[k]=Object.assign({}, (d.life||{})[k]||{});
       META.nightItems=Object.assign({mist:true}, d.nightItems||{});

@@ -31,13 +31,15 @@ const UI={
       if(now-this.retreatArm<2000){ endBattle('retreat'); }
       else{ this.retreatArm=now; $('btnRetreat').textContent='撤退する?'; setTimeout(()=>{ $('btnRetreat').textContent='撤退'; },2000); }
     });
-    $('handrow').addEventListener('click',e=>{
-      const el=e.target.closest('.hcard');
+    const onCard=e=>{
+      const el=e.target.closest('.hcard,.gchip');
       if(!el) return;
       initAudio();
       playCard(el.dataset.id, this.selForm);
       this.refreshHand();
-    });
+    };
+    $('handrow').addEventListener('click',onCard);
+    $('guestrow').addEventListener('click',onCard);
     $('formrow').addEventListener('click',e=>{
       const el=e.target.closest('.fchip');
       if(!el) return;
@@ -220,7 +222,7 @@ const UI={
     const wipeArmed=this._wipeArm && performance.now()-this._wipeArm<3000;
     return `
       <h1>ルミナ・サバイバーズ</h1>
-      <div class="sub">v1.4 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
+      <div class="sub">v1.5 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
       <p>あなたは<b>夜側の指揮者</b>。デッキから魔物を差し向け、AIで戦う光の少女<b>「ルミナ」</b>を追い詰める。<br>
       彼女に魔物が倒されるほどあなたのエネルギーとエッセンスは増え、彼女もまた強くなる。</p>
       <div style="text-align:center;color:var(--gold);font-size:12px;margin-bottom:8px">${esc(best)} ・ 通算${META.runs}戦 / 捕獲${META.captures}回</div>
@@ -479,8 +481,9 @@ const UI={
     const cards=ids.map(id=>{
       const m=MONSTERS[id], stg=codexStage(id);
       if(stg<0) return `<div class="ccard unknown"><div style="height:44px;line-height:44px;font-size:22px">？</div><div class="nm">？？？</div><div class="st">${esc(TIER_NAMES[tierOf(id)])}・未観測</div></div>`;
+      const kl=knowLv(id);
       return `<div class="ccard ${id===this.codexSel?'sel':''}" data-act="codex" data-arg="${id}">
-        <div class="stg">${stageTxt[stg]}</div>
+        <div class="stg">${stageTxt[stg]}${kl?'・学習'+ROMANS[kl]:''}</div>
         <div data-icon="${id}" data-size="44"></div>
         <div class="nm">${esc(m.name)}</div><div class="st">${esc(TIER_NAMES[tierOf(id)])}・${esc(m.role)}</div></div>`;
     }).join('');
@@ -493,7 +496,7 @@ const UI={
       if(note){
         entries.push(`<div class="entry"><span class="lbl">特徴</span>${noteHtml(note.base)}</div>`);
         for(let i=0;i<3;i++){
-          if(stg>=i+1) entries.push(`<div class="entry"><span class="lbl">追記${['一','二','三'][i]}</span>${noteHtml(note.add[i])}</div>`);
+          if(stg>=i+1) entries.push(`<div class="entry"><span class="lbl">追記${['一','二','三'][i]}</span>${noteHtml(note.add[i], i===2)}</div>`);
           else{ entries.push(`<div class="entry locked">（追記${['一','二','三'][i]}は、まだ書かれていない——${['この種族に何かされた夜','この種族が絡んだ絶頂','この種族への敗北'][i]}の後に増える）</div>`); break; }
         }
         if(stg>=3 && note.after) entries.push(`<div class="after">${esc(note.after)}</div>`);
@@ -507,13 +510,14 @@ const UI={
         <h3 style="margin-top:10px">夜側の解説</h3>
         <div class="review"><p>${esc(m.desc)}</p>${cx?'<p>'+esc(cx.lore)+'</p>':''}</div>
         <div class="kv" style="margin-top:6px">
+          <div>今世代の学習 <b>${esc(KNOW_NAMES[knowLv(sel)])}</b> <span>(脅威度${SPEC_THREAT[sel]||0}${knowLv(sel)>=2&&(SPEC_THREAT[sel]||0)>=3?'・何があっても避ける':''})</span></div>
           <div>彼女に討たれた <b>${rec.kills||0}</b></div>
           <div>彼女に何かした <b>${rec.met||0}</b>回</div>
           <div>絡んだ絶頂 <b>${rec.climax||0}</b></div>
           <div>この種族への敗北 <b>${rec.capture||0}</b></div>
         </div>
         <h3 style="margin-top:12px">ルミナの手記 <span style="color:var(--dim);font-weight:normal">(戦闘後、自室で)</span></h3>
-        <div class="notebook"><h4>${esc(m.name)}</h4>${entries.join('')||'<div class="locked">（この魔物の頁は、まだ白い）</div>'}</div>
+        <div class="notebook"><h4>${esc((cx.note&&cx.note.title)||m.name)}</h4>${entries.join('')||'<div class="locked">（この魔物の頁は、まだ白い）</div>'}</div>
       </div>`;
     }
     return `
@@ -598,24 +602,41 @@ const UI={
     this.syncBattleButtons();
     $('btnSpd').textContent='▶ ×'+(G.spd||1);
   },
+  /* 手札の要素(デッキ札+客札)。客札は別の帯に小さく並ぶ */
+  handEls(){ return [...$('handrow').children, ...$('guestrow').querySelectorAll('.gchip')]; },
   buildHand(){
-    const row=$('handrow');
-    row.innerHTML='';
+    const row=$('handrow'), grow=$('guestrow');
+    row.innerHTML=''; grow.innerHTML='';
+    const guests=G.B.hand.filter(h=>h.temp);
     for(const slot of G.B.hand){
       const m=MONSTERS[slot.id];
       const el=document.createElement('div');
-      el.className='hcard t-'+tierOf(slot.id)+(slot.temp?' temp':'');
       el.dataset.id=slot.id;
-      const tg={fodder:'雑',mid:'中',large:'大',boss:'王'}[tierOf(slot.id)];
-      el.innerHTML=`<div class="cost"></div><div class="tg">${slot.temp?'客':tg}</div><div class="combo" hidden></div><div class="cnt"></div><div class="nm">${esc(m.name)}</div><div class="cd" style="height:0%"></div>`;
-      el.insertBefore(makeIconCanvas(slot.id,44), el.firstChild);
-      row.appendChild(el);
+      if(slot.temp){
+        el.className='gchip t-'+tierOf(slot.id);
+        el.title=m.name+' — 宝箱の加勢(この戦闘のみ)';
+        el.innerHTML=`<div class="cost"></div><div class="tg">客</div><div class="combo" hidden></div><div class="cnt"></div><div class="nm">${esc(m.name)}</div><div class="cd" style="height:0%"></div>`;
+        el.insertBefore(makeIconCanvas(slot.id,44), el.firstChild);
+        grow.appendChild(el);
+      }else{
+        el.className='hcard t-'+tierOf(slot.id);
+        const tg={fodder:'雑',mid:'中',large:'大',boss:'王'}[tierOf(slot.id)];
+        el.innerHTML=`<div class="cost"></div><div class="tg">${tg}</div><div class="combo" hidden></div><div class="cnt"></div><div class="nm">${esc(m.name)}</div><div class="cd" style="height:0%"></div>`;
+        el.insertBefore(makeIconCanvas(slot.id,44), el.firstChild);
+        row.appendChild(el);
+      }
+    }
+    grow.hidden=guests.length===0;
+    if(guests.length){
+      const lbl=document.createElement('div'); lbl.className='glbl'; lbl.innerHTML='客 <b>'+guests.length+'</b>';
+      grow.insertBefore(lbl, grow.firstChild);
+      grow.scrollLeft=grow.scrollWidth;   // 新しく来た客が見えるよう右端へ
     }
     this.refreshHand();
   },
   refreshHand(){
     if(!G.B) return;
-    for(const el of $('handrow').children){
+    for(const el of this.handEls()){
       const id=el.dataset.id;
       const cost=playCost(id,this.selForm);
       el.querySelector('.cost').textContent=cost;
@@ -659,7 +680,7 @@ const UI={
     const em=enMax();
     $('enfill').style.width=(clamp(B.en/em,0,1)*100).toFixed(1)+'%';
     $('entext').textContent='EN '+Math.floor(B.en)+'/'+em;
-    for(const el of $('handrow').children){
+    for(const el of this.handEls()){
       const id=el.dataset.id;
       const slot=handSlot(id);
       const chk=canPlay(id,this.selForm);

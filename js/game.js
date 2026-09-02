@@ -28,8 +28,9 @@ function newHero(){
     dazeT:0, hypno:null,                 // 催眠電波(v1.1)
     denyT:0, denySrc:null, deepClimax:false, acheCd:2, numbT:0, watchedT:0, gazeCd:6,
     crestLv:0, freezeT:0, frozenAcc:0, suitT:0, suitPulse:0, begT:0, begCd:6, possessCd:0,   // v1.2 状態異常拡張
-    hypnoLv:0, hypnoT:0, selfT:0, selfCd:4, selfPhase:0,                                     // v1.3 催眠Lv・自慰
+    hypnoLv:0, hypnoT:0, selfT:0, selfCd:4, selfPhase:0, dodging:0,                          // v1.3 催眠Lv・自慰
     sniffT:0, sniffCd:0, sniffAt:null, muskCd:0, muskNear:false, muskCond:0, muskDone:false, aphroPrev:0,   // 雄臭
+    lastHypno:null, lastBeam:null,       // 直前の催眠/強制絶頂の源 {id,t}: 敗北・押し倒しの場面の帰属に使う
     /* 今夜の好み: ビルド選択の癖(戦闘ごとにランダム)。
        噛み合わない好みを引いた夜は、シナジー不足でDPSが枯れる */
     taste:(()=>{
@@ -156,7 +157,7 @@ function startBattle(){
   };
   spawnInitialProps();
   // 描き込みスプライトの事前焼き(デッキの種族×位相を最初の数十フレームで焼いておく)
-  G.gfxLv=2; G.prebake=[];
+  G.gfxLv=2; G.kCap=2; G.prebake=[];
   for(const id of new Set(META.deck.concat(['hand','worm']))){ if(MONSTERS[id]&&!MONSTERS[id].boss&&!MONSTERS[id].item){ for(let k=0;k<16;k++) for(let v=0;v<3;v++) G.prebake.push({id, t:k/8, vari:v}); } }
   G.mode='battle';
   G.cam.x=0; G.cam.y=0;
@@ -188,6 +189,7 @@ function endBattle(outcome){
     META.life.capBy[by]=(META.life.capBy[by]||0)+1;
     META.life.capCause[cz]=(META.life.capCause[cz]||0)+1;
     codexMark(by,'capture');
+    learn(by,'cap');
   }
   // 夜明け: ルミナはコインを数え、自分を強化する(ヴァンサバのコイン強化に相当)
   const coinGain=Math.round(B.heroCoins+(outcome==='survive'?40:10));
@@ -203,6 +205,7 @@ function endBattle(outcome){
   if(META.gen.battle>=BAL.GEN_LEN){
     META.gen.battle=0; META.gen.idx++;
     META.rot={dmg:0, ail:0, captures:0, battles:0};
+    META.gen.know={};   // 世代が変わると、覚えたことも忘れる(手記に書いた分だけ残る)
     rotReset=true;
     decay=luminaDecay();   // 世代の夜明け: 自己強化が一定数薄れる(ゼロには戻らない)
   }
@@ -244,6 +247,29 @@ function codexMet(id){
   const B=G.B; if(!B||!id) return;
   const last=B.metCd[id]; if(last!==undefined && B.time-last<1.5) return;
   B.metCd[id]=B.time; codexMark(id,'met');
+  learn(id,'met');
+}
+/* ================= 学習(世代内の知識) =================
+   何かされた回数(met)と敗北(cap)で 未知→認識→理解→熟知。世代リセットで忘れる。
+   手記を二度書いた種族(図鑑の追記二以上)は、次の世代でも一段だけ覚えている */
+function genKnow(id){ const K=META.gen.know||(META.gen.know={}); return K[id]||(K[id]={met:0,cap:0}); }
+function knowLv(id){
+  if(!MONSTERS[id]||MONSTERS[id].item) return 0;
+  const k=(META.gen.know||{})[id]||{met:0,cap:0};
+  let lv=(k.met>=1?1:0)+(k.met>=BAL.KNOW_MET2?1:0)+((k.cap>=1||k.met>=BAL.KNOW_MET3)?1:0);
+  if(typeof codexStage==='function' && codexStage(id)>=2) lv+=1;
+  return Math.min(3,lv);
+}
+function learn(id,kind){
+  if(!MONSTERS[id]||MONSTERS[id].item) return;
+  const before=knowLv(id); const k=genKnow(id);
+  if(kind==='cap') k.cap++; else k.met++;
+  const after=knowLv(id);
+  if(after>before && G.B && G.mode==='battle'){
+    const h=G.B.hero, m=MONSTERS[id];
+    floatTxt(h.x,h.y-84,'おぼえた: '+m.name+'は'+KNOW_NAMES[after],'#8fd3ff',11,1.6);
+    if(after>=2 && (SPEC_THREAT[id]||0)>=3) heroBubble(h,pickRand(['あれは……ぜったい、よける','つぎは、あれから、さきに……']),false,1);
+  }
 }
 /* 絶頂に絡んだ種族: 今ついている/直前5秒に何かしてきた種族 */
 function codexClimax(){
@@ -303,26 +329,35 @@ function awardAil(type){
 /* 魅了(v0.4): 種族別・レベル制。接触のたびその種族への段階が上がる。
    同じ種族ならどの個体にも効果が及ぶ。
    Lv1=与ダメ減 / Lv2=+無意識に寄る発作 / Lv3=+接触で魅了拘束 */
-function applyCharm(mon){
+/* 魅了(v1.5): 触れるたび即段階、ではなく、ゲージが溜まって閾値を越えたら一段上がる */
+function applyCharm(mon, amount){
   const h=G.B.hero;
   if(!mon||mon.dead) return;
   const res=1+0.22*(h.resist.charm||0);
   let c=charmEntry(h,mon.id);
   if(!c){
-    c={id:mon.id, lv:0, t:0, driftCd:BAL.CHARM_DRIFT_CD*rand(0.5,0.9)};
+    c={id:mon.id, lv:0, g:0, t:0, driftCd:BAL.CHARM_DRIFT_CD*rand(0.5,0.9)};
     h.charms.push(c);
   }
-  c.lv=Math.min(3,c.lv+1);
+  const add=(amount===undefined?BAL.CHARM_SLUG:amount)*h.sense/res;
+  c.g=(c.g||0)+add;
   c.t=BAL.CHARM_DUR*h.sense/res;
   codexMet(mon.id);
-  h.resist.charm=(h.resist.charm||0)+1;
-  heroBubble(h,[
-    '','え…なんで、めが…はなせな…',
-    'だめ…みちゃだめ、なのに…',
-    'このこ達の、そばに…いたい……',
-  ][c.lv],true,2);
-  S.charm();
-  awardAil('charm');
+  if(c.g>=BAL.CHARM_GAUGE && c.lv<3){
+    c.g-=BAL.CHARM_GAUGE; c.lv++;
+    h.resist.charm=(h.resist.charm||0)+1;
+    heroBubble(h,[
+      '','え…なんで、めが…はなせな…',
+      'だめ…みちゃだめ、なのに…',
+      'このこ達の、そばに…いたい……',
+    ][c.lv],true,2);
+    S.charm();
+    awardAil('charm');
+  }else{
+    if(Math.random()<0.5) heroBubble(h,pickRand(['……あ。いま、ちょっと、めが……','なんだろ、この、かんじ……','みつめちゃ、だめ……']),false,1);
+    parts(h.x,h.y-30,3,['#ffb3cf','#fff'],50,0.5);
+  }
+  if(c.lv>=3) c.g=Math.min(c.g,BAL.CHARM_GAUGE*0.99);
 }
 function removeCharm(h,id){
   const i=h.charms.findIndex(c=>c.id===id);
@@ -392,7 +427,7 @@ function enterClimax(){
   if(h.watchedT>0){ B.filmed++; META.life.filmed=(META.life.filmed||0)+1; codexMark('eye','climax'); floatTxt(h.x,h.y-70,'撮影された','#c98cff',11,1.4); }
   B.climaxN++;
   codexClimax();
-  if(h.sniffT>0 || (h.muskNear && h.heatLv>0)) conditionMusk();   // 匂いの中で達すると結びつく
+  if(h.sniffT>0 || (h.muskNear && h.heatLv>0 && h.muskCond>=12)) conditionMusk();   // 嗅いでいる最中、または匂いの中で他から高められていた末の絶頂が結びつく
   heroBubble(h,'や、だめ、いま……きちゃ……あ、ぁあああっ——!',true,3);
   if(B.climaxN===1) setBanner('絶頂','ルミナは立っていられない','#ff5d9e');
   if(!h.pinned && !h.charmBind){
@@ -624,7 +659,10 @@ function enterPin(mon){
   h.pinned=true; h.pinBy=mon||null;
   h.pinT=BAL.PIN_PULSE_T; h.pinEscape=0;
   h.vx=0; h.vy=0;
-  B.pinScene=sceneFor('pin', mon?mon.id:'default');
+  let sid=mon?mon.id:'default';
+  { const lh=h.lastHypno;   // 催眠Ⅱ以上で押し倒された時は、催眠の源(ゲイザー)の場面——抵抗しなかった理由はそこにある
+    if(h.hypnoLv>=2 && lh && B.time-lh.t<25 && SCENES.pin[lh.id] && !(mon&&mon.boss)) sid=lh.id; }
+  B.pinScene=sceneFor('pin', sid);
   B.pinSceneIdx=0; B.pinSceneT=0;
   setBanner('押し倒された!','もがいて逃れろ——スタミナかHPが尽きれば敗北','#ff5d7a');
   heroBubble(h,'はなれて……っ!',true,2);
@@ -725,6 +763,7 @@ function charmBindTick(dt){
 /* ================= 状態tick ================= */
 /* ================= v1.3: 催眠Lv・自慰・雄臭 ================= */
 function applyHypno(src){
+  if(src&&G.B) G.B.hero.lastHypno={id:src.id, t:G.B.time};
   const h=G.B.hero;
   h.hypnoLv=Math.min(3,h.hypnoLv+1); h.hypnoT=BAL.HYPNO_LV_DUR;
   h.dazeT=Math.max(h.dazeT,2.0);
@@ -740,6 +779,7 @@ function applyHypno(src){
 }
 /* 照射触手: 身体の準備を待たずに達してしまう */
 function forcedClimax(src){
+  if(src&&G.B) G.B.hero.lastBeam={id:src.id, t:G.B.time};
   const h=G.B.hero;
   if(h.climaxT>0) return;
   h.denyT=0; h.aphro=100;
@@ -786,7 +826,7 @@ function statesTick(h,dt){
   if(h.selfCd>0) h.selfCd-=dt;
   if(h.selfT>0){
     h.selfT-=dt;
-    applyPleasure(2.6*dt);
+    { const a0=h.aphro; applyPleasure(2.6*dt); h.aphroPrev+=h.aphro-a0; }   // 自慰の快感は雄臭の条件付けに数えない
     const el=BAL.SELF_DUR-h.selfT;
     if(h.selfPhase===0 && el>0.8){ h.selfPhase=1; heroBubble(h,pickRand(['……て、が……なんで、ここ……','ちがう、これは、その……たしかめてる、だけ……']),true,3); }
     if(h.selfPhase===1 && el>2.2){ h.selfPhase=2; heroBubble(h,pickRand(['ぁ……っ、だれか、みてる……? みてない……よね……','とまら、な……あと、すこし、だけ……']),true,3); }
@@ -820,19 +860,20 @@ function statesTick(h,dt){
           awardAil('sniff'); codexMet('goblin');
         }
       }
-      if(mk>0){ applyPleasure(0.8*mk*dt); if(h.heatLv===0 && Math.random()<dt*0.08*mk) applySensit(4); }
+      if(mk>0){ const a0=h.aphro; applyPleasure(0.8*mk*dt); h.aphroPrev+=h.aphro-a0; if(h.heatLv===0 && Math.random()<dt*0.08*mk) applySensit(4); }   // 性癖の快感は条件付けに数えない
     }
   }
   if(h.sniffT>0){
     h.sniffT-=dt;
-    applyPleasure(1.2*dt);
+    { const a0=h.aphro; applyPleasure(1.2*dt); h.aphroPrev+=h.aphro-a0; }   // 嗅ぐ発作そのものの快感は「他から受けた快感」ではない
     if(h.sniffAt&&!h.sniffAt.dead) h.face=h.sniffAt.x>h.x?1:-1;
     if(Math.random()<dt*2) parts(h.x+rand(-6,6),h.y-30,1,['#8fd36a','#c9e8a0'],30,0.7);
   }
   // 条件付け: 嗅いでいる間(または発情中に匂いの中で)に他から快感を受けると、匂いと快感が結びつく
-  const gain=Math.max(0,h.aphro-h.aphroPrev);
+  const gain=Math.max(0,h.aphro-h.aphroPrev);   // 雄臭系の自前の快感は上で aphroPrev に足して除いてある→他の魔物から受けた分だけ
   if(gain>0 && (h.sniffT>0 || (h.muskNear&&h.heatLv>0))) h.muskCond+=gain;
   if(h.muskCond>=25 && h.heatLv>0 && h.muskNear) conditionMusk();
+  if(!h.muskNear && h.sniffT<=0) h.muskCond=Math.max(0,h.muskCond-3*dt);   // 匂いから離れると結びつきは薄れる
   h.aphroPrev=h.aphro;
   // 時間停止: 触られ放題。解除の瞬間に溜めた快感が一気に来る
   if(h.freezeT>0){
@@ -920,9 +961,10 @@ function condTick(h,dt){
   for(let i=h.charms.length-1;i>=0;i--){
     const c=h.charms[i];
     c.t-=dt;
+    c.g=Math.max(0,(c.g||0)-BAL.CHARM_DECAY*dt);   // 溜まりは徐々に抜ける
+    if(c.lv<=0 && c.g<=0){ h.charms.splice(i,1); continue; }
     if(c.t<=0){
-      c.lv--;
-      if(c.lv<=0){ h.charms.splice(i,1); heroBubble(h,'…あれ? わたし、なにを…'); continue; }
+      if(c.lv>0){ c.lv--; if(c.lv<=0 && c.g<=0){ h.charms.splice(i,1); heroBubble(h,'…あれ? わたし、なにを…'); continue; } }
       c.t=BAL.CHARM_DUR*0.8;
     }
     // Lv2+: 無意識に寄っていく発作(その種族の最寄り個体が場にいる時だけ)
@@ -1091,17 +1133,18 @@ function aiUpdate(dt){
   if(Math.abs(p.vx)>12) p.face=p.vx>0?1:-1;
   p.moving=Math.hypot(p.vx,p.vy)>30;
 
-  const LBL={flee:'かいひ行動!', boss:'ボスかいひ!!', gem:'ジェム回収', heart:'ハートへ!',
+  const LBL={flee:'かいひ行動!', boss:'ボスかいひ!!', dodge:'よける!(おぼえてる)', gem:'ジェム回収', heart:'ハートへ!',
     prop:'燭台をこわして回復!', chest:'たからばこへ!', kite:'まちうけ・けん制', wait:'けいかい中',
     struggle:'ふりほどこうともがいている!',
     charmwalk:'ふらふらと、ちかづいていく…', heatwalk:'熱にまけて、よろめき寄る…',
     hypno:'……電波に、あしが……', item:'おちてる品へ!', beg:'……おねだり、なんて……してない……'};
-  const BBL={flee:'にげなきゃ〜!', boss:'おっきいのこわい!!', gem:'キラキラかいしゅう♪',
+  const BBL={flee:'にげなきゃ〜!', boss:'おっきいのこわい!!', dodge:'あれは…だめ、よけなきゃ!', gem:'キラキラかいしゅう♪',
     heart:'ハートみっけ!', prop:'燭台こわして回復しなきゃ', chest:'たからばこだ〜!',
     kite:'このきょりキープ…', wait:'つぎはどこから…?', struggle:'はなれてよ〜っ!',
     charmwalk:'…なんで、あしが…', heatwalk:'…あつくて、なにも…',
     hypno:'……あっち、いかなきゃ……', item:'なにか、おちてる!', beg:'……ちがう……'};
-  p.aiLabel=LBL[state];
+  if(p.dodging>0){ p.dodging-=dt; }
+  p.aiLabel=p.dodging>0?'よける!(おぼえてる)':LBL[state];
   if(state!==p.aiState){
     p.aiState=state;
     // エロ状態が乗っている間は、のんきなおしゃべりを封じる(台詞の主導権はエロ側)
@@ -1136,13 +1179,13 @@ function aiDecide(foc){
     if(!inSight(e,p) || e.seenT < BAL.NOTICE_T*(1.4-0.4*foc)) continue;
     const dx=p.x-e.x, dy=p.y-e.y;
     const d=Math.hypot(dx,dy)||0.001;
-    const DANGER={flower:130, gtent:90, slug:55, worm:55, gas:60, slime:110, leech:60,
-                  hand:50, serpent:120, moth:70, pot:95, slugqueen:80, dreamtree:125,
-                  gazer:70, beamer:60, bossgazer:130};
     const mobileBoss=e.boss && MONSTERS[e.id].spd>0 && e.id!=='bossgazer';   // 動かないボス/多眼のボスからは逃げ回らない(視界を見て避ける)
-    const danger=(mobileBoss?280:(DANGER[e.id]!==undefined?DANGER[e.id]:150))+e.r;
+    // 学習: 知らない相手は一律の距離感。知るほど種族ごとの間合いになり、脅威3の相手は熟知で広く避ける
+    const kl=knowLv(e.id), th=SPEC_THREAT[e.id]||0;
+    const base=mobileBoss?280:(kl===0?120:(SPEC_DANGER[e.id]!==undefined?SPEC_DANGER[e.id]:150));
+    const danger=base*(kl>=3&&th>=3?1.35:1)+e.r;
     if(d<danger){
-      let w=1-d/danger; w=w*w*(mobileBoss?3:1);
+      let w=1-d/danger; w=w*w*(mobileBoss?3:1)*(kl>=2?1+0.35*th:1);
       w*=1-0.28*charmLvFor(p,e);                               // 魅了された種族は脅威と思えない
       threat+=w; ax+=dx/d*w; ay+=dy/d*w;
       if(mobileBoss) bossNear=true;
@@ -1159,11 +1202,16 @@ function aiDecide(foc){
       if(d<c.r+30){ ax+=dx/d*0.35*foc; ay+=dy/d*0.35*foc; }
     }
   }
-  // ゲイザーの視界(紫に照らされた扇)と照射触手の照準線は見えるので避ける——催眠が深いほど避けられない
-  const dodge=foc*(1-0.25*p.hypnoLv);
-  if(dodge>0.1){
+  // ゲイザーの視界(紫に照らされた扇)と照射触手の照準線は見えるので避ける——
+  // ただし「それが危ない」と知っていなければ避けない(学習: 未知0 / 認識0.5 / 理解以上1)。催眠が深いほど避けられない。
+  // 理解以上の脅威3の相手には、周りの敵に殴られるのを覚悟で避ける(周囲への警戒を4割に落とす)
+  let ddx=0, ddy=0, strong=false;
+  const baseDodge=foc*(1-0.25*p.hypnoLv);
+  if(baseDodge>0.1){
     for(const e of B.enemies){
       if(e.dead||e.dormant||!inSight(e,p)) continue;
+      const kl=knowLv(e.id); if(kl===0) continue;
+      const dodge=baseDodge*(kl===1?0.5:1), th=SPEC_THREAT[e.id]||0;
       const eyes=gazerEyes(e);
       for(const ey of eyes){
         if(ey.state!=='aim') continue;
@@ -1171,10 +1219,10 @@ function aiDecide(foc){
         if(d>ey.r+40) continue;
         const da=((Math.atan2(dy,dx)-ey.ang+Math.PI*3)%TAU)-Math.PI;
         if(Math.abs(da)>ey.spread/2+0.35) continue;
-        // 扇の中心線から横へ抜ける+外へ
         const side=da>=0?1:-1;
-        ax+=(-Math.sin(ey.ang)*side)*0.7*dodge + dx/d*0.25*dodge;
-        ay+=( Math.cos(ey.ang)*side)*0.7*dodge + dy/d*0.25*dodge;
+        ddx+=(-Math.sin(ey.ang)*side)*0.7*dodge + dx/d*0.25*dodge;
+        ddy+=( Math.cos(ey.ang)*side)*0.7*dodge + dy/d*0.25*dodge;
+        if(kl>=2 && th>=3) strong=true;
       }
       if(e.id==='beamer' && e.bmState==='aim'){
         const ox=e.x, oy=e.y-e.r*1.4;
@@ -1183,11 +1231,18 @@ function aiDecide(foc){
         const along=rx*ux+ry*uy;
         if(along>0 && along<BAL.BEAM_LEN){
           const px=rx-ux*along, py=ry-uy*along, pd=Math.hypot(px,py)||0.001;
-          if(pd<60){ ax+=px/pd*1.6*dodge; ay+=py/pd*1.6*dodge; }
+          if(pd<60){ ddx+=px/pd*1.6*dodge; ddy+=py/pd*1.6*dodge; if(kl>=2) strong=true; }
         }
+      }
+      // 熟知した脅威3の相手からは、狙われる前から距離を取る
+      if(kl>=3 && th>=3 && MONSTERS[e.id].spd>0){
+        const dx=p.x-e.x, dy=p.y-e.y, d=Math.hypot(dx,dy)||0.001;
+        if(d<260){ ddx+=dx/d*0.35*dodge; ddy+=dy/d*0.35*dodge; }
       }
     }
   }
+  if(strong){ ax*=0.4; ay*=0.4; p.dodging=0.5; }
+  ax+=ddx; ay+=ddy;
 
   let dx=0, dy=0, state='wait';
 
@@ -1260,6 +1315,7 @@ function aiDecide(foc){
       for(const gm of B.gems){
         const d=Math.hypot(gm.x-p.x,gm.y-p.y);
         if(d>=bd) continue;
+        if(nearKnownTrap(gm.x,gm.y)) continue;   // 知っている罠のそばのジェムは諦める
         const cl=cloudAt(gm.x,gm.y);
         if(cl && p.diveT<=0){
           const w=cloudWorth(cl);
@@ -1302,6 +1358,12 @@ function aiDecide(foc){
       dx+=ax*1.5; dy+=ay*1.5;
     }
   }
+  // 学習した強敵の狙いを見たら、いま何をしていても横へ跳ぶのを優先する(捕まっている時以外)
+  if(strong && state!=='struggle'){
+    const m=Math.hypot(ddx,ddy)||1;
+    dx=dx*0.3+ddx/m*1.2; dy=dy*0.3+ddy/m*1.2;
+    state='dodge';
+  }
   // 魅了の発作: 無意識にその種族の最寄り個体へ寄っていく(Lv2+)
   if(p.charmDrift){
     const cm=nearestOfId(p.charmDrift.id);
@@ -1331,6 +1393,16 @@ function aiDecide(foc){
   p.steerX=dx; p.steerY=dy; p.steerState=state;
 }
 
+/* 知っている(理解以上)罠のそば */
+function nearKnownTrap(x,y){
+  const B=G.B;
+  for(const e of B.enemies){
+    if(e.dead||!TRAP_SPECIES.has(e.id)) continue;
+    if(knowLv(e.id)<2) continue;
+    if(Math.hypot(e.x-x,e.y-y)<95) return true;
+  }
+  return false;
+}
 /* ================= ヒロイン武器 ================= */
 function nearestEnemies(n,maxD){
   const B=G.B, p=B.hero;
@@ -1339,8 +1411,9 @@ function nearestEnemies(n,maxD){
     if(e.dead||e.dormant||e.state==='attached') continue;
     if(!inSight(e,p)) continue;                       // 見えていない敵は撃てない
     const d=Math.hypot(e.x-p.x,e.y-p.y);
-    // 魅了された相手は狙いが後回しになる(距離に下駄)
-    arr.push({e, d:d+charmLvFor(p,e)*140});
+    // 魅了された相手は狙いが後回し(距離に下駄)。理解した脅威は優先討伐(距離を差し引く)
+    const prio=knowLv(e.id)>=2?(SPEC_THREAT[e.id]||0)*90:0;
+    arr.push({e, d:d+charmLvFor(p,e)*140-prio});
     if(d>=maxD) arr.pop();
   }
   arr.sort((a,b)=>a.d-b.d);
@@ -2181,7 +2254,7 @@ function queenTick(e,dt,d,dx,dy){
     B.fx.push({kind:'pulse', x:e.x, y:e.y-e.r*0.6, t:0, life:0.8, r:110, col:'#ffb3cf'});
     sfx(180,420,0.5,'sine',0.05);
     if(d<110 && !p.pinned){
-      applyCharm(e);
+      applyCharm(e,BAL.CHARM_QUEEN_PULSE);
       applySensit(BAL.SENSIT_SLUG);
     }
   }
@@ -2294,11 +2367,15 @@ function eyeCycle(e,ey,dt,d,dx,dy,src){
   ey.t-=dt;
   const want=Math.atan2((p.y-10)-ey.y, p.x-ey.x);
   if(ey.state==='idle'){
-    ey.ang=want;
-    if(ey.t<=0 && d<BAL.GAZE_R+120 && inSight(e,p) && p.freezeT<=0){ ey.state='aim'; ey.t=ey.tmax; sfx(180,520,0.4,'sine',0.04); }
+    ey.ang=want+(ey.off||0);
+    if(ey.t<=0 && d<ey.r+60 && inSight(e,p) && p.freezeT<=0){
+      ey.state='aim'; ey.t=ey.tmax; sfx(180,520,0.4,'sine',0.04);
+      ey.off=ey.scatter?ey.scatter*rand(0.45,1.0):0;   // 脇の眼は本人から少しずらした角度に固定して狙う
+      ey.ang=want+ey.off;
+    }
   }else if(ey.state==='aim'){
-    let da=((want-ey.ang+Math.PI*3)%TAU)-Math.PI;
-    ey.ang+=clamp(da,-1.5*dt,1.5*dt);
+    let da=((want+(ey.off||0)-ey.ang+Math.PI*3)%TAU)-Math.PI;
+    ey.ang+=clamp(da,-(ey.scatter?0.5:1.5)*dt,(ey.scatter?0.5:1.5)*dt);
     if(ey.t<=0){
       ey.state='flash'; ey.t=0.28;
       B.fx.push({kind:'flash', x:ey.x, y:ey.y, ang:ey.ang, r:ey.r, spread:ey.spread, t:0, life:0.32});
@@ -2324,11 +2401,13 @@ function bossgazerTick(e,dt,d,dx,dy){
   if(d>120){ e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt; }
   for(const ey of e.eyes){
     // 眼柄の位置(胴の周りに三つ)
+    // 触手の先端に眼球。真ん中は本人を狙い、両脇は本人の周りをばらばらに狙う(逃げ先を潰す)
     const a=ey.base+Math.sin(e.t*0.8+ey.base)*0.12;
-    ey.dx=Math.cos(a)*e.r*1.15; ey.dy=Math.sin(a)*e.r*0.55-e.r*0.9;
-    const eo={x:e.x+ey.dx, y:e.y+ey.dy, ang:ey.ang, r:BAL.GAZE_R+30, spread:BAL.GAZE_ANG*0.85, state:ey.state, t:ey.t, tmax:BAL.GAZE_AIM*1.1, cd:BAL.GAZE_CD*1.2};
+    ey.dx=Math.cos(a)*e.r*1.9; ey.dy=Math.sin(a)*e.r*0.8-e.r*1.7;
+    const i=e.eyes.indexOf(ey);
+    const eo={x:e.x+ey.dx, y:e.y+ey.dy, ang:ey.ang, r:BAL.GAZE_R+BAL.GAZE_BOSS_EXTRA, spread:BAL.GAZE_ANG, state:ey.state, t:ey.t, tmax:BAL.GAZE_AIM*1.1, cd:BAL.GAZE_CD*1.2, scatter:i===1?0:(i===0?-1:1), off:ey.off||0};
     eyeCycle(e,eo,dt,d,dx,dy,e);
-    ey.ang=eo.ang; ey.state=eo.state; ey.t=eo.t;
+    ey.ang=eo.ang; ey.state=eo.state; ey.t=eo.t; ey.off=eo.off;
   }
 }
 function beamerTick(e,dt,d,dx,dy){
@@ -2342,7 +2421,7 @@ function beamerTick(e,dt,d,dx,dy){
     if(e.bmT<=0 && d<BAL.BEAM_LEN-30 && inSight(e,p) && p.climaxT<=0 && p.refractT<=0 && p.freezeT<=0){ e.bmState='aim'; e.bmT=BAL.BEAM_AIM; e.bmAng=want; sfx(900,1400,0.15,'sine',0.04); }
   }else if(e.bmState==='aim'){
     let da=((want-e.bmAng+Math.PI*3)%TAU)-Math.PI;
-    if(e.bmT>0.15) e.bmAng+=clamp(da,-1.6*dt,1.6*dt);   // 照準は速いが、最後の0.15秒は固定——横へ跳べば外れる
+    if(e.bmT>0.25) e.bmAng+=clamp(da,-1.2*dt,1.2*dt);   // 照準は1秒。最後の0.25秒は固定——見て横へ跳べば外れる
     if(e.bmT<=0){
       e.bmState='fire'; e.bmT=0.22;
       const ux=Math.cos(e.bmAng), uy=Math.sin(e.bmAng);
@@ -2531,7 +2610,7 @@ function contactHit(e){
     return;
   }
   if(e.id==='slugqueen'){
-    if(e.charmCd<=0){ e.charmCd=6; applyCharm(e); applySensit(BAL.SENSIT_SLUG); }
+    if(e.charmCd<=0){ e.charmCd=3; applyCharm(e,BAL.CHARM_QUEEN_TOUCH); applySensit(BAL.SENSIT_SLUG); }
     hurtHero(e.dmg,e,{});
     return;
   }
@@ -2569,8 +2648,8 @@ function contactHit(e){
   }
   if(e.id==='slug'){
     if(e.charmCd<=0){
-      e.charmCd=6;
-      applyCharm(e);
+      e.charmCd=2.5;
+      applyCharm(e,BAL.CHARM_SLUG);
       applySensit(BAL.SENSIT_SLUG);
     }
     hurtHero(e.dmg,e,{});
@@ -2620,6 +2699,12 @@ function beginCapture(src,cause){
   G.mode='captured';
   B.captureT=2.8;
   B.capturedBy=src?src.id:'default';
+  // 帰属: 直前6秒の強制絶頂、または催眠Ⅱ以上での敗北は、その源(照射触手/ゲイザー)の仕業として記録する(ボス個体に倒された時は除く)
+  { const h=B.hero, lb=h.lastBeam, lh=h.lastHypno;
+    if(!(src&&src.boss)){
+      if(lb && B.time-lb.t<6 && MONSTERS[lb.id]) B.capturedBy=lb.id;
+      else if(h.hypnoLv>=2 && lh && B.time-lh.t<25 && MONSTERS[lh.id]) B.capturedBy=lh.id;
+    } }
   B.captureCause=cause||'hp';
   B.hero.pinned=true;
   const bub={stamina:'ちから、が……はいらな……', charm:'だって……はなれたく、な……', hp:'そんな……っ'};

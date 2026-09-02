@@ -80,6 +80,8 @@ idは汎用カタログ準拠。効果はすべて数値・挙動レベルで表
 - 耐性: 拘束/魅了は受けるたび一時耐性(時間減衰)。祭壇「感応増幅」senseが全効果を深くする
 - 蔦の締め上げ(dot)は護り貫通
 
+- v1.5: 段階は接触で即時に上がるのではなく、種族ごとのゲージ(100)が閾値を越えたら一段上がる(3-10)
+
 ### 3-4. その他の状態
 
 | id | 名 | 付与元 | 機構 |
@@ -145,6 +147,36 @@ idは汎用カタログ準拠。効果はすべて数値・挙動レベルで表
   55fps超が8秒で戻す。`META.settings.gfxAuto=false` で固定。ベンチ(260体・全種・ウォーム)で v1.3 と同じ描画時間。
 - 個体差の描き分け: ゴブリン(顔3種・腰布2色・頭の丸み・黄みの白目)、ナメクジ(色味3種・半眼・涎・背の光沢・足の濡れ帯・ハートの縁)、
   ゴースト(裾が溶けるグラデ・魂の芯)、媚蛾(翅脈・眼状紋の色3種・胴の毛)、目玉系(下瞼の陰・glow()で shadowBlur 廃止)。
+
+### 3-10. v1.5 学習・魅了ゲージ・ゲイザー再調整・照準の可視化
+
+- **学習** `META.gen.know[id]={met,cap}`(世代リセットで消える)。`learn(id,'met'|'cap')` は codexMet / 敗北(capturedBy)から呼ばれる。
+  `knowLv(id)` = (met≥1)+(met≥KNOW_MET2 4)+(cap≥1 or met≥KNOW_MET3 8) + (codexStage≥2 なら+1)、上限3。KNOW_NAMES 未知/認識/理解/熟知。
+- aiDecide の間合い: `base = kl===0 ? 120 : SPEC_DANGER[id]`、`danger=base×(kl3かつ脅威3なら1.35)+r`、重み `×(1+0.35×脅威)`(理解以上)。
+  扇/照準線の回避 `dodge=foc×(1-0.25hypnoLv)×(kl1なら0.5、kl0なら0)`。理解以上の脅威3(SPEC_THREAT=3)が狙っている間は `strong`:
+  周囲の脅威ベクトル×0.4、操舵を `dx×0.3+回避方向×1.2` で上書き(state 'dodge'・p.dodging 0.5s・ラベル「よける!(おぼえてる)」)。
+  熟知した動く脅威3には260px以内で先回りの距離取り。`nearestEnemies` の優先度 `d-(kl≥2 ? 脅威×90 : 0)`。`nearKnownTrap` で理解以上の罠(TRAP_SPECIES)のそばのジェムを諦める。
+- **魅了ゲージ** `applyCharm(mon, amount)`: 種族エントリ `{id,lv,g,t}`。`g += amount×sense÷res`(既定 CHARM_SLUG 45、女王 CHARM_QUEEN_PULSE 55 / TOUCH 40)。
+  `g≥CHARM_GAUGE(100)` で `lv++`(旧来の段階効果・台詞・耐性)。charms tick で `g -= CHARM_DECAY(5)/s`、lv0 かつ g≤0 で消える。ナメクジ個体CD 6→2.5s。
+- **ゲイザー** GAZE_R 180→240、GAZE_ANG 1.25→0.8、gazer は tier 'mid'(cost5, unlock420, hp70, spd32)。ボス眼: r=GAZE_R+GAZE_BOSS_EXTRA(130)、
+  眼柄先端 `dx=cos·r·1.9, dy=sin·r·0.8-r·1.7`。`eyeCycle` の aim 開始時に `ey.off = scatter×rand(0.45,1.0)`(中央0・脇±)、追従は脇 0.5rad/s・中央 1.5rad/s。
+- **照射触手** BEAM_AIM 0.5→1.0、追従 1.2rad/s、`bmT>0.25` の間だけ追従。照準線は drawBeamer から外し `drawSightSectors` でワールド座標に描く
+  (BEAM_W の淡い帯+破線+最後0.25秒の白線)。焼き鍵から q8(bmAng) を除去。
+- **焼き解像度** `gfxK()=clamp(ceil(dpr×viewScale-0.1),1,2)`。renderShaded(cg,e,R,S,oy,k) は本体を k 倍で描き、合成(AO/トレス線/帯/リム)は実ピクセルで
+  行う(ずらし量×k)。SHADE/SIL/OUT は 512²。焼き canvas は S·k、置くときに S へ縮める。鍵に k を含める。k=2 のとき SPR_CACHE 上限 900→520。
+  `makeIconCanvas` は dpr 倍の canvas に描き、`drawEnemyShaded(g,e,k)` に拡大率ぶんの k を渡す。ガス玉(膨らみ4段)と女王(溜め4段)を鍵に追加。
+  キャッシュは LRU(触った鍵を Map の末尾へ。FIFO だと2秒周期の位相が戻る前に消えて焼き直しが止まらなかった)。鍵の vari は個体差で絵が変わる
+  3種(goblin/slug/moth)だけ(他種は3倍の無駄)。`thrashGuard()`: 焼き予算が45フレーム使い切られ続け、かつ満杯なら `G.kCap=1`(その戦闘は1倍焼き)。
+  fps ガードで gfxLv≤1 のときも1倍。prebake は上限の85%で止める。
+  目玉系(gazer/eye)の虹彩・瞳と照射触手の水晶は焼かずに `MON_IRIS` が毎フレーム生で重ねる(`NO_IRIS` フラグ・`drawIris`/`drawBeamerCrystal`)。
+  視線 q8 が鍵から消えて鍵空間が1/8になり、瞳は8方向の量子化ではなく滑らかに彼女を追う。
+- **手記の見た目** `noteHtml`: `~~x~~`→`<s class="scr">`(追記三は `.hard`)。CSS は SVG data-URI のループ線(26/22px周期)2層、hard は 14/11/17px の3層+斜線で塗り潰し。
+  直後の文は `.scrawl`(Yomogi・rotate(-3.5deg) skewX(-7deg)・∧印)。`※`行は `.margin`(手書き・傾き)。`note.title` があれば手記の見出しに使う(ゲイザーは「目玉のやつ」——本人は催眠の語を書けない)。
+- **客カードの帯** `UI.buildHand` が temp 札を `#guestrow`(`.gchip` 48×58・横スクロール・「客 N」ラベル)へ分け、`handEls()` で両帯を走査。
+- **敗北の帰属** `beginCapture`: ボス個体に倒された時以外、直前6秒の `lastBeam`(forcedClimax)→ beamer、催眠Ⅱ以上かつ25秒内の `lastHypno` → gazer/bossgazer を capturedBy にする。
+  `enterPin` も催眠Ⅱ以上なら催眠源の pin 場面を選ぶ(pinBy は実際の個体のまま)。これで SCENES.capture.gazer/beamer と pin.gazer/bossgazer に到達できる。
+- **雄臭の条件付け(修正)** 嗅ぐ/性癖/自慰の applyPleasure は差分を `aphroPrev` に足して除外(他から受けた快感だけ muskCond に積む)。
+  匂いの外では muskCond が 3/s で薄れる。絶頂経由の結びつきは `sniffT>0` または `muskCond≥12` を要求。
 
 ### 3-6. 回復=燭台
 
@@ -333,6 +365,17 @@ Lv1カードの初戦は素の3体散開のまま——「最初は勝てない�
   新構成(手/ワーム/淫蛇/ガス/壺/淫夢の樹)は40〜100秒で捕獲(淫蛇HP・ワームスタミナ)
 - Lv3中堅デッキ(ナメクジ/ワーム/ゴースト/淫蛇/媚蛾・5陣形)は場288体まで埋めるが彼女Lv35で生存。
   ロージェム込みの経験値供給が v0.9 より約1.25倍——中盤の壁は次版で調整
+
+### v1.5 検証結果
+
+- 魅了ゲージ: ナメクジ接触 45→90→(135)Ⅰ残35→72→(109)Ⅱ残9。20秒放置で0まで減衰(段階は残る)。
+- 学習: met1→認識、met4→理解、met8→熟知、敗北1→+1。世代交代で know が空になる。
+- 回避(学習を固定・4戦×60秒を3回・ゲイザー2+照射1): 未知 光条命中45〜60%/閃光41〜52%・回避行動0秒 → 熟知 12〜29%/2〜5%・回避行動74〜85秒(認識は中間で分散が大きい)。
+- ボスゲイザー: 脇の眼の off ≈ ±0.46〜1.0rad で固定、中央0。三眼は交互に aim。
+- 初期デッキ(Lv1)生存(彼女Lv23-24)、MID 44-147秒・Lv5新構成 34-40秒で捕獲。実戦デッキ(9種)49秒・最大295体でキャッシュ194枚(2倍焼き・溢れなし)。
+  22種同時の描画ベンチは鍵空間が上限を超えて焼き直しが続くが、thrashGuard が約5秒で1倍へ落とす(ヘッドレスのソフト描画で 113→86ms/フレーム)。
+- レビュー修正: 照準線がワールド座標で299px届く、焼き canvas は S×2、ガス/女王の鍵が溜めで変わる、強制絶頂6秒内の敗北→beamer、
+  催眠Ⅱでの敗北/押し倒し→gazer、雄臭は性癖Ⅰのまま60秒嗅いでも昇格せず(自前の快感を除外)、他から快感を受けながら嗅ぐと結びつく。
 
 ### v1.3 検証結果
 
