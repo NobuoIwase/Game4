@@ -9,7 +9,7 @@ const BAL={
   GEN_LEN:4,               // この戦数ごとにヒロインの経験がリセット
   FIELD_CAP:260,           // 場に出せる魔物の上限(超えると召喚不可)——画面を埋める
   EN_BASE:14, EN_PER_LV:3, EN_MAX:80,
-  EN_REGEN:0.9, EN_REGEN_LV:0.08,
+  EN_REGEN:1.0, EN_REGEN_LV:0.08,      // v1.1: 初期回復を少し上げた
   EN_START:12,
   CARD_CD_BASE:1.2, CARD_CD_COST:0.09,   // カードCD = BASE + コスト×COST
 
@@ -105,6 +105,7 @@ const BAL={
   PROP_ITEM:0.30,          // アイテムが出る確率(基礎)
   PROP_HEAL:20, PROP_WIPE:5, PROP_VACUUM:3, PROP_BONUS:2,   // 30の内訳
   LOGEM_V:0.5,             // ロージェム(頭数ボーナス分の雑魚が落とす)の経験値
+  LUMINA_DECAY:5,          // 世代の夜明けで薄れる自己強化の段数(ゼロには戻らない)
   GEM_CAP:600,
 
   CHEST_TIMES:[40,110,180,250],
@@ -229,6 +230,13 @@ const MONSTERS={
     desc:'桃色の花を咲かせた黒い樹。根を伸ばして近づく者の脚を繋ぎ、幹の洞から地上ワームを生み続ける。花の香は甘く、近いほど身体が熱を覚える。召喚は1戦に1度。',
     trait:'根の繋留/ワーム生成/甘香の領域',
   },
+  /* ---- 設置物(デッキには入らない。夜側のアイテムで建てる) ---- */
+  tower:{
+    name:'催眠電波の塔', role:'設置物', cost:0, unlock:-1, tier:'item', item:true,
+    hp:420, spd:0, r:14, dmg:0, xp:0,
+    desc:'骨と肉で組まれた小さな塔。頂の眼球が数秒ごとに紫の電波を放ち、浴びた者の思考をざらつかせて塔のほうへ足を向けさせる。',
+    trait:'3.5秒ごとに催眠電波(思考鈍化+引き寄せ)',
+  },
   vampi:{
     name:'ヴァンピロード', role:'ボス', cost:26, unlock:900, tier:'boss',
     hp:950, spd:55, r:28, dmg:20, xp:60, boss:true,
@@ -239,7 +247,8 @@ const MONSTERS={
 /* 階級: 雑魚/中型は全陣形、大型は精鋭型のみ、ボスは単騎 */
 const TIERS=['fodder','mid','large','boss'];
 const TIER_NAMES={fodder:'雑魚', mid:'中型', large:'大型', boss:'ボス'};
-const TIER_CAP={fodder:2, mid:2, large:1, boss:1};          // デッキ枠(計6)
+const TIER_CAP={fodder:3, mid:3, large:2, boss:1};          // デッキ枠(計9)
+const DECK_CAP=Object.values(TIER_CAP).reduce((a,b)=>a+b,0);
 const TIER_FORMS={fodder:null, mid:null, large:['single','duo'], boss:['single']};  // null=全陣形
 const tierOf=id=>MONSTERS[id].tier||(MONSTERS[id].boss?'boss':'mid');
 const CARD_LV_MAX=5;
@@ -265,6 +274,23 @@ const FORMATIONS={
     desc:'楕円の円陣で取り囲み、輪を締める。' },
   duo:{ name:'双璧', count:2, factor:1.8, unlock:300, elite:1.25,
     desc:'2体を強化(×1.25)して並べる。大型向きの少数精鋭。' },
+  burst:{ name:'大散開', count:7, factor:2.5, unlock:260,
+    desc:'散開の強化版。7方向から一斉に放ち、輪を一気に狭める。' },
+};
+
+/* ---------------- 夜側のアイテム(戦闘中、場に直接置く) ----------------
+   オート指揮がカードを回す間、プレイヤーが手を動かす場所。研究所でエッセンス解放 */
+const NIGHT_ITEMS={
+  mist:  { name:'媚薬の霧壺',   icon:'🌫', cost:6,  cd:14, unlock:0,
+    desc:'指した場所に媚薬の霧を大きく滞留させる(9秒)。吸えば敏感化が進む。' },
+  pool:  { name:'粘沼',         icon:'〰', cost:5,  cd:12, unlock:120,
+    desc:'指した場所に粘液の沼を敷く(14秒)。踏んだ彼女の足が鈍る。' },
+  rune:  { name:'淫紋の罠',     icon:'✧', cost:7,  cd:16, unlock:250,
+    desc:'見えない淫紋を伏せる(45秒)。踏むと快感が弾けてよろめき、這い寄る手が3体湧く。' },
+  tower: { name:'催眠電波の塔', icon:'📡', cost:12, cd:30, unlock:350,
+    desc:'塔を建てる(壊されるか40秒)。3.5秒ごとの電波で彼女の思考を鈍らせ、足を塔へ引き寄せる。彼女は塔を攻撃できる。' },
+  fake:  { name:'偽りの宝箱',   icon:'🎁', cost:9,  cd:40, unlock:450,
+    desc:'宝箱の偽物を置く。彼女は宝箱に目がない——開けると媚薬の霧と手の群れが噴き出す。' },
 };
 
 /* ---------------- 祭壇(オーブによる初期状態の書き換え) ----------------

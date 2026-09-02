@@ -44,6 +44,32 @@ const UI={
       this.selForm=el.dataset.id;
       this.refreshFormRow(); this.refreshHand();
     });
+    // 夜側のアイテム: チップで選び、画面をタップして置く
+    $('itemrow').addEventListener('click',e=>{
+      const el=e.target.closest('.ichip');
+      if(!el) return;
+      initAudio();
+      this.armItem(this.armed===el.dataset.id?null:el.dataset.id);
+    });
+    cv.addEventListener('pointermove',e=>{ G.mouse=this.worldPos(e); });
+    cv.addEventListener('pointerdown',e=>{
+      if(!this.armed || G.mode!=='battle') return;
+      const w=this.worldPos(e);
+      G.mouse=w;
+      if(placeItem(this.armed,w.x,w.y)){ this.armItem(null); }
+      e.preventDefault();
+    });
+    window.addEventListener('keydown',e=>{ if(e.key==='Escape' && this.armed) this.armItem(null); });
+  },
+  worldPos(e){
+    const r=cv.getBoundingClientRect();
+    const sx=(e.clientX-r.left)/r.width*W, sy=(e.clientY-r.top)/r.height*H;
+    return {x:sx-W/2+G.cam.x, y:sy-H/2+G.cam.y};
+  },
+  armItem(id){
+    this.armed=id||null; G.armItem=this.armed;
+    cv.classList.toggle('arm',!!this.armed);
+    this.refreshItems();
   },
 
   action(act,arg){
@@ -92,6 +118,16 @@ const UI={
         }else S.deny();
         this.show('lab'); break;
       }
+      case 'unitem':{
+        const it=NIGHT_ITEMS[arg];
+        if(it && !META.nightItems[arg] && META.essence>=it.unlock){
+          META.essence-=it.unlock; META.nightItems[arg]=true;
+          saveMeta(); S.buy();
+        }else S.deny();
+        this.show('lab'); break;
+      }
+      case 'codex':
+        this.codexSel=arg; this.show('codex'); break;
       case 'unform':{
         const f=FORMATIONS[arg];
         if(!META.formations.includes(arg) && META.essence>=f.unlock){
@@ -149,7 +185,7 @@ const UI={
     bgmStart('home');
     this.refreshRes();
     const fn={home:this.htmlHome, deck:this.htmlDeck, lab:this.htmlLab,
-      altar:this.htmlAltar, status:this.htmlStatus}[name];
+      altar:this.htmlAltar, status:this.htmlStatus, codex:this.htmlCodex}[name];
     this.root.innerHTML='<div class="screen"><div class="inner'+(name==='home'?'':' wide')+'" style="'+(name==='home'?'margin-top:120px;background:rgba(17,15,34,.86)':'')+'">'+fn.call(this)+'</div></div>';
     this.attachIcons();
     if(keepScroll){
@@ -178,21 +214,23 @@ const UI={
     const wipeArmed=this._wipeArm && performance.now()-this._wipeArm<3000;
     return `
       <h1>ルミナ・サバイバーズ</h1>
-      <div class="sub">v1.0 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
+      <div class="sub">v1.1 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
       <p>あなたは<b>夜側の指揮者</b>。デッキから魔物を差し向け、AIで戦う光の少女<b>「ルミナ」</b>を追い詰める。<br>
       彼女に魔物が倒されるほどあなたのエネルギーとエッセンスは増え、彼女もまた強くなる。</p>
       <div style="text-align:center;color:var(--gold);font-size:12px;margin-bottom:8px">${esc(best)} ・ 通算${META.runs}戦 / 捕獲${META.captures}回</div>
       <div class="menu-grid">
         <button data-act="battle">▶ 出撃<small>5分間の観測戦闘</small></button>
-        <button class="sub" data-act="go" data-arg="deck">🃏 デッキ編成<small>${META.deck.length}/6 枚</small></button>
+        <button class="sub" data-act="go" data-arg="deck">🃏 デッキ編成<small>${META.deck.length}/${DECK_CAP} 枚</small></button>
         <button class="sub" data-act="go" data-arg="lab">✦ 研究所<small>解放・強化・融合・陣形</small></button>
         <button class="sub" data-act="go" data-arg="altar">◉ オーブの祭壇<small>ルミナの初期状態を書き換える</small></button>
-        <button class="sub" data-act="go" data-arg="status">👁 観測記録<small>ルミナのステータス</small></button>
+        <button class="sub" data-act="go" data-arg="status">👁 観測記録<small>称号・総評・自己評価</small></button>
+        <button class="sub" data-act="go" data-arg="codex">📖 図鑑<small>魔物の解説と、彼女の手記</small></button>
         <button class="sub" data-act="autoDefault">🤖 オート初期値: ${META.settings.autoplay?'ON':'OFF'}<small>戦闘開始時のオート指揮</small></button>
       </div>
       <details style="margin-top:6px"><summary style="font-size:11px;color:var(--dim);cursor:pointer">あそびかた / ルール</summary>
       <p style="font-size:11.5px">
       ・戦闘中、ENを払ってカードの魔物を陣形つきで召喚。ルミナに倒されたぶんENとエッセンスが還元される。<br>
+      ・<b>夜側のアイテム</b>(媚薬の霧壺など)はカード列の下のチップで選び、<b>画面をタップした場所に置く</b>。オート指揮中もあなたの手で罠を仕掛けられる。<br>
       ・拘束役は接触すると<b>四肢に絡みつく</b>。ルミナは移動と攻撃でもがいて引き剥がすが、<b>スタミナ</b>を消耗する。<br>
       ・スタミナが薄い時に拘束すると<b>押し倒し</b>。<b>HPかスタミナを削りきれば敗北=捕獲</b>。与ダメ・異常・捕獲で<b>オーブ</b>獲得。<br>
       ・ルミナの回復ハートは、彼女が<b>燭台を壊した時だけ</b>落ちる。回復させたくなければ燭台の周りで待ち伏せを。<br>
@@ -226,7 +264,7 @@ const UI={
         <div class="cards">${slots}${pool.map(id=>card(id,false)).join('')}</div>`;
     }).join('');
     return `
-      <h2>🃏 デッキ編成 <span style="font-size:12px;color:var(--dim)">(${META.deck.length}/6)</span></h2>
+      <h2>🃏 デッキ編成 <span style="font-size:12px;color:var(--dim)">(${META.deck.length}/${DECK_CAP})</span></h2>
       <div class="note">雑魚・中型は全陣形で出せる。大型は<b>精鋭/双璧</b>の少数精鋭のみ、ボスは<b>単騎</b>。戦闘中に彼女が開けた宝箱からは、ランダムな魔物がこちらの手札に加わる(その戦闘限り・枚数制限なし)。</div>
       ${sections}
       <div class="note">陣形は戦闘中に選択します。解放済み: ${META.formations.map(f=>esc(FORMATIONS[f].name)).join(' / ')}</div>
@@ -237,6 +275,7 @@ const UI={
     const rows=[];
     for(const id in MONSTERS){
       const m=MONSTERS[id], st=META.cards[id];
+      if(m.item) continue;
       if(st&&st.owned){
         const atMax=st.lv>=CARD_LV_MAX;
         const cost=atMax?0:cardUpCost(id,st.lv);
@@ -278,6 +317,15 @@ const UI={
           :`<button class="sub" data-act="unform" data-arg="${fid}" ${META.essence<f.unlock?'disabled':''}>解放 ✦${f.unlock}</button>`}
       </div>`;
     }).join('');
+    const items=Object.keys(NIGHT_ITEMS).map(id=>{
+      const it=NIGHT_ITEMS[id], has=!!META.nightItems[id];
+      return `<div class="lrow">
+        <div class="info"><div class="nm">${it.icon} ${esc(it.name)} <span style="color:var(--dim);font-size:10px">EN${it.cost} / CD${it.cd}s</span></div>
+        <div class="ds">${esc(it.desc)}</div></div>
+        ${has?'<span style="color:var(--green);font-size:11px">解放済</span>'
+          :`<button class="sub" data-act="unitem" data-arg="${id}" ${META.essence<it.unlock?'disabled':''}>解放 ✦${it.unlock}</button>`}
+      </div>`;
+    }).join('');
     return `
       <h2>✦ 研究所 <span style="font-size:12px;color:var(--gold)">エッセンス ${Math.floor(META.essence)}</span></h2>
       <div class="list">${rows.join('')}</div>
@@ -285,6 +333,8 @@ const UI={
       <div class="list">${fuses.join('')||'<p>すべて融合済み。</p>'}</div>
       <h2 style="font-size:14px">陣形(出現方法)</h2>
       <div class="list">${forms}</div>
+      <h2 style="font-size:14px">夜側のアイテム <span style="font-size:11px;color:var(--dim);font-weight:normal">(戦闘中に画面をタップして置く)</span></h2>
+      <div class="list">${items}</div>
       <div class="row"><button data-act="go" data-arg="home">← もどる</button></div>`;
   },
 
@@ -331,8 +381,25 @@ const UI={
     const body=fallBody(), mind=fallMind();
     const bodyStg=stageName(body,FALL_BODY_STAGES), mindStg=stageName(mind,FALL_MIND_STAGES);
     const mods=ALTAR.filter(a=>altarLv(a.id)>0).map(a=>esc(a.name)+' '+genNum(altarLv(a.id))).join(' / ')||'なし';
+    const titles=heldTitles();
+    const honor=titles.filter(t=>t.kind==='honor'), ero=titles.filter(t=>t.kind==='ero');
+    const tcard=t=>`<div class="tcard ${t.kind}">
+        <div class="tn">${t.kind==='honor'?'📜':'💋'} ${esc(t.name)}${t.stage?`<small>s${t.stage}・${esc(t.line)}</small>`:''}</div>
+        <div class="td">${esc(t.desc)}${t.long?'<br><span style="color:var(--dim)">'+esc(t.long)+'</span>':''}</div>
+        <div class="tc">取得条件: ${esc(t.condText)}</div></div>`;
+    const review=heroReview(), self=heroSelfEval();
+    const L=META.life||{}, cb=L.capBy||{};
+    const topCap=Object.keys(cb).filter(id=>MONSTERS[id]).sort((a,b)=>cb[b]-cb[a]).slice(0,3)
+      .map(id=>esc(MONSTERS[id].name)+' '+cb[id]+'回').join(' / ')||'まだ無い';
+    const ailBy=L.ailBy||{};
+    const ailTxt=Object.keys(ailBy).filter(k=>AILMENTS[k]).map(k=>esc(AILMENTS[k].name)+' '+ailBy[k]).join(' / ')||'—';
     return `
       <h2>👁 観測記録 — ルミナ</h2>
+      <div class="stcard"><h3>称号</h3>
+        ${honor.map(tcard).join('')}
+        ${ero.length?`<div class="divider">——立派な響きの、その裏の記録——</div>${ero.map(tcard).join('')}`
+          :'<div class="note">裏の記録は、まだ無い。称号は変化より追加で増え、条件は厳しい。</div>'}
+      </div>
       <div class="stcard"><h3>人物</h3>
         <div class="kv">
           <div>名前 <b>ルミナ</b>(成人・光の守り手)</div>
@@ -352,35 +419,96 @@ const UI={
       <div class="stcard"><h3>書き換え(祭壇・永続)</h3>
         <div class="kv"><div>${mods}</div></div>
       </div>
-      <div class="stcard"><h3>ルミナの自己強化 <span style="color:var(--dim);font-weight:normal">(彼女が夜明けに買う・永続)</span></h3>
+      <div class="stcard"><h3>ルミナの自己強化 <span style="color:var(--dim);font-weight:normal">(彼女が夜明けに買う)</span></h3>
         <div class="kv">
           ${Object.keys(LUMINA_UPG).map(id=>{
             const r=luminaRank(id);
             return `<div>${esc(LUMINA_UPG[id].name)} <b>${r?genNum(r):'—'}</b><span>/${LUMINA_UPG[id].max}</span></div>`;
           }).join('')}
         </div>
-        <div class="note">貯えたコイン: ${Math.floor((META.lumina&&META.lumina.coins)||0)} — 戦闘中に彼女が拾ったジェムの一部がコインになる。放っておくと数日で大幅に強くなる。</div>
+        <div class="note">貯えたコイン: ${Math.floor((META.lumina&&META.lumina.coins)||0)} — 戦闘中に彼女が拾ったジェムの一部がコインになる。<b>世代の夜明けごとに${BAL.LUMINA_DECAY}段だけ薄れる</b>(初期値には戻らない——世代を跨ぐごとに土台が少しずつ上がる)。</div>
       </div>
       <div class="stcard"><h3>経過 — 堕ちの二軸 <span style="color:var(--dim);font-weight:normal">(世代内でリセット)</span></h3>
         <div class="kv spread"><div>肉体</div><div class="stagename">${bodyStg} (${Math.round(body)})</div></div>
         <div class="bar"><i style="width:${body}%;background:linear-gradient(90deg,#ff86b3,#ff5d7a)"></i></div>
         <div class="kv spread" style="margin-top:6px"><div>精神</div><div class="stagename">${mindStg} (${Math.round(mind)})</div></div>
         <div class="bar"><i style="width:${mind}%;background:linear-gradient(90deg,#b46cff,#7a3ff2)"></i></div>
-        <div class="note">肉体=今世代で受けた損耗と異常の蓄積 / 精神=捕獲された経験。数値は機構値。</div>
+        <div class="kv" style="margin-top:6px"><div>現在の反応段階 <b>${esc(TIER_NAMES_JP[self.tier])}</b></div></div>
+        <div class="note">肉体=今世代で受けた損耗と異常の蓄積 / 精神=捕獲された経験。反応段階は二軸から導く(心は拒み、体は応える期間が最も長い)。</div>
       </div>
       <div class="stcard"><h3>記録</h3>
         <div class="kv">
           <div>通算戦闘 <b>${META.runs}</b></div>
           <div>捕獲 <b>${META.captures}</b></div>
-          <div>総与ダメージ <b>${META.life.dmg}</b></div>
-          <div>異常付与 <b>${META.life.ail}</b></div>
-          <div>彼女に討たれた魔物 <b>${META.life.kills}</b></div>
-          <div>通算絶頂 <b>${META.life.climax||0}</b>回</div>
-          <div>彼女のボス討伐 <b>${META.life.herBoss}</b></div>
+          <div>生存 <b>${L.survive||0}</b> <span>(連続${META.streak||0})</span></div>
+          <div>総与ダメージ <b>${L.dmg}</b></div>
+          <div>異常付与 <b>${L.ail}</b></div>
+          <div>彼女に討たれた魔物 <b>${L.kills}</b></div>
+          <div>通算絶頂 <b>${L.climax||0}</b>回 <span>(一夜最多${L.bestClimax||0})</span></div>
+          <div>彼女のボス討伐 <b>${L.herBoss}</b></div>
         </div>
+        <div class="kv" style="margin-top:6px"><div>とどめを刺した種族 <b>${topCap}</b></div></div>
+        <div class="kv" style="margin-top:4px"><div>異常の内訳 <span>${ailTxt}</span></div></div>
       </div>
-      <div class="note">※詳細な観測テキスト(称号・総評など)は scenes.js 系のフックに別途拡張予定。</div>
-      <div class="row" style="margin-top:8px"><button data-act="go" data-arg="home">← もどる</button></div>`;
+      <div class="stcard"><h3>総評 <span style="color:var(--dim);font-weight:normal">(観測者の筆)</span></h3>
+        <div class="review">${review.map(p=>'<p>'+esc(p)+'</p>').join('')}</div>
+        <div class="divider">——本人による自己評価——</div>
+        <div class="selfeval">${self.lines.map(l=>'<p>'+esc(l)+'</p>').join('')}</div>
+        ${self.heart?`<div class="heart">〔心の声〕${esc(self.heart)}</div>`:''}
+      </div>
+      <div class="row" style="margin-top:8px"><button data-act="go" data-arg="codex">📖 図鑑</button><button data-act="go" data-arg="home">← もどる</button></div>`;
+  },
+
+  /* ---------- 図鑑 ---------- */
+  htmlCodex(){
+    const ids=Object.keys(MONSTERS).filter(id=>!MONSTERS[id].item);
+    const stageTxt=['見かけた','追記一','追記二','追記三'];
+    const cards=ids.map(id=>{
+      const m=MONSTERS[id], stg=codexStage(id);
+      if(stg<0) return `<div class="ccard unknown"><div style="height:44px;line-height:44px;font-size:22px">？</div><div class="nm">？？？</div><div class="st">${esc(TIER_NAMES[tierOf(id)])}・未観測</div></div>`;
+      return `<div class="ccard ${id===this.codexSel?'sel':''}" data-act="codex" data-arg="${id}">
+        <div class="stg">${stageTxt[stg]}</div>
+        <div data-icon="${id}" data-size="44"></div>
+        <div class="nm">${esc(m.name)}</div><div class="st">${esc(TIER_NAMES[tierOf(id)])}・${esc(m.role)}</div></div>`;
+    }).join('');
+    let detail='';
+    const sel=this.codexSel;
+    if(sel && MONSTERS[sel] && codexStage(sel)>=0){
+      const m=MONSTERS[sel], cx=CODEX[sel], stg=codexStage(sel), rec=(META.codex||{})[sel]||{};
+      const note=cx?cx.note:null;
+      const entries=[];
+      if(note){
+        entries.push(`<div class="entry"><span class="lbl">特徴</span>${noteHtml(note.base)}</div>`);
+        for(let i=0;i<3;i++){
+          if(stg>=i+1) entries.push(`<div class="entry"><span class="lbl">追記${['一','二','三'][i]}</span>${noteHtml(note.add[i])}</div>`);
+          else{ entries.push(`<div class="entry locked">（追記${['一','二','三'][i]}は、まだ書かれていない——${['この種族に何かされた夜','この種族が絡んだ絶頂','この種族への敗北'][i]}の後に増える）</div>`); break; }
+        }
+        if(stg>=3 && note.after) entries.push(`<div class="after">${esc(note.after)}</div>`);
+      }
+      detail=`<div class="stcard" style="text-align:left">
+        <div style="display:flex;gap:12px;align-items:center">
+          <div data-icon="${sel}" data-size="56"></div>
+          <div><div style="font-weight:bold;font-size:15px">${esc(m.name)} <span class="tierlbl t-${tierOf(sel)}">${esc(TIER_NAMES[tierOf(sel)])}</span></div>
+          <div style="font-size:11px;color:var(--dim)">${esc(m.role)} — ${esc(m.trait||'通常追跡')} / HP${m.hp} 速${m.spd} 攻${m.dmg} コスト${m.cost}</div></div>
+        </div>
+        <h3 style="margin-top:10px">夜側の解説</h3>
+        <div class="review"><p>${esc(m.desc)}</p>${cx?'<p>'+esc(cx.lore)+'</p>':''}</div>
+        <div class="kv" style="margin-top:6px">
+          <div>彼女に討たれた <b>${rec.kills||0}</b></div>
+          <div>彼女に何かした <b>${rec.met||0}</b>回</div>
+          <div>絡んだ絶頂 <b>${rec.climax||0}</b></div>
+          <div>この種族への敗北 <b>${rec.capture||0}</b></div>
+        </div>
+        <h3 style="margin-top:12px">ルミナの手記 <span style="color:var(--dim);font-weight:normal">(戦闘後、自室で)</span></h3>
+        <div class="notebook"><h4>${esc(m.name)}</h4>${entries.join('')||'<div class="locked">（この魔物の頁は、まだ白い）</div>'}</div>
+      </div>`;
+    }
+    return `
+      <h2>📖 図鑑 <span style="font-size:12px;color:var(--dim)">夜側の解説と、彼女の手記</span></h2>
+      <div class="note">左は夜側から見た解説。右の手記は彼女が戦闘後に書いたもので、<b>その種族に何かされる／その種族が絡んだ絶頂／その種族への敗北</b>のたびに追記が増える。追記は三度まで。</div>
+      ${detail}
+      <div class="codex-grid">${cards}</div>
+      <div class="row"><button data-act="go" data-arg="status">👁 観測記録</button><button data-act="go" data-arg="home">← もどる</button></div>`;
   },
 
   showResult(sum){
@@ -401,6 +529,7 @@ const UI={
       <h2 style="color:${color}">${title}</h2>
       ${by?`<div style="font-size:12px;color:var(--body)">とどめ: ${esc(by)}${causeTxt?' — '+esc(causeTxt):''}</div>`:''}
       ${sum.shop&&sum.shop.length?`<div class="note" style="color:var(--gold);margin:6px 0">——夜が明けて、ルミナは自分を強化した——<br>${sum.shop.map(esc).join(' ・ ')}</div>`:''}
+      ${sum.decay&&sum.decay.length?`<div class="note" style="color:var(--vio);margin:6px 0">——世代の夜明け。彼女の加護が${sum.decay.length}段薄れた——<br>${sum.decay.map(esc).join(' ・ ')}</div>`:''}
       ${cgHtml}
       <div class="breakdown">
         経過時間 <b>${fmt(sum.time)}</b> ・ ルミナ Lv<b>${sum.heroLv}</b><br>
@@ -450,6 +579,8 @@ const UI={
     $('battlebar').hidden=false;
     this.selForm=META.formations.includes(this.selForm)?this.selForm:META.formations[0];
     this.buildHand();
+    this.buildItems();
+    this.armItem(null);
     this.refreshFormRow();
     this.syncBattleButtons();
     $('btnSpd').textContent='▶ ×'+(G.spd||1);
@@ -475,6 +606,19 @@ const UI={
       const id=el.dataset.id;
       const cost=playCost(id,this.selForm);
       el.querySelector('.cost').textContent=cost;
+    }
+  },
+  buildItems(){
+    const row=$('itemrow');
+    row.innerHTML=Object.keys(NIGHT_ITEMS).filter(id=>META.nightItems[id]).map(id=>{
+      const it=NIGHT_ITEMS[id];
+      return `<div class="ichip" data-id="${id}" title="${esc(it.desc)}"><div class="icd" style="width:0%"></div><span>${it.icon} ${esc(it.name)} <b>${it.cost}</b></span></div>`;
+    }).join('');
+    this.refreshItems();
+  },
+  refreshItems(){
+    for(const el of $('itemrow').children){
+      el.classList.toggle('sel', el.dataset.id===this.armed);
     }
   },
   refreshFormRow(){
@@ -521,6 +665,14 @@ const UI={
       const rf=resolveForm(id,this.selForm);
       const n=spawnCountFor(id,rf,nextCombo);
       el.querySelector('.cnt').textContent=MONSTERS[id].boss?'単騎':((rf!==this.selForm?FORMATIONS[rf].name+' ':'')+n+'体');
+    }
+    // 夜側のアイテム: 使えるか・クールダウン
+    for(const el of $('itemrow').children){
+      const id=el.dataset.id;
+      const chk=canPlaceItem(id);
+      el.classList.toggle('off',!chk.ok);
+      const cd=B.itemCd[id]||0, it=NIGHT_ITEMS[id];
+      el.querySelector('.icd').style.width=(cd>0?clamp(cd/it.cd,0,1)*100:0).toFixed(0)+'%';
     }
     // 陣形チップの実効頭数(彼女のLvで育つ)
     for(const fEl of $('formrow').children){

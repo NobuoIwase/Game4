@@ -142,7 +142,15 @@ button:focus-visible{ outline:3px solid var(--blue); outline-offset:2px; }
 }
 #enfill{ height:100%; width:0%; background:linear-gradient(90deg,#7a3ff2,#c98cff); transition:width .12s; }
 #entext{ font-size:11px; font-weight:bold; color:#e7dcff; min-width:64px; text-align:right; }
-#handrow{ display:flex; gap:7px; align-items:flex-end; }
+#handrow{ display:flex; gap:7px; align-items:flex-end; flex-wrap:wrap; justify-content:center; }
+#itemrow{ display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
+.ichip{ position:relative; overflow:hidden; font-size:10.5px; padding:4px 10px; border-radius:999px; background:rgba(22,17,44,.92); border:1.4px solid var(--card-line); color:#d9d3f5; cursor:pointer; user-select:none; }
+.ichip b{ color:var(--vio); font-weight:bold; }
+.ichip .icd{ position:absolute; left:0; bottom:0; height:100%; background:rgba(120,80,255,.28); z-index:0; pointer-events:none; }
+.ichip span{ position:relative; z-index:1; }
+.ichip.off{ opacity:.45; cursor:default; }
+.ichip.sel{ border-color:var(--gold); box-shadow:0 0 10px rgba(255,215,106,.35); color:#fff; }
+canvas#cv.arm{ cursor:crosshair; }
 .hcard{
   width:66px; height:84px; border-radius:11px; background:rgba(22,17,44,.92);
   border:1.6px solid var(--card-line); cursor:pointer; position:relative;
@@ -191,6 +199,38 @@ button:focus-visible{ outline:3px solid var(--blue); outline-offset:2px; }
   color:#cfc8ea; text-align:left; white-space:pre-wrap; margin:8px 0;
 }
 .newbadge{ color:var(--pink); font-weight:bold; font-size:12px; }
+/* v1.1: 図鑑・観測記録(読み物) */
+.codex-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:8px; margin:10px 0; }
+.ccard{ background:var(--card); border:1.6px solid var(--card-line); border-radius:12px; padding:8px 6px; text-align:center; cursor:pointer; position:relative; }
+.ccard:hover{ border-color:var(--vio); }
+.ccard .nm{ font-weight:bold; font-size:12px; margin-top:3px; }
+.ccard .st{ font-size:10px; color:var(--dim); }
+.ccard.unknown{ opacity:.5; }
+.ccard .stg{ position:absolute; right:6px; top:6px; font-size:9.5px; color:var(--pink); }
+.notebook{ background:#f3ead6; color:#3a2f2a; border-radius:6px; padding:16px 18px; margin:10px 0; font-size:13px; line-height:1.95; text-align:left;
+  box-shadow:inset 0 0 40px rgba(120,90,40,.15), 0 2px 8px rgba(0,0,0,.35); font-family:"Klee One","Yu Kyokasho","YuKyokasho","Hiragino Maru Gothic ProN","Yu Gothic UI",serif;
+  background-image:repeating-linear-gradient(transparent 0 27px, rgba(120,90,40,.16) 27px 28px); }
+.notebook h4{ margin:0 0 8px; font-size:13.5px; color:#5a3a2a; border-bottom:1px dashed rgba(90,60,40,.45); padding-bottom:4px; }
+.notebook .entry{ margin:10px 0 0; padding-top:6px; }
+.notebook .entry .lbl{ display:inline-block; font-size:11px; color:#8a4a4a; border:1px solid rgba(138,74,74,.6); border-radius:4px; padding:0 6px; margin-bottom:4px; }
+.notebook s{ color:#9a6a6a; text-decoration:line-through; text-decoration-color:#7a3a3a; }
+.notebook .shaky{ display:inline-block; transform:rotate(-1.2deg) skewX(-6deg); letter-spacing:.06em; color:#6a2a3a; }
+.notebook .margin{ font-size:11px; color:#8a4a5a; margin:2px 0 2px 18px; padding-left:8px; border-left:2px solid rgba(138,74,90,.5); font-style:italic; }
+.notebook .locked{ color:#9a8a7a; font-size:11.5px; font-style:italic; }
+.notebook .after{ margin-top:10px; padding-top:8px; border-top:1px dashed rgba(90,60,40,.45); color:#4a3a4a; font-size:12px; font-family:"Hiragino Maru Gothic ProN","Yu Gothic UI","Meiryo",sans-serif; }
+.notebook .cut{ color:#7a3a3a; }
+.tcard{ border-left:3px solid var(--gold); padding:4px 10px; margin:6px 0; text-align:left; }
+.tcard.ero{ border-left-color:var(--pink); }
+.tcard .tn{ font-weight:bold; font-size:13px; }
+.tcard .tn small{ font-weight:normal; color:var(--dim); margin-left:6px; }
+.tcard .td{ font-size:11.5px; color:var(--body); line-height:1.6; }
+.tcard .tc{ font-size:10.5px; color:var(--dim); }
+.divider{ text-align:center; color:var(--pink); font-size:11.5px; margin:10px 0 4px; letter-spacing:1px; }
+.review{ font-size:12.5px; line-height:1.9; text-align:left; color:#e8ebff; }
+.review p{ margin:6px 0; }
+.selfeval{ font-size:12.5px; line-height:1.95; text-align:left; color:#ffd9e6; }
+.selfeval p{ margin:4px 0; }
+.heart{ font-size:11.5px; color:var(--dim); font-style:italic; margin-top:6px; }
 /* v1.0: 階級と客カード */
 .t-fodder{ --tc:#8fd36a; } .t-mid{ --tc:#8fd3ff; } .t-large{ --tc:#c98cff; } .t-boss{ --tc:#ff6b81; }
 .hcard .tg{ position:absolute; right:3px; top:3px; z-index:2; font-size:8px; font-weight:bold; line-height:1; padding:2px 3px; border-radius:5px; background:rgba(10,10,26,.75); color:var(--tc,#ccc); border:1px solid var(--tc,#666); }
@@ -236,6 +276,7 @@ button:focus-visible{ outline:3px solid var(--blue); outline-offset:2px; }
       <div id="entext">EN 0/10</div>
     </div>
     <div id="handrow"></div>
+    <div id="itemrow" title="夜側のアイテム: 選んでから画面をタップして置く"></div>
     <div class="spread" style="width:100%">
       <div id="formrow"></div>
       <div class="side">
@@ -250,6 +291,7 @@ button:focus-visible{ outline:3px solid var(--blue); outline-offset:2px; }
 <script src="js/core.js"></script>
 <script src="js/data.js"></script>
 <script src="js/scenes.js"></script>
+<script src="js/codex.js"></script>
 <script src="js/game.js"></script>
 <script src="js/render.js"></script>
 <script src="js/ui.js"></script>

@@ -155,7 +155,11 @@ function defaultMeta(){
     deck:['slug','worm','ghost'],
     formations:['scatter'],
     altar:{},                              // {id: lv}
-    life:{ dmg:0, ail:0, kills:0, herBoss:0 },   // 通算記録
+    life:{ dmg:0, ail:0, kills:0, herBoss:0, climax:0, survive:0, bestClimax:0,
+           ailBy:{}, capBy:{}, capCause:{} },   // 通算記録(v1.1: 種別内訳も)
+    streak:0,                                   // 連続生存(捕獲で0に)
+    nightItems:{ mist:true },                   // 夜側のアイテム(解放状態)
+    codex:{},                                   // 図鑑: {id:{seen,met,climax,capture,kills}}
     rot:{ dmg:0, ail:0, captures:0, battles:0 }, // 世代内記録(リセットされる)
     best:null,
     lumina:{ coins:0, upg:{vital:0,guard:0,bless:0,swift:0,grit:0,zeal:0} },  // 彼女の自己強化(永続)
@@ -172,6 +176,9 @@ function loadMeta(){
       META.v=3;
       META.gen=Object.assign({idx:1,battle:0}, d.gen);
       META.life=Object.assign(defaultMeta().life, d.life);
+      for(const k of ['ailBy','capBy','capCause']) META.life[k]=Object.assign({}, (d.life||{})[k]||{});
+      META.nightItems=Object.assign({mist:true}, d.nightItems||{});
+      META.codex=Object.assign({}, d.codex||{});
       META.rot=Object.assign(defaultMeta().rot, d.rot);
       META.settings=Object.assign(defaultMeta().settings, d.settings);
       META.lumina=Object.assign({coins:0,upg:{}}, d.lumina);

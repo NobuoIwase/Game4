@@ -10,6 +10,7 @@ const EN_COLORS={
   mistslime:['#ffc2d8','#8fe8c9'], gtent:['#a06ac9','#5a3a7a'],
   vampi:['#c04a6a','#ffd76a','#fff'],
   goblin:['#8fd36a','#4a7a3a'], leech:['#ffb3a0','#d87a6a'],
+  tower:['#c98cff','#5a3a7a'],
   hand:['#d8d0f0','#a89ccf'], serpent:['#b07ae8','#5a3a8a'], moth:['#ffb3cf','#c9a0b8'],
   pot:['#b07890','#5a2a44'], slugqueen:['#e0a0c0','#8fae4a'], dreamtree:['#e86a9c','#3a2a3a'],
 };
@@ -675,6 +676,7 @@ function drawEnemy(g,e){
   else if(e.id==='pot') drawPot(g,e);
   else if(e.id==='slugqueen') drawQueen(g,e);
   else if(e.id==='dreamtree') drawDreamtree(g,e);
+  else if(e.id==='tower') drawTower(g,e);
   else drawBoss(g,e);
 
   if(e.hitFlash>0){
@@ -1325,6 +1327,74 @@ function drawDreamtree(g,e){
   }
   g.restore();
 }
+function drawTower(g,e){
+  // 催眠電波の塔: 骨と肉の小塔。頂の眼球が周期的に紫の波を放つ
+  const r=e.r, ph=Math.max(0,1-((e.pulseCd||4)/4));
+  g.save();
+  // 土台(肉)
+  g.fillStyle='#5a3a5a';
+  g.beginPath(); g.ellipse(0,-r*0.1,r*1.0,r*0.42,0,0,TAU); g.fill();
+  // 骨の柱(3本)
+  g.strokeStyle='#d8cfc4'; g.lineWidth=2.2; g.lineCap='round';
+  for(const sd of [-1,0,1]){
+    g.beginPath(); g.moveTo(sd*r*0.55,-r*0.2); g.lineTo(sd*r*0.22,-r*2.0); g.stroke();
+  }
+  // 肉の巻き
+  g.strokeStyle='#8a4a7a'; g.lineWidth=3;
+  for(let i=0;i<3;i++){
+    g.beginPath(); g.arc(0,-r*(0.6+i*0.45),r*(0.5-i*0.1),Math.PI*0.1,Math.PI*0.9,true); g.stroke();
+  }
+  // 頂の眼球
+  g.shadowColor='#c98cff'; g.shadowBlur=8+ph*10;
+  g.fillStyle='#f0e8ff';
+  g.beginPath(); g.arc(0,-r*2.2,r*0.42,0,TAU); g.fill();
+  g.shadowBlur=0;
+  g.fillStyle='#7a3ff2';
+  g.beginPath(); g.arc(Math.sin(e.t*1.3)*r*0.1,-r*2.2,r*0.22,0,TAU); g.fill();
+  g.fillStyle='#1a0a2a';
+  g.beginPath(); g.arc(Math.sin(e.t*1.3)*r*0.1,-r*2.2,r*0.1,0,TAU); g.fill();
+  // 電波の予兆(放射直前に環が縮む)
+  if(ph>0.7){
+    g.globalAlpha=(ph-0.7)/0.3*0.6;
+    g.strokeStyle='#c98cff'; g.lineWidth=1.5;
+    g.beginPath(); g.arc(0,-r*2.2,r*(1.6-(ph-0.7)*3),0,TAU); g.stroke();
+    g.globalAlpha=1;
+  }
+  g.restore();
+}
+/* 淫紋の罠: プレイヤーにだけ見える淡い紋(彼女のAIは気づかない) */
+function drawTrap(g,tr){
+  g.save();
+  g.translate(tr.x,tr.y);
+  const a=tr.armed?(0.22+0.1*Math.sin(tr.t*3)):0.9;
+  g.globalAlpha=a;
+  g.strokeStyle=tr.armed?'#c98cff':'#fff'; g.lineWidth=tr.armed?1.2:3;
+  g.beginPath(); g.ellipse(0,0,tr.r,tr.r*0.55,0,0,TAU); g.stroke();
+  g.beginPath(); g.ellipse(0,0,tr.r*0.55,tr.r*0.3,0,0,TAU); g.stroke();
+  for(let i=0;i<6;i++){
+    const an=i*TAU/6+tr.t*0.4;
+    g.beginPath(); g.moveTo(Math.cos(an)*tr.r*0.55,Math.sin(an)*tr.r*0.3); g.lineTo(Math.cos(an)*tr.r,Math.sin(an)*tr.r*0.55); g.stroke();
+  }
+  g.fillStyle='rgba(255,134,179,0.8)';
+  heartPath(g,0,-2,0.8); g.fill();
+  g.restore();
+}
+/* アイテム設置カーソル(場の座標) */
+function drawPlaceCursor(g,id,x,y){
+  const it=NIGHT_ITEMS[id]; if(!it) return;
+  const R={mist:80, pool:60, rune:26, tower:190, fake:22}[id]||30;
+  g.save();
+  g.translate(x,y);
+  g.globalAlpha=0.35+0.15*Math.sin(performance.now()*0.008);
+  g.strokeStyle='#c98cff'; g.lineWidth=1.5; g.setLineDash([6,5]);
+  g.beginPath(); g.ellipse(0,0,R,R*0.7,0,0,TAU); g.stroke();
+  g.setLineDash([]);
+  g.globalAlpha=0.9;
+  g.font='bold 11px '+FONT; g.textAlign='center'; g.textBaseline='middle';
+  g.fillStyle='#e8dcff';
+  g.fillText(it.icon+' '+it.name+'  EN'+it.cost, 0, -R*0.7-14);
+  g.restore();
+}
 function drawBoss(g,e){
   const r=e.r;
   const glow=g.createRadialGradient(0,-r*0.8,r*0.3,0,-r*0.8,r*2.1);
@@ -1565,7 +1635,7 @@ function drawHUD(g){
   g.font='9px '+FONT; g.fillStyle='rgba(130,140,180,0.55)'; g.textAlign='left';
   g.fillText('enemies:'+B.enemies.length+' fps:'+Math.round(G.fps)+(TS>1?' x'+TS:''), 12, H-6);
   g.textAlign='right'; g.fillStyle='rgba(255,255,255,0.3)'; g.font='bold 10px '+FONT;
-  g.fillText('v1.0 侵蝕デッキ', W-12, H-6);
+  g.fillText('v1.1 侵蝕デッキ', W-12, H-6);
 }
 function drawCards(g){
   const B=G.B, c=B.lvCards; if(!c) return;
@@ -1799,7 +1869,8 @@ function draw(){
     for(const pr of B.props) drawProp(g,pr);
     for(const gm of B.gems) drawGem(g,gm);
     for(const h of B.hearts) drawHeartDrop(g,h);
-    for(const c of B.chests) drawChest(g,c);
+    for(const tr of B.traps) drawTrap(g,tr);
+    for(const c of B.chests){ drawChest(g,c); if(c.fake){ g.save(); g.globalAlpha=0.35; g.fillStyle='#c98cff'; g.beginPath(); g.ellipse(c.x,c.y+2,14,5,0,0,TAU); g.fill(); g.restore(); } }
     for(const it of B.items) drawItem(g,it);
 
     B.enemies.sort((a,b)=>a.y-b.y);
@@ -1922,6 +1993,8 @@ function draw(){
     }
     // 演出FX(てんらいの雷・女王の脈動)
     for(const f of B.fx) drawFx(g,f);
+    // アイテム設置カーソル(選択中)
+    if(G.armItem && G.mouse && G.mode==='battle') drawPlaceCursor(g,G.armItem,G.mouse.x,G.mouse.y);
     // プリズムウィップの薙ぎ(残像)
     if(p.whipAnim>0){
       const pr2=clamp(p.whipAnim/0.16,0,1);
@@ -2033,6 +2106,7 @@ function makeIconCanvas(id,size){
   else if(id==='pot') drawPot(g,fake);
   else if(id==='slugqueen') drawQueen(g,fake);
   else if(id==='dreamtree') drawDreamtree(g,fake);
+  else if(id==='tower') drawTower(g,fake);
   else drawBoss(g,fake);
   return c;
 }
