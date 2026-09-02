@@ -106,6 +106,18 @@ const BAL={
   PROP_HEAL:20, PROP_WIPE:5, PROP_VACUUM:3, PROP_BONUS:2,   // 30の内訳
   LOGEM_V:0.5,             // ロージェム(頭数ボーナス分の雑魚が落とす)の経験値
   LUMINA_DECAY:5,          // 世代の夜明けで薄れる自己強化の段数(ゼロには戻らない)
+  /* v1.2 状態異常拡張(放置系エロトラップダンジョンの機構を参考に、独自に再構成) */
+  DENY_DUR:7,              // 寸止め(絶頂禁止)の持続。快感は99で止められ、切れた瞬間に溜めた分が来る
+  DENY_DEEP_TH:85,         // 切れた時に快感がこれ以上なら「深い絶頂」
+  DEEP_MULT:1.6,           // 深い絶頂の硬直倍率
+  NUMB_DUR:3,              // 痺れ: 攻撃速度半減・移動-25%
+  FREEZE_DUR:4,            // 時間停止: 動けず撃てず、触られ放題。快感は蓄積して解除時に一気に
+  FREEZE_MULT:1.3,
+  SUIT_DUR:25, SUIT_PULSE:2.5, SUIT_PLEAS:5,   // 触手服: 着ている間ずっと脈動
+  CREST_MAX:3, CREST_AMP:0.15,                 // 淫紋Lv: 快感の入り+15%/Lv(戦闘中持続)
+  WATCH_R:320, WATCH_AMP:0.2,                  // 視姦: 覗き目玉に見られている間の快感増幅
+  BEG_DUR:2.5, BEG_CD:12,                      // おねだり: 撃てず、最寄りの魔物へ寄っていく
+  ACHE_CD:2.8, ACHE_PLEAS:6,                   // 疼き: 寸止め中/発情Ⅲ中の不意の突き上げ
   GEM_CAP:600,
 
   CHEST_TIMES:[40,110,180,250],
@@ -230,7 +242,38 @@ const MONSTERS={
     desc:'桃色の花を咲かせた黒い樹。根を伸ばして近づく者の脚を繋ぎ、幹の洞から地上ワームを生み続ける。花の香は甘く、近いほど身体が熱を覚える。召喚は1戦に1度。',
     trait:'根の繋留/ワーム生成/甘香の領域',
   },
+  /* ---- v1.2 追加(状態異常拡張) ---- */
+  spore:{
+    name:'痺れ浮遊子', role:'痺れ', cost:2, unlock:140, tier:'fodder',
+    hp:12, spd:40, r:9, dmg:1, xp:2, swarm:2,
+    desc:'半透明の傘を持つ、くらげのような胞子。ふわふわと寄ってきて触れると微弱な電気を流す。痛くはないが、指先が痺れて武器が鈍り、脚がもたつく。',
+    trait:'接触で【痺れ】(攻撃速度半減・移動-25%・3秒)+微快感。Lv2+で群れ倍化',
+  },
+  ghosthand:{
+    name:'手霊', role:'憑依', cost:4, unlock:300, tier:'mid',
+    hp:26, spd:70, r:9, dmg:0, xp:4,
+    desc:'夜気が手の形に凝った霊。触れると彼女の腕に憑き、その腕は彼女の意志を離れて彼女自身を撫ではじめる。腕が奪われた分だけ攻撃は乱れる。',
+    trait:'接触で腕に【憑依】(自分の手で快感・攻撃低下)。空きが無ければまさぐり',
+  },
+  eye:{
+    name:'覗き目玉', role:'視姦', cost:4, unlock:320, tier:'mid',
+    hp:30, spd:50, r:10, dmg:0, xp:4, solo:true,
+    desc:'瞼のない大きな眼球が翼で浮いている。近づかず、離れず、ただ見ている。見られている間は肌の熱が逃げず、見られながらの絶頂は記録される。',
+    trait:'距離を保って【視姦】(快感+20%)。6秒ごとの凝視で羞恥・敏感化。絶頂を「撮影」',
+  },
+  succubus:{
+    name:'寸止めの淫魔', role:'寸止め', cost:8, unlock:600, tier:'large',
+    hp:150, spd:60, r:13, dmg:3, xp:10,
+    desc:'指先ひとつで快感の栓を閉める淫魔。近くにいる彼女の絶頂を7秒だけ禁じ、溜まりきったところで栓を抜く。抜かれた瞬間の絶頂は深く、長い。',
+    trait:'8秒ごとに【寸止め】(絶頂禁止7秒→切れた時に深い絶頂)。接触で快感',
+  },
   /* ---- 設置物(デッキには入らない。夜側のアイテムで建てる) ---- */
+  web:{
+    name:'淫糸の巣', role:'設置物', cost:0, unlock:-1, tier:'item', item:true,
+    hp:160, spd:0, r:18, dmg:0, xp:0,
+    desc:'桃色に濡れた糸の巣。走り込んだ四肢を糸が取り、巣の中心へ繋ぐ。もがくか、巣そのものを壊すかしないと抜けられない。',
+    trait:'接触で空いた四肢すべてを繋留(r36)。壊せば解ける',
+  },
   tower:{
     name:'催眠電波の塔', role:'設置物', cost:0, unlock:-1, tier:'item', item:true,
     hp:420, spd:0, r:14, dmg:0, xp:0,
@@ -291,6 +334,13 @@ const NIGHT_ITEMS={
     desc:'塔を建てる(壊されるか40秒)。3.5秒ごとの電波で彼女の思考を鈍らせ、足を塔へ引き寄せる。彼女は塔を攻撃できる。' },
   fake:  { name:'偽りの宝箱',   icon:'🎁', cost:9,  cd:40, unlock:450,
     desc:'宝箱の偽物を置く。彼女は宝箱に目がない——開けると媚薬の霧と手の群れが噴き出す。' },
+  /* v1.2 */
+  suit:  { name:'触手服の魔法陣', icon:'🎀', cost:8,  cd:30, unlock:300,
+    desc:'踏むと触手が服の内側に纏わりつく(25秒)。着ている間、2.5秒ごとに脈動して快感を注ぎ、足が鈍る。' },
+  freeze:{ name:'時間停止の魔法陣', icon:'⏳', cost:10, cd:35, unlock:400,
+    desc:'踏むと4秒間、彼女だけ時間が止まる。動けず撃てず、触られ放題。止まっている間の快感は蓄積し、解除の瞬間に一気に来る。' },
+  web:   { name:'淫糸の巣',     icon:'🕸', cost:9,  cd:30, unlock:520,
+    desc:'桃色の糸の巣を張る(壊されるか40秒)。走り込んだ四肢を全部繋ぎ止める。もがくか巣を壊すまで抜けられない。' },
 };
 
 /* ---------------- 祭壇(オーブによる初期状態の書き換え) ----------------
@@ -400,6 +450,20 @@ const AILMENTS={
   charmbind:{ name:'魅了拘束', color:'#ff86b3', icon:'✦' },
   suck:{ name:'吸い付き', color:'#ff9d8a', icon:'♡' },
   climax:{ name:'絶頂', color:'#ff5d9e', icon:'♡' },
+  /* v1.1-1.2 */
+  hypno:{ name:'催眠', color:'#c98cff', icon:'📡' },
+  rune:{ name:'淫紋の罠', color:'#c98cff', icon:'✧' },
+  fake:{ name:'偽宝箱', color:'#ffd76a', icon:'🎁' },
+  deny:{ name:'寸止め', color:'#ff5d9e', icon:'✋' },
+  ache:{ name:'疼き', color:'#ff86b3', icon:'✿' },
+  numb:{ name:'痺れ', color:'#ffe066', icon:'⚡' },
+  possess:{ name:'憑依', color:'#dfe4ff', icon:'👻' },
+  watched:{ name:'視姦', color:'#c98cff', icon:'👁' },
+  crest:{ name:'淫紋', color:'#ff86b3', icon:'✧' },
+  freeze:{ name:'時間停止', color:'#8fd3ff', icon:'⏳' },
+  suit:{ name:'触手服', color:'#ff9ec2', icon:'🎀' },
+  beg:{ name:'おねだり', color:'#ff5d9e', icon:'♡' },
+  web:{ name:'淫糸', color:'#ffb3cf', icon:'🕸' },
 };
 const LIMBS=['armL','armR','legL','legR'];
 const LIMB_NAMES={armL:'左腕', armR:'右腕', legL:'左脚', legR:'右脚'};

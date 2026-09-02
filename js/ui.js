@@ -214,7 +214,7 @@ const UI={
     const wipeArmed=this._wipeArm && performance.now()-this._wipeArm<3000;
     return `
       <h1>ルミナ・サバイバーズ</h1>
-      <div class="sub">v1.1 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
+      <div class="sub">v1.2 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
       <p>あなたは<b>夜側の指揮者</b>。デッキから魔物を差し向け、AIで戦う光の少女<b>「ルミナ」</b>を追い詰める。<br>
       彼女に魔物が倒されるほどあなたのエネルギーとエッセンスは増え、彼女もまた強くなる。</p>
       <div style="text-align:center;color:var(--gold);font-size:12px;margin-bottom:8px">${esc(best)} ・ 通算${META.runs}戦 / 捕獲${META.captures}回</div>
@@ -446,6 +446,7 @@ const UI={
           <div>彼女に討たれた魔物 <b>${L.kills}</b></div>
           <div>通算絶頂 <b>${L.climax||0}</b>回 <span>(一夜最多${L.bestClimax||0})</span></div>
           <div>彼女のボス討伐 <b>${L.herBoss}</b></div>
+          <div>撮影された絶頂 <b>${L.filmed||0}</b></div>
         </div>
         <div class="kv" style="margin-top:6px"><div>とどめを刺した種族 <b>${topCap}</b></div></div>
         <div class="kv" style="margin-top:4px"><div>異常の内訳 <span>${ailTxt}</span></div></div>

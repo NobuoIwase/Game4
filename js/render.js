@@ -11,6 +11,8 @@ const EN_COLORS={
   vampi:['#c04a6a','#ffd76a','#fff'],
   goblin:['#8fd36a','#4a7a3a'], leech:['#ffb3a0','#d87a6a'],
   tower:['#c98cff','#5a3a7a'],
+  spore:['#c9ecff','#7fb8e0'], ghosthand:['#dfe4ff','#aab4e8'], eye:['#f0e8ff','#7a3ff2'],
+  succubus:['#ff86b3','#5a1f3a'], web:['#ffb3cf','#fff'],
   hand:['#d8d0f0','#a89ccf'], serpent:['#b07ae8','#5a3a8a'], moth:['#ffb3cf','#c9a0b8'],
   pot:['#b07890','#5a2a44'], slugqueen:['#e0a0c0','#8fae4a'], dreamtree:['#e86a9c','#3a2a3a'],
 };
@@ -241,6 +243,14 @@ function drawFx(g,f){
     g.stroke();
     g.fillStyle='#fff';
     g.beginPath(); g.arc(f.x,f.y,9*(1-pr)+3,0,TAU); g.fill();
+  }else if(f.kind==='gaze'){
+    const a=1-f.t/f.life;
+    g.save();
+    g.globalAlpha=a*0.55;
+    g.strokeStyle='#c98cff'; g.lineWidth=1.2; g.setLineDash([3,4]);
+    g.beginPath(); g.moveTo(f.x,f.y); g.lineTo(f.tx,f.ty); g.stroke();
+    g.setLineDash([]);
+    g.restore();
   }else if(f.kind==='pulse'){
     // 女王の甘い脈動: 広がる桃色の輪
     g.globalAlpha=(1-pr)*0.8;
@@ -513,6 +523,19 @@ function drawAttachments(g,h){
     if(!at||!at.mon||at.mon.dead) continue;
     const p=limbAnchor(h,sl);
     const t=h.anim+sl.length;
+    if(at.kind==='possess'){
+      // 手霊の憑依: 半透明の手が腕を借りている
+      g.save();
+      g.translate(p.x,p.y);
+      g.globalAlpha=0.8;
+      g.shadowColor='#aab4e8'; g.shadowBlur=8;
+      g.fillStyle='rgba(232,236,255,0.85)';
+      g.beginPath(); g.ellipse(0,0,4.2,3.4,0,0,TAU); g.fill();
+      g.strokeStyle='rgba(232,236,255,0.9)'; g.lineWidth=1.6; g.lineCap='round';
+      for(let i=0;i<4;i++){ const a=-Math.PI*0.9+i*0.45+Math.sin(t*5+i)*0.15; g.beginPath(); g.moveTo(0,0); g.lineTo(Math.cos(a)*6,Math.sin(a)*6); g.stroke(); }
+      g.restore();
+      continue;
+    }
     if(at.kind==='cling'){
       // ワーム/淫蛇の巻きつき
       const snake=at.mon.id==='serpent';
@@ -534,8 +557,8 @@ function drawAttachments(g,h){
       // 蔦(触手花/大触手): 主から四肢への線+巻き
       const src=at.mon;
       g.save();
-      g.strokeStyle=src.id==='gtent'?'#a06ac9':'#4fc496';
-      g.lineWidth=src.id==='gtent'?3.6:2.6;
+      g.strokeStyle=src.id==='gtent'?'#a06ac9':(src.id==='web'?'#ffb3cf':'#4fc496');
+      g.lineWidth=src.id==='gtent'?3.6:(src.id==='web'?1.8:2.6);
       g.lineCap='round';
       const mx=(src.x+p.x)/2+Math.sin(t*3)*8, my=(src.y-8+p.y)/2+Math.cos(t*2.5)*6;
       g.beginPath();
@@ -551,6 +574,65 @@ function drawAttachments(g,h){
       }
       g.restore();
     }
+  }
+}
+/* v1.2 状態の見た目: 時間停止/触手服/淫紋/寸止め/視姦 */
+function drawStateFx(g,h){
+  const t=h.anim;
+  if(h.freezeT>0){
+    g.save();
+    g.globalAlpha=0.35; g.fillStyle='#8fd3ff';
+    g.beginPath(); g.ellipse(h.x,h.y-22,20,30,0,0,TAU); g.fill();
+    g.globalAlpha=0.9; g.strokeStyle='#e8f6ff'; g.lineWidth=1.6;
+    g.beginPath(); g.arc(h.x,h.y-22,34,0,TAU); g.stroke();
+    for(let i=0;i<12;i++){ const a=i*TAU/12; g.beginPath(); g.moveTo(h.x+Math.cos(a)*30,h.y-22+Math.sin(a)*30); g.lineTo(h.x+Math.cos(a)*34,h.y-22+Math.sin(a)*34); g.stroke(); }
+    const ang=-Math.PI/2+TAU*(1-h.freezeT/BAL.FREEZE_DUR);
+    g.lineWidth=2.4; g.beginPath(); g.moveTo(h.x,h.y-22); g.lineTo(h.x+Math.cos(ang)*26,h.y-22+Math.sin(ang)*26); g.stroke();
+    g.restore();
+  }
+  if(h.suitT>0){
+    g.save();
+    g.globalAlpha=0.7; g.strokeStyle='#ff9ec2'; g.lineWidth=2; g.lineCap='round';
+    for(let i=0;i<5;i++){
+      const x0=h.x+(i-2)*4, ph=t*3+i;
+      g.beginPath(); g.moveTo(x0,h.y-2);
+      g.quadraticCurveTo(x0+Math.sin(ph)*8, h.y-22, x0+Math.cos(ph*0.7)*5, h.y-40+Math.sin(ph)*3);
+      g.stroke();
+    }
+    g.fillStyle='rgba(255,158,194,0.9)';
+    const pl=Math.max(0,Math.sin((BAL.SUIT_PULSE-h.suitPulse)*4));
+    g.beginPath(); g.arc(h.x-5,h.y-26,1.6+pl*1.2,0,TAU); g.fill();
+    g.beginPath(); g.arc(h.x+5,h.y-26,1.6+pl*1.2,0,TAU); g.fill();
+    g.restore();
+  }
+  if(h.crestLv>0){
+    g.save();
+    g.globalAlpha=0.35+0.25*Math.sin(t*4)+0.1*h.crestLv;
+    g.shadowColor='#ff86b3'; g.shadowBlur=8;
+    g.strokeStyle='#ff86b3'; g.lineWidth=1.2;
+    for(let k=0;k<h.crestLv;k++){ g.beginPath(); g.ellipse(h.x,h.y-9,5+k*2.5,3+k*1.5,0,0,TAU); g.stroke(); }
+    g.fillStyle='#ffb3cf'; heartPath(g,h.x,h.y-10,0.55); g.fill();
+    g.restore();
+  }
+  if(h.denyT>0){
+    g.save();
+    const pl=0.5+0.5*Math.sin(t*9);
+    g.globalAlpha=0.5+0.3*pl;
+    g.strokeStyle='#ff5d9e'; g.lineWidth=2;
+    g.beginPath(); g.arc(h.x,h.y-8,9+pl*3,0,TAU); g.stroke();
+    g.fillStyle='#ffd3e6'; g.beginPath(); g.arc(h.x,h.y-8,2.2,0,TAU); g.fill();
+    g.restore();
+  }
+  if(h.watchedT>0 && G.B){
+    g.save();
+    g.globalAlpha=0.22; g.strokeStyle='#c98cff'; g.lineWidth=1; g.setLineDash([2,5]);
+    for(const e of G.B.enemies){
+      if(e.dead||e.id!=='eye') continue;
+      if(Math.hypot(e.x-h.x,e.y-h.y)>BAL.WATCH_R) continue;
+      g.beginPath(); g.moveTo(e.x,e.y-e.r*1.2); g.lineTo(h.x,h.y-24); g.stroke();
+    }
+    g.setLineDash([]);
+    g.restore();
   }
 }
 function drawSuckers(g,h){
@@ -677,6 +759,11 @@ function drawEnemy(g,e){
   else if(e.id==='slugqueen') drawQueen(g,e);
   else if(e.id==='dreamtree') drawDreamtree(g,e);
   else if(e.id==='tower') drawTower(g,e);
+  else if(e.id==='spore') drawSpore(g,e);
+  else if(e.id==='ghosthand') drawGhosthand(g,e);
+  else if(e.id==='eye') drawEye(g,e);
+  else if(e.id==='succubus') drawSuccubus(g,e);
+  else if(e.id==='web') drawWeb(g,e);
   else drawBoss(g,e);
 
   if(e.hitFlash>0){
@@ -1327,6 +1414,108 @@ function drawDreamtree(g,e){
   }
   g.restore();
 }
+function drawSpore(g,e){
+  // 痺れ浮遊子: 半透明の傘、垂れる細い触糸、縁の小さな火花
+  const r=e.r, ph=Math.sin(e.t*2.4+e.joff);
+  g.save();
+  g.translate(0,-r*0.9+ph*1.5);
+  g.strokeStyle='rgba(180,220,255,0.6)'; g.lineWidth=1;
+  for(let i=0;i<5;i++){
+    const x=(i-2)*r*0.3;
+    g.beginPath(); g.moveTo(x,r*0.2);
+    g.quadraticCurveTo(x+Math.sin(e.t*3+i)*3, r*0.9, x+Math.sin(e.t*2+i)*4, r*1.6);
+    g.stroke();
+  }
+  const grad=g.createRadialGradient(-r*0.2,-r*0.3,r*0.1,0,0,r);
+  grad.addColorStop(0,'rgba(230,245,255,0.9)'); grad.addColorStop(1,'rgba(127,184,224,0.45)');
+  g.fillStyle=grad;
+  g.beginPath(); g.ellipse(0,0,r*(1+ph*0.06),r*0.7*(1-ph*0.06),0,0,TAU); g.fill();
+  g.strokeStyle='rgba(255,224,102,'+(0.4+0.4*Math.max(0,Math.sin(e.t*9))).toFixed(2)+')'; g.lineWidth=1.2;
+  for(let i=0;i<3;i++){
+    const a=e.t*4+i*TAU/3;
+    g.beginPath(); g.moveTo(Math.cos(a)*r,Math.sin(a)*r*0.7); g.lineTo(Math.cos(a)*r*1.3,Math.sin(a)*r*0.9); g.stroke();
+  }
+  g.restore();
+}
+function drawGhosthand(g,e){
+  // 手霊: 半透明の青白い手。指がゆっくり蠢く。下に霊気の尾
+  const r=e.r, t=e.t;
+  g.save();
+  g.translate(0,-r*1.2+Math.sin(t*2.5+e.joff)*2);
+  g.globalAlpha=0.85;
+  g.shadowColor='#aab4e8'; g.shadowBlur=8;
+  g.fillStyle='rgba(223,228,255,0.7)';
+  g.beginPath(); g.moveTo(0,r*1.6); g.quadraticCurveTo(-r*0.6,r*0.8,0,r*0.3); g.quadraticCurveTo(r*0.6,r*0.8,0,r*1.6); g.fill();   // 尾
+  g.fillStyle='#e8ecff';
+  g.beginPath(); g.ellipse(0,0,r*0.75,r*0.6,0,0,TAU); g.fill();   // 掌
+  g.strokeStyle='#e8ecff'; g.lineWidth=r*0.32; g.lineCap='round';
+  for(let i=0;i<5;i++){
+    const a=-Math.PI*0.95+i*0.38, len=r*(i===0?0.7:0.95)+Math.sin(t*4+i)*1.5;
+    g.beginPath(); g.moveTo(Math.cos(a)*r*0.5,Math.sin(a)*r*0.4); g.lineTo(Math.cos(a)*len,Math.sin(a)*len*0.9); g.stroke();
+  }
+  g.restore();
+}
+function drawEye(g,e){
+  // 覗き目玉: 瞼のない眼球に小さな翼。凝視の直前に虹彩が光る
+  const r=e.r, t=e.t, gl=clamp(1-((e.gazeCd===undefined?3:e.gazeCd)/1.2),0,1);
+  g.save();
+  g.translate(0,-r*1.2+Math.sin(t*3)*2);
+  const fl=Math.sin(t*14)*0.5;
+  g.fillStyle='#5a3a7a';
+  for(const sd of [-1,1]){
+    g.beginPath(); g.moveTo(sd*r*0.6,-r*0.2); g.quadraticCurveTo(sd*r*1.6,-r*1.1-fl*6, sd*r*1.7,-r*0.1-fl*5); g.quadraticCurveTo(sd*r*1.1,-r*0.1, sd*r*0.6,r*0.2); g.closePath(); g.fill();
+  }
+  g.shadowColor='#c98cff'; g.shadowBlur=6+gl*12;
+  g.fillStyle='#f4efff';
+  g.beginPath(); g.arc(0,0,r*0.95,0,TAU); g.fill();
+  g.shadowBlur=0;
+  g.strokeStyle='rgba(200,80,110,0.5)'; g.lineWidth=0.8;
+  for(let i=0;i<5;i++){ const a=i*TAU/5+0.4; g.beginPath(); g.moveTo(Math.cos(a)*r*0.5,Math.sin(a)*r*0.5); g.lineTo(Math.cos(a)*r*0.92,Math.sin(a)*r*0.92); g.stroke(); }
+  const p=G.B&&G.B.hero; let lx=0,ly=0;
+  if(p){ const dx=p.x-e.x, dy=(p.y-20)-(e.y-r*1.2), dd=Math.hypot(dx,dy)||1; lx=dx/dd*r*0.3; ly=dy/dd*r*0.3; }
+  g.fillStyle=gl>0.3?'#b46cff':'#7a3ff2';
+  g.beginPath(); g.arc(lx,ly,r*0.42,0,TAU); g.fill();
+  g.fillStyle='#120a1e';
+  g.beginPath(); g.arc(lx,ly,r*0.2*(1-gl*0.4),0,TAU); g.fill();
+  g.fillStyle='rgba(255,255,255,0.8)';
+  g.beginPath(); g.arc(lx-r*0.14,ly-r*0.16,r*0.08,0,TAU); g.fill();
+  g.restore();
+}
+function drawSuccubus(g,e){
+  // 寸止めの淫魔: 小淫魔の姉。色が深く、指先に「栓」の光
+  g.save();
+  g.filter='hue-rotate(-18deg) saturate(1.25) brightness(0.92)';
+  drawImp(g,e);
+  g.filter='none';
+  const r=e.r*1.15, ch=Math.max(0,1-((e.denyCd===undefined?8:e.denyCd)/1.5));
+  if(ch>0){
+    g.globalAlpha=ch;
+    g.shadowColor='#ff5d9e'; g.shadowBlur=10;
+    g.fillStyle='#ffd3e6';
+    g.beginPath(); g.arc(r*0.6,-r*0.85,2.6+ch*1.5,0,TAU); g.fill();
+    g.globalAlpha=1;
+  }
+  g.restore();
+}
+function drawWeb(g,e){
+  // 淫糸の巣: 桃色に濡れた放射糸と同心多角形
+  const r=e.r*1.9, t=e.t;
+  g.save();
+  g.translate(0,-e.r*0.4);
+  g.globalAlpha=0.85;
+  g.strokeStyle='rgba(255,179,207,0.75)'; g.lineWidth=1.2;
+  const N=8;
+  for(let i=0;i<N;i++){ const a=i*TAU/N; g.beginPath(); g.moveTo(0,0); g.lineTo(Math.cos(a)*r,Math.sin(a)*r*0.6); g.stroke(); }
+  for(let k=1;k<=3;k++){
+    const rr2=r*k/3, wob=Math.sin(t*2+k)*1.5;
+    g.beginPath();
+    for(let i=0;i<=N;i++){ const a=i*TAU/N; const x=Math.cos(a)*(rr2+wob), y=Math.sin(a)*(rr2+wob)*0.6; if(i===0) g.moveTo(x,y); else g.lineTo(x,y); }
+    g.stroke();
+  }
+  g.fillStyle='rgba(255,255,255,0.7)';
+  for(let i=0;i<6;i++){ const a=i*1.1+t*0.3, rr3=r*(0.3+((i*0.37)%0.6)); g.beginPath(); g.arc(Math.cos(a)*rr3,Math.sin(a)*rr3*0.6,1.2,0,TAU); g.fill(); }
+  g.restore();
+}
 function drawTower(g,e){
   // 催眠電波の塔: 骨と肉の小塔。頂の眼球が周期的に紫の波を放つ
   const r=e.r, ph=Math.max(0,1-((e.pulseCd||4)/4));
@@ -1368,15 +1557,22 @@ function drawTrap(g,tr){
   g.translate(tr.x,tr.y);
   const a=tr.armed?(0.22+0.1*Math.sin(tr.t*3)):0.9;
   g.globalAlpha=a;
-  g.strokeStyle=tr.armed?'#c98cff':'#fff'; g.lineWidth=tr.armed?1.2:3;
+  const col={rune:'#c98cff',suit:'#ff9ec2',freeze:'#8fd3ff'}[tr.kind||'rune'];
+  g.strokeStyle=tr.armed?col:'#fff'; g.lineWidth=tr.armed?1.2:3;
   g.beginPath(); g.ellipse(0,0,tr.r,tr.r*0.55,0,0,TAU); g.stroke();
   g.beginPath(); g.ellipse(0,0,tr.r*0.55,tr.r*0.3,0,0,TAU); g.stroke();
   for(let i=0;i<6;i++){
     const an=i*TAU/6+tr.t*0.4;
     g.beginPath(); g.moveTo(Math.cos(an)*tr.r*0.55,Math.sin(an)*tr.r*0.3); g.lineTo(Math.cos(an)*tr.r,Math.sin(an)*tr.r*0.55); g.stroke();
   }
-  g.fillStyle='rgba(255,134,179,0.8)';
-  heartPath(g,0,-2,0.8); g.fill();
+  if((tr.kind||'rune')==='freeze'){
+    g.strokeStyle='#8fd3ff'; g.lineWidth=1.4;
+    g.beginPath(); g.moveTo(0,0); g.lineTo(0,-7); g.stroke();
+    g.beginPath(); g.moveTo(0,0); g.lineTo(5,2); g.stroke();
+  }else{
+    g.fillStyle=(tr.kind==='suit')?'rgba(255,158,194,0.9)':'rgba(255,134,179,0.8)';
+    heartPath(g,0,-2,0.8); g.fill();
+  }
   g.restore();
 }
 /* アイテム設置カーソル(場の座標) */
@@ -1619,6 +1815,15 @@ function drawHUD(g){
   if(p.slow>0) chips.push(['slow','粘液']);
   for(const c of p.charms) chips.push(['charm','魅了'+ROMANS[c.lv]+' '+((MONSTERS[c.id]&&MONSTERS[c.id].name)||c.id)]);
   if(p.exhausted) chips.push(['pinned','疲弊']);
+  if(p.freezeT>0) chips.push(['freeze','時間停止 '+Math.ceil(p.freezeT)+'s']);
+  if(p.denyT>0) chips.push(['deny','寸止め '+Math.ceil(p.denyT)+'s']);
+  if(p.begT>0) chips.push(['beg','おねだり…']);
+  const posN=attachedSlots(p).filter(sl=>p.limbs[sl].kind==='possess').length;
+  if(posN>0) chips.push(['possess','憑依 '+attachedSlots(p).filter(sl=>p.limbs[sl].kind==='possess').map(sl=>LIMB_NAMES[sl]).join('・')]);
+  if(p.numbT>0) chips.push(['numb','痺れ']);
+  if(p.suitT>0) chips.push(['suit','触手服 '+Math.ceil(p.suitT)+'s']);
+  if(p.crestLv>0) chips.push(['crest','淫紋'+ROMANS[p.crestLv]]);
+  if(p.watchedT>0) chips.push(['watched','視姦']);
   g.font='bold 10px '+FONT;
   for(const [id,txt] of chips){
     const A=AILMENTS[id];
@@ -1635,7 +1840,7 @@ function drawHUD(g){
   g.font='9px '+FONT; g.fillStyle='rgba(130,140,180,0.55)'; g.textAlign='left';
   g.fillText('enemies:'+B.enemies.length+' fps:'+Math.round(G.fps)+(TS>1?' x'+TS:''), 12, H-6);
   g.textAlign='right'; g.fillStyle='rgba(255,255,255,0.3)'; g.font='bold 10px '+FONT;
-  g.fillText('v1.1 侵蝕デッキ', W-12, H-6);
+  g.fillText('v1.2 侵蝕デッキ', W-12, H-6);
 }
 function drawCards(g){
   const B=G.B, c=B.lvCards; if(!c) return;
@@ -1928,6 +2133,7 @@ function draw(){
     g.globalAlpha=1;
     drawAttachments(g,p);
     drawSuckers(g,p);
+    drawStateFx(g,p);
     if(G.mode==='battle'){
       if(p.pinned) drawPinGauge(g,p);
       else if(p.charmBind) drawCharmBindGauge(g,p);
@@ -2107,6 +2313,11 @@ function makeIconCanvas(id,size){
   else if(id==='slugqueen') drawQueen(g,fake);
   else if(id==='dreamtree') drawDreamtree(g,fake);
   else if(id==='tower') drawTower(g,fake);
+  else if(id==='spore') drawSpore(g,fake);
+  else if(id==='ghosthand') drawGhosthand(g,fake);
+  else if(id==='eye') drawEye(g,fake);
+  else if(id==='succubus') drawSuccubus(g,fake);
+  else if(id==='web') drawWeb(g,fake);
   else drawBoss(g,fake);
   return c;
 }
