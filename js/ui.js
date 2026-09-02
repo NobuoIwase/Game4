@@ -158,6 +158,9 @@ const UI={
         }else S.deny();
         this.show('altar'); break;
       }
+      case 'gfxToggle':
+        META.settings.gfx=(META.settings.gfx||'hd')==='hd'?'pixel':'hd'; saveMeta();
+        this.show('home'); break;
       case 'autoDefault':
         META.settings.autoplay=!META.settings.autoplay; saveMeta();
         this.show('home'); break;
@@ -214,7 +217,7 @@ const UI={
     const wipeArmed=this._wipeArm && performance.now()-this._wipeArm<3000;
     return `
       <h1>ルミナ・サバイバーズ</h1>
-      <div class="sub">v1.2 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
+      <div class="sub">v1.3 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
       <p>あなたは<b>夜側の指揮者</b>。デッキから魔物を差し向け、AIで戦う光の少女<b>「ルミナ」</b>を追い詰める。<br>
       彼女に魔物が倒されるほどあなたのエネルギーとエッセンスは増え、彼女もまた強くなる。</p>
       <div style="text-align:center;color:var(--gold);font-size:12px;margin-bottom:8px">${esc(best)} ・ 通算${META.runs}戦 / 捕獲${META.captures}回</div>
@@ -226,6 +229,7 @@ const UI={
         <button class="sub" data-act="go" data-arg="status">👁 観測記録<small>称号・総評・自己評価</small></button>
         <button class="sub" data-act="go" data-arg="codex">📖 図鑑<small>魔物の解説と、彼女の手記</small></button>
         <button class="sub" data-act="autoDefault">🤖 オート初期値: ${META.settings.autoplay?'ON':'OFF'}<small>戦闘開始時のオート指揮</small></button>
+        <button class="sub" data-act="gfxToggle">🎨 ルミナの絵: ${(META.settings.gfx||'hd')==='hd'?'描き込み':'ドット'}<small>クリックで切り替え</small></button>
       </div>
       <details style="margin-top:6px"><summary style="font-size:11px;color:var(--dim);cursor:pointer">あそびかた / ルール</summary>
       <p style="font-size:11.5px">
@@ -435,6 +439,10 @@ const UI={
         <div class="bar"><i style="width:${mind}%;background:linear-gradient(90deg,#b46cff,#7a3ff2)"></i></div>
         <div class="kv" style="margin-top:6px"><div>現在の反応段階 <b>${esc(TIER_NAMES_JP[self.tier])}</b></div></div>
         <div class="note">肉体=今世代で受けた損耗と異常の蓄積 / 精神=捕獲された経験。反応段階は二軸から導く(心は拒み、体は応える期間が最も長い)。</div>
+      </div>
+      <div class="stcard"><h3>身についた性癖 <span style="color:var(--dim);font-weight:normal">(通常の処置では抜けぬ・世代を跨いで残る)</span></h3>
+        ${Object.keys(TRAITS).filter(k=>(META.traits[k]||0)>0).map(k=>`<div class="tcard ero"><div class="tn">♨ ${esc(TRAITS[k].name)} <b style="color:var(--pink)">${ROMANS[META.traits[k]]}</b><small>/${TRAITS[k].max}</small></div><div class="td">${esc(TRAITS[k].desc)}</div><div class="tc">刻まれ方: ${esc(TRAITS[k].how)}</div></div>`).join('')
+          ||'<div class="note">まだ何も刻まれていない。性癖は特定の条件が揃った夜に一つずつ刻まれ、世代リセットでも消えない。</div>'}
       </div>
       <div class="stcard"><h3>記録</h3>
         <div class="kv">

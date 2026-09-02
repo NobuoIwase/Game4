@@ -159,11 +159,12 @@ function defaultMeta(){
            ailBy:{}, capBy:{}, capCause:{} },   // 通算記録(v1.1: 種別内訳も)
     streak:0,                                   // 連続生存(捕獲で0に)
     nightItems:{ mist:true },                   // 夜側のアイテム(解放状態)
+    traits:{},                                  // 身についた性癖(永続) {musk:Lv}
     codex:{},                                   // 図鑑: {id:{seen,met,climax,capture,kills}}
     rot:{ dmg:0, ail:0, captures:0, battles:0 }, // 世代内記録(リセットされる)
     best:null,
     lumina:{ coins:0, upg:{vital:0,guard:0,bless:0,swift:0,grit:0,zeal:0} },  // 彼女の自己強化(永続)
-    settings:{ autoplay:true },
+    settings:{ autoplay:true, gfx:'hd' },   // gfx: 'hd'=描き込み / 'pixel'=ドット
   };
 }
 let META=defaultMeta();
@@ -178,6 +179,7 @@ function loadMeta(){
       META.life=Object.assign(defaultMeta().life, d.life);
       for(const k of ['ailBy','capBy','capCause']) META.life[k]=Object.assign({}, (d.life||{})[k]||{});
       META.nightItems=Object.assign({mist:true}, d.nightItems||{});
+      META.traits=Object.assign({}, d.traits||{});
       META.codex=Object.assign({}, d.codex||{});
       META.rot=Object.assign(defaultMeta().rot, d.rot);
       META.settings=Object.assign(defaultMeta().settings, d.settings);
