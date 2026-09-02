@@ -158,6 +158,7 @@ function startBattle(){
   spawnInitialProps();
   // 描き込みスプライトの事前焼き(デッキの種族×位相を最初の数十フレームで焼いておく)
   G.gfxLv=2; G.kCap=2; G.prebake=[];
+  if(typeof resetSpriteCache==='function') resetSpriteCache();   // 前の戦闘の焼き絵(別デッキ・別倍率)は捨てる
   for(const id of new Set(META.deck.concat(['hand','worm']))){ if(MONSTERS[id]&&!MONSTERS[id].boss&&!MONSTERS[id].item){ for(let k=0;k<16;k++) for(let v=0;v<3;v++) G.prebake.push({id, t:k/8, vari:v}); } }
   G.mode='battle';
   G.cam.x=0; G.cam.y=0;
@@ -254,20 +255,21 @@ function codexMet(id){
    手記を二度書いた種族(図鑑の追記二以上)は、次の世代でも一段だけ覚えている */
 function genKnow(id){ const K=META.gen.know||(META.gen.know={}); return K[id]||(K[id]={met:0,cap:0}); }
 function knowLv(id){
-  if(!MONSTERS[id]||MONSTERS[id].item) return 0;
+  if(!MONSTERS[id]) return 0;
   const k=(META.gen.know||{})[id]||{met:0,cap:0};
   let lv=(k.met>=1?1:0)+(k.met>=BAL.KNOW_MET2?1:0)+((k.cap>=1||k.met>=BAL.KNOW_MET3)?1:0);
   if(typeof codexStage==='function' && codexStage(id)>=2) lv+=1;
   return Math.min(3,lv);
 }
 function learn(id,kind){
-  if(!MONSTERS[id]||MONSTERS[id].item) return;
+  if(!MONSTERS[id]) return;
   const before=knowLv(id); const k=genKnow(id);
   if(kind==='cap') k.cap++; else k.met++;
   const after=knowLv(id);
   if(after>before && G.B && G.mode==='battle'){
     const h=G.B.hero, m=MONSTERS[id];
-    floatTxt(h.x,h.y-84,'おぼえた: '+m.name+'は'+KNOW_NAMES[after],'#8fd3ff',11,1.6);
+    const nm=(typeof CODEX!=='undefined'&&CODEX[id]&&CODEX[id].note&&CODEX[id].note.title)||m.name;   // 手記の見出し名(ゲイザーは「目玉のやつ」)
+    floatTxt(h.x,h.y-84,'学習: '+nm+' → '+KNOW_NAMES[after],'#8fd3ff',11,1.6);
     if(after>=2 && (SPEC_THREAT[id]||0)>=3) heroBubble(h,pickRand(['あれは……ぜったい、よける','つぎは、あれから、さきに……']),false,1);
   }
 }
@@ -779,9 +781,9 @@ function applyHypno(src){
 }
 /* 照射触手: 身体の準備を待たずに達してしまう */
 function forcedClimax(src){
-  if(src&&G.B) G.B.hero.lastBeam={id:src.id, t:G.B.time};
   const h=G.B.hero;
   if(h.climaxT>0) return;
+  if(src) h.lastBeam={id:src.id, t:G.B.time};   // 効いた照射だけを敗北の帰属に使う
   h.denyT=0; h.aphro=100;
   heroBubble(h,'——っ!? なに、いま、あたっ……ぁ、あ、うそ、いく、いっ——',true,3);
   awardAil('beam');
@@ -805,9 +807,14 @@ function conditionMusk(){
 function gazerEyes(e){
   if(e.id==='gazer') return [{x:e.x, y:e.y-e.r, ang:e.gzAng||0, r:BAL.GAZE_R, spread:BAL.GAZE_ANG, state:e.gzState, t:e.gzT, tmax:BAL.GAZE_AIM}];
   if(e.id==='bossgazer' && e.eyes){
-    return e.eyes.map(ey=>({x:e.x+ey.dx, y:e.y+ey.dy, ang:ey.ang, r:BAL.GAZE_R+30, spread:BAL.GAZE_ANG*0.85, state:ey.state, t:ey.t, tmax:BAL.GAZE_AIM*1.1}));
+    return e.eyes.map((ey,i)=>bossEyeSpec(e,ey,i));
   }
   return [];
+}
+/* ボスの眼の扇: 描画(drawSightSectors)・回避(aiDecide)・当たり(eyeCycle)が同じ幾何を使う——半径は GAZE_R+GAZE_BOSS_EXTRA、横幅は通常ゲイザーと同じ */
+function bossEyeSpec(e,ey,i){
+  return {x:e.x+ey.dx, y:e.y+ey.dy, ang:ey.ang, r:BAL.GAZE_R+BAL.GAZE_BOSS_EXTRA, spread:BAL.GAZE_ANG, state:ey.state, t:ey.t, tmax:BAL.GAZE_AIM*1.1,
+          cd:BAL.GAZE_CD*1.2, scatter:i===1?0:(i===0?-1:1), off:ey.off||0};
 }
 function inSector(ey,p){
   const dx=p.x-ey.x, dy=(p.y-10)-ey.y, d=Math.hypot(dx,dy);
@@ -1144,11 +1151,11 @@ function aiUpdate(dt){
     charmwalk:'…なんで、あしが…', heatwalk:'…あつくて、なにも…',
     hypno:'……あっち、いかなきゃ……', item:'なにか、おちてる!', beg:'……ちがう……'};
   if(p.dodging>0){ p.dodging-=dt; }
-  p.aiLabel=p.dodging>0?'よける!(おぼえてる)':LBL[state];
+  p.aiLabel=LBL[state]||LBL.wait;
   if(state!==p.aiState){
     p.aiState=state;
     // エロ状態が乗っている間は、のんきなおしゃべりを封じる(台詞の主導権はエロ側)
-    const ero=p.heatLv>0||p.aphro>=45||restraintCount(p)>0||p.climaxT>0||p.charms.length>0;
+    const ero=p.heatLv>0||p.aphro>=45||restraintCount(p)>0||p.climaxT>0||p.charms.some(c=>c.lv>0);   // ゲージだけの魅了エントリ(lv0)は数えない
     if(!ero) heroBubble(p,BBL[state]);
   }
 }
@@ -1241,7 +1248,7 @@ function aiDecide(foc){
       }
     }
   }
-  if(strong){ ax*=0.4; ay*=0.4; p.dodging=0.5; }
+  if(strong){ ax*=0.4; ay*=0.4; }
   ax+=ddx; ay+=ddy;
 
   let dx=0, dy=0, state='wait';
@@ -1362,7 +1369,7 @@ function aiDecide(foc){
   if(strong && state!=='struggle'){
     const m=Math.hypot(ddx,ddy)||1;
     dx=dx*0.3+ddx/m*1.2; dy=dy*0.3+ddy/m*1.2;
-    state='dodge';
+    state='dodge'; p.dodging=0.5;
   }
   // 魅了の発作: 無意識にその種族の最寄り個体へ寄っていく(Lv2+)
   if(p.charmDrift){
@@ -2354,7 +2361,7 @@ function webTick(e,dt,d){
     if(n>0){
       heroBubble(p,pickRand(['いと、が……ぜんぶ、からま……っ','ぬけない……ねばって……','あし、うで、うごかな……!?']),true,2);
       sfx(400,120,0.3,'sawtooth',0.06);
-      awardAil('web');
+      awardAil('web'); learn('web');
     }
     e.grabCd=6;
   }
@@ -2404,8 +2411,7 @@ function bossgazerTick(e,dt,d,dx,dy){
     // 触手の先端に眼球。真ん中は本人を狙い、両脇は本人の周りをばらばらに狙う(逃げ先を潰す)
     const a=ey.base+Math.sin(e.t*0.8+ey.base)*0.12;
     ey.dx=Math.cos(a)*e.r*1.9; ey.dy=Math.sin(a)*e.r*0.8-e.r*1.7;
-    const i=e.eyes.indexOf(ey);
-    const eo={x:e.x+ey.dx, y:e.y+ey.dy, ang:ey.ang, r:BAL.GAZE_R+BAL.GAZE_BOSS_EXTRA, spread:BAL.GAZE_ANG, state:ey.state, t:ey.t, tmax:BAL.GAZE_AIM*1.1, cd:BAL.GAZE_CD*1.2, scatter:i===1?0:(i===0?-1:1), off:ey.off||0};
+    const eo=bossEyeSpec(e,ey,e.eyes.indexOf(ey));
     eyeCycle(e,eo,dt,d,dx,dy,e);
     ey.ang=eo.ang; ey.state=eo.state; ey.t=eo.t; ey.off=eo.off;
   }
@@ -2451,7 +2457,7 @@ function towerTick(e,dt,d){
       // 催眠電波: 思考が鈍り、足が塔へ向く
       p.dazeT=Math.max(p.dazeT,2.6);
       p.hypno={x:e.x, y:e.y, t:1.3};
-      applyPleasure(3);
+      applyPleasure(3); learn('tower');
       heroBubble(p,pickRand(['……あ、れ。いま、なにを……','あたま、が……ざらざら、する……','……あっちに、なにか……']),true,2);
       awardAil('hypno');
     }

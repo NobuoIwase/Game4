@@ -865,13 +865,16 @@ const SIL=SIL_CV.getContext('2d');
    結果は種族×半径×精鋭×個体差×状態×アニメ位相(16コマ/2秒)でキャッシュし、以後は drawImage 1回。 */
 const OUT_CV=document.createElement('canvas'); OUT_CV.width=OUT_CV.height=512; const OUTG=OUT_CV.getContext('2d');
 /* 焼き解像度: 端末の実ピクセル/ワールドpx(dpr×viewScale)に合わせて1〜2倍で焼き、等倍に縮めて置く(1倍で焼いて拡大するとぼやける) */
-function gfxK(){ return (gfxLv()<=1||(G.kCap||2)<2)?1:clamp(Math.ceil((dpr||1)*(viewScale||1)-0.1),1,2); }   // fps が落ちて装飾を省く段・キャッシュが溢れた戦闘では1倍に戻す
+function gfxK(){ return (G.kCap||2)<2?1:clamp(Math.ceil((dpr||1)*(viewScale||1)-0.1),1,2); }   // 鍵に入るので gfxLv には依存させない(段が動くたび全焼き直しになる)。kCap は戦闘中は片道
+function resetSpriteCache(){ SPR_CACHE.clear(); THRASH_N=0; }
 /* キャッシュ溢れの検知: 焼き予算が使い切られ続け、かつキャッシュが満杯なら「働き集合が入らない」——その戦闘は1倍焼きへ落とす(2倍は容量4倍) */
 let THRASH_N=0;
 function thrashGuard(){
   if((G.kCap||2)<2){ THRASH_N=0; return; }
   // 満杯で予算を使い切ったフレームは+1、そうでないフレームは-0.25(6割方の飽和が1.5秒続けば落とす)
-  if(BAKE_N>=BAKE_MAX && SPR_CACHE.size>=sprMax()) THRASH_N+=1; else THRASH_N=Math.max(0,THRASH_N-0.25);
+  let full=false;
+  if(BAKE_N>=BAKE_MAX && SPR_CACHE.size>=sprMax()){ const k=gfxK(); let n=0; for(const en of SPR_CACHE.values()) if(en.k===k) n++; full=n>=sprMax()*0.9; }   // 別倍率の古い絵は「満杯」に数えない
+  if(full) THRASH_N+=1; else THRASH_N=Math.max(0,THRASH_N-0.25);
   if(THRASH_N>=40){ G.kCap=1; THRASH_N=0; }
 }
 const OUTLINE_COL={};
@@ -965,7 +968,7 @@ function bakeSprite(e,key,R,S){
   NO_IRIS=!!MON_IRIS[e.id];
   try{ renderShaded(cg,e,R,S,R*1.4,k); } finally { NO_IRIS=false; }
   e.t=t0; e.joff=jo;
-  const ent={cv,R,oy:R*1.4,S,fl:null,hit:FRAME_N};
+  const ent={cv,R,oy:R*1.4,S,k,fl:null,hit:FRAME_N};
   const mx=sprMax(); while(SPR_CACHE.size>=mx) SPR_CACHE.delete(SPR_CACHE.keys().next().value);
   SPR_CACHE.set(key,ent); return ent;
 }
@@ -997,7 +1000,7 @@ function prebakeStep(){
 function fpsGuard(){
   if(META.settings&&META.settings.gfxAuto===false){ G.gfxLv=2; return; }
   const fdt=1/Math.max(20,G.fps||60);
-  if(G.fps<40){ G.hiT=0; G.lowT=(G.lowT||0)+fdt; if(G.lowT>2 && gfxLv()>0){ G.gfxLv=gfxLv()-1; G.lowT=0; } }
+  if(G.fps<40){ G.hiT=0; G.lowT=(G.lowT||0)+fdt; if(G.lowT>2 && gfxLv()>0){ G.gfxLv=gfxLv()-1; G.lowT=0; if(G.gfxLv===0) G.kCap=1; } }   // 最下段まで落ちたら焼き倍率も1倍へ(片道)
   else if(G.fps>55){ G.lowT=0; G.hiT=(G.hiT||0)+fdt; if(G.hiT>8 && gfxLv()<2){ G.gfxLv=gfxLv()+1; G.hiT=0; } }
 }
 /* 焼き絵の上に必ず重ねる部分: 目玉系の虹彩・瞳(視線が滑らかに追う)と照射触手の水晶。焼きの鍵から視線を外せる */
@@ -2605,6 +2608,7 @@ function draw(){
     if(heatVis>=30) drawHeatFx(g,p.x,p.y,p.anim,heatVis);
     // 魅了の糸(種族ごとに、最寄りの個体へ。深いほど濃い)
     for(const c of p.charms){
+      if(c.lv<=0) continue;   // ゲージが溜まりはじめただけの種族には糸を描かない
       let cm=null, cd=1e9;
       for(const e of B.enemies){
         if(e.dead||e.dormant||e.id!==c.id) continue;

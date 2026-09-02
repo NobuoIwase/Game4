@@ -483,9 +483,9 @@ const UI={
       if(stg<0) return `<div class="ccard unknown"><div style="height:44px;line-height:44px;font-size:22px">？</div><div class="nm">？？？</div><div class="st">${esc(TIER_NAMES[tierOf(id)])}・未観測</div></div>`;
       const kl=knowLv(id);
       return `<div class="ccard ${id===this.codexSel?'sel':''}" data-act="codex" data-arg="${id}">
-        <div class="stg">${stageTxt[stg]}${kl?'・学習'+ROMANS[kl]:''}</div>
+        <div class="stg">${stageTxt[stg]}</div>
         <div data-icon="${id}" data-size="44"></div>
-        <div class="nm">${esc(m.name)}</div><div class="st">${esc(TIER_NAMES[tierOf(id)])}・${esc(m.role)}</div></div>`;
+        <div class="nm">${esc(m.name)}</div><div class="st">${esc(TIER_NAMES[tierOf(id)])}・${esc(m.role)}</div>${kl?'<div class="lrn">今世代の学習 '+ROMANS[kl]+' '+esc(KNOW_NAMES[kl])+'</div>':''}</div>`;
     }).join('');
     let detail='';
     const sel=this.codexSel;
@@ -606,7 +606,11 @@ const UI={
   handEls(){ return [...$('handrow').children, ...$('guestrow').querySelectorAll('.gchip')]; },
   buildHand(){
     const row=$('handrow'), grow=$('guestrow');
+    // 客の帯: ラベルは固定、札だけが横スクロールする。作り直す前の位置(右端にいたか)を覚えておく
+    const oldSc=grow.querySelector('#guestscroll');
+    const atEnd=!oldSc || oldSc.scrollLeft+oldSc.clientWidth>=oldSc.scrollWidth-12, keepLeft=oldSc?oldSc.scrollLeft:0;
     row.innerHTML=''; grow.innerHTML='';
+    const sc=document.createElement('div'); sc.id='guestscroll';
     const guests=G.B.hand.filter(h=>h.temp);
     for(const slot of G.B.hand){
       const m=MONSTERS[slot.id];
@@ -617,7 +621,7 @@ const UI={
         el.title=m.name+' — 宝箱の加勢(この戦闘のみ)';
         el.innerHTML=`<div class="cost"></div><div class="tg">客</div><div class="combo" hidden></div><div class="cnt"></div><div class="nm">${esc(m.name)}</div><div class="cd" style="height:0%"></div>`;
         el.insertBefore(makeIconCanvas(slot.id,44), el.firstChild);
-        grow.appendChild(el);
+        sc.appendChild(el);
       }else{
         el.className='hcard t-'+tierOf(slot.id);
         const tg={fodder:'雑',mid:'中',large:'大',boss:'王'}[tierOf(slot.id)];
@@ -629,8 +633,8 @@ const UI={
     grow.hidden=guests.length===0;
     if(guests.length){
       const lbl=document.createElement('div'); lbl.className='glbl'; lbl.innerHTML='客 <b>'+guests.length+'</b>';
-      grow.insertBefore(lbl, grow.firstChild);
-      grow.scrollLeft=grow.scrollWidth;   // 新しく来た客が見えるよう右端へ
+      grow.appendChild(lbl); grow.appendChild(sc);
+      sc.scrollLeft=atEnd?sc.scrollWidth:keepLeft;   // 右端を見ていたなら新しく来た客が見える位置へ、途中を見ていたならそのまま
     }
     this.refreshHand();
   },
