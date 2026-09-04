@@ -42,6 +42,7 @@ function frame(now){
     const p=G.B.hero;
     const k2=Math.min(1,dt*5*steps);
     G.cam.x+=(p.x-G.cam.x)*k2; G.cam.y+=(p.y-G.cam.y)*k2;
+    if(typeof MAP_HW!=='undefined'){ G.cam.x=clamp(G.cam.x,-MAP_HW+W/2,MAP_HW-W/2); G.cam.y=clamp(G.cam.y,-MAP_HH+H/2,MAP_HH-H/2); }   // マップの外を見せない
   }
   UI.tickBattleBar();
   draw();

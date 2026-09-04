@@ -446,6 +446,14 @@ const UI={
         <div class="kv" style="margin-top:6px"><div>現在の反応段階 <b>${esc(TIER_NAMES_JP[self.tier])}</b></div></div>
         <div class="note">肉体=今世代で受けた損耗と異常の蓄積 / 精神=捕獲された経験。反応段階は二軸から導く(心は拒み、体は応える期間が最も長い)。</div>
       </div>
+      <div class="stcard"><h3>探索 <span style="color:var(--dim);font-weight:normal">(地形マップ・世代ごとに地形が変わる)</span></h3>
+        <div class="kv">
+          <div>見つけた場所 <b>${Object.values((META.map&&META.map.known)||{}).filter(Boolean).length}/6</b> <span>(祠3・泉2・門1。見えた場所だけを目当てに歩く)</span></div>
+          <div>祠の加護 <b>${Object.keys((META.map&&META.map.visited)||{}).length}/3</b> <span>(着くと自己強化が1段・世代内で1度ずつ)</span></div>
+          <div>門の突破 <b>${(META.map&&META.map.gateDone)||0}回</b> <span>(進み ${Math.round((META.map&&META.map.gateProg)||0)}/12秒。日を跨いで進む。2日目以降か3種を理解してから挑む)</span></div>
+        </div>
+        <div class="note" style="margin-top:6px">${Object.keys(ZONES).map(z=>esc(ZONES[z].name)+': '+esc(ZONES[z].desc)).join(' / ')}</div>
+      </div>
       <div class="stcard"><h3>抵抗の意志 <span style="color:var(--dim);font-weight:normal">(夜側の強化が行き着いても、彼女は「全く抵抗できない」には落ちない)</span></h3>
         <div class="kv">
           <div>意志 <b>${(META.lumina&&META.lumina.will)||0}/${BAL.WILL_CAP}</b> <span>(敗北のたび+${BAL.WILL_CAP_GAIN}、60秒以内の敗北は+${BAL.WILL_CAP_GAIN+BAL.WILL_FAST_GAIN}。生き延びると-${BAL.WILL_SURVIVE_LOSS})</span></div>
@@ -554,6 +562,8 @@ const UI={
       <h2 style="color:${color}">${title}</h2>
       ${by?`<div style="font-size:12px;color:var(--body)">とどめ: ${esc(by)}${causeTxt?' — '+esc(causeTxt):''}</div>`:''}
       ${sum.shop&&sum.shop.length?`<div class="note" style="color:var(--gold);margin:6px 0">——夜が明けて、ルミナは自分を強化した——<br>${sum.shop.map(esc).join(' ・ ')}</div>`:''}
+      ${sum.shrines&&sum.shrines.length?`<div class="note" style="color:#ffd76a;margin:6px 0">——祠の加護: ${sum.shrines.map(esc).join(' ・ ')}——</div>`:''}
+      ${sum.gateT>0?`<div class="note" style="color:#ff86b3;margin:6px 0">門に挑んだ(${Math.round(sum.gateT)}秒)。突破の進み: ${Math.round(Math.min(12,(META.map&&META.map.gateProg)||0))}/12秒</div>`:''}
       ${sum.willUp?`<div class="note" style="color:#8fd3ff;margin:6px 0">——抵抗の意志が固くなった(${sum.will}/${BAL.WILL_CAP})。次からの彼女は少し粘る——</div>`:''}
       ${sum.newCurse?`<div class="note" style="color:#ff6b81;margin:6px 0">——ボス敗北。呪い『${esc(sum.newCurse.name)}』が${BAL.CURSE_DAYS}日残る: ${esc(sum.newCurse.desc)}——</div>`:''}
       ${sum.curseGone?`<div class="note" style="color:var(--dim);margin:6px 0">呪い『${esc(sum.curseGone.name)}』が抜けた</div>`:''}

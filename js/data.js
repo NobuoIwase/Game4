@@ -354,6 +354,28 @@ const MONSTERS={
     trait:'濃い雄臭の雲を撒く(発情・敏感化)。9秒ごとに手下3体。突進。呪い『雄臭の刷り込み』',
   },
 };
+/* ---------------- 地形マップ(v1.6・実験) ----------------
+   有限のマップをマップチップで敷く。世代ごとに地形が変わり、同じ世代の4日間は同じ地形。
+   彼女は宝箱・祠(永続強化)・泉(休息)・門(突破)を目当てに歩き回る。地形は魔物にも効く */
+const MAP_T=64, MAP_W=56, MAP_H=36;                 // タイル寸・横タイル数・縦タイル数(3584×2304px、原点が中心)
+const MAP_HW=MAP_W*MAP_T/2, MAP_HH=MAP_H*MAP_T/2;
+const ZONES={
+  moss:     { name:'苔の広間',   col:'#26304a', desc:'いつもの床。何も起きない' },
+  damp:     { name:'湿った洞',   col:'#1f3c3e', desc:'ナメクジ・羽虫・ワーム・粘獣王のHP+25%(ジメジメ)' },
+  water:    { name:'浅瀬',       col:'#22375c', desc:'スライム系の速度+30%。彼女の足は水で12%鈍る' },
+  flower:   { name:'花園',       col:'#3a2c46', desc:'媚薬の雲が濃く広い(+20%)。花粉で彼女の敏感化がじわじわ進む' },
+  hotspring:{ name:'温泉',       col:'#4a3040', desc:'湯気で彼女の回復+50%。代わりに敏感化と発情ゲージが上がる' },
+  ruin:     { name:'石畳の回廊', col:'#2e2e3c', desc:'彼女の足も魔物の足も速い(+6%)' },
+  nest:     { name:'魔物の巣',   col:'#402234', desc:'魔物のHP+15%・速度+10%。門がある' },
+};
+const ZONE_IDS=Object.keys(ZONES);
+const ZONE_HP_MON={ damp:{slug:1.25,leech:1.25,worm:1.25,slimeking:1.25}, nest:{'*':1.15} };
+const ZONE_SPD_MON={ water:{slime:1.3,mistslime:1.3,slimeking:1.3}, ruin:{'*':1.06}, nest:{'*':1.1} };
+const POI_DEF={
+  shrine:{ name:'祠',   desc:'着くと彼女の自己強化が1段上がる(世代内で1度ずつ)' },
+  spring:{ name:'泉',   desc:'HPが減っていれば湯に浸かって休む。回復するが、敏感化と発情ゲージが上がる' },
+  gate:  { name:'門',   desc:'巣の奥の門。そばに12秒居続けると突破(日を跨いで進む)。突破のたび巣の魔物が湧く' },
+};
 /* ボス敗北の呪い: ボスの攻撃/影響によって敗北すると、次の CURSE_DAYS 日にわたって残る */
 const BOSS_CURSES={
   dreamtree: { name:'樹液の余熱',   desc:'敏感化の下限+20。快感の入り+10%' },

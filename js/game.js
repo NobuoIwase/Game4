@@ -23,6 +23,7 @@ function newHero(){
     dmgMult:(1+0.06*(LU.zeal||0))*(1+0.02*will)*gsc,
     will, curse:null, curseAmp:0, curseAche:false,     // v1.6 抵抗の意志 / ボス敗北の呪い
     hypnoG:0, heatG:0, inMusk:false,                   // v1.6 催眠ゲージ / 発情ゲージ(雲から) / 雄臭の雲の中
+    zone:'moss', bathT:0, springCd:0, dest:null, destT:0, explore:null, exploreT:0,   // v1.6 地形マップ
     level:1, xp:0, xpNeed:need(1),
     wp:{bolt:2, orb:1, nova:0, whip:0, rain:0, cross:0, sanct:0, blade:0, thunder:0, holy:0},
     ps:{speed:0, vital:0, magnet:0, haste:0, ward:0, growth:0, area:0, dup:0, luck:0, endure:0},
@@ -137,6 +138,8 @@ function heroStat(h){
   spd*=Math.pow(0.72, legCount(h));
   spd*=Math.pow(BAL.SUCK_SLOW, suckCount(h));
   if(h.slow>0) spd*=(h.curse==='slimeking'?0.42:0.55);   // 呪い『粘膜の記憶』: 粘液で更に鈍る
+  if(h.zone==='water') spd*=0.88;   // 浅瀬
+  if(h.zone==='ruin') spd*=1.06;    // 石畳
   if(h.heatLv>0) spd*=1-0.04*h.heatLv;
   if(h.waveDur>0) spd*=BAL.WAVE_SPD;
   if(h.exhausted) spd*=0.7;
@@ -158,7 +161,7 @@ function startBattle(){
     hand:META.deck.map(id=>({id, cdT:0, cdMax:1})),
     auto:META.settings.autoplay, autoT:1.2,
     kills:0, dmgDealt:0, dmgCarry:0, ailCount:0, orbFrag:0, essence:0,
-    bossUsed:false, bossPlayed:{}, bossCd:0, bossMark:null, ebullets:[], capturedBy:null, captureCause:'', captureT:0, winT:0,
+    bossUsed:false, bossPlayed:{}, bossCd:0, bossMark:null, ebullets:[], shrineGot:[], gateT:0, poiCd:0, capturedBy:null, captureCause:'', captureT:0, winT:0,
     ailRateT:{}, chestIdx:0, propT:BAL.PROP_RESPAWN,
     lvCards:null, pinScene:null, pinSceneIdx:0, pinSceneT:0,
     combo:{}, lastPlay:null,
@@ -169,6 +172,7 @@ function startBattle(){
     filmed:0,                                         // 見られながらの絶頂(v1.2)
     codexSeen:{}, metCd:{}, recentMet:{},             // 図鑑の記録用
   };
+  genMap();               // 地形(世代ごとに変わる)
   spawnInitialProps();
   // 描き込みスプライトの事前焼き(デッキの種族×位相を最初の数十フレームで焼いておく)
   G.gfxLv=2; G.kCap=2; G.prebake=[];
@@ -243,7 +247,7 @@ function endBattle(outcome){
     time:B.time, kills:B.kills, dmg:Math.round(B.dmgDealt), ail:B.ailCount,
     heroLv:B.hero.level, capturedBy:B.capturedBy, cause:B.captureCause, climax:B.climaxN,
     coins:coinGain, shop:shopped, decay,
-    will:META.lumina.will||0, willUp:outcome==='capture', newCurse:newCurse?BOSS_CURSES[newCurse.id]:null,
+    will:META.lumina.will||0, willUp:outcome==='capture', shrines:B.shrineGot, gateT:B.gateT, newCurse:newCurse?BOSS_CURSES[newCurse.id]:null,
     curseGone:(oldCurse&&!META.curse&&!newCurse)?BOSS_CURSES[oldCurse.id]:null});
 }
 
@@ -869,6 +873,10 @@ function inSector(ey,p){
 }
 /* v1.2 状態異常: 寸止め/疼き/痺れ/視姦/時間停止/触手服/おねだり */
 function statesTick(h,dt){
+  // 地形: 花園の花粉、温泉の湯気(回復するが火照る)
+  h.zone=zoneAt(h.x,h.y);
+  if(h.zone==='flower') applySensit(0.6*dt);
+  if(h.zone==='hotspring'){ applySensit(1.2*dt); addHeatG(2*dt); h.hp=Math.min(h.maxHp,h.hp+h.regen*0.5*dt); }
   const B=G.B;
   // ---- v1.3 催眠Lv: 時間で薄れる。Ⅲでは、その場で自分を慰めはじめる
   if(h.hypnoLv>0){
@@ -1081,12 +1089,13 @@ function aiUpdate(dt){
   const B=G.B, p=B.hero, st=heroStat(p);
   p.prevX=p.x; p.prevY=p.y;
 
-  if(p.pinned || p.charmBind || p.climaxT>0 || p.stumbleDur>0 || p.freezeT>0 || p.selfT>0 || p.sniffT>0){
+  if(p.pinned || p.charmBind || p.climaxT>0 || p.stumbleDur>0 || p.freezeT>0 || p.selfT>0 || p.sniffT>0 || p.bathT>0){
     p.vx*=Math.pow(0.001,dt); p.vy*=Math.pow(0.001,dt);
     p.moving=false;
     p.aiLabel=p.freezeT>0?'じかんが、とまって……'
       :p.climaxT>0?'ぜっちょう……!!'
       :p.selfT>0?'……(その場で、じぶんを)……'
+      :p.bathT>0?'おゆに、つかってる……'
       :p.sniffT>0?'……におい、を……'
       :(p.pinned?'おさえこまれている!!':(p.charmBind?'みりょうされて、はなれない…!!':'ふらつき…'));
     return;
@@ -1152,6 +1161,7 @@ function aiUpdate(dt){
   const k=Math.min(1,dt*6.5*foc);
   p.vx+=(tvx-p.vx)*k; p.vy+=(tvy-p.vy)*k;
   p.x+=p.vx*dt; p.y+=p.vy*dt;
+  p.x=clampMapX(p.x,p.r+6); p.y=clampMapY(p.y,p.r+6);   // マップの端
 
   // 繋留(蔦)による引き戻し
   for(const sl of attachedSlots(p)){
@@ -1173,12 +1183,12 @@ function aiUpdate(dt){
   if(Math.abs(p.vx)>12) p.face=p.vx>0?1:-1;
   p.moving=Math.hypot(p.vx,p.vy)>30;
 
-  const LBL={flee:'かいひ行動!', boss:'ボスかいひ!!', dodge:'よける!(おぼえてる)', gem:'ジェム回収', heart:'ハートへ!',
+  const LBL={flee:'かいひ行動!', boss:'ボスかいひ!!', dodge:'よける!(おぼえてる)', gem:'ジェム回収', poi:'めざす場所へ', explore:'たんさく中', heart:'ハートへ!',
     prop:'燭台をこわして回復!', chest:'たからばこへ!', kite:'まちうけ・けん制', wait:'けいかい中',
     struggle:'ふりほどこうともがいている!',
     charmwalk:'ふらふらと、ちかづいていく…', heatwalk:'熱にまけて、よろめき寄る…',
     hypno:'……電波に、あしが……', item:'おちてる品へ!', beg:'……おねだり、なんて……してない……'};
-  const BBL={flee:'にげなきゃ〜!', boss:'おっきいのこわい!!', dodge:'あれは…だめ、よけなきゃ!', gem:'キラキラかいしゅう♪',
+  const BBL={flee:'にげなきゃ〜!', boss:'おっきいのこわい!!', dodge:'あれは…だめ、よけなきゃ!', gem:'キラキラかいしゅう♪', poi:'あそこまで、いってみる', explore:'こっちは、まだ見てない',
     heart:'ハートみっけ!', prop:'燭台こわして回復しなきゃ', chest:'たからばこだ〜!',
     kite:'このきょりキープ…', wait:'つぎはどこから…?', struggle:'はなれてよ〜っ!',
     charmwalk:'…なんで、あしが…', heatwalk:'…あつくて、なにも…',
@@ -1211,6 +1221,10 @@ function cloudWorth(cl){
 function aiDecide(foc){
   const B=G.B, p=B.hero;
   let ax=0, ay=0, threat=0, bossNear=false;
+  // マップの端: 壁に追い詰められないよう、端に近いほど内側へ寄る
+  { const wm=150;
+    if(p.x<-MAP_HW+wm) ax+=(1-(p.x+MAP_HW)/wm)*1.4; if(p.x>MAP_HW-wm) ax-=(1-(MAP_HW-p.x)/wm)*1.4;
+    if(p.y<-MAP_HH+wm) ay+=(1-(p.y+MAP_HH)/wm)*1.4; if(p.y>MAP_HH-wm) ay-=(1-(MAP_HH-p.y)/wm)*1.4; }
   for(const e of B.enemies){
     if(e.dead||e.dormant||e.state==='attached') continue;
     if(e.id==='flower' && !e.revealed) continue;
@@ -1358,6 +1372,11 @@ function aiDecide(foc){
         if(d<td){ td=d; target=c; kind='chest'; }
       }
     }
+    // 目的地(祠・泉・門)や探索: 近くにジェムが無く、脅威が薄いときに歩く
+    if(!target && threat<0.3 && G.map && !nearGem(p,170)){
+      const dest=pickDest(p);
+      if(dest){ target=dest; kind=dest.kind==='explore'?'explore':'poi'; }
+    }
     if(!target){
       // ジェム回収。ガス溜まりの中のジェムは基本見送る——
       // ただし中のジェムが多ければ、意を決して取りに入る
@@ -1471,7 +1490,7 @@ function nearestEnemies(n,maxD){
 }
 function weaponsUpdate(dt){
   const B=G.B, p=B.hero;
-  const atkMult=((p.pinned||p.charmBind||p.climaxT>0||p.freezeT>0||p.begT>0||p.selfT>0||p.sniffT>0)?0:1)*Math.pow(0.75,armCount(p))   // 腕を拘束されるほど攻撃が乱れる
+  const atkMult=((p.pinned||p.charmBind||p.climaxT>0||p.freezeT>0||p.begT>0||p.selfT>0||p.sniffT>0||p.bathT>0)?0:1)*Math.pow(0.75,armCount(p))   // 腕を拘束されるほど攻撃が乱れる
     *(p.waveDur>0?BAL.WAVE_ATK:1)                                           // 発情の波の間は手が止まりがち
     *(p.numbT>0?0.5:1)                                                      // 痺れ: 指が動かない
     *(1+0.08*p.ps.haste);                                                   // クイックリボン
@@ -1802,6 +1821,7 @@ function unitDef(id){
 }
 function spawnUnit(id, x, y, o){
   o=o||{};
+  x=clampMapX(x,20); y=clampMapY(y,20);
   const B=G.B, d=unitDef(id);
   const elite=o.elite||1;
   // 夜の深まり: 彼女が育つほど、召喚される魔物も強くなる(カード練度でスケール)
@@ -1850,6 +1870,9 @@ function spawnUnit(id, x, y, o){
   if(id==='runemage'){ u.castCd=2.5; u.runeCd=6; u.lookA=0; }
   if(id==='succuqueen'){ u.orbitA=rand(TAU); u.orbitDir=Math.random()<0.5?-1:1; u.pulseCd=3; u.spawnCd=8; u.kissCd=2; }
   if(id==='gobking'){ u.muskCd=0.5; u.hornCd=4; }
+  // 地形の恩恵: 湿地で粘る種のHP、巣の魔物のHP。速度は毎フレーム今いる地形で決まる(spd0 が素の速度)
+  u.spd0=u.spd; u.zone=zoneAt(x,y);
+  { const hm=zoneMonHp(u.zone,id); if(hm!==1){ u.hp*=hm; u.maxHp*=hm; } }
   u.parent=o.parent||null;
   if(!B.codexSeen[id] && !MONSTERS[id].item){ B.codexSeen[id]=1; codexMark(id,'seen'); }
   B.enemies.push(u);
@@ -1933,6 +1956,7 @@ function spawnCloud(x,y,r,life,rate,src){
   const B=G.B;
   if(B.clouds.length>44) B.clouds.shift();
   const kind=src==='musk'?'musk':'gas';
+  if(kind==='gas' && zoneAt(x,y)==='flower'){ rate*=1.2; r*=1.1; }   // 花園では媚薬の雲が濃く広い
   const c={x,y,r,t:0,life,rate,src:src||null,kind};
   B.clouds.push(c);
   parts(x,y,kind==='musk'?4:8,kind==='musk'?['#a8c86a','#8fb05a']:['#ff9ec2','#ffc2d8'],60,0.8);
@@ -1978,12 +2002,14 @@ function enemiesUpdate(dt){
       const vd=Math.hypot(p.vx,p.vy);
       const base=vd>20?Math.atan2(p.vy,p.vx):rand(TAU);
       const a=base+rand(-1.1,1.1);
-      e.x=p.x+Math.cos(a)*BAL.REENTER_R; e.y=p.y+Math.sin(a)*BAL.REENTER_R*0.8;
+      e.x=clampMapX(p.x+Math.cos(a)*BAL.REENTER_R,e.r); e.y=clampMapY(p.y+Math.sin(a)*BAL.REENTER_R*0.8,e.r);
       e.seenT=0; e.lvx=null; e.lvy=null;
       B.spawnFx.push({x:e.x,y:e.y,t:0,r:e.r+8});
       if(e.boss){ floatTxt(e.x,e.y-e.r-20,'まわりこんできた!','#ff6b81',11,1.2); }
       continue;
     }
+    e.zone=zoneAt(e.x,e.y); if(e.spd0!==undefined) e.spd=e.spd0*zoneMonSpd(e.zone,e.id);
+    e.x=clampMapX(e.x,e.r); e.y=clampMapY(e.y,e.r);
     if(e.stun>0){ e.stun-=dt; }
     else if(e.id==='dreamtree'){
       dreamtreeTick(e,dt,d);
@@ -2510,6 +2536,140 @@ function beamerTick(e,dt,d,dx,dy){
   }else if(e.bmState==='fire'){
     if(e.bmT<=0){ e.bmState='cd'; e.bmT=BAL.BEAM_CD; }
   }else{ if(e.bmT<=0) e.bmState='idle'; }
+}
+
+/* ================= 地形マップ(v1.6・実験) =================
+   有限マップを世代ごとの種で生成。彼女は見つけた場所(祠・泉・門)を目当てに歩き、知らなければ探索する */
+function mapGen(){ return META.gen.idx||1; }
+function genMap(){
+  const gi=mapGen(), seed=1000+gi*7919;
+  if(G.map && G.map.seed===seed && META.map && META.map.gen===gi) return;
+  let sd=seed; const rnd=()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; };
+  const types=['moss','moss','moss','damp','damp','water','water','flower','flower','hotspring','ruin','ruin','nest'];
+  const sites=types.map(t=>({t, x:(rnd()-0.5)*MAP_HW*1.8, y:(rnd()-0.5)*MAP_HH*1.8}));
+  const nest=sites.find(z=>z.t==='nest'); const ea=rnd()*TAU; nest.x=Math.cos(ea)*MAP_HW*0.78; nest.y=Math.sin(ea)*MAP_HH*0.78;   // 巣は端のほう
+  sites.push({t:'moss', x:0, y:0});   // 出発点は苔の広間
+  const zone=new Uint8Array(MAP_W*MAP_H);
+  for(let j=0;j<MAP_H;j++) for(let i=0;i<MAP_W;i++){
+    const cx=(i+0.5)*MAP_T-MAP_HW, cy=(j+0.5)*MAP_T-MAP_HH;
+    const jx=(hash2(i*3+gi,j*5)-0.5)*110, jy=(hash2(i*7,j*11+gi)-0.5)*110;   // 境目を揺らして自然に
+    let best=sites[0], bd=1e18;
+    for(const z of sites){ const d=(z.x-cx-jx)*(z.x-cx-jx)+((z.y-cy-jy)*1.35)*((z.y-cy-jy)*1.35); if(d<bd){ bd=d; best=z; } }
+    zone[j*MAP_W+i]=ZONE_IDS.indexOf(best.t);
+  }
+  const pois=[];
+  const place=(kind,inZone,minD)=>{
+    for(let k=0;k<400;k++){
+      const x=(rnd()-0.5)*MAP_HW*1.72, y=(rnd()-0.5)*MAP_HH*1.72;
+      if(Math.hypot(x,y)<minD) continue;
+      if(inZone && zoneAtXY(zone,x,y)!==inZone) continue;
+      if(pois.some(q=>Math.hypot(q.x-x,q.y-y)<380)) continue;
+      pois.push({kind,x,y,key:kind+pois.length}); return;
+    }
+    pois.push({kind,x:(rnd()-0.5)*1400,y:(rnd()-0.5)*900,key:kind+pois.length});
+  };
+  place('shrine',null,520); place('shrine',null,520); place('shrine',null,520);
+  place('spring','hotspring',320); place('spring',null,420);
+  place('gate','nest',700);
+  G.map={seed, gi, zone, sites, pois, mini:null};
+  if(!META.map || META.map.gen!==gi){ META.map={gen:gi, known:{}, visited:{}, gateProg:0, gateDone:0, seen:0}; saveMeta(); }
+}
+function zoneAtXY(zone,x,y){
+  const i=Math.floor((x+MAP_HW)/MAP_T), j=Math.floor((y+MAP_HH)/MAP_T);
+  if(i<0||j<0||i>=MAP_W||j>=MAP_H) return 'moss';
+  return ZONE_IDS[zone[j*MAP_W+i]]||'moss';
+}
+function zoneAt(x,y){ return (G.map&&G.map.zone)?zoneAtXY(G.map.zone,x,y):'moss'; }
+function zoneMonSpd(z,id){ const t=ZONE_SPD_MON[z]; if(!t) return 1; return t[id]||t['*']||1; }
+function zoneMonHp(z,id){ const t=ZONE_HP_MON[z]; if(!t) return 1; return t[id]||t['*']||1; }
+function clampMapX(x,m){ m=m===undefined?24:m; return clamp(x,-MAP_HW+m,MAP_HW-m); }
+function clampMapY(y,m){ m=m===undefined?24:m; return clamp(y,-MAP_HH+m,MAP_HH-m); }
+function nearGem(p,r){ for(const gm of G.B.gems){ if(Math.hypot(gm.x-p.x,gm.y-p.y)<r) return true; } return false; }
+/* 門に挑むのは、2日目以降か、3種以上を理解してから(初日の初見では巣の奥まで行こうとしない) */
+function gateAllowed(){ const kn=META.gen.know||{}; let n=0; for(const id in kn){ if(knowLv(id)>=2) n++; } return (META.gen.battle>=1 || n>=3); }
+/* 彼女の目的地: 知っている(見たことのある)場所から選ぶ。何も無ければ、まだ見ていない方向へ探索に歩く */
+function pickDest(p){
+  const M=META.map; if(!G.map||!M) return null;
+  p.destT-=1/60;
+  if(p.dest && p.destT>0){ if(Math.hypot(p.dest.x-p.x,p.dest.y-p.y)>40) return p.dest; }
+  p.destT=6;
+  let best=null, bd=1e9;
+  for(const q of G.map.pois){
+    if(!M.known[q.key]) continue;
+    if(q.kind==='shrine' && M.visited[q.key]) continue;
+    if(q.kind==='spring' && !(p.hp<p.maxHp*0.7 && p.springCd<=0)) continue;
+    if(q.kind==='gate' && !gateAllowed()) continue;
+    const d=Math.hypot(q.x-p.x,q.y-p.y)*(q.kind==='gate'?1.3:1);
+    if(d<bd){ bd=d; best=q; }
+  }
+  if(best){ p.dest={x:best.x,y:best.y,kind:best.kind,key:best.key}; return p.dest; }
+  p.exploreT-=6;
+  if(!p.explore || p.exploreT<=0 || Math.hypot(p.explore.x-p.x,p.explore.y-p.y)<70){
+    let cand=null, cs=-1;
+    for(let k=0;k<8;k++){
+      const a=rand(TAU), dd=rand(600,1200);
+      const x=clampMapX(p.x+Math.cos(a)*dd,120), y=clampMapY(p.y+Math.sin(a)*dd,120);
+      let sc=Math.hypot(x-p.x,y-p.y)/1200;
+      for(const q of G.map.pois){ if(!M.known[q.key]) sc+=Math.max(0,1-Math.hypot(q.x-x,q.y-y)/700); }   // まだ見ていない場所のそばほど良い
+      if(sc>cs){ cs=sc; cand={x,y}; }
+    }
+    p.explore=cand; p.exploreT=30;
+  }
+  p.dest={x:p.explore.x,y:p.explore.y,kind:'explore'};
+  return p.dest;
+}
+/* 場所: 見えたら覚える。着いたら効く */
+function poiTick(dt){
+  const B=G.B, p=B.hero, M=META.map; if(!G.map||!M) return;
+  if(p.springCd>0) p.springCd-=dt;
+  if(p.bathT>0){
+    p.bathT-=dt; p.vx=0; p.vy=0;
+    p.hp=Math.min(p.maxHp,p.hp+p.maxHp*0.14*dt); applySensit(5*dt); addHeatG(10*dt);
+    if(Math.random()<dt*3) parts(p.x+rand(-14,14),p.y-30,1,['#fff','#ffe0f0'],40,1.2);
+  }
+  B.poiCd-=dt;
+  for(const q of G.map.pois){
+    if(!M.known[q.key] && inSight(q,p)){
+      M.known[q.key]=1; M.seen=(M.seen||0)+1;
+      floatTxt(q.x,q.y-40,'みつけた: '+POI_DEF[q.kind].name,'#8fd3ff',12,1.8);
+      heroBubble(p,pickRand(['あそこ、なにかある……','あれ、なんだろ','おぼえておこう']),false,1);
+      if(q.kind==='gate') setBanner('門を見つけた','巣の奥。彼女は突破したがるだろう','#ff86b3');
+    }
+    const d=Math.hypot(q.x-p.x,q.y-p.y);
+    if(q.kind==='shrine' && d<34 && !M.visited[q.key]){
+      M.visited[q.key]=1;
+      const ids=Object.keys(LUMINA_UPG).filter(id=>luminaRank(id)<LUMINA_UPG[id].max);
+      let got='';
+      if(ids.length){ const id=pickRand(ids); META.lumina.upg[id]=(META.lumina.upg[id]||0)+1; got=LUMINA_UPG[id].name; }
+      META.lumina.coins+=30;
+      B.shrineGot.push(got?(got+' +1'):'コイン+30');
+      setBanner('祠の加護',got?(got+' +1(永続)'):'コイン+30','#ffd76a');
+      heroBubble(p,pickRand(['……あたたかい。ありがとう','ちからが、わいてくる','ここ、おぼえた']),false,2);
+      parts(q.x,q.y-20,30,['#ffd76a','#fff','#ffe9b0'],140,1.0); sfx(600,1200,0.6,'sine',0.06); S.pick();
+      saveMeta();
+    }
+    if(q.kind==='spring' && d<40 && p.springCd<=0 && p.hp<p.maxHp*0.8 && attachCount(p)===0 && !p.pinned && p.climaxT<=0){
+      p.springCd=60; p.bathT=3.5;
+      setBanner('泉で休む','湯があつい。回復するが、身体も火照る','#8fd3ff');
+      heroBubble(p,pickRand(['ちょっとだけ、やすも……','あつ……でも、きもちいい……','すぐ、もどるから……']),true,2);
+      awardAil('heatg');
+    }
+    if(q.kind==='gate' && d<70 && !p.pinned && p.climaxT<=0){
+      M.gateProg+=dt; B.gateT+=dt;
+      if(B.poiCd<=0){
+        B.poiCd=3;
+        if(B.enemies.length<BAL.FIELD_CAP-4){ for(let i=0;i<2;i++){ const a=rand(TAU); spawnUnit(pickRand(['slug','goblin','worm','ghost','hand','leech']), q.x+Math.cos(a)*90, q.y+Math.sin(a)*70, {enVal:0, gemMul:0.5}); } }   // 巣の守り
+      }
+      if(M.gateProg>=12){
+        M.gateProg=0; M.gateDone=(M.gateDone||0)+1;
+        META.lumina.coins+=80; META.lumina.will=Math.min(BAL.WILL_CAP,(META.lumina.will||0)+1);
+        setBanner('門を突破した','巣の奥へ。意志が固くなり、コインを得た。門は別の場所へ移る','#ff86b3');
+        heroBubble(p,'……とおった。つぎも、いける',false,3); S.boss();
+        for(let k=0;k<200;k++){ const x=(Math.random()-0.5)*MAP_HW*1.7, y=(Math.random()-0.5)*MAP_HH*1.7; if(Math.hypot(x,y)<700||Math.hypot(x-p.x,y-p.y)<600) continue; q.x=x; q.y=y; break; }
+        M.known[q.key]=0; saveMeta();
+      }
+    }
+  }
 }
 
 /* ================= v1.6 ボス4種 ================= */
@@ -3505,6 +3665,7 @@ function battleTick(dt){
     if(!b.dead && Math.hypot(b.x-p.x,b.y-(p.y-14))<b.r+p.r*0.8 && p.freezeT<=0){ b.dead=true; runeHit(b); }
   }
   if(B.ebullets.length) B.ebullets=B.ebullets.filter(b=>!b.dead&&b.t<b.life);
+  poiTick(dt);   // 祠・泉・門
   for(const k in B.itemCd){ if(B.itemCd[k]>0) B.itemCd[k]-=dt; }
   trapsTick(dt);
   // 小淫魔: 近くの数を数える(集中低下)。快感は煽りアクション時のみ(バーストCD持ち)
@@ -3529,14 +3690,14 @@ function battleTick(dt){
   if(B.propT<=0 && B.props.length<BAL.PROP_MAX){
     B.propT=BAL.PROP_RESPAWN;
     const a=rand(TAU), d=rand(200,460);
-    B.props.push({x:p.x+Math.cos(a)*d, y:p.y+Math.sin(a)*d, hp:BAL.PROP_HP, max:BAL.PROP_HP, t:0});
+    B.props.push({x:clampMapX(p.x+Math.cos(a)*d,40), y:clampMapY(p.y+Math.sin(a)*d,40), hp:BAL.PROP_HP, max:BAL.PROP_HP, t:0});
   }
 
   // 宝箱
   if(B.chestIdx<BAL.CHEST_TIMES.length && B.time>=BAL.CHEST_TIMES[B.chestIdx]){
     B.chestIdx++;
     const a=rand(TAU), d=rand(300,460);
-    B.chests.push({x:p.x+Math.cos(a)*d, y:p.y+Math.sin(a)*d, t:0, taken:false});
+    B.chests.push({x:clampMapX(p.x+Math.cos(a)*d,40), y:clampMapY(p.y+Math.sin(a)*d,40), t:0, taken:false});
     setBanner('宝箱が どこかに おちた','ルミナが見つけると強化されてしまう…','#8fd3ff');
   }
 
