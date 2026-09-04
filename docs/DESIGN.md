@@ -199,7 +199,9 @@ idは汎用カタログ準拠。効果はすべて数値・挙動レベルで表
   →runeHit: 淫紋+1・快感12・敏感化6、13sごと伏せ紋。呪弾は knowLv≥1 なら横へ避ける)、succuqueenTick(半径130を周回、6sごと pulse: `addHeatG(45)`+発情中 `applyDeny`、口づけ CD5: 敏感化10+発情20、15sごと小淫魔2)、
   gobkingTick(bossChargeTick+1.8sごと雄臭雲 r90+9sごとゴブリン3)。
 - **包囲円陣** spawnCountFor: `ringMul = spd 0→1.6 / <30→1.35 / <45→1.0 / else 0.7`、半径 380/285。**ロージェム** `logemMul(n)`: LOGEM_CURVE を線形補間、値=`xp×0.8×mul`(下限0.4)。
-  **燭台** PROP_INIT 9 / PROP_RESPAWN 16 / PROP_MAX 12。
+  召喚(gemMul 0: 小淫魔・呼び笛・伏せ紋の手など)は従来の 0.5 のまま。**燭台** PROP_INIT 9 / PROP_RESPAWN 16 / PROP_MAX 12。
+- レビュー修正(v1.6.1): detachLimb は同じ個体が別の肢を掴んでいる間は離さない(粘獣王の2本呑み)。ボスの振りほどき減HPは 35%→5%。
+  種族上限は spawnCountFor 内で丸め、playCost も頭数比で削る(ゲイザーの包囲は表示も費用も実頭数)。呪い『残光』は Lv0 の間ゲージ40を下限に。
 
 ### 3-12. v1.6 地形マップ(実験)
 
@@ -207,7 +209,9 @@ idは汎用カタログ準拠。効果はすべて数値・挙動レベルで表
   (境目を hash2 で±55px 揺らす。nest は中心から 0.78 の縁)。`G.map.zone`(Uint8Array 56×36)。POI: 祠3(中心から520px以上)、泉2(1つは温泉帯)、門1(巣)。
   `META.map={gen,known,visited,gateProg,gateDone}` は世代が変わると作り直す。
 - 描画: `TILE_ATLAS`(地形7×3種、起動時に描く)を `drawTiles` が敷く。外は闇+岩壁。`drawPoi`(祠/泉/門・知っている場所には名札)、`drawMinimap`(左下、G.map.mini を1px/タイルで焼く)。
-  カメラは main.js で ±MAP_HW-W/2 に clamp。彼女・魔物・召喚位置・回り込み・燭台・宝箱は `clampMapX/Y`。
+  カメラは main.js で ±MAP_HW-W/2 に clamp。彼女・魔物・燭台・宝箱は `clampMapX/Y`。召喚位置と回り込みは `placeNear`(端では内側へ折り返し、壁に丸めて彼女の真横に落とさない)。
+  門の突破後の位置は `META.map.gatePos` に保ち genMap で再適用(巣に置けなければ遠い場所)。目的地の見直しは戦闘時刻ベース(6秒)、探索点は30秒。
+  POI が置けない種は地形帯の中心へ(門=巣の中心、泉=温泉の中心)。
 - AI: aiDecide の宝箱→(**目的地**)→ジェムの順。`pickDest`: 知っている(見えた)祠(未訪問)/泉(HP<70%)/門(gateAllowed: 2日目以降 or 理解3種)から最寄り、無ければ
   探索点(600〜1200px先・未知POIの近くほど高得点・30s or 到着で置き直し)。近く170pxにジェムがあればジェム優先。端150px以内は内側へ寄る力。
 - `poiTick`: 見えたら `known`(「みつけた: 祠」)。祠 34px で自己強化1段+コイン30(`visited`)。泉 40px・HP<80%・CD60 → `bathT 3.5s`(停止・HP14%/s・敏感化5/s・発情10/s)。
