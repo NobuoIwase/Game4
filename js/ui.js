@@ -446,6 +446,14 @@ const UI={
         <div class="kv" style="margin-top:6px"><div>現在の反応段階 <b>${esc(TIER_NAMES_JP[self.tier])}</b></div></div>
         <div class="note">肉体=今世代で受けた損耗と異常の蓄積 / 精神=捕獲された経験。反応段階は二軸から導く(心は拒み、体は応える期間が最も長い)。</div>
       </div>
+      <div class="stcard"><h3>抵抗の意志 <span style="color:var(--dim);font-weight:normal">(夜側の強化が行き着いても、彼女は「全く抵抗できない」には落ちない)</span></h3>
+        <div class="kv">
+          <div>意志 <b>${(META.lumina&&META.lumina.will)||0}/${BAL.WILL_CAP}</b> <span>(敗北のたび+${BAL.WILL_CAP_GAIN}、60秒以内の敗北は+${BAL.WILL_CAP_GAIN+BAL.WILL_FAST_GAIN}。生き延びると-${BAL.WILL_SURVIVE_LOSS})</span></div>
+          <div>効果 <span>最大HP+3%/点・与ダメ+2%/点・スタミナ+1.5/点・振りほどき+2%/点。催眠Ⅲの底でも意志の分だけ手が動く。魅了/催眠ゲージの入り-1.5%/点</span></div>
+          <div>世代の成長 <span>第${genNum(META.gen.idx)}世代: 素のHPと火力 ×${(1+BAL.GEN_SCALE*Math.min(10,Math.max(0,(META.gen.idx||1)-1))).toFixed(2)}</span></div>
+        </div>
+        ${META.curse&&BOSS_CURSES[META.curse.id]?`<div class="note" style="color:#ff6b81;margin-top:6px">ボス敗北の呪い『${esc(BOSS_CURSES[META.curse.id].name)}』 残り${META.curse.left}日 — ${esc(BOSS_CURSES[META.curse.id].desc)}</div>`:'<div class="note" style="margin-top:6px">ボス敗北の呪いは、いま無い。</div>'}
+      </div>
       <div class="stcard"><h3>身についた性癖 <span style="color:var(--dim);font-weight:normal">(通常の処置では抜けぬ・世代を跨いで残る)</span></h3>
         ${Object.keys(TRAITS).filter(k=>(META.traits[k]||0)>0).map(k=>`<div class="tcard ero"><div class="tn">♨ ${esc(TRAITS[k].name)} <b style="color:var(--pink)">${ROMANS[META.traits[k]]}</b><small>/${TRAITS[k].max}</small></div><div class="td">${esc(TRAITS[k].desc)}</div><div class="tc">刻まれ方: ${esc(TRAITS[k].how)}</div></div>`).join('')
           ||'<div class="note">まだ何も刻まれていない。性癖は特定の条件が揃った夜に一つずつ刻まれ、世代リセットでも消えない。</div>'}
@@ -546,6 +554,9 @@ const UI={
       <h2 style="color:${color}">${title}</h2>
       ${by?`<div style="font-size:12px;color:var(--body)">とどめ: ${esc(by)}${causeTxt?' — '+esc(causeTxt):''}</div>`:''}
       ${sum.shop&&sum.shop.length?`<div class="note" style="color:var(--gold);margin:6px 0">——夜が明けて、ルミナは自分を強化した——<br>${sum.shop.map(esc).join(' ・ ')}</div>`:''}
+      ${sum.willUp?`<div class="note" style="color:#8fd3ff;margin:6px 0">——抵抗の意志が固くなった(${sum.will}/${BAL.WILL_CAP})。次からの彼女は少し粘る——</div>`:''}
+      ${sum.newCurse?`<div class="note" style="color:#ff6b81;margin:6px 0">——ボス敗北。呪い『${esc(sum.newCurse.name)}』が${BAL.CURSE_DAYS}日残る: ${esc(sum.newCurse.desc)}——</div>`:''}
+      ${sum.curseGone?`<div class="note" style="color:var(--dim);margin:6px 0">呪い『${esc(sum.curseGone.name)}』が抜けた</div>`:''}
       ${sum.decay&&sum.decay.length?`<div class="note" style="color:var(--vio);margin:6px 0">——世代の夜明け。彼女の加護が${sum.decay.length}段薄れた——<br>${sum.decay.map(esc).join(' ・ ')}</div>`:''}
       ${cgHtml}
       <div class="breakdown">
@@ -689,7 +700,8 @@ const UI={
       const slot=handSlot(id);
       const chk=canPlay(id,this.selForm);
       el.classList.toggle('off',!chk.ok);
-      const cdH=slot&&slot.cdT>0?clamp(slot.cdT/(slot.cdMax||1),0,1)*100:0;
+      const isBoss=!!MONSTERS[id].boss;
+      const cdH=isBoss?(B.bossCd>0?clamp(B.bossCd/BAL.BOSS_CD,0,1)*100:0):(slot&&slot.cdT>0?clamp(slot.cdT/(slot.cdMax||1),0,1)*100:0);
       el.querySelector('.cd').style.height=cdH.toFixed(0)+'%';
       // コンボ連鎖の残り表示
       const cb=B.combo&&B.combo[id];
@@ -702,7 +714,9 @@ const UI={
       // 大型・ボスは陣形が精鋭型へ丸められる——丸めた先の陣形名を添える
       const rf=resolveForm(id,this.selForm);
       const n=spawnCountFor(id,rf,nextCombo);
-      el.querySelector('.cnt').textContent=MONSTERS[id].boss?'単騎':((rf!==this.selForm?FORMATIONS[rf].name+' ':'')+n+'体');
+      el.querySelector('.cnt').textContent=isBoss
+        ?(B.bossPlayed[id]?'出撃済':(B.bossCd>0?'次まで'+Math.ceil(B.bossCd)+'s':(B.enemies.some(e=>e.boss&&!e.dead)?'交代待ち':'単騎')))
+        :((rf!==this.selForm?FORMATIONS[rf].name+' ':'')+n+'体');
     }
     // 夜側のアイテム: 使えるか・クールダウン
     for(const el of $('itemrow').children){

@@ -163,7 +163,8 @@ function defaultMeta(){
     codex:{},                                   // 図鑑: {id:{seen,met,climax,capture,kills}}
     rot:{ dmg:0, ail:0, captures:0, battles:0 }, // 世代内記録(リセットされる)
     best:null,
-    lumina:{ coins:0, upg:{vital:0,guard:0,bless:0,swift:0,grit:0,zeal:0} },  // 彼女の自己強化(永続)
+    lumina:{ coins:0, will:0, upg:{vital:0,guard:0,bless:0,swift:0,grit:0,zeal:0} },  // 彼女の自己強化(永続)・抵抗の意志
+    curse:null,   // ボス敗北の呪い {id,left}
     settings:{ autoplay:true, gfx:'hd', gfxAuto:true },   // gfx: 'hd'=描き込み / 'pixel'=ドット。gfxAuto: fps低下で装飾を自動で省く
   };
 }
@@ -183,7 +184,8 @@ function loadMeta(){
       META.codex=Object.assign({}, d.codex||{});
       META.rot=Object.assign(defaultMeta().rot, d.rot);
       META.settings=Object.assign(defaultMeta().settings, d.settings);
-      META.lumina=Object.assign({coins:0,upg:{}}, d.lumina);
+      META.lumina=Object.assign({coins:0,will:0,upg:{}}, d.lumina);
+      META.curse=(d.curse&&d.curse.id&&d.curse.left>0)?d.curse:null;
       META.lumina.upg=Object.assign({vital:0,guard:0,bless:0,swift:0,grit:0,zeal:0}, (d.lumina||{}).upg);
       migrateCards();
     }

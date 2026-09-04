@@ -14,6 +14,7 @@ const EN_COLORS={
   spore:['#c9ecff','#7fb8e0'], ghosthand:['#dfe4ff','#aab4e8'], eye:['#f0e8ff','#7a3ff2'],
   succubus:['#ff86b3','#5a1f3a'], web:['#ffb3cf','#fff'],
   gazer:['#b46cff','#3a1f5a','#f4efff'], beamer:['#d8c8ff','#5a3a7a'], bossgazer:['#b46cff','#2a1a3e','#f4efff'],
+  slimeking:['#5fd0c0','#1a4a48','#ffd76a'], runemage:['#ff86b3','#3a1a3e','#ffd0e4'], succuqueen:['#ff5d9e','#3a1226','#ffd76a'], gobking:['#8fd36a','#2a3a1a','#ffd76a'],
   hand:['#d8d0f0','#a89ccf'], serpent:['#b07ae8','#5a3a8a'], moth:['#ffb3cf','#c9a0b8'],
   pot:['#b07890','#5a2a44'], slugqueen:['#e0a0c0','#8fae4a'], dreamtree:['#e86a9c','#3a2a3a'],
 };
@@ -167,18 +168,16 @@ function drawTrail(g,tr){
   g.fillStyle='rgba(200,255,235,'+(a*0.5).toFixed(3)+')';
   g.beginPath(); g.ellipse(tr.x-2,tr.y-2,tr.r*0.4,tr.r*0.26,0,0,TAU); g.fill();
 }
-let cloudSprite=null;
+let cloudSprite=null, muskSprite=null;
 function makeCloudSprite(){
-  cloudSprite=document.createElement('canvas');
-  cloudSprite.width=128; cloudSprite.height=128;
-  const cg=cloudSprite.getContext('2d');
-  for(const [ox,oy,rr2] of [[-12,-6,42],[14,8,36],[0,0,52]]){
-    const grad=cg.createRadialGradient(64+ox,64+oy,rr2*0.2,64+ox,64+oy,rr2);
-    grad.addColorStop(0,'rgba(255,158,194,0.22)');
-    grad.addColorStop(1,'rgba(255,158,194,0)');
-    cg.fillStyle=grad;
-    cg.beginPath(); cg.arc(64+ox,64+oy,rr2,0,TAU); cg.fill();
-  }
+  const mk=(rgb)=>{ const cv=document.createElement('canvas'); cv.width=128; cv.height=128; const cg=cv.getContext('2d');
+    for(const [ox,oy,rr2] of [[-12,-6,42],[14,8,36],[0,0,52]]){
+      const grad=cg.createRadialGradient(64+ox,64+oy,rr2*0.2,64+ox,64+oy,rr2);
+      grad.addColorStop(0,'rgba('+rgb+',0.22)'); grad.addColorStop(1,'rgba('+rgb+',0)');
+      cg.fillStyle=grad; cg.beginPath(); cg.arc(64+ox,64+oy,rr2,0,TAU); cg.fill();
+    } return cv; };
+  cloudSprite=mk('255,158,194');     // 媚薬の霧(桃)
+  muskSprite=mk('150,190,90');       // 雄臭の雲(くすんだ黄緑)
 }
 makeCloudSprite();
 function drawCloud(g,c){
@@ -189,11 +188,12 @@ function drawCloud(g,c){
   g.globalAlpha=lifeA;
   g.translate(c.x,c.y);
   g.rotate(c.t*0.25);
-  g.drawImage(cloudSprite,-64*sc,-64*sc,128*sc,128*sc);
+  const spr=c.kind==='musk'?muskSprite:cloudSprite;
+  g.drawImage(spr,-64*sc,-64*sc,128*sc,128*sc);
   g.rotate(-c.t*0.5);
-  g.drawImage(cloudSprite,-58*sc,-58*sc,116*sc,116*sc);
+  g.drawImage(spr,-58*sc,-58*sc,116*sc,116*sc);
   g.globalAlpha=lifeA*0.6;
-  g.fillStyle='rgba(255,194,216,0.8)';
+  g.fillStyle=c.kind==='musk'?'rgba(190,215,130,0.7)':'rgba(255,194,216,0.8)';
   for(let i=0;i<3;i++){
     const ph=c.t*1.3+i*2.1;
     g.beginPath();
@@ -828,7 +828,11 @@ function drawEnemy(g,e){
 }
 /* 種族ごとの本体描画(drawEnemy から分離。描き込みモードではオフスクリーンで陰影を重ねる) */
 function drawBody(g,e){
-  if(e.id==='slug') drawSlug(g,e);
+  if(e.id==='slimeking') drawSlimeking(g,e);
+  else if(e.id==='runemage') drawRunemage(g,e);
+  else if(e.id==='succuqueen') drawSuccuqueen(g,e);
+  else if(e.id==='gobking') drawGobking(g,e);
+  else if(e.id==='slug') drawSlug(g,e);
   else if(e.id==='ghost') drawGhost(g,e);
   else if(e.id==='slime') drawSlime(g,e,false);
   else if(e.id==='mistslime') drawSlime(g,e,true);
@@ -1908,6 +1912,106 @@ function drawBeamerCrystal(g,e,ex,ey){
   g.beginPath(); g.arc(0,-r*0.05,r*0.16,0,TAU); g.fill();
   g.restore();
 }
+/* ---- v1.6 ボス4種 ---- */
+function drawSlimeking(g,e){
+  const r=e.r, t=e.t, puls=1+Math.sin(t*2.2)*0.05;
+  g.save();
+  // 足元に広がる粘液
+  g.fillStyle='rgba(95,208,192,0.35)';
+  g.beginPath(); g.ellipse(0,2,r*1.5,r*0.45,0,0,TAU); g.fill();
+  for(let i=0;i<5;i++){ const a=i*TAU/5+t*0.3; g.beginPath(); g.ellipse(Math.cos(a)*r*1.3,2+Math.sin(a)*r*0.35,r*0.22,r*0.1,0,0,TAU); g.fill(); }
+  // 胴(半透明の粘液の山)
+  const grad=g.createRadialGradient(-r*0.3,-r*1.1,r*0.2,0,-r*0.8,r*1.5);
+  grad.addColorStop(0,'rgba(180,255,240,0.95)'); grad.addColorStop(0.6,'rgba(95,208,192,0.9)'); grad.addColorStop(1,'rgba(40,120,110,0.9)');
+  g.fillStyle=grad;
+  g.beginPath(); g.moveTo(-r*1.3,0); g.bezierCurveTo(-r*1.45,-r*1.2*puls,-r*0.6,-r*1.9*puls,0,-r*1.85*puls); g.bezierCurveTo(r*0.6,-r*1.9*puls,r*1.45,-r*1.2*puls,r*1.3,0); g.closePath(); g.fill();
+  // 核と、昇っていく泡(模様)
+  g.fillStyle='rgba(30,90,85,0.55)'; g.beginPath(); g.ellipse(0,-r*0.75,r*0.5,r*0.6,0,0,TAU); g.fill();
+  g.fillStyle='rgba(220,255,250,0.5)';
+  for(let i=0;i<7;i++){ const a=i*2.4+t*0.5, rr=r*(0.35+0.45*((i*0.37)%1)); const bx=Math.cos(a)*rr*0.9, by=-r*0.9+Math.sin(a)*rr*0.7-((t*0.35+i*0.3)%1)*r*0.4; g.beginPath(); g.arc(bx,by,r*0.06+((i*0.53)%1)*r*0.07,0,TAU); g.fill(); }
+  // 目(彼女を追う)
+  const la=e.lookA||0, lx=Math.cos(la)*r*0.12, ly=Math.sin(la)*r*0.08;
+  g.fillStyle='#fff'; for(const sd of [-1,1]){ g.beginPath(); g.ellipse(sd*r*0.38,-r*1.05,r*0.16,r*0.2,0,0,TAU); g.fill(); }
+  g.fillStyle='#1a4a48'; for(const sd of [-1,1]){ g.beginPath(); g.arc(sd*r*0.38+lx,-r*1.05+ly,r*0.09,0,TAU); g.fill(); }
+  // 水晶の冠
+  g.fillStyle='#ffd76a';
+  for(const [ox,h] of [[-r*0.45,r*0.35],[-r*0.15,r*0.5],[r*0.15,r*0.5],[r*0.45,r*0.35]]){ g.beginPath(); g.moveTo(ox-r*0.1,-r*1.75); g.lineTo(ox,-r*1.75-h); g.lineTo(ox+r*0.1,-r*1.75); g.closePath(); g.fill(); }
+  g.fillRect(-r*0.55,-r*1.8,r*1.1,r*0.12);
+  g.fillStyle='rgba(255,255,255,0.45)'; g.beginPath(); g.ellipse(-r*0.45,-r*1.35,r*0.22,r*0.12,-0.5,0,TAU); g.fill();
+  g.restore();
+}
+function drawRunemage(g,e){
+  const r=e.r, t=e.t, bob=Math.sin(t*1.6)*2;
+  const dir=Math.cos(e.lookA||0)>=0?1:-1;
+  g.save();
+  // 足元に浮く淫紋の輪
+  g.save(); g.globalAlpha=0.5; g.strokeStyle='#ff86b3'; g.lineWidth=1.4;
+  g.beginPath(); g.ellipse(0,1,r*1.3,r*0.45,0,0,TAU); g.stroke();
+  g.fillStyle='#ffb3cf'; for(let i=0;i<6;i++){ const a=i*TAU/6+t*0.8; g.beginPath(); g.arc(Math.cos(a)*r*1.3,1+Math.sin(a)*r*0.45,1.6,0,TAU); g.fill(); }
+  g.restore();
+  g.translate(0,bob);
+  // ローブ
+  g.fillStyle='#5a2a5a';
+  g.beginPath(); g.moveTo(-r*0.95,0); g.quadraticCurveTo(-r*0.9,-r*1.4,-r*0.45,-r*2.0); g.lineTo(r*0.45,-r*2.0); g.quadraticCurveTo(r*0.9,-r*1.4,r*0.95,0); g.closePath(); g.fill();
+  // ローブの紋(模様)
+  g.strokeStyle='rgba(255,134,179,0.55)'; g.lineWidth=1.1;
+  for(let i=0;i<3;i++){ const y=-r*(0.35+i*0.45), w=r*(0.75-i*0.15); g.beginPath(); g.moveTo(-w,y); g.quadraticCurveTo(0,y-r*0.15,w,y); g.stroke(); }
+  g.fillStyle='rgba(255,134,179,0.6)'; g.beginPath(); g.arc(0,-r*1.0,r*0.16,0,TAU); g.fill();
+  // 頭巾と、闇の中の桃色の目
+  g.fillStyle='#4a1f4a'; g.beginPath(); g.ellipse(0,-r*2.05,r*0.55,r*0.5,0,0,TAU); g.fill();
+  g.fillStyle='#1a0a1e'; g.beginPath(); g.ellipse(dir*r*0.08,-r*1.95,r*0.4,r*0.32,0,0,TAU); g.fill();
+  g.fillStyle='#ff86b3'; for(const sd of [-1,1]){ g.beginPath(); g.ellipse(dir*r*0.08+sd*r*0.16,-r*1.95,r*0.07,r*0.05,0,0,TAU); g.fill(); }
+  // 杖と、先で回る呪印
+  g.strokeStyle='#8a5a3a'; g.lineWidth=2.2; g.lineCap='round'; g.beginPath(); g.moveTo(dir*r*0.8,-r*0.1); g.lineTo(dir*r*0.95,-r*2.3); g.stroke();
+  const gl=0.5+0.5*Math.sin(t*3);
+  glow(g,dir*r*0.95,-r*2.55,r*0.55,'255,134,179',0.35+0.35*gl);
+  g.save(); g.translate(dir*r*0.95,-r*2.55); g.rotate(t*1.5); g.fillStyle='#ffd0e4';
+  g.beginPath(); for(let i=0;i<8;i++){ const a=i*Math.PI/4, rr=(i%2===0)?r*0.3:r*0.12; g.lineTo(Math.cos(a)*rr,Math.sin(a)*rr); } g.closePath(); g.fill();
+  g.restore();
+  g.restore();
+}
+function drawSuccuqueen(g,e){
+  const r=e.r*1.15, fl=Math.sin(e.t*11);
+  g.save();
+  // 大きな翅(本体の後ろ)
+  g.save(); g.translate(0,fl*1.6-r*0.5); const dir=Math.cos(e.orbitA||0)>=0?1:-1; g.scale(dir,1);
+  g.fillStyle='#6a1f4a';
+  for(const sd of [-1,1]){ const flap=fl*0.4*sd; g.beginPath(); g.moveTo(sd*r*0.3,-r*1.2); g.quadraticCurveTo(sd*r*2.0,-r*2.2-flap*8,sd*r*2.4,-r*0.6-flap*6); g.quadraticCurveTo(sd*r*1.6,-r*0.5,sd*r*0.35,-r*0.3); g.closePath(); g.fill(); }
+  g.restore();
+  drawImp(g,e,{wing:'#8a2a6a',tail:'#c8408a',heart:'#ff5d9e',skin:'#f7d8cc',dress:'#7a1f5a',head:'#f9e0d4',hair:'#2a1a3e',horn:'#ffd76a',face:'#3a1226',blush:'rgba(255,90,140,0.6)',pattern:'rgba(255,215,106,0.55)'});
+  // 冠
+  g.save(); g.translate(0,fl*1.6-r*0.5);
+  g.fillStyle='#ffd76a';
+  g.beginPath(); g.moveTo(-r*0.42,-r*2.05); g.lineTo(-r*0.3,-r*2.45); g.lineTo(-r*0.15,-r*2.15); g.lineTo(0,-r*2.55); g.lineTo(r*0.15,-r*2.15); g.lineTo(r*0.3,-r*2.45); g.lineTo(r*0.42,-r*2.05); g.closePath(); g.fill();
+  g.fillStyle='#ff5d9e'; g.beginPath(); g.arc(0,-r*2.15,r*0.07,0,TAU); g.fill();
+  g.restore();
+  g.restore();
+}
+function drawGobking(g,e){
+  const r=e.r;
+  g.save();
+  // 毛皮のマント(後ろ)
+  g.fillStyle='#6a4a3a'; g.beginPath(); g.moveTo(-r*0.9,-r*1.4); g.quadraticCurveTo(-r*1.1,-r*0.2,-r*0.8,r*0.1); g.lineTo(r*0.8,r*0.1); g.quadraticCurveTo(r*1.1,-r*0.2,r*0.9,-r*1.4); g.closePath(); g.fill();
+  g.fillStyle='rgba(255,240,220,0.25)'; for(let i=0;i<6;i++){ g.beginPath(); g.arc(-r*0.75+i*r*0.3,-r*1.35,r*0.13,0,TAU); g.fill(); }
+  drawGoblin(g,e);
+  // 骨の棍棒
+  g.strokeStyle='#d8cfc4'; g.lineWidth=r*0.16; g.lineCap='round';
+  g.beginPath(); g.moveTo(r*0.6,-r*0.5); g.lineTo(r*1.25,-r*1.55); g.stroke();
+  g.fillStyle='#e8e0d8'; g.beginPath(); g.arc(r*1.28,-r*1.62,r*0.2,0,TAU); g.fill();
+  // 冠
+  g.fillStyle='#ffd76a';
+  g.beginPath(); g.moveTo(-r*0.5,-r*1.85); g.lineTo(-r*0.35,-r*2.3); g.lineTo(-r*0.17,-r*1.95); g.lineTo(0,-r*2.4); g.lineTo(r*0.17,-r*1.95); g.lineTo(r*0.35,-r*2.3); g.lineTo(r*0.5,-r*1.85); g.closePath(); g.fill();
+  g.restore();
+}
+/* 刻印師の呪弾 */
+function drawRuneBolt(g,b){
+  g.save(); g.translate(b.x,b.y);
+  glow(g,0,0,b.r*2.2,'255,134,179',0.5);
+  g.rotate(b.t*6); g.fillStyle='#ffd0e4';
+  g.beginPath(); for(let i=0;i<8;i++){ const a=i*Math.PI/4, rr=(i%2===0)?b.r:b.r*0.4; g.lineTo(Math.cos(a)*rr,Math.sin(a)*rr); } g.closePath(); g.fill();
+  g.fillStyle='#ff5d9e'; g.beginPath(); g.arc(0,0,b.r*0.3,0,TAU); g.fill();
+  g.restore();
+}
 function drawBossgazer(g,e){
   const r=e.r, t=e.t;
   g.save();
@@ -2263,7 +2367,8 @@ function drawHUD(g){
   }
   const sk=suckCount(p);
   if(sk>0) chips.push(['suck','吸い付き '+suckSlots(p).map(sl=>SUCK_NAMES[sl]).join('・')]);
-  if(p.heatLv>0) chips.push(['heat','発情'+ROMANS[p.heatLv]+(p.waveDur>0?' 波!':'')]);
+  if(p.heatLv>0) chips.push(['heat','発情'+ROMANS[p.heatLv]+(p.waveDur>0?' 波!':'')+(p.heatLv<3&&p.heatG>0?' '+Math.round(p.heatG)+'%':'')]);
+  else if((p.heatG||0)>=10) chips.push(['heatg','発情 '+Math.round(p.heatG)+'%']);
   if(p.aphro>=8) chips.push(['aphro','快感 '+Math.round(p.aphro)+'%']);
   const slv=sensLvOf(p);
   if(slv>0) chips.push(['sens','敏感'+ROMANS[slv]]);
@@ -2279,10 +2384,11 @@ function drawHUD(g){
   if(p.suitT>0) chips.push(['suit','触手服 '+Math.ceil(p.suitT)+'s']);
   if(p.crestLv>0) chips.push(['crest','淫紋'+ROMANS[p.crestLv]]);
   if(p.watchedT>0) chips.push(['watched','視姦']);
-  if(p.hypnoLv>0) chips.push(['hypnolv','催眠'+ROMANS[p.hypnoLv]]);
+  if(p.hypnoLv>0) chips.push(['hypnolv','催眠'+ROMANS[p.hypnoLv]+(p.hypnoLv<3&&p.hypnoG>0?' '+Math.round(p.hypnoG)+'%':'')]);
+  else if((p.hypnoG||0)>=10) chips.push(['hypnolv','催眠 '+Math.round(p.hypnoG)+'%']);
   if(p.selfT>0) chips.push(['self','自慰……']);
-  if(p.sniffT>0) chips.push(['sniff','嗅いでいる…']);
-  else if(p.muskNear && (META.traits.musk||0)>0) chips.push(['musk','雄臭'+ROMANS[META.traits.musk]]);
+  if(p.inMusk) chips.push(['musk','雄臭'+((META.traits.musk||0)>0?ROMANS[META.traits.musk]:'')]);
+  if(p.curse&&BOSS_CURSES[p.curse]) chips.push(['curse','呪い: '+BOSS_CURSES[p.curse].name]);
   g.font='bold 10px '+FONT;
   for(const [id,txt] of chips){
     const A=AILMENTS[id];
@@ -2537,6 +2643,7 @@ function draw(){
     for(const tr of B.traps) drawTrap(g,tr);
     for(const c of B.chests){ drawChest(g,c); if(c.fake){ g.save(); g.globalAlpha=0.35; g.fillStyle='#c98cff'; g.beginPath(); g.ellipse(c.x,c.y+2,14,5,0,0,TAU); g.fill(); g.restore(); } }
     for(const it of B.items) drawItem(g,it);
+    if(B.ebullets) for(const b of B.ebullets) drawRuneBolt(g,b);
 
     drawSightSectors(g,B);
     B.enemies.sort((a,b)=>a.y-b.y);

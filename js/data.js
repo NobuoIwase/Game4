@@ -68,7 +68,13 @@ const BAL={
   PLEAS_DECAY:0.6,         // 快感ゲージ自然減衰 /s
   PLEAS_IMP_BURST:4.5,     // 小淫魔の煽りアクション1回ぶんの快感(受動では上がらない)
   IMP_BURST_CD:1.0,        // 煽りバーストの全体クールダウン(数で強くなりすぎ防止)
-  PLEAS_GAS:1.8,           // ガス雲は快感も僅かに直接生む /s
+  PLEAS_GAS:0,             // (v1.6) ガス雲は快感を直接は生まない——発情ゲージと敏感化だけ
+  HEAT_GAS:9,              // ガス雲の中: 発情ゲージ /s(100で発情Lv+1)
+  MUSK_CLOUD_CD:2.0, MUSK_CLOUD_R:56, MUSK_CLOUD_LIFE:5.5, MUSK_HEAT:8, MUSK_COND:1.7,   // 雄臭の雲(ゴブリンが歩きながら残す)
+  HYPNO_GAIN:[100,55,34],  // 閃光1回の催眠ゲージ: Ⅰは一発、Ⅱは2回、Ⅲは3回
+  HYPNO_DECAY:4,           // 催眠ゲージの減衰 /s
+  WILL_CAP:20, WILL_CAP_GAIN:2, WILL_FAST_GAIN:1, WILL_SURVIVE_LOSS:1, GEN_SCALE:0.03,   // 抵抗の意志(敗北で固くなる)・世代ごとの素の成長
+  BOSS_CD:60, CURSE_DAYS:2,   // ボス: 出撃間隔と、ボス敗北の呪いが跨ぐ日数
   PLEAS_BINDER:0.5,        // 絡みつき1体あたり /s(練度でスケール)
   PLEAS_PIN:4,             // 押し倒し1拍あたり
   SUCK_PLEAS:2.6,          // 吸い付き1体あたり /s
@@ -105,11 +111,13 @@ const BAL={
   /* --- 燭台(回復・アイテム) v1.0 ---
      アイテムは30%(幸運で増): 回復20% / 浄化(画面全消去)5% / 収集(全ジェム回収)3% / 星の審判(ボーナス攻撃)2% */
   PROP_HP:24,
-  PROP_INIT:6,             // 初期配置数
-  PROP_RESPAWN:26,         // 追加出現間隔(s)
+  PROP_INIT:9,             // 初期配置数(v1.6: 密度を上げてアイテムを拾いやすく)
+  PROP_RESPAWN:16,         // 追加出現間隔(s)
+  PROP_MAX:12,             // 場の燭台の上限
   PROP_ITEM:0.30,          // アイテムが出る確率(基礎)
   PROP_HEAL:20, PROP_WIPE:5, PROP_VACUUM:3, PROP_BONUS:2,   // 30の内訳
-  LOGEM_V:0.5,             // ロージェム(頭数ボーナス分の雑魚が落とす)の経験値
+  LOGEM_V:0.5,             // (v1.6以前の固定値。現在は LOGEM_CURVE で頭数に応じて漸減)
+  LOGEM_CURVE:[[30,1.0],[50,0.9],[70,0.8],[90,0.75],[110,0.7],[150,0.6],[200,0.5]],   // 場の魔物数→ロージェムの経験値倍率(100%→…→50%)
   LUMINA_DECAY:5,          // 世代の夜明けで薄れる自己強化の段数(ゼロには戻らない)
   /* v1.2 状態異常拡張(放置系エロトラップダンジョンの機構を参考に、独自に再構成) */
   DENY_DUR:7,              // 寸止め(絶頂禁止)の持続。快感は99で止められ、切れた瞬間に溜めた分が来る
@@ -126,7 +134,7 @@ const BAL={
   /* v1.3 */
   REENTER_D:780,           // 本家同様: これ以上離れた魔物は画面外の縁へ回り込んで再登場(同一個体)
   REENTER_R:560,           // 再登場時の距離(画面外すぐ)
-  GAZE_R:240, GAZE_ANG:0.8,    // ゲイザーの視界(半径・角度rad): 狭く、長く。表示→閃光→催眠
+  GAZE_R:240, GAZE_ANG:0.65,    // ゲイザーの視界(半径・角度rad): 狭く、長く。表示→閃光→催眠
   GAZE_BOSS_EXTRA:130,         // ボスゲイザーの視界はさらに長い(横幅は同じ)
   GAZE_AIM:1.4, GAZE_CD:5.5,
   HYPNO_LV_DUR:30,         // 催眠Lvが1段薄れるまでの秒数
@@ -318,13 +326,49 @@ const MONSTERS={
     name:'ヴァンピロード', role:'ボス', cost:26, unlock:900, tier:'boss',
     hp:950, spd:55, r:28, dmg:20, xp:60, boss:true,
     desc:'夜の統率者。突進で薙ぎ払い、掠めた相手をよろめかせる。召喚は1戦に1度。',
-    trait:'突進/接触よろめき',
+    trait:'突進/接触よろめき。呪い『吸われ癖』',
   },
+  /* ---- v1.6 ボス4種 ---- */
+  slimeking:{
+    name:'粘獣王', role:'ボス・粘液', cost:24, unlock:1000, tier:'boss',
+    hp:1000, spd:26, r:30, dmg:4, xp:60, boss:true,
+    desc:'巣の底に溜まった粘液が、意思を持って立ち上がった王。歩いた跡に広い粘液の帯を残し、追いつけば身体を呑んで脚を絡め取る。呑まれている間、粘液は服の内側まで染みてくる。',
+    trait:'粘液の帯(足が鈍る)を残す。接触で【呑み込み】: 脚を粘液で繋留+敏感化。呪い『粘膜の記憶』',
+  },
+  runemage:{
+    name:'淫紋の刻印師', role:'ボス・術者', cost:25, unlock:1150, tier:'boss',
+    hp:850, spd:18, r:24, dmg:0, xp:60, boss:true,
+    desc:'淫紋を刻む術者。間合いを保ち、桃色の呪弾を放つ。当たった場所から淫紋が身体に焼きつき、以後、快感の入りが増す。足元にも淫紋を伏せる。',
+    trait:'呪弾(命中で淫紋Lv+1・快感)。淫紋の罠を伏せる。呪い『淫紋焼き付け』',
+  },
+  succuqueen:{
+    name:'夢魔の女王', role:'ボス・甘い夢', cost:25, unlock:1250, tier:'boss',
+    hp:900, spd:48, r:26, dmg:3, xp:60, boss:true,
+    desc:'淫魔たちの女王。周りを舞いながら甘い夢の波を放ち、発情を深め、火照った身体に寸止めをかける。口づけで敏感にし、小淫魔を呼ぶ。',
+    trait:'6秒ごとの甘い波(発情ゲージ+。発情中なら寸止め)。接触で口づけ(敏感化)。小淫魔召喚。呪い『甘い夢の残り香』',
+  },
+  gobking:{
+    name:'ゴブリンの王', role:'ボス・雄臭', cost:24, unlock:950, tier:'boss',
+    hp:1100, spd:40, r:27, dmg:9, xp:60, boss:true, musk:true,
+    desc:'群れの長。濃い雄の臭いを常に撒き、呼び笛で手下を集める。突進で薙ぎ払う。臭いの中に居続ければ、発情していなくても身体が熱を覚えていく。',
+    trait:'濃い雄臭の雲を撒く(発情・敏感化)。9秒ごとに手下3体。突進。呪い『雄臭の刷り込み』',
+  },
+};
+/* ボス敗北の呪い: ボスの攻撃/影響によって敗北すると、次の CURSE_DAYS 日にわたって残る */
+const BOSS_CURSES={
+  dreamtree: { name:'樹液の余熱',   desc:'敏感化の下限+20。快感の入り+10%' },
+  bossgazer: { name:'残光',         desc:'催眠ゲージ40で始まる(一度の閃光でⅠが入る)。思考間隔+15%' },
+  vampi:     { name:'吸われ癖',     desc:'スタミナ上限-15。振りほどきが15%鈍る' },
+  slimeking: { name:'粘膜の記憶',   desc:'敏感化の下限+15。粘液で足が更に鈍る' },
+  runemage:  { name:'淫紋焼き付け', desc:'淫紋Ⅰで始まる。焼けるような快感——疼きが常に来る' },
+  succuqueen:{ name:'甘い夢の残り香', desc:'発情Ⅰで始まる。おねだりが発情Ⅱから起きる' },
+  gobking:   { name:'雄臭の刷り込み', desc:'雄臭の雲の効きが1.5倍' },
 };
 /* 階級: 雑魚/中型は全陣形、大型は精鋭型のみ、ボスは単騎 */
 const TIERS=['fodder','mid','large','boss'];
 const TIER_NAMES={fodder:'雑魚', mid:'中型', large:'大型', boss:'ボス'};
-const TIER_CAP={fodder:3, mid:3, large:2, boss:1};          // デッキ枠(計9)
+const TIER_CAP={fodder:3, mid:3, large:2, boss:2};          // デッキ枠(計10)。ボスは同時に1体・同じボスは1戦1回・次のボスまで60秒
+const SPECIES_MAX={gazer:4};                                  // 同時に場に出せる上限(種族)
 const DECK_CAP=Object.values(TIER_CAP).reduce((a,b)=>a+b,0);
 const TIER_FORMS={fodder:null, mid:null, large:['single','duo'], boss:['single']};  // null=全陣形
 const tierOf=id=>MONSTERS[id].tier||(MONSTERS[id].boss?'boss':'mid');
@@ -333,10 +377,11 @@ const SPEC_THREAT={
   slug:1, goblin:0, leech:1, worm:1, ghost:0, slime:0, gas:1, imp:1, flower:2, mistslime:1, gtent:2,
   hand:1, serpent:2, moth:1, pot:2, slugqueen:2, dreamtree:2, vampi:2,
   spore:1, ghosthand:2, eye:1, succubus:3, gazer:3, beamer:3, bossgazer:3, web:2, tower:2,
-};
+  slimeking:2, runemage:3, succuqueen:3, gobking:2 };
 const SPEC_DANGER={ flower:130, gtent:90, slug:55, worm:55, gas:60, slime:110, leech:60,
   hand:50, serpent:120, moth:70, pot:95, slugqueen:80, dreamtree:125,
-  gazer:70, beamer:60, bossgazer:130, succubus:110, ghosthand:90, spore:60, eye:40, web:90, tower:60 };
+  gazer:70, beamer:60, bossgazer:130, succubus:110, ghosthand:90, spore:60, eye:40, web:90, tower:60,
+  slimeking:120, runemage:150, succuqueen:120, gobking:130 };
 const TRAP_SPECIES=new Set(['flower','pot','web','dreamtree']);   // 知っていれば、そばのジェムは諦める
 const KNOW_NAMES=['未知','認識','理解','熟知'];
 const CARD_LV_MAX=5;
@@ -359,7 +404,7 @@ const FORMATIONS={
   ambush:{ name:'潜伏', count:3, factor:1.6, unlock:280,
     desc:'進行方向の先に伏せて置く。設置系・鈍足と好相性。' },
   ring:{ name:'包囲円陣', count:10, factor:4.0, unlock:380,
-    desc:'楕円の円陣で取り囲み、輪を締める。' },
+    desc:'広い楕円の円陣で取り囲み、輪を締める。速い魔物は少なく、遅い魔物ほど多く、動かない魔物が最も多い。' },
   duo:{ name:'双璧', count:2, factor:1.8, unlock:300, elite:1.25,
     desc:'2体を強化(×1.25)して並べる。大型向きの少数精鋭。' },
   burst:{ name:'大散開', count:7, factor:2.5, unlock:260,
@@ -514,12 +559,14 @@ const AILMENTS={
   beam:{ name:'強制絶頂', color:'#ffd76a', icon:'✦' },
   musk:{ name:'雄臭', color:'#8fd36a', icon:'♨' },
   sniff:{ name:'嗅ぐ', color:'#8fd36a', icon:'♨' },
+  curse:{ name:'呪い', color:'#ff6b81', icon:'✠' },
+  heatg:{ name:'発情ゲージ', color:'#ff9ec2', icon:'♨' },
 };
 /* 身についた性癖(永続・世代を跨ぐ)。通常の処置では抜けない */
 const TRAITS={
   musk:{ name:'雄臭への発情', max:3,
-    desc:'ゴブリンの雄の臭いと快感が結びついた。以後、発情していなくても臭いを嗅ぐと身体が熱を覚え、Lvが上がるほど嗅ぐ足が止まりやすい。',
-    how:'発情中にゴブリンの臭いを嗅ぎながら、他の魔物から快感を受ける' },
+    desc:'ゴブリンの雄の臭いと発情が結びついた。以後、臭いの雲の中に居るだけで身体が熱を覚え(発情ゲージ・敏感化の入りがLvごとに増す)、臭いを避ける足が鈍る。',
+    how:'発情したまま、ゴブリンの臭いの雲の中に居続ける' },
 };
 const LIMBS=['armL','armR','legL','legR'];
 const LIMB_NAMES={armL:'左腕', armR:'右腕', legL:'左脚', legR:'右脚'};
