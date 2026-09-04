@@ -178,6 +178,43 @@ idは汎用カタログ準拠。効果はすべて数値・挙動レベルで表
 - **雄臭の条件付け(修正)** 嗅ぐ/性癖/自慰の applyPleasure は差分を `aphroPrev` に足して除外(他から受けた快感だけ muskCond に積む)。
   匂いの外では muskCond が 3/s で薄れる。絶頂経由の結びつきは `sniffT>0` または `muskCond≥12` を要求。
 
+### 3-11. v1.6 催眠ゲージ・雄臭の雲・発情ゲージ・抵抗の意志・ボスの規則と呪い
+
+- **催眠ゲージ** `h.hypnoG`: applyHypno は `HYPNO_GAIN[lv]=[100,55,34]×(1-0.015×意志)` を足し、100で `hypnoLv++`(残りは持ち越し)。
+  Ⅰは一発、Ⅱは2回、Ⅲは3回。雲の外で `HYPNO_DECAY 4/s` 減衰。100未満は「……あ、ひかっ……」の小反応だけ。`SPECIES_MAX={gazer:4}`
+  を canPlay/playCard で見る(頭数は上限まで丸める)。GAZE_ANG 0.65。
+- **雲=発情ゲージ+敏感化** statesTick の雲判定: gas 種は `applySensit(rate)`+`addHeatG(HEAT_GAS 9/s)`、快感は直接足さない(PLEAS_GAS=0)。
+  `addHeatG` は 100 で `heatUp(false)`(絶頂経由と違い aphro を動かさない)。雲の外では 1.5/s 抜ける。
+- **雄臭の雲** MONSTERS.musk の個体は彼女から300px以内で `MUSK_CLOUD_CD 2.0s` ごとに `spawnCloud(...,'musk')`(r56・5.5s、場の雄臭雲は14まで)。
+  雲の中(`h.inMusk`): 敏感化×(1+0.3Lv)、発情ゲージ `MUSK_HEAT 8/s×(1+0.35Lv)`、発情中なら `muskCond += MUSK_COND 1.7/s`、25で性癖+1。
+  雲の外で muskCond は 2/s 薄れる。嗅ぐ発作(sniffT)は廃止(フィールドは残置)。ゴブリンの王の雲は r90・`c.boss` 付き(呪いの帰属)。
+- **抵抗の意志** `META.lumina.will`(0..WILL_CAP 20): 敗北 +WILL_CAP_GAIN 2(+WILL_FAST_GAIN 1 if 60秒以内)、生存 -1。
+  newHero: maxHp×(1+0.03will)×gsc、dmgMult×(1+0.02will)×gsc、staminaMax+1.5will(gsc=1+GEN_SCALE 0.03×min(10,世代-1))。
+  addStruggle/pinEscape: 催眠Ⅲの係数 0→0.02will、Ⅱは 0.35→0.35+0.5×0.02will、全体×(1+0.02will)。applyCharm/applyHypno のゲージ入り×(1-0.015will)。
+- **ボスの規則** canPlay: `bossPlayed[id]`(1戦1回)→ `bossCd`(BOSS_CD 60s)→ 場にボスが居れば不可。TIER_CAP.boss=2。手札は '出撃済'/'次まで○s'/'交代待ち' を表示。
+- **ボス敗北の呪い** `B.bossMark={id,t}` をボスの hurtHero/applyHypno/applyDeny/雲/呑み込み/呪弾/伏せ紋で更新。endBattle: とどめがボス、または bossMark が直前8秒なら
+  `META.curse={id,left:CURSE_DAYS 2}`。毎戦 left--。newHero で適用: dreamtree(敏感化下限+20・curseAmp 0.10) / bossgazer(hypnoG 40・思考×1.15) /
+  vampi(スタミナ-15・振りほどき×0.85) / slimeking(下限+15・粘液の鈍足 0.55→0.42) / runemage(淫紋Ⅰ・curseAche=疼き常時) / succuqueen(発情Ⅰ・おねだりⅡから) / gobking(雲の効き×1.5)。
+- **新ボス4種**: slimekingTick(粘液の帯 trails r20/6s、接触で tether×2 `needMul 1.6`+敏感化12+slow1.5、CD7)、runemageTick(170〜330の間合い、4.5sごと `B.ebullets` 呪弾 210px/s
+  →runeHit: 淫紋+1・快感12・敏感化6、13sごと伏せ紋。呪弾は knowLv≥1 なら横へ避ける)、succuqueenTick(半径130を周回、6sごと pulse: `addHeatG(45)`+発情中 `applyDeny`、口づけ CD5: 敏感化10+発情20、15sごと小淫魔2)、
+  gobkingTick(bossChargeTick+1.8sごと雄臭雲 r90+9sごとゴブリン3)。
+- **包囲円陣** spawnCountFor: `ringMul = spd 0→1.6 / <30→1.35 / <45→1.0 / else 0.7`、半径 380/285。**ロージェム** `logemMul(n)`: LOGEM_CURVE を線形補間、値=`xp×0.8×mul`(下限0.4)。
+  **燭台** PROP_INIT 9 / PROP_RESPAWN 16 / PROP_MAX 12。
+
+### 3-12. v1.6 地形マップ(実験)
+
+- `genMap()`(startBattle): 種 `1000+世代×7919`。13サイト(moss×3, damp×2, water×2, flower×2, hotspring, ruin×2, nest)+中心の moss をボロノイ風に割り付け
+  (境目を hash2 で±55px 揺らす。nest は中心から 0.78 の縁)。`G.map.zone`(Uint8Array 56×36)。POI: 祠3(中心から520px以上)、泉2(1つは温泉帯)、門1(巣)。
+  `META.map={gen,known,visited,gateProg,gateDone}` は世代が変わると作り直す。
+- 描画: `TILE_ATLAS`(地形7×3種、起動時に描く)を `drawTiles` が敷く。外は闇+岩壁。`drawPoi`(祠/泉/門・知っている場所には名札)、`drawMinimap`(左下、G.map.mini を1px/タイルで焼く)。
+  カメラは main.js で ±MAP_HW-W/2 に clamp。彼女・魔物・召喚位置・回り込み・燭台・宝箱は `clampMapX/Y`。
+- AI: aiDecide の宝箱→(**目的地**)→ジェムの順。`pickDest`: 知っている(見えた)祠(未訪問)/泉(HP<70%)/門(gateAllowed: 2日目以降 or 理解3種)から最寄り、無ければ
+  探索点(600〜1200px先・未知POIの近くほど高得点・30s or 到着で置き直し)。近く170pxにジェムがあればジェム優先。端150px以内は内側へ寄る力。
+- `poiTick`: 見えたら `known`(「みつけた: 祠」)。祠 34px で自己強化1段+コイン30(`visited`)。泉 40px・HP<80%・CD60 → `bathT 3.5s`(停止・HP14%/s・敏感化5/s・発情10/s)。
+  門 70px 内で `gateProg += dt`、3sごとに巣の守り2体、12sで突破(コイン80・意志+1・門は別の場所へ・known リセット)。
+- 地形の恩恵: spawnUnit で `u.spd0` と `zoneMonHp`(damp: slug/leech/worm/slimeking ×1.25、nest ×1.15)、毎フレーム `e.spd=spd0×zoneMonSpd`(water: slime系×1.3、ruin ×1.06、nest ×1.1)。
+  彼女: heroStat water×0.88 / ruin×1.06、statesTick flower 敏感化0.6/s、hotspring 敏感化1.2/s+発情2/s+回復×1.5。花園の gas 雲は rate×1.2・r×1.1。
+
 ### 3-6. 回復=燭台
 
 回復ハートは撃破ドロップしない。マップの**燭台(HP24)を彼女が能動的に撃ち壊した時だけ**
@@ -378,6 +415,18 @@ Lv1カードの初戦は素の3体散開のまま——「最初は勝てない�
 - もがき中も「よける!(おぼえてる)」ラベルが出ていた → state が dodge のときだけ。
 - 図鑑カードの「・学習Ⅲ」がアイコンに重なっていた → カード下部の別行(.lrn)。客の帯の「客 N」ラベルがスクロールで隠れていた → ラベル固定+札だけスクロール(#guestscroll)、右端にいた時だけ追従。
 - 照射触手の trait 文「照準0.5秒」を1.0秒に。nearKnownTrap の未開花の花(認識不能)については審査で否決(据え置き)。
+
+### v1.6 検証結果
+
+- 催眠ゲージ: 閃光の列 1:0 → 1:55 → 2:10 → 2:44 → 2:78 → 3(Ⅰ一発・Ⅱ二発・Ⅲ三発)。ゲイザー4体で canPlay=species、5体目は出ない。
+- 雄臭の雲: 彼女を留めて8秒で発情ゲージ64・敏感化+20・快感0(足止めなし)。発情中20秒で性癖Ⅰ。ガス雲6秒で発情ゲージ54・敏感化41・快感0。
+- 意志20: HP175→280、火力×1.4、スタミナ130。敗北(30秒)で意志+3、生存で-1。呪い: 刻印師の影響下で敗北→『淫紋焼き付け』2日、次戦は淫紋Ⅰ・疼き常時、2戦で消える。
+- 包囲: 花16/ナメクジ10/ゴブリン7、半径比1.0。ロージェム 1,0.9,0.8,0.75,0.7,0.6,0.5。燭台初期9。ボス: 出撃で bossCd 60、他ボスは bosscd→boss1、同ボスは出撃済。
+- 新ボス: 粘獣王の呑み込みで脚2本繋留+slow1.5、刻印師の伏せ紋で淫紋、女王の波で発情ゲージ28/20秒、王の雲3(boss付き)。全て例外なし。
+- 地形: 世代1と2で地形が変わり、同世代は同一。中心は苔。端で彼女/魔物が clamp。湿地のナメクジHP 14→17.5、浅瀬でスライム52→67.6・彼女154→136、石畳163。
+  祠: 見えて known、着いて自己強化+1。泉: HP50%で入浴→全快・発情ゲージ37。門: 13秒で突破(コイン+80・意志+1・移動)。
+  知っている祠へ 726→35px を5秒で歩き、訪問後は探索へ。探索は8秒で1097px移動。
+- 初期デッキ(Lv1)生存(彼女Lv23〜25)、Lv5新構成 32〜37秒で捕獲(有限マップでも不変量を維持)。
 
 ### v1.5 検証結果
 
