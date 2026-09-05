@@ -2503,7 +2503,7 @@ function drawHUD(g){
   }
   g.shadowBlur=0;
   // ボスHP
-  const boss=B.enemies.find(e=>e.boss);
+  const boss=B.enemies.find(e=>e.boss&&!e.dead&&!MONSTERS[e.id].guardian)||B.enemies.find(e=>e.boss&&!e.dead);
   if(boss){
     g.textAlign='center'; g.font='bold 9px '+FONT; g.fillStyle='#ff8c9e';
     const bw=Math.min(300, W-40), by=narrow?H-72:60;   // 縦画面では上が詰まるのでボスHPは下に寄せる

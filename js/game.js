@@ -6,7 +6,7 @@
 
 /* ================= ヒロイン生成 ================= */
 function newHero(){
-  const gb=META.gen.battle;                 // 世代内の戦歴 0..3
+  const gb=Math.min(3,META.gen.battle||0);   // 潜行の日数(0..3 で頭打ち。v2.0 で日数は増え続けるため)
   const aArmor=altarLv('armor'), aRegen=altarLv('regen'), aSpeed=altarLv('speed');
   const aSense=altarLv('sense'), aHeat=altarLv('heat'), aFocus=altarLv('focus');
   const aStam=altarLv('stamina');
@@ -27,9 +27,9 @@ function newHero(){
     poolT:0, readT:0, poolKey:null, readKey:null, goal:null, goalT:0, farmT:0, walkT:0,        // v1.8 清水/石碑/目当て
     stuckT:0, unstickT:0, path:null, zoneLast:undefined,                                       // v1.7 壁・経路
     level:1, xp:0, xpNeed:need(1),
-    wp:{bolt:2, orb:1, nova:0, whip:0, rain:0, cross:0, sanct:0, blade:0, thunder:0, holy:0},
-    ps:{speed:0, vital:0, magnet:0, haste:0, ward:0, growth:0, area:0, dup:0, luck:0, endure:0},
-    evo:{sstar:0, sring:0, sburst:0, srush:0, scomet:0, sjudge:0, gsanct:0, kblade:0, judgment:0, spring:0},
+    wp:{bolt:2, orb:1, nova:0, whip:0, rain:0, cross:0, sanct:0, blade:0, thunder:0, holy:0, chain:0, spirit:0, shield:0},
+    ps:{speed:0, vital:0, magnet:0, haste:0, ward:0, growth:0, area:0, dup:0, luck:0, endure:0, reach:0, pierce:0, regen:0},
+    evo:{sstar:0, sring:0, sburst:0, srush:0, scomet:0, sjudge:0, gsanct:0, kblade:0, judgment:0, spring:0, hchain:0, twinspirit:0, aegis:0},
     boltT:0.6, novaT:2.5, orbAng:0, novaAnim:0, novaR:0,
     chainT:1.0, spiritT:1.2, shieldPulse:0, shieldR:0, shieldArc:0, shieldAng:0,   // v2.0 新武器
     whipT:1.1, whipAnim:0, whipDir:1, whipSide:1, whipR:0, rainT:2.2, crossT:1.6,
@@ -224,7 +224,7 @@ function endBattle(outcome){
   const B=G.B;
   if(B.over) return;
   B.over=true;
-  const gb=META.gen.battle;
+  const gb=Math.min(3,META.gen.battle||0);
   let orbGain=B.orbFrag, essGain=Math.round(B.essence);
   if(outcome==='capture'){ orbGain+=BAL.ORB_CAPTURE + BAL.ORB_CAPTURE_GEN*gb; essGain+=BAL.CAPTURE_ESS_BONUS; }
   if(outcome==='survive'){ essGain+=BAL.SURVIVE_ESS_BONUS; }
@@ -625,10 +625,10 @@ function detachLimb(slot, opt){
     const heldSlot=LIMBS.find(sl=>sl!==slot && h.limbs[sl] && h.limbs[sl].mon===mon);
     if(heldSlot){ mon.limb=heldSlot; }
     else{
-      mon.state = mon.id==='flower' ? 'open' : (mon.id==='gtent' ? 'idle' : 'chase');
+      mon.state = mon.id==='flower' ? 'open' : ((mon.id==='gtent'||mon.id==='core'||mon.id==='mouth') ? 'idle' : 'chase');
       mon.limb=null;
       const p=limbAnchor(h,slot);
-      if(mon.id!=='flower' && mon.id!=='gtent' && mon.id!=='web'){
+      if(mon.id!=='flower' && mon.id!=='gtent' && mon.id!=='web' && mon.id!=='core' && mon.id!=='mouth'){   // 据わった個体はその場から動かない
         mon.x=p.x+rand(-8,8); mon.y=p.y+rand(-4,4);
       }
     }
@@ -636,7 +636,7 @@ function detachLimb(slot, opt){
       mon.stun=1.2;
       mon.hp-=mon.maxHp*(mon.boss?0.05:0.35);   // ボスは振りほどかれても大きくは削れない(呑み込みで自滅しない)
       const a=rand(TAU);
-      mon.x+=Math.cos(a)*30; mon.y+=Math.sin(a)*30; collideMap(mon,mon.r*0.75,canFly(mon.id));
+      if(MONSTERS[mon.id].spd>0){ mon.x+=Math.cos(a)*30; mon.y+=Math.sin(a)*30; collideMap(mon,mon.r*0.75,canFly(mon.id)); }   // 据わった個体(魔核・口)は飛ばされない
       parts(mon.x,mon.y,8,['#fff','#c98cff'],140,0.5);
       if(mon.hp<=0) killEnemy(mon);
     }
@@ -2164,7 +2164,6 @@ function enemiesUpdate(dt){
       e.x=anch.x; e.y=anch.y;
       if(e.id==='inyoku'){ e.holdT=(e.holdT||0)-dt; if(e.holdT<=0 && e.limb){ detachLimb(e.limb,{}); e.swoopCd=rand(3,5); e.orbitA=rand(TAU); e.y-=40; } }   // v2.0 淫翼は数秒で離れて舞い戻る
       if(e.id==='suiyou') p.slow=Math.max(p.slow,0.6);                                                                                              // v2.0 水妖に絡まれている間は足が鈍い
-      if(e.id==='mouth'){ applyPleasure(5.5*unitPmul(e)*dt); addHeatG(4*dt); applySensit(0.8*dt); e.lickT=(e.lickT||0)+dt; if(e.lickT>0.9){ e.lickT=0; parts(p.x+rand(-10,10),p.y+rand(4,16),3,['#ffb3cf','#fff'],60,0.4); } }   // v2.0 肉壁の口: 吸いながら舐め続ける
       continue;
     }
     // 魅了拘束の相手: 彼女に縋りつかれてその場を動かない
@@ -3029,7 +3028,7 @@ function mouthTick(e,dt,d){
   const holding=attachedSlots(p).some(sl=>p.limbs[sl].mon===e);
   if(e.grabCd>0) e.grabCd-=dt;
   if(holding){ e.lickT+=dt; applyPleasure(6*unitPmul(e)*dt); addHeatG(4*dt); applySensit(0.8*dt); if(e.lickT>0.9){ e.lickT=0; parts(p.x+rand(-10,10),p.y+rand(4,16),3,['#ffb3cf','#fff'],60,0.4); } return; }
-  if(d<e.r+p.r+14 && e.grabCd<=0 && p.ifr<=0){ if(attachMonster(e,'cling',{legFirst:true,needMul:1.6})) e.grabCd=4; else e.grabCd=1.5; }
+  if(d<e.r+p.r+14 && e.grabCd<=0 && p.ifr<=0){ if(attachMonster(e,'tether',{r:40,legFirst:true,needMul:1.6})){ e.grabCd=4; e.state='idle'; } else e.grabCd=1.5; }   // 口は床から動かず、脚を 40px の内に繋ぐ
 }
 /* 遺跡の番人: 動かない石像。額の紋が光り、淫紋の光弾を扇状に放つ(1.2秒の予兆) */
 function guardianTick(e,dt,d,dx,dy){
@@ -3053,7 +3052,7 @@ function coreTick(e,dt,d,dx,dy){
   e.whipCd-=dt; e.pulseCd-=dt; e.spawnCd-=dt; if(e.pulseT>0) e.pulseT-=dt;
   if(e.whipT>0){
     e.whipT-=dt;
-    if(e.whipT<=0){ if(d<240 && attachMonster(e,'tether',{r:210,needMul:1.3})){ hurtHero(e.dmg*0.6,e,{noKb:true}); B.bossMark={id:'core',t:B.time}; codexMet('core'); } e.whipCd=BAL.CORE_WHIP_CD*(holding?1.8:1); }
+    if(e.whipT<=0){ if(d<240 && attachMonster(e,'tether',{r:210,needMul:1.3})){ e.state='idle'; hurtHero(e.dmg*0.6,e,{noKb:true}); B.bossMark={id:'core',t:B.time}; codexMet('core'); } e.whipCd=BAL.CORE_WHIP_CD*(holding?1.8:1); }   // 魔核は据わったまま根で繋ぐ(attached にせず、脈動も続く)
   }else if(d<210 && e.whipCd<=0 && !holding){ e.whipT=0.6; sfx(120,50,0.3,'sawtooth',0.08); }
   if(d<420 && e.pulseCd<=0){
     e.pulseCd=BAL.CORE_PULSE_CD*(ph<0.5?0.7:1); e.pulseT=0.7;
@@ -3940,7 +3939,7 @@ function canPlay(id, formId){
   if(MONSTERS[id].boss){
     if(B.bossPlayed[id]) return {ok:false, why:'bossused'};                 // 同じボスは1戦に1度
     if(B.bossCd>0) return {ok:false, why:'bosscd'};                         // 次のボスまで BOSS_CD 秒
-    if(B.enemies.some(e=>e.boss&&!e.dead)) return {ok:false, why:'boss1'};  // 同時に1体
+    if(B.enemies.some(e=>e.boss&&!e.dead&&!MONSTERS[e.id].guardian)) return {ok:false, why:'boss1'};  // 同時に1体(最深部の魔核は数えない)
   }
   if(B.enemies.length>=BAL.FIELD_CAP) return {ok:false, why:'cap'};
   if(SPECIES_MAX[id]!==undefined && aliveOf(id)>=SPECIES_MAX[id]) return {ok:false, why:'species'};   // 種族の同時上限(ゲイザー4)

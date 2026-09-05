@@ -180,7 +180,7 @@ const UI={
         if(this._wipeArm && performance.now()-this._wipeArm<3000){ wipeMeta(); this._wipeArm=0; this.show('home'); }
         else{ this._wipeArm=performance.now(); this.show('home'); }
         break;
-      case 'again': this.hideAll(); startBattle(); break;
+      case 'again': applyDeckMode(); this.hideAll(); startBattle(); break;
     }
     this.refreshRes();
   },
