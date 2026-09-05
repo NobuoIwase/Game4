@@ -160,6 +160,8 @@ const BAL={
   GEM_CLUSTER_R:130, GEM_CLUSTER_W:0.22, GEM_CLUSTER_MAX:2.6, GOAL_KEEP:1.25,
   /* v2.1 成長の飽和(引き継ぎ用): Lv NEED_SOFT_LV 超で必要経験値が +K/Lv、Lv XP_SOFT_LV 超でジェムの経験値が 1/(1+K·超過Lv)、祈りの上限 */
   NEED_SOFT_LV:20, NEED_SOFT_K:0.05, XP_SOFT_LV:15, XP_SOFT_K:0.03, PRAY_MAX:30,
+  /* v2.1 諦め: 同じ目標へ GIVEUP_T 秒近づけなければ GIVEUP_CD 秒その目標を外す(壁の向こうの品・入口で弾かれる等で回り続けない) */
+  GIVEUP_T:5, GIVEUP_CD:40,
   // v1.9 武器の上限: Lv5 までは従来の伸び、Lv6〜8 は覚醒(進化後も効く)。全部が上限なら「ルミナの祈り」(無駄なレベルを出さない)
   WP_EVO_LV:5, WP_OVER_DMG:0.15, WP_OVER_CD:0.93, WP_OVER_AREA:0.05,
   PRAY_DMG:0.04, PRAY_HP:0.03, PRAY_SPD:0.01, PRAY_HEAL:40,

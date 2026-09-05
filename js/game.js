@@ -25,6 +25,7 @@ function newHero(){
     hypnoG:0, hypnoFloor:0, heatG:0, inMusk:false,     // v1.6 催眠ゲージ(呪いの下限) / 発情ゲージ(雲から) / 雄臭の雲の中
     zone:'moss', bathT:0, springCd:0, dest:null, destUntil:0, explore:null, exploreUntil:0,   // v1.6 地形マップ
     poolT:0, readT:0, poolKey:null, readKey:null, goal:null, goalT:0, farmT:0, walkT:0,        // v1.8 清水/石碑/目当て
+    tgtKey:null, tgtBest:0, tgtT:0,                                                              // v2.1 諦めの見張り
     stuckT:0, unstickT:0, path:null, zoneLast:undefined,                                       // v1.7 壁・経路
     level:1, xp:0, xpNeed:need(1),
     wp:{bolt:2, orb:1, nova:0, whip:0, rain:0, cross:0, sanct:0, blade:0, thunder:0, holy:0, chain:0, spirit:0, shield:0},
@@ -223,6 +224,7 @@ function startBattle(){
     poolCd:{}, steleRead:{}, used:{shroom:0,nectar:0,treasure:0,pool:0,stele:0}, seeToastT:-9,
     event:null, eventT:BAL.EVENT_FIRST, eventsN:0, eventsDone:0,                                   // v1.8 イベント(光の柱)
     wantExit:false, wantExitWhy:'', idleGoalT:0, sentRing:null, metLine:{}, lineCd:{}, featSaid:{}, pressSaid:0, lowSaid:false, calmT:0,   // v2.1 降りる判断 / 番兵の輪 / 台詞の記録
+    giveUp:new Map(),                                                                              // v2.1 諦めた目標(ref → いつまで外すか)
   };
   genMap();               // 地形(世代×階層で変わる)
   { const F=G.B.floor; G.B.exitLocked=(F.puzzle==='seals');
@@ -376,6 +378,10 @@ function sayLine(path,prio,cd,fallback){
   if(prio<=1){ const ero=p.heatLv>0||p.aphro>=45||restraintCount(p)>0||p.climaxT>0||p.pinned||!!p.charmBind||p.charms.some(c=>c.lv>0); if(ero) return false; }
   B.lineCd[path]=B.time; heroBubble(p,txt,prio>=2,prio); return true;
 }
+/* v2.1 諦め: 目標(品・箱・ハート・ジェム・場所・資源。目当ての ref か、その物自体)を GIVEUP_CD 秒のあいだ候補から外す */
+const giveUpKey=t=>(t&&typeof t==='object')?(t.ref||t):t;
+function gaveUp(t){ const B=G.B; if(!B||!B.giveUp||!t) return false; const u=B.giveUp.get(giveUpKey(t)); return u!==undefined && B.time<u; }
+function giveUpOn(t){ const B=G.B; if(!B||!B.giveUp||!t) return; B.giveUp.set(giveUpKey(t),B.time+BAL.GIVEUP_CD); }
 /* ================= 学習(世代内の知識) =================
    何かされた回数(met)と敗北(cap)で 未知→認識→理解→熟知。世代リセットで忘れる。
    手記を二度書いた種族(図鑑の追記二以上)は、次の世代でも一段だけ覚えている */
@@ -1491,7 +1497,8 @@ function aiDecide(foc){
     if(p.hp < p.maxHp*0.6){
       let td=420;
       for(const h2 of B.hearts){
-        if(G.map && !passAt(h2.x,h2.y,false)) continue;
+        if(G.map && (!passAt(h2.x,h2.y,false) || !reachableAt(h2.x,h2.y,false))) continue;   // v2.1 届かない所の物は狙わない
+        if(gaveUp(h2)) continue;
         const d=Math.hypot(h2.x-p.x,h2.y-p.y);
         if(d<td){ td=d; target=h2; kind='heart'; }
       }
@@ -1508,15 +1515,20 @@ function aiDecide(foc){
       // 燭台からこぼれた品(全消去/全回収/流星群)は多少の脅威があっても拾いに行く
       let td=480;
       for(const it of B.items){
+        if(G.map && (!passAt(it.x,it.y,false) || !reachableAt(it.x,it.y,false))) continue;   // v2.1 壁の向こうの品は諦める
+        if(gaveUp(it)) continue;
         const d=Math.hypot(it.x-p.x,it.y-p.y);
+        if(exitOpen && d>220) continue;   // v2.1 降りると決めたら、遠い品は追わない
         if(d<td){ td=d; target=it; kind='item'; }
       }
     }
     if(!target && threat<0.3){
       let td=520;
       for(const c of B.chests){
-        if(G.map && !passAt(c.x,c.y,false)) continue;   // 壁の中の箱は狙わない(壁に貼りつかない)
+        if(G.map && (!passAt(c.x,c.y,false) || !reachableAt(c.x,c.y,false))) continue;   // 壁の中/届かない箱は狙わない(壁に貼りつかない)
+        if(gaveUp(c)) continue;
         const d=Math.hypot(c.x-p.x,c.y-p.y);
+        if(exitOpen && d>220) continue;   // v2.1 降りると決めたら、遠い箱は追わない
         if(d<td){ td=d; target=c; kind='chest'; }
       }
     }
@@ -1544,7 +1556,8 @@ function aiDecide(foc){
         if(walk && d>44 && (((gm.x-p.x)*gx+(gm.y-p.y)*gy)/(gdn*(d||1))<-0.1 || d+Math.hypot(goal.x-gm.x,goal.y-gm.y)>gdn+120)) continue;   // v2.1 歩くときは進む先の、寄り道120px以内のジェムだけ
         if(nearKnownTrap(gm.x,gm.y)) continue;   // 知っている罠のそばのジェムは諦める
         if(zoneAvoided(zoneAt(gm.x,gm.y))) continue;   // 学習した嫌な地形(浅瀬/花園/温泉)のジェムは諦める
-        if(G.map && !passAt(gm.x,gm.y,false)) continue;   // 壁に埋まったジェムは諦める
+        if(G.map && (!passAt(gm.x,gm.y,false) || !reachableAt(gm.x,gm.y,false))) continue;   // 壁に埋まった/届かないジェムは諦める
+        if(gaveUp(gm)) continue;
         const cl=cloudAt(gm.x,gm.y);
         if(cl && p.diveT<=0){
           const w=cloudWorth(cl);
@@ -1563,13 +1576,27 @@ function aiDecide(foc){
     }
     if(!target && goalOk){ target=goal; kind='g_'+(goal.kind==='event'?'event':(goal.kind==='item'?'item':goal.sub)); }
     if(target && kind==='g_stairs' && exitGuard) target={x:exX,y:exY};   // v2.1 番兵が居るうちは輪の外側から撃つ
+    // v2.1 諦めの見張り: 同じ目標へ向かって GIVEUP_T 秒近づけなければ(壁の向こう・入口で弾かれる・押し合い)、その目標を外して他へ。燭台(撃つ間は止まる)と降り口の上は除く
+    if(target && kind!=='prop' && !(kind==='g_stairs' && (exitGuard || exitD<90))){
+      const key=giveUpKey(target), d0=Math.hypot(target.x-p.x,target.y-p.y);
+      if(p.tgtKey===key){
+        if(d0<p.tgtBest-14){ p.tgtBest=d0; p.tgtT=B.time; }
+        else if(B.time-p.tgtT>BAL.GIVEUP_T){
+          giveUpOn(target); B.nGiveUp=(B.nGiveUp||0)+1;
+          if(p.goal && (giveUpKey(p.goal)===key || p.goal===target)){ if(p.goal.kind==='explore'){ p.explore=null; p.exploreUntil=0; } p.goal=null; p.goalT=0; }
+          p.path=null; p.tgtKey=null; target=null; kind='';
+          sayLine('giveUp',0,20,'……とれない。あとで!');
+        }
+      } else { p.tgtKey=key; p.tgtBest=d0; p.tgtT=B.time; }
+    } else p.tgtKey=null;
     if(target){
       const d=Math.hypot(target.x-p.x,target.y-p.y)||1;
       const sv=steerTo(p,target.x,target.y);   // 見えていれば直進、壁があれば経路
       dx=sv.x; dy=sv.y;
       state=kind;
       if(kind==='prop' && d<150){ dx*=0.12; dy*=0.12; }   // 燭台を撃ち壊す間は足を止める
-      dx+=ax*1.0; dy+=ay*1.0;
+      const wf=(p.path&&p.path.length)?0.6:1.0;   // v2.1 経路を辿っている間は壁の反発を弱める(細い入口で弾かれて回らない)
+      dx+=ax*wf; dy+=ay*wf;
     }else{
       let ne=null, nd=1e9;
       for(const e of B.enemies){
@@ -2897,7 +2924,7 @@ function updateGoal(p){
   if(p.goal && goalValid(p,p.goal) && B.time<p.goalT){ if(p.goal.ref && p.goal.kind!=='explore' && p.goal.kind!=='event'){ p.goal.x=p.goal.ref.x; p.goal.y=p.goal.ref.y; } return p.goal; }
   p.goalT=B.time+BAL.GOAL_RETHINK;
   const cands=[];
-  const add=(kind,sub,x,y,worth,ref,key)=>{ if(worth<=0 || !passAt(x,y,false) || nearKnownTrap(x,y)) return; if(crestKnow()>=1 && B.traps.some(tr=>tr.armed && Math.hypot(tr.x-x,tr.y-y)<tr.r+40)) return; /* 知っている紋の罠の上は目当てにしない */ const d=Math.hypot(x-p.x,y-p.y); cands.push({kind,sub,x,y,ref,key,d,worth,score:worth/(1+d/600)}); };
+  const add=(kind,sub,x,y,worth,ref,key)=>{ if(worth<=0 || !passAt(x,y,false) || nearKnownTrap(x,y)) return; if(ref && gaveUp(ref)) return; /* v2.1 諦めた目標は外す */ if(crestKnow()>=1 && B.traps.some(tr=>tr.armed && Math.hypot(tr.x-x,tr.y-y)<tr.r+40)) return; /* 知っている紋の罠の上は目当てにしない */ const d=Math.hypot(x-p.x,y-p.y); cands.push({kind,sub,x,y,ref,key,d,worth,score:worth/(1+d/600)}); };
   const hpR=p.hp/p.maxHp, stR=p.stamina/p.staminaMax;
   const leaving=!!B.wantExit && !B.floor.final;   // v2.1 降りる気になったら、寄り道の価値は薄く(拾うのは道すがらだけ)
   let unknownN=0; for(const q of G.map.pois) if(!M.known[q.key]) unknownN++;
