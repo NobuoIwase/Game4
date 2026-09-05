@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Klee+One&family=Yomogi&display=swap" rel="stylesheet">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ルミナ・サバイバーズ — 侵蝕デッキ</title>
+<style>
+:root{
+  --ink:#0b0c19; --panel:rgba(17,15,34,.94); --line:rgba(150,130,255,.38);
+  --gold:#ffd76a; --blue:#8fd3ff; --pink:#ff86b3; --body:#cdd3ef; --dim:#7b82a8;
+  --vio:#b46cff; --vio2:#7a3ff2; --red:#ff5d7a; --green:#7ee89a;
+  --card:#191430; --card-line:rgba(160,120,255,.35);
+}
+html,body{height:100%;}
+body{
+  margin:0; background:var(--ink); color:#fff; overflow:hidden;
+  font-family:"Hiragino Maru Gothic ProN","Yu Gothic UI","Meiryo",system-ui,sans-serif;
+  -webkit-user-select:none; user-select:none;
+}
+#stage{
+  position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+  background:radial-gradient(1200px 700px at 50% 40%, #151230, #08060f);
+}
+canvas#cv{ border-radius:8px; box-shadow:0 0 44px rgba(120,80,255,.16); }
+#mute{
+  position:absolute; top:10px; right:14px; font-size:20px; cursor:pointer;
+  opacity:.72; z-index:40; line-height:1;
+}
+[hidden]{ display:none !important; }
+
+/* ===== 汎用UI ===== */
+button{
+  font-family:inherit; font-size:14px; font-weight:bold; color:#fff;
+  background:linear-gradient(180deg,#a678ff,#7a3ff2); border:none; border-radius:12px;
+  padding:10px 22px; cursor:pointer; box-shadow:0 4px 14px rgba(140,90,255,.35);
+  transition:transform .1s;
+}
+button:hover{ transform:scale(1.04); }
+button:disabled{ opacity:.38; cursor:default; transform:none; box-shadow:none; }
+button.sub{ background:linear-gradient(180deg,#3a3658,#262242); font-weight:normal; font-size:12px; padding:8px 16px; }
+button.gold{ background:linear-gradient(180deg,#ffd76a,#e8a53a); color:#3a2a10; }
+button:focus-visible{ outline:3px solid var(--blue); outline-offset:2px; }
+
+/* ===== スクリーン(DOMオーバーレイ) ===== */
+#screens{ position:absolute; inset:0; z-index:20; pointer-events:none; }
+.screen{
+  position:absolute; inset:0; display:flex; flex-direction:column;
+  align-items:center; pointer-events:auto; overflow:auto; padding:14px 0;
+}
+.screen .inner{
+  background:var(--panel); border:2px solid var(--line); border-radius:18px;
+  padding:20px 26px; max-width:min(860px,94vw); margin:auto;
+  box-shadow:0 10px 40px rgba(0,0,0,.6);
+}
+.screen .inner.wide{ width:min(860px,94vw); }
+.screen h1{
+  margin:0 0 2px; font-size:26px; letter-spacing:2px; text-align:center;
+  background:linear-gradient(180deg,#ffffff 20%,var(--vio));
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+}
+.screen h2{ margin:0 0 10px; font-size:19px; color:#e7dcff; }
+.screen .sub{ color:var(--blue); font-size:11px; letter-spacing:3px; text-align:center; margin-bottom:10px; }
+.screen p{ font-size:12.5px; line-height:1.85; color:var(--body); margin:6px 0 10px; }
+.note{ font-size:11px; color:var(--dim); margin-top:8px; line-height:1.7; }
+.row{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; align-items:center; }
+.spread{ display:flex; justify-content:space-between; align-items:center; gap:12px; }
+
+/* リソースバー */
+#resbar{
+  position:absolute; top:10px; left:14px; z-index:30; display:flex; gap:8px;
+  font-size:12px; font-weight:bold; pointer-events:none;
+}
+#resbar .chip{
+  background:rgba(20,16,40,.85); border:1.4px solid var(--card-line);
+  border-radius:999px; padding:5px 12px; color:#e7dcff;
+}
+#resbar .chip b{ color:var(--gold); }
+#resbar .chip.orb b{ color:var(--vio); }
+
+/* メニューカードグリッド */
+.menu-grid{ display:grid; grid-template-columns:repeat(2,minmax(180px,1fr)); gap:10px; margin:12px 0 6px; }
+.menu-grid button{ padding:14px 10px; font-size:15px; }
+.menu-grid button small{ display:block; font-size:10px; font-weight:normal; opacity:.75; margin-top:3px; }
+
+/* カード(モンスター) */
+.cards{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; margin:10px 0; }
+.mcard{
+  background:var(--card); border:1.6px solid var(--card-line); border-radius:14px;
+  padding:10px; text-align:center; position:relative; transition:border-color .12s;
+}
+.mcard.sel{ border-color:var(--gold); box-shadow:0 0 12px rgba(255,215,106,.25); }
+.mcard.locked{ opacity:.55; }
+.mcard .nm{ font-weight:bold; font-size:13px; margin:4px 0 2px; }
+.mcard .st{ font-size:10.5px; color:var(--dim); line-height:1.6; }
+.mcard .cost{
+  position:absolute; top:6px; left:6px; background:var(--vio2); border-radius:999px;
+  font-size:11px; font-weight:bold; padding:2px 8px;
+}
+.mcard .lv{
+  position:absolute; top:6px; right:6px; color:var(--gold);
+  font-size:10px; font-weight:bold;
+}
+.mcard canvas{ image-rendering:auto; }
+.mcard .act{ margin-top:6px; }
+.mcard .act button{ font-size:11px; padding:5px 12px; border-radius:9px; }
+
+/* 祭壇・研究の行 */
+.list{ display:flex; flex-direction:column; gap:8px; margin:10px 0; }
+.lrow{
+  display:flex; align-items:center; gap:12px; background:var(--card);
+  border:1.4px solid var(--card-line); border-radius:12px; padding:9px 14px;
+}
+.lrow .info{ flex:1; text-align:left; }
+.lrow .nm{ font-weight:bold; font-size:13px; }
+.lrow .ds{ font-size:10.5px; color:var(--dim); line-height:1.55; }
+.pips{ display:inline-flex; gap:3px; margin-left:8px; vertical-align:1px; }
+.pips i{ width:8px; height:8px; border-radius:50%; background:#2c2750; border:1px solid var(--card-line); }
+.pips i.on{ background:var(--vio); box-shadow:0 0 5px var(--vio); }
+
+/* ステータス画面 */
+.stcard{
+  background:var(--card); border:1.4px solid var(--card-line); border-radius:12px;
+  padding:10px 14px; margin-bottom:9px; text-align:left;
+}
+.stcard h3{ margin:0 0 6px; font-size:12.5px; color:var(--vio); letter-spacing:1px; }
+.stcard .kv{ display:flex; flex-wrap:wrap; gap:5px 16px; font-size:12px; }
+.stcard .kv span{ color:var(--dim); font-size:11px; }
+.bar{ height:9px; background:#241f45; border-radius:5px; overflow:hidden; margin:3px 0 1px; }
+.bar i{ display:block; height:100%; border-radius:5px; }
+.stagename{ font-size:11px; color:var(--gold); font-weight:bold; }
+
+/* ===== 戦闘HUD(下部バー) ===== */
+#battlebar{
+  position:absolute; left:50%; bottom:8px; transform:translateX(-50%);
+  z-index:25; display:flex; flex-direction:column; gap:6px; align-items:center;
+  pointer-events:auto;
+}
+#enwrap{ display:flex; align-items:center; gap:8px; width:100%; }
+#enbar{
+  flex:1; height:14px; background:rgba(20,16,40,.85); border:1.4px solid var(--card-line);
+  border-radius:8px; overflow:hidden; position:relative;
+}
+#enfill{ height:100%; width:0%; background:linear-gradient(90deg,#7a3ff2,#c98cff); transition:width .12s; }
+#entext{ font-size:11px; font-weight:bold; color:#e7dcff; min-width:64px; text-align:right; }
+#handrow{ display:flex; gap:7px; align-items:flex-end; flex-wrap:wrap; justify-content:center; }
+/* 客カード(宝箱の加勢): 増えても本来の手札を圧迫しないよう、別の細い帯に詰めて横スクロール */
+#guestrow{ display:flex; gap:6px; align-items:center; max-width:100%; padding:2px 4px 3px; }
+#guestrow[hidden]{ display:none; }
+#guestscroll{ display:flex; gap:4px; align-items:flex-end; flex:1 1 auto; min-width:0; overflow-x:auto; overflow-y:hidden; padding-bottom:2px; scrollbar-width:thin; scrollbar-color:rgba(201,140,255,.5) transparent; }
+#guestrow .glbl{ flex:0 0 auto; font-size:9.5px; color:#c98cff; border:1px solid rgba(201,140,255,.6); border-radius:999px; padding:2px 7px; white-space:nowrap; }
+#guestrow .glbl b{ color:#fff; }
+.gchip{
+  flex:0 0 auto; width:48px; height:58px; border-radius:9px; background:rgba(22,17,44,.92);
+  border:1.4px dashed #c98cff; box-shadow:0 0 8px rgba(201,140,255,.25); cursor:pointer; position:relative;
+  display:flex; flex-direction:column; align-items:center; justify-content:flex-end; padding-bottom:3px; overflow:hidden; transition:transform .1s;
+}
+.gchip:hover{ transform:translateY(-3px); }
+.gchip.off{ opacity:.42; cursor:default; transform:none; }
+.gchip canvas{ position:absolute; top:3px; left:50%; transform:translateX(-50%) scale(.72); transform-origin:top center; }
+.gchip .cost{ position:absolute; top:2px; left:2px; z-index:2; background:var(--vio2); border-radius:999px; font-size:9px; font-weight:bold; padding:0 5px; }
+.gchip .tg{ position:absolute; right:2px; top:2px; z-index:2; font-size:7.5px; font-weight:bold; line-height:1; padding:2px 3px; border-radius:5px; background:rgba(10,10,26,.75); color:#c98cff; border:1px solid #c98cff; }
+.gchip .nm{ font-size:7.5px; font-weight:bold; color:#d9d3f5; z-index:2; max-width:46px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.gchip .cnt{ position:absolute; bottom:13px; right:2px; z-index:2; color:#ffd76a; font-size:7.5px; font-weight:bold; text-shadow:0 1px 2px rgba(0,0,0,.8); pointer-events:none; }
+.gchip .cd{ position:absolute; left:0; bottom:0; width:100%; background:rgba(8,6,18,.72); z-index:3; pointer-events:none; }
+.gchip .combo{ position:absolute; top:14px; right:2px; z-index:4; background:#ffd76a; color:#241c08; border-radius:999px; font-size:8px; font-weight:bold; padding:0 4px; pointer-events:none; }
+#itemrow{ display:flex; gap:6px; flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; max-width:100%; justify-content:safe center; padding-bottom:2px; scrollbar-width:thin; scrollbar-color:rgba(201,140,255,.5) transparent; }   /* v1.9: 一列(はみ出したら横スクロール) */
+.ichip{ position:relative; overflow:hidden; font-size:10.5px; padding:4px 10px; border-radius:999px; background:rgba(22,17,44,.92); border:1.4px solid var(--card-line); color:#d9d3f5; cursor:pointer; user-select:none; }
+.ichip b{ color:var(--vio); font-weight:bold; }
+.ichip .icd{ position:absolute; left:0; bottom:0; height:100%; background:rgba(120,80,255,.28); z-index:0; pointer-events:none; }
+.ichip span{ position:relative; z-index:1; }
+.ichip.off{ opacity:.45; cursor:default; }
+.ichip.sel{ border-color:var(--gold); box-shadow:0 0 10px rgba(255,215,106,.35); color:#fff; }
+canvas#cv.arm{ cursor:crosshair; }
+.hcard{
+  width:66px; height:84px; border-radius:11px; background:rgba(22,17,44,.92);
+  border:1.6px solid var(--card-line); cursor:pointer; position:relative;
+  display:flex; flex-direction:column; align-items:center; justify-content:flex-end;
+  padding-bottom:4px; transition:transform .1s, border-color .1s; overflow:hidden;
+}
+.hcard:hover{ transform:translateY(-4px); }
+.hcard.sel{ border-color:var(--gold); box-shadow:0 0 14px rgba(255,215,106,.35); transform:translateY(-6px); }
+.hcard.off{ opacity:.42; cursor:default; transform:none; }
+.hcard .nm{ font-size:9px; font-weight:bold; color:#d9d3f5; z-index:2; }
+.hcard .cost{
+  position:absolute; top:3px; left:3px; z-index:2; background:var(--vio2);
+  border-radius:999px; font-size:10px; font-weight:bold; padding:1px 6px;
+}
+.hcard canvas{ position:absolute; top:6px; left:50%; transform:translateX(-50%); }
+.hcard .cd{
+  position:absolute; left:0; bottom:0; width:100%; background:rgba(8,6,18,.72);
+  z-index:3; pointer-events:none;
+}
+.hcard .combo{
+  position:absolute; top:3px; right:3px; z-index:4; background:#ffd76a; color:#241c08;
+  border-radius:999px; font-size:9px; font-weight:bold; padding:1px 5px; pointer-events:none;
+}
+.hcard .cnt{
+  position:absolute; bottom:17px; right:3px; z-index:2; color:#ffd76a;
+  font-size:8.5px; font-weight:bold; text-shadow:0 1px 2px rgba(0,0,0,.8); pointer-events:none;
+}
+#formrow{ display:flex; gap:6px; }
+.fchip{
+  font-size:10.5px; font-weight:bold; color:#cbc2ee; background:rgba(22,17,44,.9);
+  border:1.4px solid var(--card-line); border-radius:999px; padding:4px 11px; cursor:pointer;
+}
+.fchip.sel{ color:#fff; background:var(--vio2); border-color:var(--vio); }
+.fchip .fc{ opacity:.8; font-weight:normal; }
+#battlebar .side{ display:flex; gap:6px; }
+#battlebar .side button{ font-size:10.5px; padding:5px 12px; border-radius:999px; }
+#battlebar .side button.on{ background:linear-gradient(180deg,#ffd76a,#e8a53a); color:#3a2a10; }
+
+/* 結果パネル内の内訳 */
+.breakdown{ font-size:12.5px; line-height:2; color:#e8ebff; text-align:left; margin:8px auto; display:table; }
+.breakdown b{ color:var(--gold); }
+.breakdown .o b{ color:var(--vio); }
+#sceneBox{
+  background:#141024; border:1.4px solid var(--card-line); border-radius:10px;
+  max-height:180px; overflow:auto; padding:10px 14px; font-size:12px; line-height:1.9;
+  color:#cfc8ea; text-align:left; white-space:pre-wrap; margin:8px 0;
+}
+.newbadge{ color:var(--pink); font-weight:bold; font-size:12px; }
+/* v1.1: 図鑑・観測記録(読み物) */
+.codex-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:8px; margin:10px 0; }
+.ccard{ background:var(--card); border:1.6px solid var(--card-line); border-radius:12px; padding:8px 6px; text-align:center; cursor:pointer; position:relative; }
+.ccard:hover{ border-color:var(--vio); }
+.ccard .nm{ font-weight:bold; font-size:12px; margin-top:3px; }
+.ccard .st{ font-size:10px; color:var(--dim); }
+.ccard.unknown{ opacity:.5; }
+.ccard .stg{ position:absolute; right:6px; top:6px; font-size:9.5px; color:var(--pink); }
+.ccard .lrn{ font-size:9.5px; color:#8fd3ff; margin-top:2px; }
+.notebook{ background:#f3ead6; color:#3a2f2a; border-radius:6px; padding:16px 18px; margin:10px 0; font-size:13px; line-height:1.95; text-align:left;
+  box-shadow:inset 0 0 40px rgba(120,90,40,.15), 0 2px 8px rgba(0,0,0,.35); font-family:"Klee One","Yu Kyokasho","YuKyokasho","Hiragino Maru Gothic ProN","Yu Gothic UI",serif;
+  background-image:repeating-linear-gradient(transparent 0 27px, rgba(120,90,40,.16) 27px 28px); }
+.notebook h4{ margin:0 0 8px; font-size:13.5px; color:#5a3a2a; border-bottom:1px dashed rgba(90,60,40,.45); padding-bottom:4px; }
+.notebook .entry{ margin:10px 0 0; padding-top:6px; }
+.notebook .entry .lbl{ display:inline-block; font-size:11px; color:#8a4a4a; border:1px solid rgba(138,74,74,.6); border-radius:4px; padding:0 6px; margin-bottom:4px; }
+.notebook s{ color:inherit; text-decoration:none; }   /* v2.3 消した字も同じ墨色のまま(上から塗り消す) */
+.notebook s.scr{ text-decoration:none; color:inherit; padding:1px 3px; margin:0 1px; border-radius:40% 55% 45% 60% / 55% 40% 60% 45%; box-decoration-break:clone; -webkit-box-decoration-break:clone;
+  /* ペンで往復させた取り消し: 細いループ線を2層。下の字は読める */
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='26' height='20' viewBox='0 0 26 20'><path d='M0 11 C4 -3 8 25 13 11 S22 -3 26 11' fill='none' stroke='%233a2f2a' stroke-width='1.7' stroke-linecap='round' opacity='.9'/></svg>"),
+                   url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='22' height='20' viewBox='0 0 22 20'><path d='M0 8 C3 22 8 -4 11 9 S19 22 22 8' fill='none' stroke='%233a2f2a' stroke-width='1.4' stroke-linecap='round' opacity='.8'/></svg>");
+  background-size:26px 100%, 22px 100%; background-position:0 0, 7px 2px; background-repeat:repeat-x; }
+.notebook s.scr.hard{ color:inherit; padding:1px 4px;
+  /* 本当に消したい所: ペンでぐりぐり往復した塗り——線は細く密に、字は最低限読める */
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='20' viewBox='0 0 16 20'><path d='M0 10 C2 -5 5 25 8 10 S14 -5 16 10' fill='none' stroke='%233a2f2a' stroke-width='1.8' stroke-linecap='round' opacity='.9'/></svg>"),
+                   url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='20' viewBox='0 0 12 20'><path d='M0 6 C2 24 4 -4 6 8 S10 24 12 6' fill='none' stroke='%233a2f2a' stroke-width='1.6' stroke-linecap='round' opacity='.9'/></svg>"),
+                   url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='19' height='20' viewBox='0 0 19 20'><path d='M0 14 C3 -6 6 26 10 12 S16 -6 19 14' fill='none' stroke='%233a2f2a' stroke-width='1.6' stroke-linecap='round' opacity='.9'/></svg>"),
+                   url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='30' height='20' viewBox='0 0 30 20'><path d='M0 4 C10 1 20 19 30 16 M0 16 C10 19 20 1 30 4' fill='none' stroke='%233a2f2a' stroke-width='1.5' stroke-linecap='round' opacity='.9'/></svg>");
+  background-size:16px 100%, 12px 100%, 19px 100%, 30px 100%; background-position:0 0, 5px 1px, 2px -2px, 0 0; background-repeat:repeat-x; }
+/* 取り消した横に書きなぐった訂正。手書きフォント、傾き、行から浮く */
+.notebook .scrawl{ display:inline-block; transform:rotate(-3.5deg) skewX(-7deg) translateY(-7px); font-family:"Yomogi","Klee One","Yu Kyokasho",cursive; font-size:12.5px; color:#6a2a3a; margin:0 6px 0 4px; letter-spacing:-.01em; line-height:1.3; position:relative; padding:0 2px; text-shadow:0 0 .4px rgba(106,42,58,.6); }
+.notebook .scrawl::before{ content:"∧"; position:absolute; left:-6px; bottom:-5px; font-size:9px; color:#7a2e44; opacity:.75; transform:rotate(6deg); }
+.notebook .shaky{ display:inline-block; transform:rotate(-1.2deg) skewX(-6deg); letter-spacing:.06em; color:#6a2a3a; }
+.notebook .margin{ font-family:"Yomogi","Klee One","Yu Kyokasho",cursive; font-size:11.5px; color:#7a3a4a; margin:0 0 4px 22px; padding-left:8px; border-left:2px solid rgba(138,74,90,.45); transform:rotate(-1.8deg); line-height:1.5; }
+.notebook .locked{ color:#9a8a7a; font-size:11.5px; font-style:italic; }
+.notebook .after{ margin-top:10px; padding-top:8px; border-top:1px dashed rgba(90,60,40,.45); color:#4a3a4a; font-size:12px; font-family:"Hiragino Maru Gothic ProN","Yu Gothic UI","Meiryo",sans-serif; }
+.notebook .cut{ color:#7a3a3a; }
+.tcard{ border-left:3px solid var(--gold); padding:4px 10px; margin:6px 0; text-align:left; }
+.tcard.ero{ border-left-color:var(--pink); }
+.tcard .tn{ font-weight:bold; font-size:13px; }
+.tcard .tn small{ font-weight:normal; color:var(--dim); margin-left:6px; }
+.tcard .td{ font-size:11.5px; color:var(--body); line-height:1.6; }
+.tcard .tc{ font-size:10.5px; color:var(--dim); }
+.divider{ text-align:center; color:var(--pink); font-size:11.5px; margin:10px 0 4px; letter-spacing:1px; }
+.review{ font-size:12.5px; line-height:1.9; text-align:left; color:#e8ebff; }
+.review p{ margin:6px 0; }
+.selfeval{ font-size:12.5px; line-height:1.95; text-align:left; color:#ffd9e6; }
+.selfeval p{ margin:4px 0; }
+.heart{ font-size:11.5px; color:var(--dim); font-style:italic; margin-top:6px; }
+/* v1.0: 階級と客カード */
+.t-fodder{ --tc:#8fd36a; } .t-mid{ --tc:#8fd3ff; } .t-large{ --tc:#c98cff; } .t-boss{ --tc:#ff6b81; }
+.hcard .tg{ position:absolute; right:3px; top:3px; z-index:2; font-size:8px; font-weight:bold; line-height:1; padding:2px 3px; border-radius:5px; background:rgba(10,10,26,.75); color:var(--tc,#ccc); border:1px solid var(--tc,#666); }
+.hcard.temp{ border-style:dashed; border-color:#c98cff; box-shadow:0 0 10px rgba(201,140,255,.35); }
+.hcard.temp .tg{ color:#c98cff; border-color:#c98cff; }
+.mcard.empty{ opacity:.5; border-style:dashed; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:120px; cursor:default; }
+.tier-h{ border-left:3px solid var(--tc,#888); padding-left:8px; margin-top:14px; }
+.tierlbl{ font-size:9.5px; font-weight:normal; padding:1px 6px; border-radius:999px; border:1px solid var(--tc,#888); color:var(--tc,#ccc); vertical-align:middle; }
+@media (prefers-reduced-motion: reduce){ button,.hcard{ transition:none; } }
+
+/* ===== v2.0 物語の箱: 階層の導入・降下・結末などの地の文を、盤面の上に短く出す ===== */
+#storybox{ position:absolute; top:13%; left:50%; transform:translateX(-50%); width:min(660px,92vw); max-height:52vh; overflow:auto; z-index:26;
+  background:rgba(10,8,22,.88); border:1px solid rgba(201,140,255,.55); border-radius:14px; padding:14px 18px 12px; box-shadow:0 10px 40px rgba(0,0,0,.55);
+  color:#e8dcf5; font-size:13px; line-height:1.75; white-space:pre-wrap; text-align:left; cursor:pointer; pointer-events:auto; }
+#storybox .shint{ display:block; margin-top:8px; font-size:10px; color:var(--dim); text-align:right; }
+body.portrait #storybox{ top:5%; font-size:12px; }
+/* ===== v2.1 ADV(立ち絵+名前+台詞/地の文の箱)。表示中はゲーム時間が止まる。タップで次へ ===== */
+#adv{ position:absolute; inset:0; z-index:30; pointer-events:auto; cursor:pointer; overflow:hidden; }
+#advShade{ position:absolute; inset:0; background:linear-gradient(180deg, rgba(6,4,16,.12) 0%, rgba(6,4,16,.32) 55%, rgba(6,4,16,.86) 100%); }
+#advStand{ position:absolute; left:50%; bottom:0; height:86%; aspect-ratio:832/1216; transform:translateX(-96%); pointer-events:none; transition:filter .25s; }
+#advStand img{ height:100%; width:auto; display:block; filter:drop-shadow(0 10px 24px rgba(0,0,0,.6)); }
+#advStand.dim{ filter:brightness(.5) saturate(.7); }
+#advStand.speak{ animation:advBob .9s ease-in-out infinite alternate; }
+@keyframes advBob{ from{ transform:translateX(-96%) translateY(0); } to{ transform:translateX(-96%) translateY(-5px); } }
+#advTint{ position:absolute; inset:0; opacity:0; transition:opacity .3s; background:radial-gradient(38% 22% at 50% 30%, rgba(255,110,150,.55), rgba(255,110,150,0) 70%); mix-blend-mode:multiply; }
+#advStand.f-heat #advTint, #advStand.f-shy #advTint{ opacity:1; }
+#advBox{ position:absolute; left:50%; bottom:4%; transform:translateX(-50%); width:min(760px,94%); min-height:108px; box-sizing:border-box; padding:16px 18px 24px; border-radius:16px;
+  background:rgba(12,9,28,.92); border:1px solid rgba(201,140,255,.55); box-shadow:0 10px 40px rgba(0,0,0,.55); color:#f0e8ff; font-size:15px; line-height:1.85; text-align:left; }
+#advName{ position:absolute; top:-15px; left:16px; padding:3px 14px; border-radius:10px; font-size:12px; font-weight:bold; color:#3a2a10; background:linear-gradient(180deg,#ffd76a,#e8a53a); box-shadow:0 3px 10px rgba(0,0,0,.4); }
+#advName.n{ display:none; } #advName.town{ background:linear-gradient(180deg,#a8e0ff,#5aa8e0); } #advName.voice{ background:linear-gradient(180deg,#d8b0ff,#8a5ad8); color:#fff; }
+#advText{ min-height:54px; white-space:pre-wrap; word-break:break-word; } #advText.n{ color:#d6d9f2; }
+#advHint{ position:absolute; right:14px; bottom:6px; font-size:10px; color:var(--dim); animation:advBlink 1.2s ease-in-out infinite; }
+@keyframes advBlink{ 0%,100%{opacity:.3} 50%{opacity:1} }
+#advCtl{ position:absolute; right:10px; top:-15px; display:flex; gap:6px; } #advCtl button{ padding:3px 10px; font-size:10px; border-radius:9px; box-shadow:none; }
+body.portrait #advStand{ height:58%; bottom:26%; transform:translateX(-50%); } body.portrait #advStand.speak{ animation:advBobP .9s ease-in-out infinite alternate; }
+@keyframes advBobP{ from{ transform:translateX(-50%) translateY(0); } to{ transform:translateX(-50%) translateY(-5px); } }
+body.portrait #advBox{ bottom:2%; width:96%; font-size:13.5px; padding:14px 14px 22px; }
+/* 物語画面・結果画面の台本表示(話者付き) */
+.storytext{ line-height:1.8; color:#e8dcf5; text-align:left; }
+.storytext .sn{ margin:4px 0; color:#cfd3ee; }
+.storytext .sl{ margin:4px 0 4px 6px; }
+.storytext .who{ display:inline-block; min-width:3.2em; margin-right:6px; padding:0 8px; border-radius:8px; font-size:11px; color:#3a2a10; background:linear-gradient(180deg,#ffd76a,#e8a53a); }
+.storytext .who.t{ background:linear-gradient(180deg,#a8e0ff,#5aa8e0); } .storytext .who.v{ background:linear-gradient(180deg,#d8b0ff,#8a5ad8); color:#fff; }
+/* ===== 縦持ち(v1.9): 戦闘バーを世界の上に重ねず、キャンバスの下に置く。札は小さく一列(横スクロール) ===== */
+body.portrait #stage{ flex-direction:column; justify-content:flex-start; align-items:center; padding-top:4px; box-sizing:border-box; }
+body.portrait canvas#cv{ flex:0 0 auto; }
+body.portrait #battlebar{ position:static; left:auto; bottom:auto; transform:none; width:100% !important; max-width:100vw; gap:3px; padding:4px 4px 6px; box-sizing:border-box; }
+/* v1.10 横持ちで画面が低いとき: EN・アイテム・陣形/操作を1段にまとめて盤面の高さを稼ぐ */
+@media (max-height:560px){
+  body.portrait #battlebar{
+    display:grid; align-items:center; column-gap:8px; row-gap:3px;
+    grid-template-columns:minmax(110px,1fr) auto auto;
+    grid-template-areas:"en item side" "hand hand hand" "guest guest guest";
+  }
+  body.portrait #enwrap{ grid-area:en; }
+  body.portrait #itemrow{ grid-area:item; max-width:34vw; }
+  body.portrait #battlebar .spread{ grid-area:side; width:auto !important; }
+  body.portrait #handrow{ grid-area:hand; }
+  body.portrait #guestrow{ grid-area:guest; }
+  body.portrait #formrow{ max-width:26vw; }
+}
+body.portrait #enwrap{ gap:6px; }
+body.portrait #enbar{ height:11px; }
+body.portrait #handrow{ flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; justify-content:flex-start; max-width:100%; padding:2px 2px 3px; gap:4px; scrollbar-width:thin; scrollbar-color:rgba(201,140,255,.5) transparent; }
+body.portrait .hcard{ width:46px; height:58px; flex:0 0 auto; border-radius:8px; padding-bottom:2px; }
+body.portrait .hcard canvas{ top:2px; transform:translateX(-50%) scale(.7); transform-origin:top center; }
+body.portrait .hcard .nm{ font-size:7px; max-width:44px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+body.portrait .hcard .cost{ font-size:8.5px; padding:0 4px; top:2px; left:2px; }
+body.portrait .hcard .cnt{ font-size:7px; bottom:11px; right:2px; }
+body.portrait .hcard .combo{ font-size:8px; padding:0 4px; top:2px; right:2px; }
+body.portrait .hcard .tg{ font-size:7px; right:2px; top:2px; padding:1px 2px; }
+body.portrait .hcard:hover, body.portrait .hcard.sel{ transform:none; }
+body.portrait #guestrow{ padding:1px 2px 2px; }
+body.portrait .gchip{ width:40px; height:50px; }
+body.portrait .gchip canvas{ transform:translateX(-50%) scale(.6); }
+body.portrait #itemrow{ flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; justify-content:flex-start; max-width:100%; padding-bottom:2px; gap:4px; }
+body.portrait .ichip{ flex:0 0 auto; font-size:9.5px; padding:3px 8px; white-space:nowrap; }
+body.portrait #battlebar .spread{ flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; justify-content:flex-start; gap:6px; align-items:center; padding-bottom:2px; }
+body.portrait #formrow{ flex-wrap:nowrap; flex:0 0 auto; gap:4px; }
+body.portrait .fchip{ flex:0 0 auto; font-size:9.5px; padding:3px 8px; white-space:nowrap; }
+body.portrait #battlebar .side{ flex:0 0 auto; }
+body.portrait #battlebar .side button{ font-size:9.5px; padding:4px 8px; white-space:nowrap; }
+
+/* ===== モバイル(縦持ち)調整 ===== */
+#battlebar .spread{ flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; justify-content:safe center; gap:6px; align-items:center; padding-bottom:2px; scrollbar-width:thin; }   /* v1.9: 陣形とボタンも一列 */
+#formrow{ flex-wrap:nowrap; flex:0 0 auto; }
+#battlebar .side{ flex:0 0 auto; }
+.fchip,.ichip{ white-space:nowrap; flex:0 0 auto; }
+/* 札が10枚以上なら小さめの札で一列に */
+#handrow.dense .hcard{ width:56px; height:74px; }
+#handrow.dense .hcard .nm{ font-size:8px; }
+#handrow.dense .hcard canvas{ top:3px; }
+#handrow.dense .hcard .cnt{ font-size:8px; bottom:15px; }
+@media (max-width:720px){
+  #resbar{ gap:5px; font-size:10.5px; right:48px; flex-wrap:wrap; }
+  #resbar .chip{ padding:3px 9px; }
+  .hcard{ width:56px; height:74px; }
+  .hcard .nm{ font-size:8px; }
+  .hcard canvas{ top:3px; }
+  .fchip{ padding:3px 9px; font-size:9.5px; }
+  #battlebar{ gap:4px; bottom:4px; }
+  #battlebar .side button{ font-size:9.5px; padding:4px 9px; }
+  #entext{ font-size:10px; min-width:54px; }
+  .menu-grid{ grid-template-columns:1fr; }
+  .screen .inner{ padding:14px 14px; }
+  .cards{ grid-template-columns:repeat(auto-fill,minmax(124px,1fr)); }
+}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="cv" width="960" height="540"></canvas>
+  <div id="mute" title="サウンド切替">🔊</div>
+  <div id="resbar" hidden>
+    <div class="chip">✦ エッセンス <b id="resEss">0</b></div>
+    <div class="chip orb">◉ オーブ <b id="resOrb">0</b></div>
+    <div class="chip">世代 <b id="resGen">Ⅰ</b> <span id="resRot" style="color:var(--dim)"></span></div>
+  </div>
+  <div id="battlebar" hidden>
+    <div id="enwrap">
+      <div id="enbar"><div id="enfill"></div></div>
+      <div id="entext">EN 0/10</div>
+    </div>
+    <div id="handrow"></div>
+    <div id="guestrow" hidden></div>
+    <div id="itemrow" title="夜側のアイテム: 選んでから画面をタップして置く"></div>
+    <div class="spread" style="width:100%">
+      <div id="formrow"></div>
+      <div class="side">
+        <button id="btnAuto" class="sub">AUTO</button>
+        <button id="btnSpd" class="sub">▶ ×1</button>
+        <button id="btnRetreat" class="sub">撤退</button>
+      </div>
+    </div>
+  </div>
+  <div id="storybox" hidden title="タップで閉じる"></div>
+  <div id="screens"></div>
+  <div id="adv" hidden>
+    <div id="advShade"></div>
+    <div id="advStand" class="dim"><img id="advImg" alt="" draggable="false"><div id="advTint"></div></div>
+    <div id="advBox">
+      <div id="advName"></div>
+      <div id="advText"></div>
+      <div id="advCtl"><button id="advAuto" class="sub" type="button">自動送り: ON</button><button id="advSkip" class="sub" type="button">とばす ≫</button></div>
+      <div id="advHint">▼ タップで次へ</div>
+    </div>
+  </div>
+</div>
+<script src="js/core.js"></script>
+<script src="js/data.js"></script>
+<script src="js/scenes.js"></script>
+<script src="js/codex.js"></script>
+<script src="js/codex_v20.js"></script>
+<script src="js/scenes_v20.js"></script>
+<script src="js/story.js"></script>
+<script src="js/lines.js"></script>
+<script src="js/map.js"></script>
+<script src="js/game.js"></script>
+<script src="js/render.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
