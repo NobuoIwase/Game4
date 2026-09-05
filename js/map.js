@@ -314,7 +314,7 @@ function randZoneSpot(z,fx,fy,minD,maxD){
     if(!passAt(x,y,false)) continue;
     return {x,y};
   }
-  const t=T[(Math.random()*T.length)|0]; const i=t%MAP_W, j=(t-i)/MAP_W; return {x:tileCX(i),y:tileCY(j)};
+  return null;   // 範囲内に無い(呼ぶ側が別の置き方に切り替える)
 }
 /* ================= 配置 ================= */
 function snapFloor(x,y,fly,maxR){

@@ -149,7 +149,7 @@ const BAL={
   PICK_SHROOM_N:4, PICK_SHROOM_RESPAWN:30, PICK_SHROOM_MAX:5,       // 光茸: 初期数/追加間隔(s)/上限
   PICK_NECTAR_N:3, PICK_NECTAR_RESPAWN:25, PICK_NECTAR_MAX:4,       // 蜜の花
   PICK_TREASURE_CD:28, PICK_TREASURE_MAX:2,                         // 沈んだ宝: 出現間隔/上限
-  POOL_CD:45, POOL_T:2.2, STELE_T:2.0,                              // 清水の再使用/浸かる時間、石碑を読む時間
+  POOL_CD:45, POOL_T:2.0, STELE_T:2.0,                              // 清水の再使用/浸かる時間、石碑を読む時間
   EVENT_FIRST:30, EVENT_CD_MIN:50, EVENT_CD_MAX:75, EVENT_LIFE:60,  // イベントの初回/間隔/光の柱が立つ時間
   GOAL_RETHINK:3, FARM_T:6, FARM_BREAK:5,                           // 目当ての見直し間隔 / ジェム拾いに留まる上限 / その後歩く時間
   SHROOM_REVEAL:900, SHROOM_XP:0.06, TREASURE_XP:0.35,             // 光茸の見通し距離・経験値(必要量比)、沈んだ宝の経験値(必要量比)

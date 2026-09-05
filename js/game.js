@@ -1419,10 +1419,11 @@ function aiDecide(foc){
     // v1.8 目当て: 行きたい先(光の柱・宝箱・落ちた品・場所・資源・探索)を選ぶ。
     // 脅威が薄ければそこへ歩き、ジェムは進む先の近いものだけ拾う。ジェム畑に長く留まったら(FARM_T)いったん歩き出す
     const goal=(!target && G.map) ? updateGoal(p) : null;
-    let walk=false;
+    let walk=false, goalOk=false;
     if(goal){
       const urgent=goal.kind==='event'||goal.kind==='item'||goal.score>=1.2;
-      walk = threat<(urgent?0.6:0.3) && (p.walkT>0 || urgent || !nearGem(p,170));
+      goalOk = threat<(urgent?0.6:0.3);                                   // 脅威が濃いときは目当てへ歩かない(牽制/回避に戻る)
+      walk = goalOk && (p.walkT>0 || urgent || !nearGem(p,170));
     }
     if(!target){
       // ジェム回収。ガス溜まりの中のジェムは基本見送る——
@@ -1451,7 +1452,7 @@ function aiDecide(foc){
         }
       }
     }
-    if(!target && goal){ target=goal; kind='g_'+(goal.kind==='event'?'event':(goal.kind==='item'?'item':goal.sub)); }
+    if(!target && goalOk){ target=goal; kind='g_'+(goal.kind==='event'?'event':(goal.kind==='item'?'item':goal.sub)); }
     if(target){
       const d=Math.hypot(target.x-p.x,target.y-p.y)||1;
       const sv=steerTo(p,target.x,target.y);   // 見えていれば直進、壁があれば経路
@@ -2666,7 +2667,7 @@ function goalValid(p,g){
   if(g.kind==='chest') return B.chests.includes(g.ref) && !g.ref.taken;
   if(g.kind==='item') return B.items.includes(g.ref);
   if(g.kind==='pick') return B.picks.includes(g.ref) && !g.ref.dead;
-  if(g.kind==='poi'){ const q=g.ref;
+  if(g.kind==='poi'){ const q=g.ref; if(!M.known[q.key]) return false;
     if(q.kind==='shrine') return !M.visited[q.key];
     if(q.kind==='spring') return p.hp<p.maxHp*0.7 && p.springCd<=0;
     if(q.kind==='pool') return poolWant(p) && !(B.poolCd[q.key]>0);
@@ -2687,7 +2688,9 @@ function updateGoal(p){
   if(B.event){ const ev=B.event; let w=0;
     if(ev.kind==='chest') w=3.2; else if(ev.kind==='star') w=3.0; else if(ev.kind==='shroom') w=2.0;
     else if(ev.kind==='pool') w=poolWant(p)?2.8:0; else if(ev.kind==='stele') w=B.steleRead[ev.key]?0:2.4;
-    add('event',ev.kind,ev.x,ev.y,w,ev,ev.key); }
+    let ex=ev.x, ey=ev.y;
+    if(ev.kind==='shroom' && ev.refs){ let nd=1e9; for(const pk of ev.refs){ if(pk.dead) continue; const dd=Math.hypot(pk.x-p.x,pk.y-p.y); if(dd<nd){ nd=dd; ex=pk.x; ey=pk.y; } } }   // 群生は残っている光茸そのものへ
+    add('event',ev.kind,ex,ey,w,ev,ev.key); }
   for(const it of B.items){ if(it.known) add('item',it.kind,it.x,it.y,3.0,it); }
   for(const c of B.chests){ if(c.known && !c.taken) add('chest',c.bossChest?'boss':'chest',c.x,c.y,c.bossChest?3.0:2.6,c); }
   for(const q of G.map.pois){
@@ -2795,12 +2798,12 @@ function poiTick(dt){
       heroBubble(p,pickRand(['ちょっとだけ、やすも……','あつ……でも、きもちいい……','すぐ、もどるから……']),true,2);
       awardAil('heatg');
     }
-    if(q.kind==='pool' && d<38 && !(B.poolCd[q.key]>0) && p.poolT<=0 && poolWant(p) && attachCount(p)===0 && !p.pinned && p.climaxT<=0){
+    if(q.kind==='pool' && d<38 && !(B.poolCd[q.key]>0) && p.poolT<=0 && poolWant(p) && attachCount(p)===0 && !p.pinned && !p.charmBind && p.climaxT<=0){
       p.poolT=BAL.POOL_T; p.poolKey=q.key;
       setBanner('清水で流す','冷たい水。敏感化・発情・粘液が流れる——足が止まる','#8fd3ff');
       heroBubble(p,pickRand(['つめた……でも、ながさなきゃ','ちょっと、あらうだけ……']),true,2);
     }
-    if(q.kind==='stele' && d<40 && !B.steleRead[q.key] && p.readT<=0 && attachCount(p)===0 && !p.pinned && p.climaxT<=0){
+    if(q.kind==='stele' && d<40 && !B.steleRead[q.key] && p.readT<=0 && attachCount(p)===0 && !p.pinned && !p.charmBind && p.climaxT<=0){
       p.readT=BAL.STELE_T; p.readKey=q.key;
       heroBubble(p,pickRand(['なにか、かいてある……','ふるい、もじ……よめる、かな']),true,1);
     }
@@ -2824,7 +2827,7 @@ function poiTick(dt){
             q.x=tileCX(tileI(x)); q.y=tileCY(tileJ(y)); placed=true; break; }
         }
         clearAround(q.x,q.y,2);   // 門の周りは開けておく(守りの召喚と彼女の接近のため)
-        M.gatePos={x:q.x,y:q.y}; M.known[q.key]=0; p.dest=null; p.destUntil=0; saveMeta();
+        M.gatePos={x:q.x,y:q.y}; M.known[q.key]=0; p.dest=null; p.destUntil=0; p.goal=null; saveMeta();
       }
     }
   }
@@ -3373,7 +3376,7 @@ function applyItem(kind){
 function spawnPick(kind,x,y,known){
   const B=G.B; if(!G.map) return null;
   let q=null;
-  if(x===undefined){ const p=B.hero; q=randZoneSpot(PICK_DEF[kind].zone,p.x,p.y,260,1500); if(!q) return null; }
+  if(x===undefined){ const p=B.hero; q=randZoneSpot(PICK_DEF[kind].zone,p.x,p.y,260,1500)||randZoneSpot(PICK_DEF[kind].zone,p.x,p.y,260,9999); if(!q) return null; }
   else q=snapFloor(x,y,false,3)||{x,y};
   const pk={kind,x:q.x,y:q.y,t:0,known:!!known,dead:false};
   B.picks.push(pk); return pk;
@@ -3428,10 +3431,10 @@ function revealAround(x,y,r){
   return n;
 }
 /* 清水が欲しい状態: 敏感化・発情ゲージ・粘液・快感のどれかがひどい */
-function poolWant(p){ return p.sensit>=35 || (p.heatG||0)>=45 || p.slow>0 || p.aphro>=40; }
+function poolWant(p){ return p.sensit>=Math.max(35,(p.sensitFloor||0)+10) || (p.heatG||0)>=45 || p.slow>0 || p.aphro>=40; }   // 下限ぶんの敏感化では欲しがらない
 function usePool(q){
   const B=G.B, p=B.hero; B.poolCd[q.key]=BAL.POOL_CD; B.used.pool++;
-  p.sensit=Math.max(0,p.sensit-30); p.heatG=Math.max(0,(p.heatG||0)-50); p.slow=0; p.aphro=Math.max(0,p.aphro-15);
+  p.sensit=Math.max(p.sensitFloor||0,p.sensit-30); p.heatG=Math.max(0,(p.heatG||0)-50); p.slow=0; p.aphro=Math.max(0,p.aphro-15);   // 祭壇/呪いの下限は割らない
   parts(q.x,q.y-6,20,['#cffaff','#fff','#8fd3ff'],120,0.9); sfx(900,500,0.4,'sine',0.05);
   floatTxt(p.x,p.y-58,'清水 — 敏感化-30・発情-50','#8fd3ff',12,1.6);
   heroBubble(p,pickRand(['……つめたい。あたま、すっきりした','ぬるぬる、ながれた……よし']),false,1);
@@ -3487,7 +3490,7 @@ function startEvent(){
   const ev={kind,t:0,until:B.time+BAL.EVENT_LIFE,x:0,y:0,key:null,ref:null,refs:null,boost:false};
   if(kind==='chest'){ const q=far('ruin'); const c={x:q.x,y:q.y,t:0,taken:false,known:true,event:true}; B.chests.push(c); ev.ref=c; ev.x=q.x; ev.y=q.y; }
   else if(kind==='star'){ const q=far(null); const r2=Math.random()*10, ik=r2<5?'wipe':(r2<8?'vacuum':'bonus'); const it={kind:ik,x:q.x,y:q.y,t:0,known:true,event:true}; B.items.push(it); ev.ref=it; ev.x=q.x; ev.y=q.y; }
-  else if(kind==='shroom'){ const q=far('moss'); ev.refs=[]; for(let i=0;i<4;i++){ const a=i*TAU/4+rand(0.4); const pk=spawnPick('shroom',q.x+Math.cos(a)*34,q.y+Math.sin(a)*26,true); if(pk) ev.refs.push(pk); } ev.x=q.x; ev.y=q.y; if(!ev.refs.length){ B.eventT=5; return; } }
+  else if(kind==='shroom'){ const q=far('moss'); ev.refs=[]; for(let i=0;i<4;i++){ const a=i*TAU/4+rand(0.4); const pk=spawnPick('shroom',q.x+Math.cos(a)*14,q.y+Math.sin(a)*10,true); if(pk) ev.refs.push(pk); } ev.x=q.x; ev.y=q.y; if(!ev.refs.length){ B.eventT=5; return; } }
   else if(kind==='pool'){ const q=pools.find(o=>(B.poolCd[o.key]||0)>0)||pickRand(pools); B.poolCd[q.key]=0; ev.key=q.key; ev.x=q.x; ev.y=q.y; M.known[q.key]=1; }
   else if(kind==='stele'){ const q=pickRand(steles); ev.key=q.key; ev.x=q.x; ev.y=q.y; ev.boost=true; M.known[q.key]=1; }
   B.event=ev; B.eventsN++;
