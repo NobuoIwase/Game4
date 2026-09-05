@@ -1464,7 +1464,9 @@ function aiDecide(foc){
   if(exitQ){ const ddx=p.x-exitQ.x, ddy=p.y-exitQ.y, dd=Math.hypot(ddx,ddy)||1;
     if(exitGuard){ const rr=BAL.SENTINEL_ALERT-20; exX=exitQ.x+ddx/dd*rr; exY=exitQ.y+ddy/dd*rr*0.8; } else { exX=exitQ.x; exY=exitQ.y; }   // 警戒半径の縁: 番兵を引き出して撃つ
     exitD=Math.hypot(exX-p.x,exY-p.y)||1; }
-  const exitGo=!!exitQ && (exitOpen || exitD>40);
+  let exitGo=!!exitQ && (exitOpen || exitD>40);
+  // v2.2 降りたいのに降り口をまだ知らない: 探索点を「逃げる先」にして、群れに押されても地図を進む(その場で牽制し続けない)
+  if(B.wantExit && !exitQ && p.explore && !B.floor.final){ exX=p.explore.x; exY=p.explore.y; exitD=Math.hypot(exX-p.x,exY-p.y)||1; exitGo=exitD>60; }
 
   // HPが危険域なら、多少の脅威があっても燭台へ強行する(回復の隙=攻めどころ)
   let forceProp=null;
