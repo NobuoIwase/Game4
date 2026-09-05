@@ -5,22 +5,33 @@
    debug: ?ts=N でゲーム速度N倍(1-5) / console: __game
 ============================================================ */
 const TAU = Math.PI*2;
-const W = 960, H = 540;
+let W = 960, H = 540;                                  // 視界の論理サイズ。端末の縦横比に合わせて resize() で決める
 const FONT = '"Hiragino Maru Gothic ProN","Yu Gothic UI","Meiryo",sans-serif';
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
 const TS = Math.max(1, Math.min(5, parseInt(new URLSearchParams(location.search).get('ts'),10) || 1));
 
 let dpr=1, viewScale=1, barCover=0;   // barCover: 横持ちで戦闘バーが世界の下端を覆う高さ(世界px)。縦持ちでは重ねないので 0
+/* v1.10 視界の形を端末に合わせる。
+   960x540 の横長のまま縦持ちの画面に収めると、幅で頭打ちになって画面の高さの1/4しか使えない
+   (412x830 の端末で canvas 406x228)。見える世界の"広さ"は 960x540 と同じに保ったまま、
+   縦横比だけ画面に合わせると canvas 410x674 になり、同じ倍率で描いても1体1体が大きく見える。 */
+const VIEW_AREA=960*540, AR_MIN=0.52, AR_MAX=2.60;
 function resize(){
   dpr = Math.min(2, window.devicePixelRatio||1);
   const bb=document.getElementById('battlebar');
   // v1.9 縦持ち: キャンバスを上に、戦闘バーをその下に(重ねない)。キャンバスは残りの高さに収める
-  const portrait = window.innerHeight > window.innerWidth*1.05;
+  // v1.10 横持ちでも画面が低い端末(高さ560px未満)は同じ扱い。重ねると盤面の6割が隠れてしまうため
+  const portrait = window.innerHeight > window.innerWidth*1.05 || window.innerHeight < 560;
   document.body.classList.toggle('portrait', portrait);
   let availH=window.innerHeight;
   if(portrait && bb && !bb.hidden){ availH=Math.max(220, window.innerHeight-bb.offsetHeight-12); }
-  viewScale = Math.min(window.innerWidth/W, availH/H) * 0.985;
+  const availW=Math.max(240, window.innerWidth);
+  let ar=availW/Math.max(200,availH);
+  if(ar<AR_MIN) ar=AR_MIN; else if(ar>AR_MAX) ar=AR_MAX;
+  W = Math.round(Math.sqrt(VIEW_AREA*ar)/2)*2;
+  H = Math.round(Math.sqrt(VIEW_AREA/ar)/2)*2;
+  viewScale = Math.min(availW/W, availH/H) * 0.985;
   cv.style.width  = Math.round(W*viewScale)+'px';
   cv.style.height = Math.round(H*viewScale)+'px';
   cv.width  = Math.round(W*viewScale*dpr);
@@ -29,8 +40,11 @@ function resize(){
     if(portrait){ bb.style.width='100%'; barCover=0; }
     else{ bb.style.width = Math.min(1100, Math.round(W*viewScale)-24)+'px'; barCover = bb.hidden?0:(bb.offsetHeight+8)/viewScale; }   // 札13枚が一列に収まる幅まで広げる
   }
+  if(typeof makeVignette==='function') makeVignette();   // 周辺減光は画面サイズで焼いているので作り直す
 }
-window.addEventListener('resize', resize); resize();
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', ()=>setTimeout(resize,60));
+resize();
 // 戦闘バーの高さが変わったら(表示/非表示・客札の増減)キャンバスの寸法を合わせ直す
 if(window.ResizeObserver){
   let lastBarH=-1;

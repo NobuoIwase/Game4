@@ -2312,6 +2312,10 @@ function drawPinScene(g){
 /* ---------------- HUD ---------------- */
 function drawHUD(g){
   const B=G.B, p=B.hero;
+  /* v1.10 視界は端末の縦横比に合わせて幅が変わる。狭いときは横並びをやめて段に積む。
+     右端はミュートボタン(DOM)と重なるので、そのぶん余白を取る。 */
+  const narrow = W < 780;
+  const RM = narrow ? 56 : 16;
   // XPバー(ヒロインの成長=脅威度)
   g.fillStyle='rgba(255,255,255,0.10)'; g.fillRect(0,0,W,7);
   const xg=g.createLinearGradient(0,0,W,0);
@@ -2325,91 +2329,113 @@ function drawHUD(g){
   g.fillStyle='#ffd76a'; g.font='bold 13px '+FONT;
   g.textAlign='center'; g.textBaseline='middle';
   g.fillText('Lv '+p.level,41,26.5);
-  // HPバー
-  rr(g,82,14,150,11,6);
+
+  // HP / スタミナ / 護り
+  const barX = narrow ? 10 : 82;
+  const barY = narrow ? 44 : 14;
+  const barW = narrow ? Math.max(120, W-152) : 150;
+  rr(g,barX,barY,barW,11,6);
   g.fillStyle='rgba(20,24,50,0.78)'; g.fill();
   const hr=clamp(p.hp/p.maxHp,0,1);
   if(hr>0){
-    rr(g,82,14,150*hr,11,6);
+    rr(g,barX,barY,barW*hr,11,6);
     g.fillStyle=hr>0.35?'#ff5d7a':'#ff9c2e'; g.fill();
   }
-  rr(g,82,14,150,11,6);
+  rr(g,barX,barY,barW,11,6);
   g.strokeStyle='rgba(255,255,255,0.35)'; g.lineWidth=1.2; g.stroke();
-  g.fillStyle='#ffffff'; g.font='bold 9px '+FONT; g.textAlign='left';
-  g.fillText('HP '+Math.ceil(p.hp)+'/'+p.maxHp, 240, 19.5);
+  g.fillStyle='#ffffff'; g.font='bold 9px '+FONT;
+  g.textAlign = narrow?'right':'left';
+  // 狭い画面では数値をバーの中に重ねる。下地の色が変わっても読めるよう影を敷く
+  if(narrow){ g.shadowColor='rgba(0,0,0,0.9)'; g.shadowBlur=3; }
+  g.fillText('HP '+Math.ceil(p.hp)+'/'+p.maxHp, narrow?barX+barW-6:barX+barW+8, barY+5.5);
+  g.shadowBlur=0;
   // スタミナバー
-  rr(g,82,28,150,8,4);
+  rr(g,barX,barY+14,barW,8,4);
   g.fillStyle='rgba(20,24,50,0.78)'; g.fill();
   const sr=clamp(p.stamina/p.staminaMax,0,1);
   if(sr>0){
-    rr(g,82,28,150*sr,8,4);
+    rr(g,barX,barY+14,barW*sr,8,4);
     g.fillStyle=sr>0.3?'#ffd76a':'#ff7a4a'; g.fill();
   }
-  rr(g,82,28,150,8,4);
+  rr(g,barX,barY+14,barW,8,4);
   g.strokeStyle='rgba(255,255,255,0.28)'; g.lineWidth=1; g.stroke();
-  g.fillStyle='#ffe9b0'; g.font='bold 8px '+FONT;
-  g.fillText('スタミナ '+Math.ceil(p.stamina), 240, 32.5);
+  g.fillStyle= narrow?'#ffffff':'#ffe9b0'; g.font='bold 8px '+FONT;
+  g.textAlign = narrow?'right':'left';
+  if(narrow){ g.shadowColor='rgba(0,0,0,0.9)'; g.shadowBlur=3; }
+  g.fillText('スタミナ '+Math.ceil(p.stamina), narrow?barX+barW-6:barX+barW+8, barY+18.5);
+  g.shadowBlur=0;
   // 護り
   g.fillStyle='#8fd3ff'; g.font='bold 10px '+FONT;
-  g.fillText('護り '+Math.max(0,p.armor-attachCount(p)), 330, 19.5);
+  g.textAlign = narrow?'right':'left';
+  g.shadowColor='rgba(0,0,0,0.85)'; g.shadowBlur=3;
+  g.fillText('護り '+Math.max(0,p.armor-attachCount(p)), narrow?W-10:330, barY+5.5);
+  g.shadowBlur=0;
+
   // タイマー
   g.textAlign='center';
-  g.font='bold 24px '+FONT;
+  g.font='bold '+(narrow?20:24)+'px '+FONT;
   g.fillStyle='#ffffff';
   g.shadowColor='rgba(0,0,0,0.6)'; g.shadowBlur=5;
   g.fillText(fmt(B.time), W/2, 26);
   g.shadowBlur=0;
-  g.font='9px '+FONT; g.fillStyle='rgba(190,200,240,0.75)';
-  g.fillText('/ '+fmt(BAL.RUN_TIME)+' まで生存でルミナの勝利', W/2, 42);
+  if(!narrow){
+    g.font='9px '+FONT; g.fillStyle='rgba(190,200,240,0.75)';
+    g.fillText('/ '+fmt(BAL.RUN_TIME)+' まで生存でルミナの勝利', W/2, 42);
+  }
   // 右上
-  g.textAlign='right'; g.font='bold 13px '+FONT; g.fillStyle='#ffd76a';
-  g.fillText('被撃破 '+B.kills, W-16, 24);
-  g.font='10px '+FONT; g.fillStyle='rgba(200,180,255,0.8)';
-  g.fillText('第'+genNum(META.gen.idx)+'世代 / 戦歴'+(META.gen.battle+1)+'/'+BAL.GEN_LEN, W-16, 42);
+  g.textAlign='right'; g.font='bold '+(narrow?12:13)+'px '+FONT; g.fillStyle='#ffd76a';
+  g.shadowColor='rgba(0,0,0,0.85)'; g.shadowBlur=3;
+  g.fillText('被撃破 '+B.kills, W-RM, narrow?22:24);
+  g.font=(narrow?9:10)+'px '+FONT; g.fillStyle='rgba(200,180,255,0.85)';
+  g.fillText('第'+genNum(META.gen.idx)+'世代 / 戦歴'+(META.gen.battle+1)+'/'+BAL.GEN_LEN, narrow?W-10:W-RM, narrow?barY+18.5:42);
   // 夜の深まり(彼女のLv連動の夜側強化)
   const nStat=Math.round(Math.min(BAL.NIGHT_STAT_CAP, BAL.NIGHT_STAT_LV*Math.max(0,p.level-1))*100);
   const nUnit=Math.min(BAL.NIGHT_UNIT_MAX, Math.floor(p.level/BAL.NIGHT_UNIT_LV));
   if(nStat>0||nUnit>0){
-    g.fillStyle='rgba(196,140,255,0.9)'; g.font='bold 10px '+FONT;
-    g.fillText('夜の深まり +'+nStat+'%'+(nUnit>0?' / +'+nUnit+'体':''), W-16, 58);
+    g.fillStyle='rgba(212,168,255,0.95)'; g.font='bold '+(narrow?9:10)+'px '+FONT;
+    g.fillText('夜の深まり +'+nStat+'%'+(nUnit>0?' / +'+nUnit+'体':''), narrow?W-10:W-RM, narrow?barY+30:58);
   }
+  g.shadowBlur=0;
   // ボスHP
   const boss=B.enemies.find(e=>e.boss);
   if(boss){
     g.textAlign='center'; g.font='bold 9px '+FONT; g.fillStyle='#ff8c9e';
-    g.fillText(MONSTERS[boss.id].name, W/2, 56);
-    rr(g,W/2-150,60,300,7,4);
+    const bw=Math.min(300, W-40), by=narrow?H-72:60;   // 縦画面では上が詰まるのでボスHPは下に寄せる
+    g.fillText(MONSTERS[boss.id].name, W/2, by-8);
+    rr(g,W/2-bw/2,by,bw,7,4);
     g.fillStyle='rgba(20,24,50,0.8)'; g.fill();
     const br=clamp(boss.hp/boss.maxHp,0,1);
-    if(br>0){ rr(g,W/2-150,60,300*br,7,4); g.fillStyle='#e84a68'; g.fill(); }
-    rr(g,W/2-150,60,300,7,4);
+    if(br>0){ rr(g,W/2-bw/2,by,bw*br,7,4); g.fillStyle='#e84a68'; g.fill(); }
+    rr(g,W/2-bw/2,by,bw,7,4);
     g.strokeStyle='rgba(255,120,140,0.6)'; g.lineWidth=1; g.stroke();
   }
   // AI思考チップ
   g.font='bold 11px '+FONT;
   const label='AI思考: '+p.aiLabel;
   const cw=g.measureText(label).width+34;
-  rr(g,10,48,cw,22,11);
+  const chipY=narrow?72:48;
+  rr(g,10,chipY,cw,22,11);
   g.fillStyle='rgba(24,30,60,0.82)'; g.fill();
   g.strokeStyle='rgba(143,211,255,0.65)'; g.lineWidth=1.3; g.stroke();
   const pulse=0.55+0.45*Math.sin(performance.now()*0.006);
   g.fillStyle='rgba(143,211,255,'+pulse.toFixed(2)+')';
-  g.beginPath(); g.arc(23,59,3.6,0,TAU); g.fill();
+  g.beginPath(); g.arc(23,chipY+11,3.6,0,TAU); g.fill();
   g.fillStyle='#cfe7ff'; g.textAlign='left'; g.textBaseline='middle';
-  g.fillText(label,32,59.5);
+  g.fillText(label,32,chipY+11.5);
   // v1.8 目当てチップ: 彼女がいま向かっている先と方角(夜側が先回りして待ち伏せできるように)
   if(p.goal && G.mode==='battle'){
     const gl=p.goal, gx=gl.x-p.x, gy=gl.y-p.y, gd=Math.hypot(gx,gy);
     const gcol=gl.kind==='event'?((EVENT_DEF[gl.sub]&&EVENT_DEF[gl.sub].col)||'#ffd76a'):'#ffe9b0';
     const gtxt='目当て: '+goalName(gl)+(gd>60?'  '+dirName(gx,gy)+' '+Math.round(gd)+'px':'  ここ');
     const gw=g.measureText(gtxt).width+26;
-    rr(g,10+cw+8,48,gw,22,11); g.fillStyle='rgba(40,30,20,0.82)'; g.fill(); g.strokeStyle=hexA(gcol,0.7); g.lineWidth=1.3; g.stroke();
-    g.fillStyle=gcol; g.textAlign='left'; g.textBaseline='middle'; g.fillText(gtxt,10+cw+8+13,59.5);
+    const gx0=narrow?10:10+cw+8, gy0=narrow?chipY+24:48;   // 狭い画面ではAI思考チップの下に置く
+    rr(g,gx0,gy0,gw,22,11); g.fillStyle='rgba(40,30,20,0.82)'; g.fill(); g.strokeStyle=hexA(gcol,0.7); g.lineWidth=1.3; g.stroke();
+    g.fillStyle=gcol; g.textAlign='left'; g.textBaseline='middle'; g.fillText(gtxt,gx0+13,gy0+11.5);
     drawEdgeArrow(g,gl.x,gl.y,gcol,goalName(gl));
   }
   if(B.event && G.mode==='battle' && !(p.goal&&p.goal.kind==='event')) drawEdgeArrow(g,B.event.x,B.event.y,(EVENT_DEF[B.event.kind]&&EVENT_DEF[B.event.kind].col)||'#fff','光の柱');
   // 状態チップ
-  let sx=10, sy=76;
+  let sx=10, sy=narrow?chipY+50:76;
   const chips=[];
   const atk=attachCount(p);
   if(p.climaxT>0) chips.push(['climax','絶頂!!']);
@@ -2471,12 +2497,14 @@ function drawCards(g){
   g.fillText('LEVEL UP! — ルミナのAIが選んでいます…', W/2, 92);
   g.shadowBlur=0;
   const cw=168, ch=186;
+  const vert = W < cw*3+56;   // 縦長の画面では3枚を横に並べきれないので縦に積む
   c.opts.forEach((k,i)=>{
     const chosen=c.revealed&&i===c.pick;
     const isEvo=k.startsWith('EVO:');
     const def=isEvo?EVOS[k.slice(4)]:UPG[k];
-    const px=W/2+(i-1)*196-cw/2;
-    const py=H/2-ch/2+ (chosen? -8-Math.abs(Math.sin(c.t*7))*4 : 0);
+    const px=vert ? W/2-cw/2 : W/2+(i-1)*Math.min(196,(W-24)/3)-cw/2;
+    const py=(vert ? H/2+(i-1)*(ch+12)-ch/2 : H/2-ch/2)
+             + (chosen? -8-Math.abs(Math.sin(c.t*7))*4 : 0);
     g.save();
     rr(g,px,py,cw,ch,14);
     g.fillStyle=isEvo?'rgba(40,26,60,0.97)':'rgba(20,24,46,0.96)'; g.fill();

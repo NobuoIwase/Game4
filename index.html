@@ -284,6 +284,20 @@ canvas#cv.arm{ cursor:crosshair; }
 body.portrait #stage{ flex-direction:column; justify-content:flex-start; align-items:center; padding-top:4px; box-sizing:border-box; }
 body.portrait canvas#cv{ flex:0 0 auto; }
 body.portrait #battlebar{ position:static; left:auto; bottom:auto; transform:none; width:100% !important; max-width:100vw; gap:3px; padding:4px 4px 6px; box-sizing:border-box; }
+/* v1.10 横持ちで画面が低いとき: EN・アイテム・陣形/操作を1段にまとめて盤面の高さを稼ぐ */
+@media (max-height:560px){
+  body.portrait #battlebar{
+    display:grid; align-items:center; column-gap:8px; row-gap:3px;
+    grid-template-columns:minmax(110px,1fr) auto auto;
+    grid-template-areas:"en item side" "hand hand hand" "guest guest guest";
+  }
+  body.portrait #enwrap{ grid-area:en; }
+  body.portrait #itemrow{ grid-area:item; max-width:34vw; }
+  body.portrait #battlebar .spread{ grid-area:side; width:auto !important; }
+  body.portrait #handrow{ grid-area:hand; }
+  body.portrait #guestrow{ grid-area:guest; }
+  body.portrait #formrow{ max-width:26vw; }
+}
 body.portrait #enwrap{ gap:6px; }
 body.portrait #enbar{ height:11px; }
 body.portrait #handrow{ flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; justify-content:flex-start; max-width:100%; padding:2px 2px 3px; gap:4px; scrollbar-width:thin; scrollbar-color:rgba(201,140,255,.5) transparent; }
