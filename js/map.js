@@ -37,7 +37,7 @@ function clampMapY(y,m){ m=m===undefined?24:m; return clamp(y,-MAP_HH+m,MAP_HH-m
 /* ================= 生成 ================= */
 function genMap(){
   const gi=mapGen(), seed=1000+gi*7919;
-  if(G.map && G.map.seed===seed && META.map && META.map.gen===gi) return;
+  if(G.map && G.map.seed===seed && META.map && META.map.gen===gi){ G.map.flowT=-9; G.map.heroTile=null; return; }   // 同じ世代: 流れ場だけ次の出撃で作り直す
   let sd=seed; const rnd=()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; };
   const N=MAP_W*MAP_H;
   // ---- 地形帯: ボロノイ風。巣は端のほう、出発点は苔
@@ -144,6 +144,17 @@ function floodReach(solid,si,sj){
   return reach;
 }
 
+/* 周囲を床にする(門の移設など)。描いた区画と縮小図・流れ場を捨てる */
+function clearAround(x,y,r){
+  if(!G.map) return;
+  const i0=tileI(x), j0=tileJ(y);
+  for(let dj=-r;dj<=r;dj++) for(let di=-r;di<=r;di++){
+    const i=i0+di, j=j0+dj; if(i<2||j<2||i>=MAP_W-2||j>=MAP_H-2) continue;
+    G.map.solid[j*MAP_W+i]=0;
+  }
+  for(let dj=-r-1;dj<=r+1;dj++) for(let di=-r-1;di<=r+1;di++) G.map.chunks.delete(chunkKey(Math.floor((i0+di)/CHUNK),Math.floor((j0+dj)/CHUNK)));
+  G.map.mini=null; G.map.flowT=-9; G.map.heroTile=null;
+}
 /* ================= 流れ場(魔物の回り込み)・視線・経路 ================= */
 function bfsField(si,sj,fly){
   const N=MAP_W*MAP_H, dist=new Int16Array(N).fill(-1);

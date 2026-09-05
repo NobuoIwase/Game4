@@ -589,7 +589,7 @@ function detachLimb(slot, opt){
       mon.stun=1.2;
       mon.hp-=mon.maxHp*(mon.boss?0.05:0.35);   // ボスは振りほどかれても大きくは削れない(呑み込みで自滅しない)
       const a=rand(TAU);
-      mon.x+=Math.cos(a)*30; mon.y+=Math.sin(a)*30;
+      mon.x+=Math.cos(a)*30; mon.y+=Math.sin(a)*30; collideMap(mon,mon.r*0.75,canFly(mon.id));
       parts(mon.x,mon.y,8,['#fff','#c98cff'],140,0.5);
       if(mon.hp<=0) killEnemy(mon);
     }
@@ -636,7 +636,7 @@ function detachSucker(slot, opt){
       mon.stun=1.2;
       mon.hp-=mon.maxHp*0.35;
       const a=rand(TAU);
-      mon.x+=Math.cos(a)*34; mon.y+=Math.sin(a)*34;
+      mon.x+=Math.cos(a)*34; mon.y+=Math.sin(a)*34; collideMap(mon,mon.r*0.75,canFly(mon.id));
       parts(mon.x,mon.y,6,['#fff','#ff9d8a'],130,0.5);
       if(mon.hp<=0) killEnemy(mon);
     }
@@ -774,7 +774,7 @@ function releaseCharmBind(sane){
     mon.stun=1.2;
     mon.hp-=mon.maxHp*0.35;
     const a=rand(TAU);
-    mon.x+=Math.cos(a)*30; mon.y+=Math.sin(a)*30;
+    mon.x+=Math.cos(a)*30; mon.y+=Math.sin(a)*30; collideMap(mon,mon.r*0.75,canFly(mon.id));
     parts(mon.x,mon.y,8,['#fff','#ffb3cf'],140,0.5);
     if(mon.hp<=0) killEnemy(mon);
     h.ifr=1.2;
@@ -1180,7 +1180,7 @@ function aiUpdate(dt){
   // 詰まり検知: 進みたいのに進めていない(壁の角など)→ 探索点へ経路で抜ける
   { const want=Math.hypot(p.steerX||0,p.steerY||0), moved=Math.hypot(p.x-p.prevX,p.y-p.prevY);
     if(want>0.3 && moved<st.speed*dt*0.25 && attachCount(p)===0 && !p.pinned && !p.charmBind) p.stuckT=(p.stuckT||0)+dt; else p.stuckT=Math.max(0,(p.stuckT||0)-dt*2);
-    if(p.stuckT>1.2){ p.stuckT=0; p.unstickT=2.5; p.explore=null; p.exploreUntil=0; p.dest=null; p.destUntil=0; p.path=null; }
+    if(p.stuckT>1.2){ p.stuckT=0; p.unstickT=2.5; B.nUnstick=(B.nUnstick||0)+1; p.explore=null; p.exploreUntil=0; p.dest=null; p.destUntil=0; p.path=null; }
     if(p.unstickT>0) p.unstickT-=dt; }
 
   // 繋留(蔦)による引き戻し
@@ -1242,7 +1242,7 @@ function aiDecide(foc){
   const B=G.B, p=B.hero;
   // 詰まりからの脱出: しばらく探索点へ経路で歩く
   if(p.unstickT>0){
-    if(!p.explore) pickDest(p);
+    if(!p.explore || B.time>p.exploreUntil) pickExplore(p);
     if(p.explore){ const sv=steerTo(p,p.explore.x,p.explore.y); p.steerX=sv.x; p.steerY=sv.y; p.steerState='explore'; return; }
   }
   let ax=0, ay=0, threat=0, bossNear=false;
@@ -1372,6 +1372,7 @@ function aiDecide(foc){
     if(p.hp < p.maxHp*0.6){
       let td=420;
       for(const h2 of B.hearts){
+        if(G.map && !passAt(h2.x,h2.y,false)) continue;
         const d=Math.hypot(h2.x-p.x,h2.y-p.y);
         if(d<td){ td=d; target=h2; kind='heart'; }
       }
@@ -1395,6 +1396,7 @@ function aiDecide(foc){
     if(!target && threat<0.3){
       let td=520;
       for(const c of B.chests){
+        if(G.map && !passAt(c.x,c.y,false)) continue;   // 壁の中の箱は狙わない(壁に貼りつかない)
         const d=Math.hypot(c.x-p.x,c.y-p.y);
         if(d<td){ td=d; target=c; kind='chest'; }
       }
@@ -1413,6 +1415,7 @@ function aiDecide(foc){
         if(d>=bd) continue;
         if(nearKnownTrap(gm.x,gm.y)) continue;   // 知っている罠のそばのジェムは諦める
         if(zoneAvoided(zoneAt(gm.x,gm.y))) continue;   // 学習した嫌な地形(浅瀬/花園/温泉)のジェムは諦める
+        if(G.map && !passAt(gm.x,gm.y,false)) continue;   // 壁に埋まったジェムは諦める
         const cl=cloudAt(gm.x,gm.y);
         if(cl && p.diveT<=0){
           const w=cloudWorth(cl);
@@ -1901,7 +1904,7 @@ function spawnUnit(id, x, y, o){
   if(id==='succuqueen'){ u.orbitA=rand(TAU); u.orbitDir=Math.random()<0.5?-1:1; u.pulseCd=3; u.spawnCd=8; u.kissCd=2; }
   if(id==='gobking'){ u.muskCd=0.5; u.hornCd=4; }
   // 地形の恩恵: 湿地で粘る種のHP、巣の魔物のHP。速度は毎フレーム今いる地形で決まる(spd0 が素の速度)
-  u.spd0=u.spd; u.zone=zoneAt(x,y);
+  u.spd0=u.spd; u.zone=zoneAt(x,y); u.item=!!MONSTERS[id].item;   // 設置物は押し合いで動かない
   { const hm=zoneMonHp(u.zone,id); if(hm!==1){ u.hp*=hm; u.maxHp*=hm; } }
   u.parent=o.parent||null;
   if(!B.codexSeen[id] && !MONSTERS[id].item){ B.codexSeen[id]=1; codexMark(id,'seen'); }
@@ -1960,7 +1963,7 @@ function killEnemy(e){
     setBanner('ボスが討たれた…','大量のエッセンスが残された','#b46cff');
     META.life.herBoss++;
     B.essence+=30;
-    B.chests.push({x:e.x,y:e.y,t:0,taken:false,bossChest:true});   // 王の宝箱: 強くて面倒な相手を倒した報酬(彼女側)
+    { const q=snapFloor(e.x,e.y,false,6)||{x:e.x,y:e.y}; B.chests.push({x:q.x,y:q.y,t:0,taken:false,bossChest:true}); }   // 王の宝箱: 強くて面倒な相手を倒した報酬(彼女側)。歩ける床に置く
     G.shake=Math.min(10,G.shake+7);
     S.clear();
   }else if(!MONSTERS[e.id].item){
@@ -1980,6 +1983,7 @@ function logemMul(n){
 }
 function dropGem(x,y,v,lo){
   const B=G.B;
+  if(G.map && !passAt(x,y,false)){ const q=snapFloor(x,y,false,3); if(q){ x=q.x; y=q.y; } }   // 崖の上で倒れた飛ぶ魔物のジェムは、彼女が届く床に落とす
   if(B.gems.length>BAL.GEM_CAP){ B.gems[(Math.random()*B.gems.length)|0].v+=v; return; }
   B.gems.push({x,y,v,t:rand(10),sp:0,lo:!!lo});
 }
@@ -2021,7 +2025,8 @@ function enemiesUpdate(dt){
     const d=Math.hypot(dx,dy)||0.001;
     const fly=canFly(e.id);
     // 壁で彼女が見えないときは、流れ場(BFS)に沿って回り込む(以降の追跡・照準はその向きを使う)
-    if(d>36 && G.map && !losClear(e.x,e.y,p.x,p.y,fly)){ const f=flowDir(e.x,e.y,fly); if(f){ dx=f.x*d; dy=f.y*d; } }
+    e.blocked=false;
+    if(d>36 && G.map && !losClear(e.x,e.y,p.x,p.y,fly)){ const f=flowDir(e.x,e.y,fly); if(f){ dx=f.x*d; dy=f.y*d; e.blocked=true; } }
 
     if(e.dormant){
       e.dormT+=dt;
@@ -2111,7 +2116,7 @@ function enemiesUpdate(dt){
       // slug / goblin / ghost / slime / mistslime: 通常追跡
       const rush=(attachCount(p)>0||p.pinned||p.charmBind||p.climaxT>0) && d<300 ? 1.9 : 1;
       const ox=Math.cos(e.joff)*14, oy=Math.sin(e.joff)*14;
-      const tx=p.x+ox-e.x, ty=p.y+oy-e.y;
+      const tx=dx+ox, ty=dy+oy;   // dx/dy は壁で視線が切れると流れ場の向きに置き換わっている
       const td=Math.hypot(tx,ty)||0.001;
       e.x+=tx/td*e.spd*rush*dt; e.y+=ty/td*e.spd*rush*dt;
       if(e.id==='ghost'){ e.x+=-ty/td*Math.sin(e.t*2+e.joff)*22*dt; e.y+=tx/td*Math.sin(e.t*2+e.joff)*22*dt; }
@@ -2152,12 +2157,12 @@ function enemiesUpdate(dt){
       }
     }
 
-    // 壁との当たり。遠くで3秒動けない個体は、届く床へ置き直す(壁の裏で固まらない)
+    // 壁との当たり。壁で視線が切れたまま3秒動けない個体は、届く床へ置き直す(壁の裏で固まらない。距離を保つ個体は対象外)
     if(!e.dead && !e.dormant && e.state!=='attached' && MONSTERS[e.id].spd>0){
       collideMap(e,e.r*0.75,fly);
-      if(d>320){
+      if(e.blocked && d>320){
         if(Math.hypot(e.x-(e.stX||0),e.y-(e.stY||0))<4) e.stT=(e.stT||0)+dt; else { e.stT=0; e.stX=e.x; e.stY=e.y; }
-        if(e.stT>3){ e.stT=0; const a=rand(TAU); const q=placeNear(p.x,p.y,Math.cos(a)*BAL.REENTER_R,Math.sin(a)*BAL.REENTER_R*0.8,e.r,fly); e.x=q.x; e.y=q.y; e.stX=e.x; e.stY=e.y; B.spawnFx.push({x:e.x,y:e.y,t:0,r:e.r+8}); }
+        if(e.stT>3){ e.stT=0; B.nReloc=(B.nReloc||0)+1; const a=rand(TAU); const q=placeNear(p.x,p.y,Math.cos(a)*BAL.REENTER_R,Math.sin(a)*BAL.REENTER_R*0.8,e.r,fly); e.x=q.x; e.y=q.y; e.stX=e.x; e.stY=e.y; B.spawnFx.push({x:e.x,y:e.y,t:0,r:e.r+8}); }
       }
     }
     // 接触
@@ -2169,7 +2174,7 @@ function enemiesUpdate(dt){
     }
   }
   separateEnemies(dt); separateEnemies(dt);   // 魔物同士の押し合い(v1.7): 2回緩和して、重ならずぎゅうぎゅうに詰まる
-  for(const e of B.enemies){ if(!e.dead&&!e.dormant&&e.state!=='attached'&&MONSTERS[e.id].spd>0) collideMap(e,e.r*0.75,canFly(e.id)); }   // 押し合いで壁に入らない
+  for(const e of B.enemies){ if(!e.dead&&!e.dormant&&e.state!=='attached'&&!e.item) collideMap(e,e.r*0.75,canFly(e.id)); }   // 押し合いで壁に入らない
   B.enemies=B.enemies.filter(e=>!e.dead);
 }
 /* ================= 魔物同士の当たり判定(v1.7) =================
@@ -2183,7 +2188,7 @@ function separateEnemies(dt){
   const grid=new Map();
   const key=(cx,cy)=>cx*100003+cy;
   for(const e of list){ const cx=Math.floor(e.x/SEP_CELL), cy=Math.floor(e.y/SEP_CELL); const k=key(cx,cy); let a=grid.get(k); if(!a){ a=[]; grid.set(k,a); } a.push(e); }
-  const mass=e=>e.item?1e9:(e.boss?12:e.r*e.r);
+  const mass=e=>(e.item||MONSTERS[e.id].spd===0)?1e9:(e.boss?e.r*e.r*8:e.r*e.r);   // 設置物/動かない種は不動。ボスは重い
   for(const e of list){
     const cx=Math.floor(e.x/SEP_CELL), cy=Math.floor(e.y/SEP_CELL);
     for(let ox=-1;ox<=1;ox++) for(let oy=-1;oy<=1;oy++){
@@ -2196,8 +2201,8 @@ function separateEnemies(dt){
         const me=mass(e), mf=mass(f), tot=me+mf;
         const ke=mf/tot, kf=me/tot;                 // 軽いほうが多く動く
         const ux=dx/d, uy=dy/d;
-        if(!e.item){ e.x-=ux*over*ke; e.y-=uy*over*ke*0.85; }
-        if(!f.item){ f.x+=ux*over*kf; f.y+=uy*over*kf*0.85; }
+        if(me<1e9){ e.x-=ux*over*ke; e.y-=uy*over*ke*0.85; }
+        if(mf<1e9){ f.x+=ux*over*kf; f.y+=uy*over*kf*0.85; }
       }
     }
     e.sepTag=null;
@@ -2242,6 +2247,7 @@ function gasTick(e,dt,d,dx,dy){
 }
 function impTick(e,dt,d,dx,dy){
   const B=G.B, p=B.hero;
+  if(e.blocked){ e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt; return; }   // 壁で視線が切れている: 旋回せず流れ場に沿って回り込む
   // ヒロインの周りをパタパタと旋回
   e.orbitA+=e.orbitDir*(2.2+Math.sin(e.t*1.7)*0.5)*dt;
   const R=62+Math.sin(e.t*2.3+e.joff)*20;
@@ -2360,7 +2366,7 @@ function handTick(e,dt,d,dx,dy){
   const rush=(attachCount(p)>0||p.pinned||p.charmBind||p.climaxT>0) && d<300 ? 1.8 : 1;
   const crawl=0.65+0.35*Math.abs(Math.sin(e.t*9+e.joff));   // 指を動かすような小刻みな前進
   const ox=Math.cos(e.joff)*10, oy=Math.sin(e.joff)*10;
-  const tx=p.x+ox-e.x, ty=p.y+oy-e.y, td=Math.hypot(tx,ty)||0.001;
+  const tx=dx+ox, ty=dy+oy, td=Math.hypot(tx,ty)||0.001;
   e.x+=tx/td*e.spd*rush*crawl*dt; e.y+=ty/td*e.spd*rush*crawl*dt;
 }
 function serpentTick(e,dt,d,dx,dy){
@@ -2373,6 +2379,7 @@ function serpentTick(e,dt,d,dx,dy){
 }
 function mothTick(e,dt,d,dx,dy){
   const B=G.B, p=B.hero;
+  if(e.blocked){ e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt; return; }   // 壁で視線が切れている: 旋回せず流れ場に沿って回り込む
   if(e.swoopT>0){
     // 翼で肌を撫でる急降下: 彼女を通り抜ける
     e.swoopT-=dt;
@@ -2487,7 +2494,7 @@ function ghosthandTick(e,dt,d,dx,dy){
   if(e.gropeCd>0) e.gropeCd-=dt;
   const rush=(attachCount(p)>0||p.pinned||p.charmBind||p.climaxT>0) && d<300 ? 1.7 : 1;
   const ox=Math.cos(e.joff)*12, oy=Math.sin(e.joff)*12;
-  const tx=p.x+ox-e.x, ty=p.y-14+oy-e.y, td=Math.hypot(tx,ty)||0.001;
+  const tx=dx+ox, ty=dy-14+oy, td=Math.hypot(tx,ty)||0.001;
   e.x+=tx/td*e.spd*rush*dt; e.y+=ty/td*e.spd*rush*dt;
 }
 function eyeTick(e,dt,d,dx,dy){
@@ -2509,6 +2516,7 @@ function eyeTick(e,dt,d,dx,dy){
 }
 function succubusTick(e,dt,d,dx,dy){
   const B=G.B, p=B.hero;
+  if(e.blocked){ e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt; return; }   // 壁で視線が切れている: 旋回せず流れ場に沿って回り込む
   // 彼女の周りをゆったり回る(小淫魔より大きく、ゆっくり)
   e.orbitA+=e.orbitDir*0.7*dt;
   const R=90+Math.sin(e.t*1.1+e.joff)*16;
@@ -2642,19 +2650,25 @@ function pickDest(p){
     if(d<bd){ bd=d; best=q; }
   }
   if(best){ p.dest={x:best.x,y:best.y,kind:best.kind,key:best.key}; return p.dest; }
-  if(!p.explore || B.time>p.exploreUntil || Math.hypot(p.explore.x-p.x,p.explore.y-p.y)<70){
-    let cand=null, cs=-1;
-    for(let k=0;k<8;k++){
-      const a=rand(TAU), dd=rand(600,1200);
-      const x=clampMapX(p.x+Math.cos(a)*dd,120), y=clampMapY(p.y+Math.sin(a)*dd,120);
-      let sc=Math.hypot(x-p.x,y-p.y)/1200;
-      for(const q of G.map.pois){ if(!M.known[q.key]) sc+=Math.max(0,1-Math.hypot(q.x-x,q.y-y)/700); }   // まだ見ていない場所のそばほど良い
-      if(sc>cs){ cs=sc; cand={x,y}; }
-    }
-    p.explore=cand; p.exploreUntil=B.time+30;
-  }
+  if(!p.explore || B.time>p.exploreUntil || Math.hypot(p.explore.x-p.x,p.explore.y-p.y)<70) pickExplore(p);
+  if(!p.explore) return null;
   p.dest={x:p.explore.x,y:p.explore.y,kind:'explore'};
   return p.dest;
+}
+/* 探索点: 届く床の上から、まだ見ていない場所のそばを選ぶ(詰まり脱出でも使う) */
+function pickExplore(p){
+  const M=META.map, B=G.B; if(!G.map||!M) return null;
+  let cand=null, cs=-1;
+  for(let k=0;k<12;k++){
+    const a=rand(TAU), dd=rand(600,1200);
+    const q=snapFloor(clampMapX(p.x+Math.cos(a)*dd,120), clampMapY(p.y+Math.sin(a)*dd,120), false, 6);
+    if(!q || !reachableAt(q.x,q.y,false)) continue;
+    let sc=Math.hypot(q.x-p.x,q.y-p.y)/1200;
+    for(const po of G.map.pois){ if(!M.known[po.key]) sc+=Math.max(0,1-Math.hypot(po.x-q.x,po.y-q.y)/700); }   // まだ見ていない場所のそばほど良い
+    if(sc>cs){ cs=sc; cand={x:q.x,y:q.y}; }
+  }
+  p.explore=cand; p.exploreUntil=B.time+30;
+  return cand;
 }
 /* 場所: 見えたら覚える。着いたら効く */
 function poiTick(dt){
@@ -2708,8 +2722,10 @@ function poiTick(dt){
         for(let pass=0;pass<2&&!placed;pass++){
           for(let k=0;k<300;k++){ const x=(Math.random()-0.5)*MAP_HW*1.7, y=(Math.random()-0.5)*MAP_HH*1.7;
             if(Math.hypot(x,y)<700||Math.hypot(x-p.x,y-p.y)<600) continue; if(pass===0 && zoneAt(x,y)!=='nest') continue;
-            q.x=x; q.y=y; placed=true; break; }
+            if(!passAt(x,y,false) || !reachableAt(x,y,false)) continue;   // 壁の中・届かない床には置かない
+            q.x=tileCX(tileI(x)); q.y=tileCY(tileJ(y)); placed=true; break; }
         }
+        clearAround(q.x,q.y,2);   // 門の周りは開けておく(守りの召喚と彼女の接近のため)
         M.gatePos={x:q.x,y:q.y}; M.known[q.key]=0; p.dest=null; p.destUntil=0; saveMeta();
       }
     }
@@ -2782,6 +2798,7 @@ function runeHit(b){
 /* 夢魔の女王: 周りを舞い、甘い夢の波(発情ゲージ・発情中なら寸止め)、口づけ、小淫魔の召喚 */
 function succuqueenTick(e,dt,d,dx,dy){
   const B=G.B, p=B.hero;
+  if(e.blocked){ e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt; return; }   // 壁で視線が切れている: 旋回せず流れ場に沿って回り込む
   e.orbitA+=e.orbitDir*1.1*dt;
   const R=130, tx=p.x+Math.cos(e.orbitA)*R, ty=p.y+Math.sin(e.orbitA)*R*0.7;
   const tdx=tx-e.x, tdy=ty-e.y, td=Math.hypot(tdx,tdy)||1;
@@ -3074,7 +3091,7 @@ function hurtHero(dmg,src,opt){
     G.hurtFlash=0.3; G.shake=Math.min(8,G.shake+3);
     if(!opt.noKb && src && !p.pinned){
       const dx=p.x-src.x, dy=p.y-src.y, d=Math.hypot(dx,dy)||1;
-      p.x+=dx/d*16; p.y+=dy/d*16;
+      p.x+=dx/d*16; p.y+=dy/d*16; if(G.map) collideMap(p,p.r+2,false);
     }
     heroBubble(p,'いたっ…!');
     S.hurt();
