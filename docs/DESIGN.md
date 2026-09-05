@@ -315,6 +315,17 @@ idは汎用カタログ準拠。効果はすべて数値・挙動レベルで表
   `storyTick`: 落ち着いている時(拘束・発情・魔物30体超でない)に 38〜58 秒ごと、その階層の独り言を吹き出しで。降り口で `descend`、魔核の間を見つけた時に `finalEncounter`(1戦1度)。結果画面: clear=`ending`、reset=`reset`。
 - 表示: `#storybox`(盤面の上、タップか時間で閉じる)。ホームの「物語」画面は序章と到達済みの階層の導入、魔核討伐後は結末を載せる。
 
+### 3-23. v2.3 奥義・戦闘モードAI・図鑑の消し字
+
+- **奥義(`SKILLS`, `skillTick`)**: `p.skillCd{blink,purge,bulwark}` を毎フレーム減らす。`skillReady(p,id)`=Lv到達かつCD0。**bulwark**: HP<35%・非押し倒しで `p.guardT=4`(`hurtHero` で net=dmg×mult×0.3−armor、`battleTick` の自然回復×4)。**purge**: `attachCount>=2||p.pinned`(魅了拘束中は不可)で全 `detachLimb(sl,{fling:true})`、押し倒しを解除(`pinned/pinBy/pinEscape/struggle/B.pinScene`)、半径120の魔物を90px押して `stun`(ボス0.6/他1.2)、`ifr` 1.0、スタミナ+20。**blink**: 非拘束・非絶頂で `nearEnemyCount(130)>=6 || p.press>=1.4` なら12方向×180pxの床(`snapFloor`+`reachableAt`)のうち周囲150/60の頭数が最少の点へ瞬間移動、`ifr` 0.6。発動は `useSkill`(CD・`B.nSkill`・帯・台詞 `skill.*`・音)。
+- **戦闘モード(aiDecide 先頭)**: 見えていて気づいた魔物(`inSight` かつ `seenT>=NOTICE_T` 相当)について、260px 内の HP 合計(ボスは 0.35 倍)と 120px 内の頭数 `nNear`、群れの重心から離れる向き `awx/awy` を求める。`p.dpsEst=heroDpsEst(p)`(武器ごとの基礎DPS×Lv×覚醒×進化×dmgMult×俊足×連弾)。`ttk=hpNear/dpsEst`、`p.press=ttk/FLEE_TTK+nNear/FLEE_N`。`B.time>=p.modeUntil` の時だけ `want`=flee(ttk>`FLEE_TTK`9 or nNear>=`FLEE_N`12)/kite(ttk>`KITE_TTK`4 or nNear>=`KITE_N`6)/fight を決め、変わったら `MODE_HOLD`(1.2s)保つ。
+- **分岐の位置**: struggle → fleeOut → 降り口に着いた → forceProp(瀕死の燭台) → **retreat(flee)** → **kite2(kite, threat<1.6)** → 旧 flee(threat>0.9) → 目当て/ジェム。retreat は HP<70% で届くハート(300px)を最優先、次に `exitGo` なら `exX/exY`、無ければ 8 方向×420px の床を「頭数(220)+中間点(140)×0.7−重心から離れる向き×2.5−fear≥2 の地形」で採点して `p.escape`(2.5秒/50px で更新)。kite2 は `awx/awy`×0.55+8方向の空き×0.45+脅威ベクトル×0.6、`exitGo` なら 0.4 混ぜ、下がる向きと内積≥0 のジェム(磁石外〜`KITE_GEM_R`160)・ハート(HP<70%、260px)へ寄る。
+- **逃げ続け→降りる**: `skillTick` が flee の間 `B.fleeT` を積み(他モードで半速で減る)、`exitTick` は `fleeT>=FLEE_EXIT_T`(8)・非最終階層で `why='flee'`(帯「逃げ続けても終わらない——降り口を探す」、台詞 `fleeExit`)。
+- **迷いの積み上げ(`p.hesitN[zone]`)**: 迷いの決着で「やめとく」を選ぶか、fear3 で価値不足のまま引き返すと +1。入る確率 `pe` に `HESIT_ESC`(0.22)×回数を足す。fear3 の即時引き返しの敷居 `FEAR3_WORTH×(1−0.25×回数)`(下限 0.4)。入った(brave)時に 0 に戻す。`scared` の長さは `SCARED_T`(40)。台詞: 2回目以降の迷いは `hesitateAgain`、3回目以降に入る時は `braveFinally`。
+- **表示**: `AILMENTS.heal/skill/flee`。奥義チップは解放済みの記号とCD秒、モードチップは kite/flee の時だけ。`draw()` で `guardT>0` の間は金色の glow と楕円の輪。
+- **図鑑の消し字**: `.notebook s{color:inherit; text-decoration:none}`、`.scr`/`.scr.hard` の背景SVGの線を墨色(#3a2f2a)・太さ1.4〜1.8・不透明度0.8〜0.9に。字は同じ墨色のまま、線だけが上に重なる。
+- **検証(Playwright)**: 奥義3種の発動(壁: 40ダメ→3、回復4.2/s。浄化: 二肢→0、周囲2体停止。跳躍: 180px移動、周囲6→1)。A/B(`BAL.SMART_AI` 0/1、オート指揮): 第5層 Lv45 圧0.76 開始 300秒上限 → 旧AI 捕獲 68/209/29 秒、新AI 生存300/172/295 秒。第3層 Lv30 通常 → 旧 300(生存)/122/92、新 123/110/139(初期閾値 2.5/7 では引き撃ちが多くジェムが減った→ 4/9 に緩めて再計測、下記の追記参照)。第4層 EN強制50% → 差なし(63 vs 69 秒)。
+
 ### 3-22. v2.2 包囲の調整・設置するオート指揮・迷うヒロイン・えちえちエリア・魔核
 
 - **包囲円陣**: `FORMATIONS.ring.tiers=['fodder']` を `resolveForm` が見る(中型は burst→wave→scatter へ)。`RING_R`=470(縦0.75)、出た個体に `stun=RING_STUN`(0.9)。`playCard` が `B.ringCd=RING_CD`(25)を立て、`autoDirector` は `held` の時だけ、かつ `ringCd<=0` の時だけ ring を候補にする。放出(flush)では使わない。

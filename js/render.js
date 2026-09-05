@@ -2633,6 +2633,9 @@ function drawHUD(g){
   if(p.watchedT>0) chips.push(['watched','視姦']);
   if(p.hypnoLv>0) chips.push(['hypnolv','催眠'+ROMANS[p.hypnoLv]+(p.hypnoLv<3&&p.hypnoG>0?' '+Math.round(p.hypnoG)+'%':'')]);
   else if((p.hypnoG||0)>=10) chips.push(['hypnolv','催眠 '+Math.round(p.hypnoG)+'%']);
+  if(p.guardT>0) chips.push(['heal','聖光の壁 '+Math.ceil(p.guardT)+'s']);
+  { const un=Object.keys(SKILLS).filter(k=>p.level>=SKILLS[k].lv); if(un.length) chips.push(['skill','奥義 '+un.map(k=>SKILLS[k].icon+((p.skillCd[k]||0)>0?Math.ceil(p.skillCd[k]):'')).join(' ')]); }   // v2.3 解放済みの奥義とCD
+  if(BAL.SMART_AI && (p.aiMode==='kite'||p.aiMode==='flee')) chips.push(['flee',p.aiMode==='flee'?'逃げに徹する':'引き撃ち']);
   if(p.selfT>0) chips.push(['self','自慰……']);
   if(p.inMusk) chips.push(['musk','雄臭'+((META.traits.musk||0)>0?ROMANS[META.traits.musk]:'')]);
   if(p.curse&&BOSS_CURSES[p.curse]) chips.push(['curse','呪い: '+BOSS_CURSES[p.curse].name]);
@@ -2653,7 +2656,7 @@ function drawHUD(g){
   drawMinimap(g);
   g.fillText('enemies:'+B.enemies.length+' fps:'+Math.round(G.fps)+(TS>1?' x'+TS:''), 12, H-6);
   g.textAlign='right'; g.fillStyle='rgba(255,255,255,0.3)'; g.font='bold 10px '+FONT;
-  g.fillText('v2.2 深淵', W-12, H-6);
+  g.fillText('v2.3 深淵', W-12, H-6);
 }
 function drawCards(g){
   const B=G.B, c=B.lvCards; if(!c) return;
@@ -3114,6 +3117,7 @@ function draw(){
   g.globalAlpha=1;
   if(inBattle){
     const p=G.B.hero;
+    if(p.guardT>0){ glow(g,p.x,p.y-14,62,'255,215,106',0.3+0.15*Math.sin(G.B.time*8)); g.save(); g.strokeStyle='rgba(255,230,150,0.8)'; g.lineWidth=2; g.beginPath(); g.ellipse(p.x,p.y-12,30,38,0,0,TAU); g.stroke(); g.restore(); }   // v2.3 聖光の壁
     drawBubbleAt(g,p.x,p.y,p.bubble,p.bubbleT);
   }
   g.restore();

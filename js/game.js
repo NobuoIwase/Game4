@@ -26,6 +26,7 @@ function newHero(){
     zone:'moss', bathT:0, springCd:0, dest:null, destUntil:0, explore:null, exploreUntil:0,   // v1.6 地形マップ
     poolT:0, readT:0, poolKey:null, readKey:null, goal:null, goalT:0, farmT:0, walkT:0,        // v1.8 清水/石碑/目当て
     tgtKey:null, tgtBest:0, tgtT:0,                                                              // v2.1 諦めの見張り
+    skillCd:{blink:0,purge:0,bulwark:0}, guardT:0, aiMode:'fight', modeUntil:0, escape:null, dpsEst:20, hesitN:{},   // v2.3 奥義 / 戦闘モード / 地形ごとの迷った回数
     stuckT:0, unstickT:0, path:null, zoneLast:undefined,                                       // v1.7 壁・経路
     level:1, xp:0, xpNeed:need(1),
     wp:{bolt:2, orb:1, nova:0, whip:0, rain:0, cross:0, sanct:0, blade:0, thunder:0, holy:0, chain:0, spirit:0, shield:0},
@@ -1324,14 +1325,14 @@ function aiUpdate(dt){
     charmwalk:'ふらふらと、ちかづいていく…', heatwalk:'熱にまけて、よろめき寄る…',
     hypno:'……電波に、あしが……', item:'おちてる品へ!', beg:'……おねだり、なんて……してない……',
     g_event:'光の柱へ!', g_chest:'たからばこへ!', g_boss:'おうさまの箱へ!', g_item:'おちてる品へ!', g_shrine:'祠へ', g_spring:'泉で休みに', g_pool:'清水であらいに',
-    g_stele:'石碑をよみに', g_stairs:'降り口へ', g_seal:'封印石を灯しに', g_core:'魔核へ——', g_shroom:'光茸をとりに', g_nectar:'蜜の花へ', g_treasure:'沈んだ宝へ', g_explore:'たんさく中', g_gems:'ジェムをあつめる', hesitate:'まよっている……', think:'かんがえ中……', abort:'にげだす!'};
+    g_stele:'石碑をよみに', g_stairs:'降り口へ', g_seal:'封印石を灯しに', g_core:'魔核へ——', g_shroom:'光茸をとりに', g_nectar:'蜜の花へ', g_treasure:'沈んだ宝へ', g_explore:'たんさく中', g_gems:'ジェムをあつめる', hesitate:'まよっている……', think:'かんがえ中……', abort:'にげだす!', retreat:'逃げに徹する!', kite2:'引き撃ち'};
   const BBL={flee:'にげなきゃ〜!', boss:'おっきいのこわい!!', dodge:'あれは…だめ、よけなきゃ!', gem:'キラキラかいしゅう♪', poi:'あそこまで、いってみる', explore:'こっちは、まだ見てない',
     heart:'ハートみっけ!', prop:'燭台こわして回復しなきゃ', chest:'たからばこだ〜!',
     kite:'このきょりキープ…', wait:'つぎはどこから…?', struggle:'はなれてよ〜っ!',
     charmwalk:'…なんで、あしが…', heatwalk:'…あつくて、なにも…',
     hypno:'……あっち、いかなきゃ……', item:'なにか、おちてる!', beg:'……ちがう……',
     g_event:'あのひかり、いってみる', g_chest:'たからばこだ〜!', g_boss:'おうさまの、たからばこ……!', g_item:'なにか、おちてる!', g_shrine:'ほこら、いこう', g_spring:'ちょっと、やすみたい……',
-    g_pool:'あらいたい……べたべた', g_stele:'なにか、かいてある', g_stairs:'……おりる。つぎへ', g_seal:'あれ、ともさなきゃ', g_core:'……あれが、しんぞう', g_shroom:'あのひかり、とろう', g_nectar:'はな……あまいにおい', g_treasure:'みずのなかに、なにか……', g_explore:'こっちは、まだ見てない', g_gems:'キラキラ、ぜんぶひろう♪', hesitate:'……どうしよ', think:'……うーん', abort:'やっぱ、むり!'};
+    g_pool:'あらいたい……べたべた', g_stele:'なにか、かいてある', g_stairs:'……おりる。つぎへ', g_seal:'あれ、ともさなきゃ', g_core:'……あれが、しんぞう', g_shroom:'あのひかり、とろう', g_nectar:'はな……あまいにおい', g_treasure:'みずのなかに、なにか……', g_explore:'こっちは、まだ見てない', g_gems:'キラキラ、ぜんぶひろう♪', hesitate:'……どうしよ', think:'……うーん', abort:'やっぱ、むり!', retreat:'ぜんぶ、にげるっ!', kite2:'さがりながら、うつ!'};
   if(p.dodging>0){ p.dodging-=dt; }
   p.aiLabel=LBL[state]||LBL.wait;
   if(state!==p.aiState){
@@ -1456,6 +1457,16 @@ function aiDecide(foc){
   if(strong){ ax*=0.4; ay*=0.4; }
   ax+=ddx; ay+=ddy;
 
+  // v2.3 戦闘モード: 近くの魔物を倒し切る見込み秒(ttk)と密度で決める。fight → kite(引き撃ち) → flee(逃げに徹する)。切り替えは MODE_HOLD 秒は保つ
+  let nNear=0, hpNear=0, awx=0, awy=0; p.dpsEst=heroDpsEst(p);
+  { let cx=0, cy=0, cn=0;
+    for(const e of B.enemies){ if(e.dead||e.dormant||e.item||e.state==='attached'||e.id==='imp') continue; if(e.id==='flower' && !e.revealed) continue; if(!inSight(e,p) || e.seenT < BAL.NOTICE_T*(1.4-0.4*foc)) continue; const d=Math.hypot(e.x-p.x,e.y-p.y); if(d<260){ hpNear+=e.hp*(e.boss?0.35:1); const w=1-d/260; cx+=e.x*w; cy+=e.y*w; cn+=w; } if(d<120) nNear++; }
+    if(cn>0){ cx/=cn; cy/=cn; const d=Math.hypot(p.x-cx,p.y-cy)||1; awx=(p.x-cx)/d; awy=(p.y-cy)/d; } }   // awx/awy: 群れの重心から離れる向き
+  const ttk=hpNear/Math.max(1,p.dpsEst); p.press=ttk/BAL.FLEE_TTK+nNear/BAL.FLEE_N; p.ttkEst=ttk; p.nNear=nNear;
+  if(BAL.SMART_AI && B.time>=p.modeUntil){
+    const want=(ttk>BAL.FLEE_TTK||nNear>=BAL.FLEE_N)?'flee':((ttk>BAL.KITE_TTK||nNear>=BAL.KITE_N)?'kite':'fight');
+    if(want!==p.aiMode){ p.aiMode=want; p.modeUntil=B.time+BAL.MODE_HOLD; p.escape=null; if(want==='flee') sayLine('retreat',1,8,'むり、にげる!'); else if(want==='kite') sayLine('kite',0,12); }
+  }
   let dx=0, dy=0, state='wait';
   // v2.1 降りる気になったら: 知っている降り口(開いていて、番兵が居ない)へ向かう力が、逃げ・牽制に混ざる。そばまで来たら踏みとどまって降りる
   const exitQ=(B.wantExit&&G.map&&!B.exitLocked)?G.map.pois.find(q=>q.kind==='stairs'&&META.map.known[q.key]):null;
@@ -1501,6 +1512,30 @@ function aiDecide(foc){
     if(d<150){ dx*=0.12; dy*=0.12; }
     dx+=ax*1.1; dy+=ay*1.1;
     state='prop';
+  }else if(BAL.SMART_AI && p.aiMode==='flee'){
+    // 逃げに徹する: 体力が薄ければ届くハートへ。降り口が開いていればそこへ、降りたいなら探索点へ、無ければ8方向の中で群れから遠く魔物の薄い床へ。細かい目当ては見ない
+    let heart=null; if(p.hp<p.maxHp*0.7){ let td=300; for(const h2 of B.hearts){ if(G.map && (!passAt(h2.x,h2.y,false) || !reachableAt(h2.x,h2.y,false))) continue; if(gaveUp(h2)) continue; const d=Math.hypot(h2.x-p.x,h2.y-p.y); if(d<td){ td=d; heart=h2; } } }
+    if(heart){ const sv=steerTo(p,heart.x,heart.y); dx=sv.x+ax*0.4; dy=sv.y+ay*0.4; state='heart'; }
+    else{
+      if(!p.escape || B.time>p.escape.until || Math.hypot(p.escape.x-p.x,p.escape.y-p.y)<50){
+        let best=null, bs=-1e9;
+        if(exitGo){ best={x:exX,y:exY}; }
+        else for(let k=0;k<8;k++){ const a=k*TAU/8+Math.sin(B.time)*0.2, ca=Math.cos(a), sa=Math.sin(a); const q=snapFloor(clampMapX(p.x+ca*420,80),clampMapY(p.y+sa*320,80),false,6); if(!q||!reachableAt(q.x,q.y,false)) continue; const sc=-nearEnemyCount(q.x,q.y,220)*1.0-nearEnemyCount((p.x+q.x)/2,(p.y+q.y)/2,140)*0.7+(awx*ca+awy*sa)*2.5-(zoneFear(zoneAt(q.x,q.y))>=2?3:0); if(sc>bs){ bs=sc; best=q; } }
+        p.escape=best?{x:best.x,y:best.y,until:B.time+2.5}:null;
+      }
+      if(p.escape){ const sv=steerTo(p,p.escape.x,p.escape.y); dx=sv.x+ax*0.5; dy=sv.y+ay*0.5; }
+      else { const m=Math.hypot(ax,ay)||1; dx=ax/m; dy=ay/m; }
+      state='retreat';
+    }
+  }else if(BAL.SMART_AI && p.aiMode==='kite' && threat<1.6){
+    // 引き撃ち: 群れの重心から離れつつ、空いている側へ寄る(武器は自動で撃つ)。下がる側のジェム・ハートだけ拾う(群れの方へは戻らない)
+    let ox=0, oy=0, bs=-1e9; for(let k=0;k<8;k++){ const a=k*TAU/8; const qx=p.x+Math.cos(a)*200, qy=p.y+Math.sin(a)*150; if(!passAt(qx,qy,false)) continue; const sc=-nearEnemyCount(qx,qy,170)+(awx*Math.cos(a)+awy*Math.sin(a))*2; if(sc>bs){ bs=sc; ox=Math.cos(a); oy=Math.sin(a); } }
+    dx=awx*0.55+ox*0.45+ax*0.6; dy=awy*0.55+oy*0.45+ay*0.6; state='kite2';
+    if(exitGo){ dx=dx*0.7+(exX-p.x)/exitD*0.4; dy=dy*0.7+(exY-p.y)/exitD*0.4; }
+    { const m0=Math.hypot(dx,dy)||1, ux=dx/m0, uy=dy/m0; let pick=null, pd=1e9, pk='';
+      if(p.hp<p.maxHp*0.7){ for(const h2 of B.hearts){ if(G.map && (!passAt(h2.x,h2.y,false) || !reachableAt(h2.x,h2.y,false))) continue; if(gaveUp(h2)) continue; const hx=h2.x-p.x, hy=h2.y-p.y, d=Math.hypot(hx,hy)||1; if(d<260 && (hx*ux+hy*uy)/d>-0.2 && d<pd){ pd=d; pick=h2; pk='heart'; } } }
+      if(!pick){ const mag=heroStat(p).magnet; for(const gm of B.gems){ const gx=gm.x-p.x, gy=gm.y-p.y, d=Math.hypot(gx,gy)||1; if(d<mag*0.9 || d>BAL.KITE_GEM_R) continue; if((gx*ux+gy*uy)/d<-0.25) continue; if(G.map && !passAt(gm.x,gm.y,false)) continue; if(d<pd){ pd=d; pick=gm; pk='gem'; } } }
+      if(pick){ const sv=steerTo(p,pick.x,pick.y), wgt=pk==='heart'?0.75:0.65; dx=sv.x*wgt+ux*(1-wgt); dy=sv.y*wgt+uy*(1-wgt); if(pk==='heart') state='heart'; } }
   }else if(threat>0.9){
     const m=Math.hypot(ax,ay)||1;
     dx=ax/m - (ay/m)*0.35*p.strafeDir;
@@ -1628,9 +1663,10 @@ function aiDecide(foc){
           if(B.time<p.hesit.until){ const sw=Math.sin(B.time*2.6), ux=dx, uy=dy; dx=-ux*0.3-uy*sw*0.25; dy=-uy*0.3+ux*sw*0.25; state='hesitate'; }
           else{
             const nz=p.hesit.zone, worth=p.hesit.worth||(p.goal&&p.goal.worth)||1.5, hpR=p.hp/p.maxHp, aroused=p.aphro>=45||p.heatLv>0||p.sensit>=60;
-            const pe=((p.hesit.fear||2)>=3?0.35:0.65)+(worth>=2.6?0.3:(worth>=2?0.15:0))+(hpR>0.7?0.15:-0.1)+(aroused?0.25:0);   // v2.2 段が高いほど入りにくい。媚薬まみれなら「もういいや」
-            if(Math.random()<pe){ p.brave=p.brave||{}; p.brave[nz]=B.time+60; B.nBrave=(B.nBrave||0)+1; sayLine(aroused?'resign':'brave',1,0,'……いく! ちょっとだけ!'); }
-            else{ p.scared=p.scared||{}; p.scared[nz]=B.time+40; B.nChicken=(B.nChicken||0)+1; giveUpOn(target); if(p.goal && (giveUpKey(p.goal)===giveUpKey(target)||p.goal===target)){ if(p.goal.kind==='explore'){ p.explore=null; p.exploreUntil=0; } p.goal=null; p.goalT=0; } sayLine('chicken',1,0,'やめとく……こわいし'); dx=0; dy=0; state='hesitate'; }
+            const hn=(p.hesitN&&p.hesitN[nz])||0;   // v2.3 同じ地形で何度も迷った回数(迷うたびに入る確率が上がる→迷い続けない)
+            const pe=((p.hesit.fear||2)>=3?0.35:0.65)+(worth>=2.6?0.3:(worth>=2?0.15:0))+(hpR>0.7?0.15:-0.1)+(aroused?0.25:0)+BAL.HESIT_ESC*hn;   // v2.2 段が高いほど入りにくい。媚薬まみれなら「もういいや」
+            if(Math.random()<pe){ p.brave=p.brave||{}; p.brave[nz]=B.time+60; B.nBrave=(B.nBrave||0)+1; if(p.hesitN) p.hesitN[nz]=0; sayLine(aroused?'resign':(hn>=2?'braveFinally':'brave'),1,0,'……いく! ちょっとだけ!'); }
+            else{ p.scared=p.scared||{}; p.scared[nz]=B.time+BAL.SCARED_T; p.hesitN=p.hesitN||{}; p.hesitN[nz]=hn+1; B.nChicken=(B.nChicken||0)+1; giveUpOn(target); if(p.goal && (giveUpKey(p.goal)===giveUpKey(target)||p.goal===target)){ if(p.goal.kind==='explore'){ p.explore=null; p.exploreUntil=0; } p.goal=null; p.goalT=0; } sayLine('chicken',1,0,'やめとく……こわいし'); dx=0; dy=0; state='hesitate'; }
             p.hesit=null;
           }
         }else{
@@ -1641,10 +1677,11 @@ function aiDecide(foc){
           if(scary){
             const worth=(p.goal&&p.goal.worth)?p.goal.worth:(kind==='chest'?(target.bossChest?3.0:2.6):(kind==='item'?3.0:(kind==='heart'?3.2:1.5)));   // 目当てが無い直接の目標(箱・品)は種類から価値を見る
             const aroused=p.aphro>=45||p.heatLv>0||p.sensit>=60;   // v2.2 媚薬まみれなら「もういいや」で腰が軽い
-            if(nf>=3 && worth<BAL.FEAR3_WORTH*(aroused?0.5:1)){   // 入りたくない地形に、それほどの用は無い→迷わず引き返す
-              p.scared=p.scared||{}; p.scared[nz]=B.time+40; B.nChicken=(B.nChicken||0)+1; giveUpOn(target); if(p.goal && (giveUpKey(p.goal)===giveUpKey(target)||p.goal===target)){ if(p.goal.kind==='explore'){ p.explore=null; p.exploreUntil=0; } p.goal=null; p.goalT=0; } sayLine('chicken',1,0,'そこは、いかない!'); dx=0; dy=0; state='hesitate';
+            const hn=(p.hesitN&&p.hesitN[nz])||0;
+            if(nf>=3 && worth<BAL.FEAR3_WORTH*(aroused?0.5:1)*Math.max(0.4,1-0.25*hn)){   // 入りたくない地形に、それほどの用は無い→迷わず引き返す(v2.3 引き返した回数だけ敷居が下がり、やがて迷い始める)
+              p.scared=p.scared||{}; p.scared[nz]=B.time+BAL.SCARED_T; p.hesitN=p.hesitN||{}; p.hesitN[nz]=hn+1; B.nChicken=(B.nChicken||0)+1; giveUpOn(target); if(p.goal && (giveUpKey(p.goal)===giveUpKey(target)||p.goal===target)){ if(p.goal.kind==='explore'){ p.explore=null; p.exploreUntil=0; } p.goal=null; p.goalT=0; } sayLine('chicken',1,0,'そこは、いかない!'); dx=0; dy=0; state='hesitate';
             }else{
-              p.hesit={zone:nz, fear:nf, worth, until:B.time+(nf>=3?2.0+Math.random()*1.6:1.0+Math.random()*1.0)*(aroused?0.6:1), key:giveUpKey(target)}; B.nHesit=(B.nHesit||0)+1; sayLine(aroused?'resign':'hesitate',1,0,'……はいる? はいらない?'); const sw=Math.sin(B.time*2.6), ux=dx, uy=dy; dx=-ux*0.3-uy*sw*0.25; dy=-uy*0.3+ux*sw*0.25; state='hesitate';
+              p.hesit={zone:nz, fear:nf, worth, until:B.time+(nf>=3?2.0+Math.random()*1.6:1.0+Math.random()*1.0)*(aroused?0.6:1), key:giveUpKey(target)}; B.nHesit=(B.nHesit||0)+1; sayLine(aroused?'resign':(hn>=1?'hesitateAgain':'hesitate'),1,0,'……はいる? はいらない?'); const sw=Math.sin(B.time*2.6), ux=dx, uy=dy; dx=-ux*0.3-uy*sw*0.25; dy=-uy*0.3+ux*sw*0.25; state='hesitate';
             }
           }
         }
@@ -3213,6 +3250,38 @@ function sentinelTick(e,dt,d,dx,dy){
   }
   if((e.grabCd||0)>0) e.grabCd-=dt;
 }
+/* ================= v2.3 奥義(彼女の後半の強化) =================
+   Lvで解放され、AIが状況で使う。跳躍=囲まれた時に空いている方へ、浄化=拘束を千切って弾く、壁=瀕死で被ダメ-70% */
+function skillReady(p,id){ return p.level>=SKILLS[id].lv && (p.skillCd[id]||0)<=0; }
+function useSkill(p,id){ const B=G.B; p.skillCd[id]=SKILLS[id].cd; B.nSkill=B.nSkill||{}; B.nSkill[id]=(B.nSkill[id]||0)+1; setBanner('奥義 '+SKILLS[id].name,SKILLS[id].desc.split('。')[0],'#ffd76a'); sayLine('skill.'+id,2,0,SKILLS[id].name+'!'); S.lvup(); }
+function nearEnemyCount(x,y,r){ let n=0; for(const e of G.B.enemies){ if(e.dead||e.dormant||e.item||e.state==='attached') continue; if(Math.hypot(e.x-x,e.y-y)<r) n++; } return n; }
+function skillTick(dt){
+  const B=G.B, p=B.hero;
+  for(const k in p.skillCd) if(p.skillCd[k]>0) p.skillCd[k]-=dt;
+  if(BAL.SMART_AI){ if(p.aiMode==='flee') B.fleeT=(B.fleeT||0)+dt; else B.fleeT=Math.max(0,(B.fleeT||0)-dt*0.5); }   // 逃げ続けた秒数(exitTick が「降り口を探す」に使う)
+  if(p.guardT>0){ p.guardT-=dt; if(Math.random()<dt*10) parts(p.x+rand(-16,16),p.y-rand(0,30),1,['#ffd76a','#fff'],30,0.6); }
+  if(G.mode!=='battle') return;
+  // 聖光の壁: 瀕死
+  if(skillReady(p,'bulwark') && p.hp<p.maxHp*0.35 && !p.pinned){ p.guardT=4; useSkill(p,'bulwark'); parts(p.x,p.y-14,30,['#ffd76a','#fff','#ffe9b0'],200,0.8); }
+  // 浄化の脈: 二肢以上を掴まれた／押し倒された
+  if(skillReady(p,'purge') && (attachCount(p)>=2 || p.pinned) && !p.charmBind){
+    for(const sl of attachedSlots(p)) detachLimb(sl,{fling:true});
+    if(p.pinned){ p.pinned=false; p.pinBy=null; p.pinEscape=0; p.struggle=0; B.pinScene=null; }
+    for(const e of B.enemies){ if(e.dead||e.dormant||e.item) continue; const dx=e.x-p.x, dy=e.y-p.y, d=Math.hypot(dx,dy)||0.001; if(d<120){ if(MONSTERS[e.id].spd>0 && !MONSTERS[e.id].guardian){ e.x+=dx/d*90; e.y+=dy/d*90; collideMap(e,e.r*0.75,canFly(e.id)); } e.stun=Math.max(e.stun||0,e.boss?0.6:1.2); } }
+    p.ifr=Math.max(p.ifr,1.0); p.stamina=Math.min(p.staminaMax,p.stamina+20); useSkill(p,'purge'); parts(p.x,p.y-14,40,['#fff','#8fd3ff','#ffd76a'],260,0.9); G.shake=Math.min(8,G.shake+5);
+  }
+  // 光の跳躍: 囲まれた
+  if(skillReady(p,'blink') && attachCount(p)===0 && !p.pinned && !p.charmBind && p.climaxT<=0 && (nearEnemyCount(p.x,p.y,130)>=6 || (p.press||0)>=1.4)){
+    let best=null, bs=1e9; for(let k=0;k<12;k++){ const a=k*TAU/12; const q=snapFloor(clampMapX(p.x+Math.cos(a)*180,40),clampMapY(p.y+Math.sin(a)*180,40),false,3); if(!q||!reachableAt(q.x,q.y,false)) continue; const sc=nearEnemyCount(q.x,q.y,150)+nearEnemyCount(q.x,q.y,60)*2; if(sc<bs){ bs=sc; best=q; } }
+    if(best && bs<nearEnemyCount(p.x,p.y,150)){ parts(p.x,p.y-14,24,['#fff','#8fd3ff'],200,0.6); p.x=best.x; p.y=best.y; p.vx=p.vy=0; p.path=null; p.ifr=Math.max(p.ifr,0.6); parts(p.x,p.y-14,24,['#fff','#ffd76a'],200,0.6); useSkill(p,'blink'); }
+  }
+}
+/* v2.3 いまの武器から見た、おおまかな秒間火力(戦う/引き撃ち/逃げるの判断に使う) */
+function heroDpsEst(p){
+  const BASE={bolt:14,orb:10,nova:16,whip:14,rain:13,cross:13,sanct:15,blade:14,thunder:14,holy:9,chain:13,spirit:12,shield:9};
+  let d=0; for(const k in BASE){ const lv=p.wp[k]||0; if(lv<=0) continue; const ov=wpOver(lv); const evo=Object.keys(EVOS).some(e=>EVOS[e].base===k && p.evo[e]>0); d+=BASE[k]*(1+0.35*(Math.min(BAL.WP_EVO_LV,lv)-1))*ov.dmg/ov.cd*(evo?1.8:1); }
+  return Math.max(8, d*(p.dmgMult||1)*(1+0.08*(p.ps.haste||0))*(1+0.4*(p.ps.dup||0)));
+}
 /* ================= v2.1 降りる判断 =================
    降り口を知っていても、まだ見ていない所や拾える物があるうちは降りない。深淵の圧が高まる / HPが薄い / 目当てが探索しか無くなって久しい
    のどれかで「降りよう」に切り替わる(戻らない)。最終階層(降り口なし)では働かない */
@@ -3224,11 +3293,13 @@ function exitTick(dt){
   if(pr>=BAL.EXIT_PRESS) why='press';
   else if(hpR<BAL.EXIT_HP && B.time>40) why='hp';
   else if(B.idleGoalT>=BAL.EXIT_IDLE_T && B.time>90) why='done';
+  else if(BAL.SMART_AI && (B.fleeT||0)>=BAL.FLEE_EXIT_T && B.time>40 && !B.floor.final) why='flee';   // v2.3 逃げ続けても終わらない → 降り口を探して降りる
   if(!why) return;
   const fin=!!B.floor.final; const st=G.map.pois.find(o=>o.kind===(fin?'core':'stairs')); if(!st) return;
   B.wantExit=true; B.wantExitWhy=why; p.goal=null; p.goalT=0;
-  if(fin){ setBanner('彼女は魔核へ向かう気になった', why==='press'?'魔物が増えてきた——長居はまずい':(why==='hp'?'体力が薄い——決めに行く':'見るところは見た——魔核へ'),'#ff6b81'); sayLine('wantExit',1,0,'……いこう。まかくの、ところへ'); }
-  else{ setBanner('彼女は降りる気になった', why==='press'?'魔物が増えてきた——長居はまずい':(why==='hp'?'体力が薄い——ここは離れる':'見るところは見た——次へ'),'#8fd3ff'); sayLine('wantExit',1,0,why==='done'?'もう、みるとこないし。おりよ!':'……そろそろ、おりなきゃ'); }
+  const SUB={press:'魔物が増えてきた——長居はまずい', hp:fin?'体力が薄い——決めに行く':'体力が薄い——ここは離れる', done:fin?'見るところは見た——魔核へ':'見るところは見た——次へ', flee:'逃げ続けても終わらない——降り口を探す'};
+  if(fin){ setBanner('彼女は魔核へ向かう気になった', SUB[why],'#ff6b81'); sayLine('wantExit',1,0,'……いこう。まかくの、ところへ'); }
+  else{ setBanner('彼女は降りる気になった', SUB[why],'#8fd3ff'); if(why==='flee') sayLine('fleeExit',1,0,'にげながら、おりぐちさがす!'); else sayLine('wantExit',1,0,why==='done'?'もう、みるとこないし。おりよ!':'……そろそろ、おりなきゃ'); }
 }
 /* v2.1 場面に合わせた台詞: 地形に入った / 圧が高まった / 体力が薄い / 一息 */
 function linesTick(dt){
@@ -3685,7 +3756,7 @@ function hurtHero(dmg,src,opt){
   const atk=attachCount(p);
   const mult=p.pinned?BAL.PIN_DMG_MULT:((atk>0||p.charmBind)?BAL.ATTACH_DMG_MULT:1);
   const armor=opt.pierce?0:Math.max(0,p.armor-atk);
-  const net=Math.max(0, dmg*mult-armor);
+  const net=Math.max(0, dmg*mult*(p.guardT>0?0.3:1)-armor);   // v2.3 聖光の壁: 被ダメ-70%
   if(net<=0){
     if(!opt.quiet){
       parts(p.x,p.y-14,3,['#cfe0ff','#8fd3ff'],70,0.3);
@@ -4517,7 +4588,7 @@ function battleTick(dt){
   if(p.bubbleCd>0) p.bubbleCd-=dt;
   if(p.novaAnim>0) p.novaAnim-=dt;
   if(p.whipAnim>0) p.whipAnim-=dt;
-  p.hp=Math.min(p.maxHp,p.hp+p.regen*dt);   // 清廉のご加護
+  p.hp=Math.min(p.maxHp,p.hp+p.regen*(p.guardT>0?4:1)*dt);   // 清廉のご加護 / v2.3 聖光の壁で×4
 
   condTick(p,dt);
   if(p.climaxT>0){ climaxTick(dt); }
@@ -4568,6 +4639,7 @@ function battleTick(dt){
   picksTick(dt); eventTick(dt);   // v1.8 地形の資源とイベント
   storyTick(dt);                   // v2.0 階層の独り言
   exitTick(dt); linesTick(dt);     // v2.1 降りる判断 / 場面に合わせた台詞
+  skillTick(dt);                   // v2.3 奥義
 
   // EN回復
   B.en=Math.min(enMax(), B.en+(BAL.EN_REGEN+0.12*altarLv('enregen')+BAL.EN_REGEN_LV*p.level)*B.floor.en.regen*(1+BAL.PRESS_EN_REGEN*pressure())*dt);   // v2.0 深いほど速く溜まる / v2.1 長居するほど速い

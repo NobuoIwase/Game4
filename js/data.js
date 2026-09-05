@@ -171,6 +171,10 @@ const BAL={
   GEM_FARM_T:12, GEM_FARM_CD:25,
   /* v2.2 地形の嫌い方の閾値: fear≥2 で境で迷う、fear≥3 は価値 FEAR3_WORTH 以上の目当てが無ければ入らない。経路コスト fear1/2/3 */
   FEAR3_WORTH:2.4, FEAR_COST:[0,0.5,1.5,3.0],
+  /* v2.3 迷いの積み上げ: 同じ地形で「やめとく」を選ぶたびに次に入る確率が HESIT_ESC ずつ上がる(入ったら戻る)。SCARED_T 秒はその地形へ寄らない */
+  HESIT_ESC:0.22, SCARED_T:40,
+  /* v2.3 戦闘の賢さ: 近くの魔物を倒し切るまでの見込み秒(ttk)と密度で 戦う/引き撃ち/逃げに徹する を切り替える。SMART_AI=0 で旧挙動 */
+  SMART_AI:1, KITE_TTK:5.0, KITE_N:7, FLEE_TTK:9, FLEE_N:12, MODE_HOLD:1.2, FLEE_EXIT_T:8, KITE_GEM_R:200,   // 逃げ続けが FLEE_EXIT_T 秒で「降り口を探す」に切り替わる / 引き撃ち中に拾うジェムの距離
   // v1.9 武器の上限: Lv5 までは従来の伸び、Lv6〜8 は覚醒(進化後も効く)。全部が上限なら「ルミナの祈り」(無駄なレベルを出さない)
   WP_EVO_LV:5, WP_OVER_DMG:0.15, WP_OVER_CD:0.93, WP_OVER_AREA:0.05,
   PRAY_DMG:0.04, PRAY_HP:0.03, PRAY_SPD:0.01, PRAY_HEAL:40,
@@ -607,6 +611,12 @@ const LUMINA_UPG={
   grit: {name:'ねばりの心',    max:8, base:30, fx:'スタミナ上限 +6' },
   zeal: {name:'せいなる火力',  max:8, base:36, fx:'与ダメ +6%' },
 };
+/* v2.3 奥義(彼女の後半の強化): Lvで解放。オート(AI)が状況で使う。cd=秒 */
+const SKILLS={
+  blink:  { name:'光の跳躍', icon:'✦', lv:22, cd:20, desc:'囲まれた時(半径130に6体以上、または脅威が濃い時)、光になって最も空いている方へ180px跳ぶ。0.6秒無敵' },
+  purge:  { name:'浄化の脈', icon:'❂', lv:38, cd:35, desc:'二肢以上を掴まれるか押し倒された時、光を破裂させて全ての拘束を千切り、半径120の魔物を弾いて止める(ボスは短く)' },
+  bulwark:{ name:'聖光の壁', icon:'◈', lv:52, cd:45, desc:'HPが35%を切った時、4秒間 被ダメ-70%・自然回復×4' },
+};
 const luminaUpCost=(id,rank)=>Math.round(LUMINA_UPG[id].base*Math.pow(1.5,rank));
 const luminaRank=id=>((META.lumina&&META.lumina.upg)||{})[id]||0;
 const shaveCost=rank=>Math.round(6+3*rank);   // 自己強化を1段削ぐオーブ費用
@@ -706,6 +716,10 @@ const AILMENTS={
   sniff:{ name:'嗅ぐ', color:'#8fd36a', icon:'♨' },
   curse:{ name:'呪い', color:'#ff6b81', icon:'✠' },
   heatg:{ name:'発情ゲージ', color:'#ff9ec2', icon:'♨' },
+  /* v2.3 彼女側の状態(奥義・戦闘モード) */
+  heal:{ name:'聖光の壁', color:'#ffd76a', icon:'◈' },
+  skill:{ name:'奥義', color:'#ffe9b0', icon:'✧' },
+  flee:{ name:'戦闘モード', color:'#8fd3ff', icon:'➶' },
 };
 /* 身についた性癖(永続・世代を跨ぐ)。通常の処置では抜けない */
 const TRAITS={
