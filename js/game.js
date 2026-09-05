@@ -1266,18 +1266,23 @@ function aiUpdate(dt){
 
   // 媚薬・煽りによるノイズ(思考の乱れ)
   if(foc<1){
-    const n=(1-foc)*1.1;
+    const n=(1-foc)*1.1*((p.path&&p.path.length)?0.4:1);   // v2.1 経路を辿っている(狭い所)ときは乱れを小さく
     dx+=Math.sin(B.time*3.1+p.anim*7)*n;
     dy+=Math.cos(B.time*2.7+p.anim*5)*n;
   }
 
+  // v2.1 壁ぞい滑り: 壁へ向かう成分を落として、隙間では軸方向だけ進む。横に動けない(牽制の横歩き)なら向きを反転
+  if(G.map && BAL.WALL_SLIDE_R>0 && (dx||dy)){
+    const m0=Math.hypot(dx,dy), sl=wallSlide(p.x,p.y,dx,dy,BAL.WALL_SLIDE_R,false); dx=sl.x; dy=sl.y;
+    if(Math.hypot(dx,dy)<m0*0.35){ p.blockT=(p.blockT||0)+dt; if(p.blockT>0.25){ p.blockT=0; p.strafeDir*=-1; } } else p.blockT=0;
+  }
   const m=Math.hypot(dx,dy);
   const tvx=m>0.001?dx/m*st.speed:0;
   const tvy=m>0.001?dy/m*st.speed:0;
   const k=Math.min(1,dt*6.5*foc);
   p.vx+=(tvx-p.vx)*k; p.vy+=(tvy-p.vy)*k;
   p.x+=p.vx*dt; p.y+=p.vy*dt;
-  collideMap(p,p.r+2,false);   // 壁・崖・マップの端
+  { const cx=p.x, cy=p.y; collideMap(p,p.r+2,false); if(Math.hypot(p.x-cx,p.y-cy)>0.5){ B.nWallHit=(B.nWallHit||0)+1; const vd=p.vx*(p.x-cx)+p.vy*(p.y-cy); if(vd<0){ p.vx*=0.5; p.vy*=0.5; } } }   // 壁・崖・マップの端(押し戻されたら勢いを殺す=跳ね返りで震えない)
   // 詰まり検知: 進みたいのに進めていない(壁の角など)→ 探索点へ経路で抜ける
   { const want=Math.hypot(p.steerX||0,p.steerY||0), moved=Math.hypot(p.x-p.prevX,p.y-p.prevY);
     if(want>0.3 && moved<st.speed*dt*0.25 && attachCount(p)===0 && !p.pinned && !p.charmBind) p.stuckT=(p.stuckT||0)+dt; else p.stuckT=Math.max(0,(p.stuckT||0)-dt*2);
@@ -1356,7 +1361,7 @@ function aiDecide(foc){
   }
   let ax=0, ay=0, threat=0, bossNear=false;
   // 壁・崖: 近いほど離れる力(角に追い詰められない)
-  { const wp=wallPush(p.x,p.y,42,false); ax+=wp.x*1.3; ay+=wp.y*1.3; }
+  const wpush=wallPush(p.x,p.y,42,false); const wpx=wpush.x*1.3, wpy=wpush.y*1.3; ax+=wpx; ay+=wpy;   // v2.1 目標へ歩く時は「進路を押し戻す」成分だけ後で外す
   // マップの端: 壁に追い詰められないよう、端に近いほど内側へ寄る
   { const wm=150;
     if(p.x<-MAP_HW+wm) ax+=(1-(p.x+MAP_HW)/wm)*1.4; if(p.x>MAP_HW-wm) ax-=(1-(MAP_HW-p.x)/wm)*1.4;
@@ -1595,8 +1600,10 @@ function aiDecide(foc){
       dx=sv.x; dy=sv.y;
       state=kind;
       if(kind==='prop' && d<150){ dx*=0.12; dy*=0.12; }   // 燭台を撃ち壊す間は足を止める
-      const wf=(p.path&&p.path.length)?0.6:1.0;   // v2.1 経路を辿っている間は壁の反発を弱める(細い入口で弾かれて回らない)
-      dx+=ax*wf; dy+=ay*wf;
+      // v2.1 壁の反発のうち、進路(dx,dy)と逆向きの成分は外す(細い入口で押し戻されて回らない)。横へ寄せる成分(通路の真ん中へ)は残す
+      { let cx=wpx, cy=wpy; const sm=Math.hypot(dx,dy)||1, ux=dx/sm, uy=dy/sm, dot=cx*ux+cy*uy; if(dot<0){ cx-=ux*dot; cy-=uy*dot; }
+        const wf=(p.path&&p.path.length)?0.6:1.0;
+        dx+=(ax-wpx+cx*wf); dy+=(ay-wpy+cy*wf); }
     }else{
       let ne=null, nd=1e9;
       for(const e of B.enemies){

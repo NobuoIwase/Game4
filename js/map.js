@@ -316,6 +316,20 @@ function collideMap(o,r,fly){
   }
   o.x=clampMapX(o.x,r); o.y=clampMapY(o.y,r);
 }
+/* v2.1 壁ぞい滑り: (dx,dy) のうち、半径 r 内の壁へ向かう成分を落とす(壁に沿って滑る)。狭い隙間では横成分が消え、軸方向だけが残る */
+function wallSlide(x,y,dx,dy,r,fly){
+  const ci=tileI(x), cj=tileJ(y);
+  for(let j=cj-1;j<=cj+1;j++) for(let i=ci-1;i<=ci+1;i++){
+    if(passIJ(i,j,fly)) continue;
+    const tx0=i*MAP_T-MAP_HW, ty0=j*MAP_T-MAP_HH;
+    const nx=clamp(x,tx0,tx0+MAP_T), ny=clamp(y,ty0,ty0+MAP_T);
+    const ddx=x-nx, ddy=y-ny, d=Math.hypot(ddx,ddy);
+    if(d<0.001||d>=r) continue;
+    const ux=ddx/d, uy=ddy/d, dot=dx*ux+dy*uy;
+    if(dot<0){ dx-=ux*dot; dy-=uy*dot; }
+  }
+  return {x:dx,y:dy};
+}
 /* 近くの壁から離れる力(彼女の操舵に足す) */
 function wallPush(x,y,range,fly){
   let px=0, py=0; const ci=tileI(x), cj=tileJ(y), R=Math.ceil(range/MAP_T);
