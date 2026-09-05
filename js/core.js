@@ -177,7 +177,7 @@ function loadMeta(){
     if(d && (d.v===2||d.v===3)){
       META=Object.assign(defaultMeta(), d);
       META.v=3;
-      META.gen=Object.assign({idx:1,battle:0,know:{}}, d.gen); META.gen.know=META.gen.know||{};
+      META.gen=Object.assign({idx:1,battle:0,know:{},zoneKnow:{}}, d.gen); META.gen.know=META.gen.know||{}; META.gen.zoneKnow=META.gen.zoneKnow||{};
       META.life=Object.assign(defaultMeta().life, d.life);
       for(const k of ['ailBy','capBy','capCause']) META.life[k]=Object.assign({}, (d.life||{})[k]||{});
       META.nightItems=Object.assign({mist:true}, d.nightItems||{});

@@ -262,7 +262,7 @@ const MONSTERS={
   /* ---- v1.0 追加: ボス ---- */
   dreamtree:{
     name:'淫夢の樹', role:'ボス・巣', cost:24, unlock:1100, tier:'boss',
-    hp:800, spd:0, r:30, dmg:0, xp:55, boss:true,
+    hp:1300, spd:0, r:30, dmg:0, xp:90, boss:true,
     desc:'桃色の花を咲かせた黒い樹。根を伸ばして近づく者の脚を繋ぎ、幹の洞から地上ワームを生み続ける。花の香は甘く、近いほど身体が熱を覚える。召喚は1戦に1度。',
     trait:'根の繋留/ワーム生成/甘香の領域',
   },
@@ -305,7 +305,7 @@ const MONSTERS={
   },
   bossgazer:{
     name:'ボスゲイザー', role:'ボス・多眼', cost:26, unlock:1200, tier:'boss',
-    hp:900, spd:30, r:30, dmg:6, xp:60, boss:true,
+    hp:1450, spd:30, r:30, dmg:6, xp:90, boss:true,
     desc:'三つの眼柄を持つゲイザーの王。三つの視界がそれぞれ別の拍で彼女を探し、閃光を重ねる。彼女は視界を見て避けるが、三つ同時には避けきれない。召喚は1戦に1度。',
     trait:'三つの視界が交互に閃光(催眠Lv+1)。接触で殴打',
   },
@@ -324,32 +324,32 @@ const MONSTERS={
   },
   vampi:{
     name:'ヴァンピロード', role:'ボス', cost:26, unlock:900, tier:'boss',
-    hp:950, spd:55, r:28, dmg:20, xp:60, boss:true,
+    hp:1500, spd:55, r:28, dmg:20, xp:90, boss:true,
     desc:'夜の統率者。突進で薙ぎ払い、掠めた相手をよろめかせる。召喚は1戦に1度。',
     trait:'突進/接触よろめき。呪い『吸われ癖』',
   },
   /* ---- v1.6 ボス4種 ---- */
   slimeking:{
     name:'粘獣王', role:'ボス・粘液', cost:24, unlock:1000, tier:'boss',
-    hp:1000, spd:26, r:30, dmg:4, xp:60, boss:true,
+    hp:1600, spd:26, r:30, dmg:4, xp:90, boss:true,
     desc:'巣の底に溜まった粘液が、意思を持って立ち上がった王。歩いた跡に広い粘液の帯を残し、追いつけば身体を呑んで脚を絡め取る。呑まれている間、粘液は服の内側まで染みてくる。',
     trait:'粘液の帯(足が鈍る)を残す。接触で【呑み込み】: 脚を粘液で繋留+敏感化。呪い『粘膜の記憶』',
   },
   runemage:{
     name:'淫紋の刻印師', role:'ボス・術者', cost:25, unlock:1150, tier:'boss',
-    hp:850, spd:18, r:24, dmg:0, xp:60, boss:true,
+    hp:1350, spd:18, r:24, dmg:0, xp:90, boss:true,
     desc:'淫紋を刻む術者。間合いを保ち、桃色の呪弾を放つ。当たった場所から淫紋が身体に焼きつき、以後、快感の入りが増す。足元にも淫紋を伏せる。',
     trait:'呪弾(命中で淫紋Lv+1・快感)。淫紋の罠を伏せる。呪い『淫紋焼き付け』',
   },
   succuqueen:{
     name:'夢魔の女王', role:'ボス・甘い夢', cost:25, unlock:1250, tier:'boss',
-    hp:900, spd:48, r:26, dmg:3, xp:60, boss:true,
+    hp:1450, spd:48, r:26, dmg:3, xp:90, boss:true,
     desc:'淫魔たちの女王。周りを舞いながら甘い夢の波を放ち、発情を深め、火照った身体に寸止めをかける。口づけで敏感にし、小淫魔を呼ぶ。',
     trait:'6秒ごとの甘い波(発情ゲージ+。発情中なら寸止め)。接触で口づけ(敏感化)。小淫魔召喚。呪い『甘い夢の残り香』',
   },
   gobking:{
     name:'ゴブリンの王', role:'ボス・雄臭', cost:24, unlock:950, tier:'boss',
-    hp:1100, spd:40, r:27, dmg:9, xp:60, boss:true, musk:true,
+    hp:1750, spd:40, r:27, dmg:9, xp:90, boss:true, musk:true,
     desc:'群れの長。濃い雄の臭いを常に撒き、呼び笛で手下を集める。突進で薙ぎ払う。臭いの中に居続ければ、発情していなくても身体が熱を覚えていく。',
     trait:'濃い雄臭の雲を撒く(発情・敏感化)。9秒ごとに手下3体。突進。呪い『雄臭の刷り込み』',
   },
@@ -357,16 +357,16 @@ const MONSTERS={
 /* ---------------- 地形マップ(v1.6・実験) ----------------
    有限のマップをマップチップで敷く。世代ごとに地形が変わり、同じ世代の4日間は同じ地形。
    彼女は宝箱・祠(永続強化)・泉(休息)・門(突破)を目当てに歩き回る。地形は魔物にも効く */
-const MAP_T=64, MAP_W=56, MAP_H=36;                 // タイル寸・横タイル数・縦タイル数(3584×2304px、原点が中心)
+const MAP_T=32, MAP_W=112, MAP_H=72;                // タイル寸・横タイル数・縦タイル数(3584×2304px、原点が中心)。v1.7: 32pxのチップで細かく
 const MAP_HW=MAP_W*MAP_T/2, MAP_HH=MAP_H*MAP_T/2;
 const ZONES={
-  moss:     { name:'苔の広間',   col:'#26304a', desc:'いつもの床。何も起きない' },
-  damp:     { name:'湿った洞',   col:'#1f3c3e', desc:'ナメクジ・羽虫・ワーム・粘獣王のHP+25%(ジメジメ)' },
-  water:    { name:'浅瀬',       col:'#22375c', desc:'スライム系の速度+30%。彼女の足は水で12%鈍る' },
-  flower:   { name:'花園',       col:'#3a2c46', desc:'媚薬の雲が濃く広い(+20%)。花粉で彼女の敏感化がじわじわ進む' },
-  hotspring:{ name:'温泉',       col:'#4a3040', desc:'湯気で彼女の回復+50%。代わりに敏感化と発情ゲージが上がる' },
-  ruin:     { name:'石畳の回廊', col:'#2e2e3c', desc:'彼女の足も魔物の足も速い(+6%)' },
-  nest:     { name:'魔物の巣',   col:'#402234', desc:'魔物のHP+15%・速度+10%。門がある' },
+  moss:     { name:'苔の広間',   col:'#223a3c', desc:'いつもの床。何も起きない' },
+  damp:     { name:'湿った洞',   col:'#1c3040', desc:'ナメクジ・羽虫・ワーム・粘獣王のHP+25%(ジメジメ)' },
+  water:    { name:'浅瀬',       col:'#1f4a7c', desc:'スライム系の速度+30%。彼女の足は水で12%鈍る' },
+  flower:   { name:'花園',       col:'#2f5638', desc:'媚薬の雲が濃く広い(+20%)。花粉で彼女の敏感化がじわじわ進む' },
+  hotspring:{ name:'温泉',       col:'#5a3a3c', desc:'湯気で彼女の回復+50%。代わりに敏感化と発情ゲージが上がる' },
+  ruin:     { name:'石畳の回廊', col:'#3a3a4a', desc:'彼女の足も魔物の足も速い(+6%)' },
+  nest:     { name:'魔物の巣',   col:'#4a2038', desc:'魔物のHP+15%・速度+10%。門がある' },
 };
 const ZONE_IDS=Object.keys(ZONES);
 const ZONE_HP_MON={ damp:{slug:1.25,leech:1.25,worm:1.25,slimeking:1.25}, nest:{'*':1.15} };
@@ -389,7 +389,7 @@ const BOSS_CURSES={
 /* 階級: 雑魚/中型は全陣形、大型は精鋭型のみ、ボスは単騎 */
 const TIERS=['fodder','mid','large','boss'];
 const TIER_NAMES={fodder:'雑魚', mid:'中型', large:'大型', boss:'ボス'};
-const TIER_CAP={fodder:3, mid:3, large:2, boss:2};          // デッキ枠(計10)。ボスは同時に1体・同じボスは1戦1回・次のボスまで60秒
+const TIER_CAP={fodder:3, mid:3, large:2, boss:5};          // デッキ枠(計13)。ボスは同時に1体・同じボスは1戦1回・次のボスまで60秒(1分ごとに1体なので5体まで編成できる)
 const SPECIES_MAX={gazer:4};                                  // 同時に場に出せる上限(種族)
 const DECK_CAP=Object.values(TIER_CAP).reduce((a,b)=>a+b,0);
 const TIER_FORMS={fodder:null, mid:null, large:['single','duo'], boss:['single']};  // null=全陣形

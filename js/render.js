@@ -20,126 +20,7 @@ const EN_COLORS={
 };
 
 /* ---------------- 世界 ---------------- */
-/* マップチップ: 地形ごとに3種のチップを起動時に描いて敷く(64px)。世代で地形が変わっても同じチップを使う */
-let TILE_ATLAS=null;
-function makeTileAtlas(){
-  const T=MAP_T, n=ZONE_IDS.length;
-  TILE_ATLAS=document.createElement('canvas'); TILE_ATLAS.width=T*3; TILE_ATLAS.height=T*n;
-  const g=TILE_ATLAS.getContext('2d');
-  const R=(seed)=>{ let sd=seed*9973+17; return ()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; }; };
-  ZONE_IDS.forEach((z,row)=>{
-    for(let v=0;v<3;v++){
-      const ox=v*T, oy=row*T, rnd=R(row*7+v+1);
-      g.save(); g.beginPath(); g.rect(ox,oy,T,T); g.clip();
-      g.fillStyle=ZONES[z].col; g.fillRect(ox,oy,T,T);
-      // わずかな市松で継ぎ目を出す
-      g.fillStyle='rgba(255,255,255,0.025)'; if(v%2===0) g.fillRect(ox,oy,T,T);
-      if(z==='moss'){
-        g.fillStyle='rgba(90,150,110,0.28)'; for(let k=0;k<7;k++){ const x=ox+rnd()*T, y=oy+rnd()*T, rr=2+rnd()*4; g.beginPath(); g.arc(x,y,rr,0,TAU); g.fill(); }
-        g.strokeStyle='rgba(120,140,200,0.22)'; g.lineWidth=1.3; for(let k=0;k<3;k++){ const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y+3); g.quadraticCurveTo(x+2,y-3,x+4,y-6); g.stroke(); }
-        if(rnd()<0.6){ const x=ox+rnd()*T, y=oy+rnd()*T; g.fillStyle='rgba(255,190,215,0.5)'; for(let k=0;k<4;k++){ const a=k*TAU/4; g.beginPath(); g.arc(x+Math.cos(a)*2.4,y+Math.sin(a)*2.4,1.6,0,TAU); g.fill(); } g.fillStyle='rgba(255,225,140,0.6)'; g.beginPath(); g.arc(x,y,1.2,0,TAU); g.fill(); }
-      }else if(z==='damp'){
-        for(let k=0;k<3;k++){ const x=ox+rnd()*T, y=oy+rnd()*T, w=8+rnd()*14, h=4+rnd()*6; g.fillStyle='rgba(60,130,140,0.35)'; g.beginPath(); g.ellipse(x,y,w,h,0,0,TAU); g.fill(); g.fillStyle='rgba(180,240,240,0.25)'; g.beginPath(); g.ellipse(x-w*0.3,y-h*0.3,w*0.35,h*0.3,0,0,TAU); g.fill(); }
-        g.fillStyle='rgba(120,200,190,0.35)'; for(let k=0;k<5;k++){ g.beginPath(); g.arc(ox+rnd()*T,oy+rnd()*T,1.2,0,TAU); g.fill(); }
-        g.fillStyle='rgba(70,110,90,0.35)'; for(let k=0;k<4;k++){ g.beginPath(); g.arc(ox+rnd()*T,oy+rnd()*T,2.5+rnd()*3,0,TAU); g.fill(); }
-      }else if(z==='water'){
-        g.strokeStyle='rgba(120,180,240,0.35)'; g.lineWidth=1.2;
-        for(let k=0;k<4;k++){ const x=ox+rnd()*T, y=oy+rnd()*T, w=6+rnd()*10; g.beginPath(); g.moveTo(x-w,y); g.quadraticCurveTo(x-w/2,y-3,x,y); g.quadraticCurveTo(x+w/2,y+3,x+w,y); g.stroke(); }
-        g.fillStyle='rgba(220,240,255,0.5)'; for(let k=0;k<4;k++){ g.beginPath(); g.arc(ox+rnd()*T,oy+rnd()*T,1,0,TAU); g.fill(); }
-        g.fillStyle='rgba(40,70,120,0.35)'; g.beginPath(); g.ellipse(ox+rnd()*T,oy+rnd()*T,14,6,0,0,TAU); g.fill();
-      }else if(z==='flower'){
-        g.strokeStyle='rgba(120,170,130,0.3)'; g.lineWidth=1.3; for(let k=0;k<5;k++){ const x=ox+rnd()*T, y=oy+rnd()*T; for(let m=-1;m<=1;m++){ g.beginPath(); g.moveTo(x+m*3,y+3); g.quadraticCurveTo(x+m*4,y-2,x+m*5,y-6); g.stroke(); } }
-        for(let k=0;k<4;k++){ const x=ox+rnd()*T, y=oy+rnd()*T, c=['rgba(255,150,190,0.7)','rgba(240,220,255,0.65)','rgba(255,200,120,0.6)'][Math.floor(rnd()*3)]; g.fillStyle=c; for(let m=0;m<5;m++){ const a=m*TAU/5+rnd(); g.beginPath(); g.arc(x+Math.cos(a)*2.8,y+Math.sin(a)*2.8,1.9,0,TAU); g.fill(); } g.fillStyle='rgba(255,240,180,0.8)'; g.beginPath(); g.arc(x,y,1.3,0,TAU); g.fill(); }
-      }else if(z==='hotspring'){
-        g.fillStyle='rgba(120,70,90,0.45)'; for(let k=0;k<3;k++){ g.beginPath(); g.ellipse(ox+rnd()*T,oy+rnd()*T,10+rnd()*10,5+rnd()*5,0,0,TAU); g.fill(); }
-        g.fillStyle='rgba(255,220,225,0.10)'; for(let k=0;k<4;k++){ g.beginPath(); g.arc(ox+rnd()*T,oy+rnd()*T,6+rnd()*8,0,TAU); g.fill(); }
-        g.fillStyle='rgba(255,180,190,0.25)'; for(let k=0;k<3;k++){ g.beginPath(); g.arc(ox+rnd()*T,oy+rnd()*T,1.5,0,TAU); g.fill(); }
-      }else if(z==='ruin'){
-        g.strokeStyle='rgba(90,90,120,0.55)'; g.lineWidth=1.2;
-        const s2=T/2; for(let i=0;i<=2;i++){ g.beginPath(); g.moveTo(ox,oy+i*s2); g.lineTo(ox+T,oy+i*s2); g.stroke(); }
-        for(let j=0;j<2;j++){ const off=(j%2)*s2/2; for(let i=0;i<=2;i++){ g.beginPath(); g.moveTo(ox+i*s2+off,oy+j*s2); g.lineTo(ox+i*s2+off,oy+(j+1)*s2); g.stroke(); } }
-        g.strokeStyle='rgba(60,60,80,0.6)'; for(let k=0;k<2;k++){ const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y); g.lineTo(x+rnd()*10-5,y+rnd()*10-5); g.lineTo(x+rnd()*14-7,y+rnd()*14-7); g.stroke(); }
-        g.fillStyle='rgba(120,160,120,0.2)'; for(let k=0;k<3;k++){ g.beginPath(); g.arc(ox+rnd()*T,oy+rnd()*T,2,0,TAU); g.fill(); }
-      }else if(z==='nest'){
-        g.strokeStyle='rgba(140,60,100,0.5)'; g.lineWidth=2;
-        for(let k=0;k<3;k++){ const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y); g.bezierCurveTo(x+rnd()*30-15,y+rnd()*30-15,x+rnd()*40-20,y+rnd()*40-20,x+rnd()*50-25,y+rnd()*50-25); g.stroke(); }
-        g.fillStyle='rgba(255,120,170,0.35)'; for(let k=0;k<4;k++){ g.beginPath(); g.arc(ox+rnd()*T,oy+rnd()*T,2+rnd()*2.5,0,TAU); g.fill(); }
-        g.fillStyle='rgba(40,10,30,0.35)'; g.beginPath(); g.ellipse(ox+rnd()*T,oy+rnd()*T,9,5,rnd(),0,TAU); g.fill();
-      }
-      g.restore();
-    }
-  });
-}
-makeTileAtlas();
-function drawTiles(g){
-  const cx=G.cam.x, cy=G.cam.y, T=MAP_T;
-  g.fillStyle='#0d0c16'; g.fillRect(cx-W/2-40,cy-H/2-40,W+80,H+80);   // マップの外は闇
-  const i0=Math.max(0,Math.floor((cx-W/2+MAP_HW)/T)-1), i1=Math.min(MAP_W-1,Math.floor((cx+W/2+MAP_HW)/T)+1);
-  const j0=Math.max(0,Math.floor((cy-H/2+MAP_HH)/T)-1), j1=Math.min(MAP_H-1,Math.floor((cy+H/2+MAP_HH)/T)+1);
-  const zone=(G.map&&G.map.zone)||null;
-  for(let i=i0;i<=i1;i++){
-    for(let j=j0;j<=j1;j++){
-      const z=zone?zone[j*MAP_W+i]:0, v=Math.floor(hash2(i,j)*3);
-      g.drawImage(TILE_ATLAS, v*T, z*T, T, T, i*T-MAP_HW, j*T-MAP_HH, T+0.5, T+0.5);
-    }
-  }
-  // 端の岩壁
-  g.strokeStyle='rgba(140,110,160,0.45)'; g.lineWidth=8; g.strokeRect(-MAP_HW,-MAP_HH,MAP_HW*2,MAP_HH*2);
-}
-/* 場所: 祠(金の灯)・泉(湯)・門(巣の奥) */
-function drawPoi(g,q){
-  const M=META.map||{}, t=performance.now()*0.001, known=!!M.known[q.key];
-  g.save(); g.translate(q.x,q.y);
-  if(q.kind==='shrine'){
-    const done=!!M.visited[q.key];
-    g.fillStyle='rgba(8,8,26,0.35)'; g.beginPath(); g.ellipse(0,4,24,9,0,0,TAU); g.fill();
-    g.fillStyle='#5a5a70'; g.fillRect(-16,-4,32,6);                         // 台座
-    g.fillStyle='#6e6e88'; g.fillRect(-5,-30,10,26);                         // 柱
-    g.fillStyle='#4a4a62'; g.beginPath(); g.moveTo(-18,-30); g.lineTo(0,-42); g.lineTo(18,-30); g.closePath(); g.fill();   // 屋根
-    glow(g,0,-18,done?10:16,done?'200,200,220':'255,215,106',done?0.25:0.55+0.2*Math.sin(t*3));
-    g.fillStyle=done?'#c8c8dc':'#ffd76a'; g.beginPath(); g.arc(0,-18,4,0,TAU); g.fill();
-  }else if(q.kind==='spring'){
-    const grad=g.createRadialGradient(0,0,4,0,0,40); grad.addColorStop(0,'rgba(180,230,255,0.85)'); grad.addColorStop(1,'rgba(90,150,210,0.55)');
-    g.fillStyle=grad; g.beginPath(); g.ellipse(0,0,40,20,0,0,TAU); g.fill();
-    g.strokeStyle='rgba(220,245,255,0.5)'; g.lineWidth=1.2; g.beginPath(); g.ellipse(0,0,26+Math.sin(t*2)*3,12+Math.sin(t*2)*1.5,0,0,TAU); g.stroke();
-    g.fillStyle='rgba(255,240,245,0.16)'; for(let i=0;i<3;i++){ const ph=(t*0.4+i*0.33)%1; g.beginPath(); g.arc(-14+i*14,-10-ph*30,8+ph*8,0,TAU); g.fill(); }
-    g.fillStyle='#6a6a80'; for(let i=0;i<7;i++){ const a=i*TAU/7; g.beginPath(); g.ellipse(Math.cos(a)*42,Math.sin(a)*21,5,3,a,0,TAU); g.fill(); }
-  }else if(q.kind==='gate'){
-    const pr=Math.min(1,(M.gateProg||0)/12);
-    g.fillStyle='rgba(8,8,26,0.45)'; g.beginPath(); g.ellipse(0,6,60,16,0,0,TAU); g.fill();
-    g.fillStyle='#2a1420'; g.fillRect(-44,-70,14,76); g.fillRect(30,-70,14,76);
-    g.beginPath(); g.moveTo(-44,-70); g.quadraticCurveTo(0,-104,44,-70); g.lineTo(44,-56); g.quadraticCurveTo(0,-90,-44,-56); g.closePath(); g.fill();
-    g.fillStyle='rgba(255,110,170,'+(0.18+0.12*Math.sin(t*2))+')'; g.beginPath(); g.moveTo(-30,4); g.lineTo(-30,-60); g.quadraticCurveTo(0,-84,30,-60); g.lineTo(30,4); g.closePath(); g.fill();
-    g.strokeStyle='rgba(255,134,179,0.7)'; g.lineWidth=2; g.beginPath(); g.moveTo(-36,-72); g.quadraticCurveTo(0,-106,36,-72); g.stroke();
-    if(pr>0){ g.strokeStyle='#ff86b3'; g.lineWidth=3; g.beginPath(); g.arc(0,-30,52,-Math.PI/2,-Math.PI/2+TAU*pr); g.stroke(); }
-    for(let i=0;i<5;i++){ const a=i*TAU/5+t*0.6; g.fillStyle='rgba(255,150,200,0.5)'; g.beginPath(); g.arc(Math.cos(a)*48,-30+Math.sin(a)*18,1.8,0,TAU); g.fill(); }
-  }
-  if(known){ g.fillStyle='rgba(143,211,255,0.9)'; g.font='bold 10px sans-serif'; g.textAlign='center'; g.fillText(POI_DEF[q.kind].name, 0, q.kind==='gate'?-112:(q.kind==='spring'?-30:-50)); }
-  g.restore();
-}
-/* ミニマップ(左下): 地形色・知っている場所・彼女・ボス */
-function drawMinimap(g){
-  if(!G.map||!G.B) return;
-  const M=META.map||{}, B=G.B, p=B.hero;
-  if(!G.map.mini){
-    const c=document.createElement('canvas'); c.width=MAP_W; c.height=MAP_H; const cg=c.getContext('2d');
-    for(let j=0;j<MAP_H;j++) for(let i=0;i<MAP_W;i++){ cg.fillStyle=ZONES[ZONE_IDS[G.map.zone[j*MAP_W+i]]].col; cg.fillRect(i,j,1,1); }
-    G.map.mini=c;
-  }
-  const sc=2, mw=MAP_W*sc, mh=MAP_H*sc, x0=12, y0=H-mh-22;
-  g.save(); g.globalAlpha=0.88;
-  g.fillStyle='rgba(10,10,26,0.8)'; g.fillRect(x0-3,y0-3,mw+6,mh+6);
-  g.imageSmoothingEnabled=false; g.drawImage(G.map.mini,x0,y0,mw,mh); g.imageSmoothingEnabled=true;
-  const tx=(x)=>x0+(x+MAP_HW)/MAP_T*sc, ty=(y)=>y0+(y+MAP_HH)/MAP_T*sc;
-  for(const q of G.map.pois){ if(!M.known[q.key]) continue; g.fillStyle=q.kind==='shrine'?(M.visited[q.key]?'#9a9ab0':'#ffd76a'):(q.kind==='spring'?'#8fd3ff':'#ff86b3'); g.fillRect(tx(q.x)-2,ty(q.y)-2,4,4); }
-  for(const c of B.chests){ g.fillStyle='#ffe9b0'; g.fillRect(tx(c.x)-1,ty(c.y)-1,3,3); }
-  for(const e of B.enemies){ if(e.boss&&!e.dead){ g.fillStyle='#ff5d7a'; g.fillRect(tx(e.x)-2,ty(e.y)-2,4,4); } }
-  g.fillStyle='#fff'; g.beginPath(); g.arc(tx(p.x),ty(p.y),2.2,0,TAU); g.fill();
-  g.strokeStyle='rgba(255,255,255,0.35)'; g.lineWidth=1; g.strokeRect(tx(G.cam.x-W/2),ty(G.cam.y-H/2),W/MAP_T*sc,H/MAP_T*sc);
-  g.strokeStyle='rgba(201,140,255,0.6)'; g.strokeRect(x0-3,y0-3,mw+6,mh+6);
-  g.restore();
-}
-
+/* 地形の描画(マップチップ・場所・ミニマップ)は js/map.js */
 function drawLight(g,x,y){
   const lg=g.createRadialGradient(x,y-10,20,x,y-10,270);
   lg.addColorStop(0,'rgba(255,244,214,0.10)');
@@ -2496,7 +2377,7 @@ function drawHUD(g){
   drawMinimap(g);
   g.fillText('enemies:'+B.enemies.length+' fps:'+Math.round(G.fps)+(TS>1?' x'+TS:''), 12, H-6);
   g.textAlign='right'; g.fillStyle='rgba(255,255,255,0.3)'; g.font='bold 10px '+FONT;
-  g.fillText('v1.6 侵蝕デッキ', W-12, H-6);
+  g.fillText('v1.7 侵蝕デッキ', W-12, H-6);
 }
 function drawCards(g){
   const B=G.B, c=B.lvCards; if(!c) return;
@@ -2733,7 +2614,7 @@ function draw(){
     for(const gm of B.gems) drawGem(g,gm);
     for(const h of B.hearts) drawHeartDrop(g,h);
     for(const tr of B.traps) drawTrap(g,tr);
-    for(const c of B.chests){ drawChest(g,c); if(c.fake){ g.save(); g.globalAlpha=0.35; g.fillStyle='#c98cff'; g.beginPath(); g.ellipse(c.x,c.y+2,14,5,0,0,TAU); g.fill(); g.restore(); } }
+    for(const c of B.chests){ if(c.bossChest){ glow(g,c.x,c.y-6,34,'255,215,106',0.35+0.15*Math.sin(c.t*4)); } drawChest(g,c); if(c.fake){ g.save(); g.globalAlpha=0.35; g.fillStyle='#c98cff'; g.beginPath(); g.ellipse(c.x,c.y+2,14,5,0,0,TAU); g.fill(); g.restore(); } }
     for(const it of B.items) drawItem(g,it);
     if(B.ebullets) for(const b of B.ebullets) drawRuneBolt(g,b);
 
