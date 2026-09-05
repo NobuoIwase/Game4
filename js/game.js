@@ -210,6 +210,13 @@ function startBattle(){
   heroBubble(hero,'今日も、まもりぬくよ!',true);
   UI.enterBattle();
   bgmStart('battle');
+  // v2.0 物語: 初めての出撃は序章、階層に降り立った導入(潜行ごとに1度)、敗北の翌朝は再挑戦の文
+  { const F=G.B.floor, sf=storyFloor(F.depth); let lines=null;
+    if(!META.run.storySeen.prologue && STORY.prologue.length){ lines=STORY.prologue.concat(sf.intro.length?['']:[]).concat(sf.intro); META.run.storySeen.prologue=1; META.run.storySeen['f'+F.depth]=1; saveMeta(); }
+    else if(META.run.fails>0 && STORY.retry.length){ lines=storyRetry(); }
+    else if(sf.intro.length && !META.run.storySeen['f'+F.depth]){ lines=sf.intro; META.run.storySeen['f'+F.depth]=1; saveMeta(); }
+    if(lines&&lines.length) UI.showStory(lines,{dur:8+lines.length*1.3});
+    G.B.storyLineT=22+rand(10); }
 }
 function enMax(){ const F=(G.B&&G.B.floor)||curFloor(); return Math.min(BAL.EN_MAX*F.en.max, BAL.EN_BASE*F.en.base + 6*altarLv('encap') + BAL.EN_PER_LV*(G.B?G.B.hero.level:1)); }   // v2.0 深いほど多い
 
@@ -280,7 +287,8 @@ function endBattle(outcome){
     heroLv:B.hero.level, capturedBy:B.capturedBy, cause:B.captureCause, climax:B.climaxN,
     coins:coinGain, shop:shopped, decay,
     will:META.lumina.will||0, willUp:outcome==='capture', shrines:B.shrineGot, gateT:B.gateT, used:B.used, eventsN:B.eventsN, eventsDone:B.eventsDone,
-    floor:B.floor, floorBefore, runNote, fails:META.run.fails, nextFloor:META.run.floor, seals:Object.keys(B.seals).length, newCurse:newCurse?BOSS_CURSES[newCurse.id]:null,
+    floor:B.floor, floorBefore, runNote, fails:META.run.fails, nextFloor:META.run.floor, seals:Object.keys(B.seals).length,
+    storyLines: outcome==='clear'?STORY.ending:(runNote==='reset'?STORY.reset:null), newCurse:newCurse?BOSS_CURSES[newCurse.id]:null,
     curseGone:(oldCurse&&!META.curse&&!newCurse)?BOSS_CURSES[oldCurse.id]:null});
 }
 
@@ -290,6 +298,7 @@ function runReset(){
   META.gen.battle=0; META.gen.idx++;
   META.rot={dmg:0, ail:0, captures:0, battles:0};
   META.gen.know={}; META.gen.zoneKnow={}; META.gen.trapKnow={};   // 世代が変わると、覚えたことも忘れる(手記に書いた分だけ残る)
+  META.run.storySeen={prologue:(META.run.storySeen||{}).prologue};   // 階層の導入はまた出る(序章は出ない)
 }
 /* 世代の夜明け: 彼女の自己強化は BAL.LUMINA_DECAY 段ぶん薄れる。高い系統から1段ずつ。
    初期値に戻るわけではない——世代を跨ぐごとに、土台が少しずつ上がっていく */
@@ -2913,7 +2922,7 @@ function poiTick(dt){
       floatTxt(q.x,q.y-40,'みつけた: '+POI_DEF[q.kind].name,'#8fd3ff',12,1.8);
       heroBubble(p,pickRand(['あそこ、なにかある……','あれ、なんだろ','おぼえておこう']),false,1);
       if(q.kind==='stairs') setBanner('降り口を見つけた','彼女はいずれ降りる。その前に捕まえたい','#8fd3ff');
-      if(q.kind==='core') setBanner('魔核の間','深淵の心臓。彼女は挑むだろう','#ff6b81');
+      if(q.kind==='core'){ setBanner('魔核の間','深淵の心臓。彼女は挑むだろう','#ff6b81'); if(STORY.finalEncounter.length && !B.storyCoreSeen){ B.storyCoreSeen=true; UI.showStory(STORY.finalEncounter,{dur:11}); } }
       if(q.kind==='seal') setBanner('封印石','3つ全て灯すと降り口が開く','#c98cff');
     }
     const d=Math.hypot(q.x-p.x,q.y-p.y);
@@ -2973,6 +2982,7 @@ function startDescend(){
   B.descending=true; B.exitT=0;
   for(const sl of attachedSlots(p)) p.limbs[sl]=null; for(const sl of suckSlots(p)) p.suckers[sl]=null;
   setBanner('降り口へ','ルミナは次の階層へ降りていく……','#8fd3ff');
+  { const sf=storyFloor(B.floor.depth); if(sf.descend.length) UI.showStory(sf.descend,{dur:6}); }
   heroBubble(p,pickRand(['……いくよ。まだ、おりられる','ここは、もういい。つぎ']),true,3);
   parts(p.x,p.y-10,26,['#8fd3ff','#fff','#cbd5ff'],160,1.0); S.clear();
   G.mode='survived'; B.winT=2.4;
@@ -3617,6 +3627,15 @@ function applyItem(kind){
     S.boss();
   }
 }
+/* v2.0 物語: 落ち着いている時に、その階層の独り言を零す */
+function storyTick(dt){
+  const B=G.B, p=B.hero; if(B.storyLineT===undefined) B.storyLineT=25;
+  B.storyLineT-=dt; if(B.storyLineT>0) return;
+  B.storyLineT=38+rand(20);
+  const sf=storyFloor(B.floor.depth); if(!sf.enter.length) return;
+  if(p.pinned||p.charmBind||p.climaxT>0||attachCount(p)>0||p.heatLv>0||B.enemies.length>30) return;
+  heroBubble(p,pickRand(sf.enter),false,0);
+}
 /* ================= v1.8 地形の資源(光茸・蜜の花・沈んだ宝) =================
    地形帯ごとに生える/沈んでいる拾い物。彼女は見えたものを覚え、必要に応じて目当てにする */
 function spawnPick(kind,x,y,known){
@@ -4241,6 +4260,7 @@ function battleTick(dt){
   pickupsUpdate(dt);
   if(G.mode!=='battle') return;
   picksTick(dt); eventTick(dt);   // v1.8 地形の資源とイベント
+  storyTick(dt);                   // v2.0 階層の独り言
 
   // EN回復
   B.en=Math.min(enMax(), B.en+(BAL.EN_REGEN+0.12*altarLv('enregen')+BAL.EN_REGEN_LV*p.level)*B.floor.en.regen*dt);   // v2.0 深いほど速く溜まる

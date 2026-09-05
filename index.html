@@ -280,6 +280,12 @@ canvas#cv.arm{ cursor:crosshair; }
 .tierlbl{ font-size:9.5px; font-weight:normal; padding:1px 6px; border-radius:999px; border:1px solid var(--tc,#888); color:var(--tc,#ccc); vertical-align:middle; }
 @media (prefers-reduced-motion: reduce){ button,.hcard{ transition:none; } }
 
+/* ===== v2.0 物語の箱: 階層の導入・降下・結末などの地の文を、盤面の上に短く出す ===== */
+#storybox{ position:absolute; top:13%; left:50%; transform:translateX(-50%); width:min(660px,92vw); max-height:52vh; overflow:auto; z-index:26;
+  background:rgba(10,8,22,.88); border:1px solid rgba(201,140,255,.55); border-radius:14px; padding:14px 18px 12px; box-shadow:0 10px 40px rgba(0,0,0,.55);
+  color:#e8dcf5; font-size:13px; line-height:1.75; white-space:pre-wrap; text-align:left; cursor:pointer; pointer-events:auto; }
+#storybox .shint{ display:block; margin-top:8px; font-size:10px; color:var(--dim); text-align:right; }
+body.portrait #storybox{ top:5%; font-size:12px; }
 /* ===== 縦持ち(v1.9): 戦闘バーを世界の上に重ねず、キャンバスの下に置く。札は小さく一列(横スクロール) ===== */
 body.portrait #stage{ flex-direction:column; justify-content:flex-start; align-items:center; padding-top:4px; box-sizing:border-box; }
 body.portrait canvas#cv{ flex:0 0 auto; }
@@ -372,12 +378,14 @@ body.portrait #battlebar .side button{ font-size:9.5px; padding:4px 8px; white-s
       </div>
     </div>
   </div>
+  <div id="storybox" hidden title="タップで閉じる"></div>
   <div id="screens"></div>
 </div>
 <script src="js/core.js"></script>
 <script src="js/data.js"></script>
 <script src="js/scenes.js"></script>
 <script src="js/codex.js"></script>
+<script src="js/story.js"></script>
 <script src="js/map.js"></script>
 <script src="js/game.js"></script>
 <script src="js/render.js"></script>

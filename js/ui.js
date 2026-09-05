@@ -186,6 +186,15 @@ const UI={
   },
 
   hideAll(){ this.root.innerHTML=''; G.screen=''; },
+  /* v2.0 物語の箱: 数行の地の文を盤面の上に出す。タップか時間で閉じる */
+  showStory(lines,opt){
+    opt=opt||{}; const box=$('storybox'); if(!box||!lines||!lines.length) return;
+    box.innerHTML=lines.map(l=>esc(l)).join('\n')+'<span class="shint">タップで閉じる</span>';
+    box.hidden=false; if(this._storyTimer) clearTimeout(this._storyTimer);
+    this._storyTimer=setTimeout(()=>this.hideStory(), Math.round((opt.dur||9)*1000));
+    if(!this._storyBound){ this._storyBound=true; box.addEventListener('click',()=>this.hideStory()); }
+  },
+  hideStory(){ const box=$('storybox'); if(box) box.hidden=true; if(this._storyTimer){ clearTimeout(this._storyTimer); this._storyTimer=null; } },
 
   show(name){
     // 同じ画面の再描画(強化ボタン等)ではスクロール位置を保持する
@@ -195,12 +204,13 @@ const UI={
     G.screen=name;
     G.mode='home';
     G.B=null;
+    this.hideStory();
     $('battlebar').hidden=true;
     $('resbar').hidden=false;
     bgmStart('home');
     this.refreshRes();
     const fn={home:this.htmlHome, deck:this.htmlDeck, lab:this.htmlLab,
-      altar:this.htmlAltar, status:this.htmlStatus, codex:this.htmlCodex}[name];
+      altar:this.htmlAltar, status:this.htmlStatus, codex:this.htmlCodex, story:this.htmlStory}[name];
     this.root.innerHTML='<div class="screen"><div class="inner'+(name==='home'?'':' wide')+'" style="'+(name==='home'?'margin-top:120px;background:rgba(17,15,34,.86)':'')+'">'+fn.call(this)+'</div></div>';
     this.attachIcons();
     if(keepScroll){
@@ -242,6 +252,7 @@ const UI={
         <button class="sub" data-act="go" data-arg="altar">◉ オーブの祭壇<small>ルミナの初期状態を書き換える</small></button>
         <button class="sub" data-act="go" data-arg="status">👁 観測記録<small>称号・総評・自己評価</small></button>
         <button class="sub" data-act="go" data-arg="codex">📖 図鑑<small>魔物の解説と、彼女の手記</small></button>
+        <button class="sub" data-act="go" data-arg="story">📜 物語<small>彼女がここへ来た理由と、深淵の記録</small></button>
         <button class="sub" data-act="autoDefault">🤖 オート初期値: ${META.settings.autoplay?'ON':'OFF'}<small>戦闘開始時のオート指揮</small></button>
         <button class="sub" data-act="gfxToggle">🎨 絵柄: ${(META.settings.gfx||'hd')==='hd'?'描き込み':'ドット(旧)'}<small>ルミナと魔物の描き方を切り替え</small></button>
         <button class="sub" data-act="gfxAutoToggle">⚙ 自動品質: ${META.settings.gfxAuto!==false?'ON':'OFF'}<small>fpsが落ちたら装飾を自動で省く</small></button>
@@ -264,6 +275,20 @@ const UI={
       </div>`;
   },
 
+  /* v2.0 物語: 序章と、到達した階層の導入。結末・リセットの記録 */
+  htmlStory(){
+    const deepest=Math.max(1,META.run.deepest||1);
+    const block=(title,lines,color)=>lines&&lines.length?`<h2 style="font-size:14px;color:${color||'var(--vio)'}">${esc(title)}</h2><div class="note" style="white-space:pre-wrap;line-height:1.8;color:#e8dcf5">${lines.map(esc).join('\n')}</div>`:'';
+    let floorsHtml='';
+    for(let k=0;k<FLOORS.length;k++){ const F=FLOORS[k], sf=storyFloor(k+1); if(k+1<=deepest) floorsHtml+=block('第'+F.depth+'層 '+F.name,sf.intro,F.col); else floorsHtml+=`<h2 style="font-size:14px;color:var(--dim)">第${F.depth}層 ${esc(F.name)} <span style="font-size:11px">— まだ辿り着いていない</span></h2>`; }
+    return `
+      <h2>📜 物語</h2>
+      <div class="note">いまは<b>第${genNum(META.gen.idx)}世代</b>、第${curFloor().depth}層。最深到達 第${deepest}層。魔核を討った回数 ${META.run.clears||0}。二連敗の朝、深淵の霧は彼女の記憶を奪う——手記だけが残る。</div>
+      ${STORY.prologue.length?block('序章',STORY.prologue,'var(--gold)'):'<div class="note">序章の文はまだ届いていない(執筆中)。</div>'}
+      ${floorsHtml}
+      ${(META.run.clears||0)>0?block('結末(魔核を討った日)',STORY.ending,'var(--gold)'):''}
+      <div class="row"><button data-act="go" data-arg="home">← もどる</button></div>`;
+  },
   htmlDeck(){
     // 階級ごとに枠がある: 雑魚2 / 中型2 / 大型1 / ボス1(大型は精鋭・双璧のみ、ボスは単騎)
     const card=(id,sel)=>{
@@ -576,9 +601,12 @@ const UI={
       ? `<div id="sceneBox"><b>${esc(scene.title||'')}</b>\n${scene.beats.map(esc).join('\n\n')}</div>`
       : `<div class="note">敗北シーン: テキスト未実装(js/scenes.js のフックへ別途追加)</div>`):'';
     const cgHtml=cap?`<div id="cgWrap"></div>`:'';
+    this.hideStory();
+    const storyHtml=(sum.storyLines&&sum.storyLines.length)?`<div class="note" style="white-space:pre-wrap;line-height:1.8;color:#e8dcf5;text-align:left;margin:8px 0">${sum.storyLines.map(esc).join('\n')}</div>`:'';
     this.root.innerHTML=`<div class="screen"><div class="inner" style="text-align:center;min-width:340px">
       <h2 style="color:${color}">${title}</h2>
       ${runHtml}
+      ${storyHtml}
       ${by?`<div style="font-size:12px;color:var(--body)">とどめ: ${esc(by)}${causeTxt?' — '+esc(causeTxt):''}</div>`:''}
       ${sum.shop&&sum.shop.length?`<div class="note" style="color:var(--gold);margin:6px 0">——夜が明けて、ルミナは自分を強化した——<br>${sum.shop.map(esc).join(' ・ ')}</div>`:''}
       ${sum.shrines&&sum.shrines.length?`<div class="note" style="color:#ffd76a;margin:6px 0">——祠の加護: ${sum.shrines.map(esc).join(' ・ ')}——</div>`:''}
