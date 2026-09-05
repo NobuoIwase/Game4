@@ -2422,7 +2422,7 @@ function separateEnemies(dt){
   const grid=new Map();
   const key=(cx,cy)=>cx*100003+cy;
   for(const e of list){ const cx=Math.floor(e.x/SEP_CELL), cy=Math.floor(e.y/SEP_CELL); const k=key(cx,cy); let a=grid.get(k); if(!a){ a=[]; grid.set(k,a); } a.push(e); }
-  const mass=e=>(e.item||MONSTERS[e.id].spd===0)?1e9:(e.boss?e.r*e.r*8:e.r*e.r);   // 設置物/動かない種は不動。ボスは重い
+  const mass=e=>(e.item||MONSTERS[e.id].spd===0||(e.id==='sentinel'&&e.state==='idle'))?1e9:(e.boss?e.r*e.r*8:e.r*e.r);   // 設置物/動かない種/抱え込んでいる番兵は不動。ボスは重い
   for(const e of list){
     const cx=Math.floor(e.x/SEP_CELL), cy=Math.floor(e.y/SEP_CELL);
     for(let ox=-1;ox<=1;ox++) for(let oy=-1;oy<=1;oy++){
@@ -3092,11 +3092,9 @@ function exitGuarded(){ const B=G.B; return !!B && B.enemies.some(e=>e.id==='sen
 function sentinelTick(e,dt,d,dx,dy){
   const B=G.B, p=B.hero, R=B.sentRing; if(!R) return;
   const holding=attachedSlots(p).some(sl=>p.limbs[sl].mon===e);
-  if(holding){ e.state='idle'; return; }   // 抱え込んでいる間は据わる(繋留が彼女を留める)
-  if(e.state==='idle') e.state='chase';
   const hd=Math.hypot(p.x-R.x,p.y-R.y);
   const alert=hd<BAL.SENTINEL_ALERT && !p.pinned;
-  // 共有の拍: 生きている先頭の個体だけが輪の状態を進める
+  // 共有の拍: 生きている先頭の個体だけが輪の状態を進める(抱え込んでいる個体でも進める——止まると踏み込みが解けない)
   if(e===B.enemies.find(o=>o.id==='sentinel'&&!o.dead)){
     R.phase+=dt*(alert?0.04:0.22); R.alert=alert;
     if(R.stepT>0) R.stepT-=dt;
@@ -3104,6 +3102,8 @@ function sentinelTick(e,dt,d,dx,dy){
     else R.stepCd=Math.max(R.stepCd,1.2);
     if(alert && !B.guardSaid && META.map.known[R.key]){ B.guardSaid=true; sayLine('guarded',1,0,'あの石の人たち、あなを守ってる……'); }
   }
+  if(holding){ e.state='idle'; return; }   // 抱え込んでいる間は据わる(繋留が彼女を留める)
+  if(e.state==='idle') e.state='chase';
   let tx,ty,spd=e.spd;
   if(alert){
     // 彼女と穴の間に半円で並び、同じ速さで詰める。踏み込みの間は一斉に速い
@@ -3120,7 +3120,7 @@ function sentinelTick(e,dt,d,dx,dy){
   // 接触: 石の腕で背後から両腕ごと抱え込む(腕が空いていなければ脚)。据わって繋留する
   if(d<e.r+p.r+4 && p.ifr<=0 && !p.pinned && (e.grabCd||0)<=0){
     const arms=!!freeSlotFor('tether',false,true);
-    if(attachMonster(e,'tether',{r:36,needMul:1.5,armsOnly:arms})){ e.state='idle'; hurtHero(e.dmg*0.5,e,{noKb:true}); codexMet('sentinel'); heroBubble(p,pickRand(['つめた……うで、うごかない……!','いしの、うで……はなして……っ']),true,2); }
+    if(attachMonster(e,'tether',{r:36,needMul:1.5,armsOnly:arms})){ e.state='idle'; e.grabCd=4; hurtHero(e.dmg*0.5,e,{noKb:true}); codexMet('sentinel'); heroBubble(p,pickRand(['つめた……うで、うごかない……!','いしの、うで……はなして……っ']),true,2); }   // 振りほどかれた後は少し間を置く
     else e.grabCd=1.0;
   }
   if((e.grabCd||0)>0) e.grabCd-=dt;

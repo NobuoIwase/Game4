@@ -28,7 +28,7 @@ function frame(now){
   const paused=UI.advOpen();   // v2.1 物語(立ち絵+台詞)を表示している間はゲーム時間が止まる
   const speedy=!paused && ['battle','levelup','captured','survived'].includes(G.mode) && G.B;
   const steps=paused ? 0 : (speedy ? TS*(G.spd||1) : 1);
-  if(paused) UI.tickAdv(rdt);
+  if(paused){ UI.tickAdv(rdt); G.shake=Math.max(0,G.shake-dt*14); }   // 文字送りだけ進め、揺れは収める(fxTick は止まる)
   for(let k=0;k<steps;k++){
     switch(G.mode){
       case 'home':     lobbyTick(dt); break;
