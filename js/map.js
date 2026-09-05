@@ -36,15 +36,16 @@ function clampMapY(y,m){ m=m===undefined?24:m; return clamp(y,-MAP_HH+m,MAP_HH-m
 
 /* ================= 生成 ================= */
 function genMap(){
-  const gi=mapGen(), seed=1000+gi*7919;
-  if(G.map && G.map.seed===seed && META.map && META.map.gen===gi){ G.map.flowT=-9; G.map.heroTile=null; return; }   // 同じ世代: 流れ場だけ次の出撃で作り直す
+  const gi=mapGen(), F=curFloor(), fl=F.depth, seed=1000+gi*7919+fl*104729;   // v2.0 世代×階層で地形が決まる(同じ階層への再挑戦は同じ地形)
+  if(G.map && G.map.seed===seed && META.map && META.map.gen===gi && META.map.floor===fl){ G.map.flowT=-9; G.map.heroTile=null; return; }   // 同じ世代・同じ階層: 流れ場だけ次の出撃で作り直す
   let sd=seed; const rnd=()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; };
   const N=MAP_W*MAP_H;
   // ---- 地形帯: ボロノイ風。巣は端のほう、出発点は苔
-  const types=['moss','moss','moss','damp','damp','water','water','flower','flower','hotspring','ruin','ruin','nest'];
+  const types=[]; for(const z in F.zoneW){ for(let k=0;k<F.zoneW[z];k++) types.push(z); }   // v2.0 階層の地形パレット(重み=帯の数)
+  const mainZone=Object.entries(F.zoneW).sort((a,b)=>b[1]-a[1])[0][0];
   const sites=types.map(t=>({t, x:(rnd()-0.5)*MAP_HW*1.8, y:(rnd()-0.5)*MAP_HH*1.8}));
-  const nest=sites.find(z=>z.t==='nest'); const ea=rnd()*TAU; nest.x=Math.cos(ea)*MAP_HW*0.78; nest.y=Math.sin(ea)*MAP_HH*0.78;
-  sites.push({t:'moss', x:0, y:0});
+  const nest=sites.find(z=>z.t==='nest'); if(nest){ const ea=rnd()*TAU; nest.x=Math.cos(ea)*MAP_HW*0.78; nest.y=Math.sin(ea)*MAP_HH*0.78; }
+  sites.push({t:mainZone, x:0, y:0});
   const zone=new Uint8Array(N);
   for(let j=0;j<MAP_H;j++) for(let i=0;i<MAP_W;i++){
     const cx=tileCX(i), cy=tileCY(j);
@@ -117,28 +118,29 @@ function genMap(){
       if(!okTile(x,y)) continue;
       if(inZone && zoneAtXY(zone,x,y)!==inZone) continue;
       if(pois.some(q=>Math.hypot(q.x-x,q.y-y)<380)) continue;
-      pois.push({kind,x:tileCX(tileI(x)),y:tileCY(tileJ(y)),key:kind+pois.length}); return;
+      pois.push({kind,x:tileCX(tileI(x)),y:tileCY(tileJ(y)),key:'f'+fl+':'+kind+pois.length}); return;
     }
     const site=inZone?sites.find(z=>z.t===inZone):null;
     if(site){ // 地形帯の中心付近の届く床
-      for(let k=0;k<300;k++){ const x=site.x+(rnd()-0.5)*400, y=site.y+(rnd()-0.5)*300; if(okTile(x,y)){ pois.push({kind,x:tileCX(tileI(x)),y:tileCY(tileJ(y)),key:kind+pois.length}); return; } }
+      for(let k=0;k<300;k++){ const x=site.x+(rnd()-0.5)*400, y=site.y+(rnd()-0.5)*300; if(okTile(x,y)){ pois.push({kind,x:tileCX(tileI(x)),y:tileCY(tileJ(y)),key:'f'+fl+':'+kind+pois.length}); return; } }
     }
-    for(let k=0;k<400;k++){ const x=(rnd()-0.5)*MAP_HW*1.72, y=(rnd()-0.5)*MAP_HH*1.72; if(Math.hypot(x,y)>=minD*0.6 && okTile(x,y)){ pois.push({kind,x:tileCX(tileI(x)),y:tileCY(tileJ(y)),key:kind+pois.length}); return; } }
-    pois.push({kind,x:tileCX(ci0+6),y:tileCY(cj0),key:kind+pois.length});
+    for(let k=0;k<400;k++){ const x=(rnd()-0.5)*MAP_HW*1.72, y=(rnd()-0.5)*MAP_HH*1.72; if(Math.hypot(x,y)>=minD*0.6 && okTile(x,y)){ pois.push({kind,x:tileCX(tileI(x)),y:tileCY(tileJ(y)),key:'f'+fl+':'+kind+pois.length}); return; } }
+    pois.push({kind,x:tileCX(ci0+6),y:tileCY(cj0),key:'f'+fl+':'+kind+pois.length});
   };
-  place('shrine',null,520); place('shrine',null,520); place('shrine',null,520);
-  place('spring','hotspring',320); place('spring',null,420);
-  place('gate','nest',700);
-  place('pool','damp',300); place('pool','damp',300);       // v1.8 清水(湿った洞)
-  place('stele','ruin',300); place('stele','ruin',300);     // v1.8 石碑(石畳の回廊)
+  // v2.0 階層ごとの場所。降り口(最終階層は魔核の間)は出発点から遠く
+  place('shrine',null,520); place('shrine',null,520); if(fl<=3) place('shrine',null,520);
+  if(F.zoneW.hotspring) place('spring','hotspring',320); place('spring',null,420);
+  if(F.zoneW.damp){ place('pool','damp',300); place('pool','damp',300); }
+  if(F.zoneW.ruin){ place('stele','ruin',300); place('stele','ruin',300); }
+  if(F.final) place('core',null,1100); else place('stairs',null,1000);
+  if(F.puzzle==='seals'){ place('seal',null,500); place('seal',null,500); place('seal',null,500); }
   // v1.8 地形帯ごとの「届く床」の索引(資源の出現・イベントの位置に使う)
   const zoneTiles={}; for(const z of ZONE_IDS) zoneTiles[z]=[];
   for(let k=0;k<N;k++){ if(!solid[k] && reachF[k]) zoneTiles[ZONE_IDS[zone[k]]].push(k); }
   // 場所の周りは床を空ける(祠・門の前に立てるように)
   for(const q of pois){ const i=tileI(q.x), j=tileJ(q.y); for(let dj=-2;dj<=2;dj++) for(let di=-2;di<=2;di++){ if(inMap(i+di,j+dj) && i+di>=2 && j+dj>=2 && i+di<MAP_W-2 && j+dj<MAP_H-2) solid[(j+dj)*MAP_W+i+di]=0; } }
-  G.map={seed, gi, zone, solid, sites, pois, zoneTiles, mini:null, chunks:new Map(), dist:null, distF:null, flowT:-9, heroTile:null};
-  if(!META.map || META.map.gen!==gi){ META.map={gen:gi, known:{}, visited:{}, gateProg:0, gateDone:0, seen:0}; saveMeta(); }
-  if(META.map.gatePos){ const g=pois.find(q=>q.kind==='gate'); if(g && passAt(META.map.gatePos.x,META.map.gatePos.y,false)){ g.x=META.map.gatePos.x; g.y=META.map.gatePos.y; } }
+  G.map={seed, gi, floor:fl, wall:F.wall, zone, solid, sites, pois, zoneTiles, mini:null, chunks:new Map(), dist:null, distF:null, flowT:-9, heroTile:null};
+  if(!META.map || META.map.gen!==gi || META.map.floor!==fl){ META.map={gen:gi, floor:fl, known:{}, visited:{}, seen:0}; saveMeta(); }   // 世代か階層が変われば記憶を捨てる(同じ階層の再挑戦では保つ)
   // 出発点からの流れ場を先に作る(初期召喚の配置に使う)
   G.map.dist=bfsField(ci0,cj0,false); G.map.distF=bfsField(ci0,cj0,true); G.map.heroTile=[ci0,cj0];
 }
@@ -355,10 +357,10 @@ function placeNear(px,py,dx,dy,m,fly){
 
 /* ================= 描画: マップチップ・チャンク ================= */
 let TILE_ATLAS=null;
-const TILE_VARS=4, ROCK_ROW=7, CLIFF_ROW=8;
+const TILE_VARS=4, ROCK_ROW=ZONE_IDS.length, CLIFF_ROW=ZONE_IDS.length+1, BRICK_ROW=ZONE_IDS.length+2, FLESH_ROW=ZONE_IDS.length+3;   // 地形帯の行の後に 岩/崖/煉瓦/肉壁
 function makeTileAtlas(){
   const T=MAP_T;
-  TILE_ATLAS=document.createElement('canvas'); TILE_ATLAS.width=T*TILE_VARS; TILE_ATLAS.height=T*(ZONE_IDS.length+2);
+  TILE_ATLAS=document.createElement('canvas'); TILE_ATLAS.width=T*TILE_VARS; TILE_ATLAS.height=T*(ZONE_IDS.length+4);
   const g=TILE_ATLAS.getContext('2d');
   const R=(seed)=>{ let sd=seed*9973+17; return ()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; }; };
   const paint=(row,v,fn)=>{ const ox=v*T, oy=row*T, rnd=R(row*11+v+1); g.save(); g.beginPath(); g.rect(ox,oy,T,T); g.clip(); fn(ox,oy,rnd); g.restore(); };
@@ -408,6 +410,13 @@ function makeTileAtlas(){
         for(let k=0;k<2;k++){ const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y); g.bezierCurveTo(x+rnd()*20-10,y+rnd()*20-10,x+rnd()*24-12,y+rnd()*24-12,x+rnd()*28-14,y+rnd()*28-14); g.stroke(); }
         for(let k=0;k<2;k++){ const x=ox+rnd()*T, y=oy+rnd()*T, r=2+rnd()*2.2; dot(x,y,r,'rgba(170,90,130,0.7)'); dot(x-r*0.3,y-r*0.3,r*0.35,'rgba(255,200,230,0.55)'); }
         g.fillStyle='rgba(30,8,24,0.4)'; g.beginPath(); g.ellipse(ox+rnd()*T,oy+rnd()*T,6,3.5,rnd(),0,TAU); g.fill();
+      }else if(z==='flesh'){
+        // 肉の床: 濡れた桃色の組織。太い血管、膨らみのハイライト、小さな窪み
+        g.fillStyle='rgba(120,40,70,0.35)'; g.beginPath(); g.ellipse(ox+rnd()*T,oy+rnd()*T,9+rnd()*6,6+rnd()*4,rnd()*3,0,TAU); g.fill();
+        g.strokeStyle='rgba(150,30,60,0.55)'; g.lineWidth=2.2; for(let k=0;k<2;k++){ const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y); g.bezierCurveTo(x+rnd()*22-11,y+rnd()*22-11,x+rnd()*26-13,y+rnd()*26-13,x+rnd()*30-15,y+rnd()*30-15); g.stroke(); }
+        g.strokeStyle='rgba(230,120,160,0.35)'; g.lineWidth=1; { const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y); g.quadraticCurveTo(x+rnd()*14-7,y+rnd()*14-7,x+rnd()*18-9,y+rnd()*18-9); g.stroke(); }
+        for(let k=0;k<2;k++){ const x=ox+rnd()*T, y=oy+rnd()*T, r=2.5+rnd()*2.5; dot(x,y,r,'rgba(200,90,130,0.6)'); dot(x-r*0.35,y-r*0.35,r*0.4,'rgba(255,200,225,0.7)'); }
+        { const x=ox+rnd()*T, y=oy+rnd()*T; g.fillStyle='rgba(40,6,20,0.55)'; g.beginPath(); g.ellipse(x,y,3.5,2.2,rnd()*3,0,TAU); g.fill(); g.fillStyle='rgba(255,150,190,0.35)'; g.beginPath(); g.ellipse(x,y-1.2,2.2,0.9,0,0,TAU); g.fill(); }
       }
     });
   });
@@ -425,6 +434,23 @@ function makeTileAtlas(){
     g.strokeStyle='rgba(40,34,60,0.6)'; g.lineWidth=1; const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y); g.lineTo(x+rnd()*10-5,y+rnd()*10-5); g.stroke();
     for(let k=0;k<2;k++) dot(ox+rnd()*T,oy+rnd()*T,1.3,'rgba(80,140,110,0.35)');
   });
+  // 煉瓦の壁(沈んだ回廊): 暗い石積みと目地、欠け
+  for(let v=0;v<TILE_VARS;v++) paint(BRICK_ROW,v,(ox,oy,rnd)=>{
+    g.fillStyle='#262636'; g.fillRect(ox,oy,T,T);
+    const bh=T/4; g.strokeStyle='rgba(12,12,22,0.9)'; g.lineWidth=1.4;
+    for(let r=0;r<4;r++){ const y=oy+r*bh; g.beginPath(); g.moveTo(ox,y+0.7); g.lineTo(ox+T,y+0.7); g.stroke(); const off=(r%2)*(T/4); for(let k=0;k<3;k++){ const x=ox+off+k*(T/2); if(x>ox&&x<ox+T){ g.beginPath(); g.moveTo(x,y); g.lineTo(x,y+bh); g.stroke(); } } }
+    g.fillStyle='rgba(255,255,255,0.05)'; for(let r=0;r<4;r++){ const off=(r%2)*(T/4); for(let k=-1;k<3;k++){ const x=ox+off+k*(T/2); g.fillRect(Math.max(ox,x+1),oy+r*bh+1,Math.min(T/2-2,ox+T-Math.max(ox,x+1)),2); } }
+    if(v>=2){ g.strokeStyle='rgba(10,10,18,0.8)'; g.lineWidth=1; const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y); g.lineTo(x+rnd()*10-5,y+rnd()*10-5); g.stroke(); }
+    for(let k=0;k<2;k++) dot(ox+rnd()*T,oy+rnd()*T,1.2,'rgba(110,150,120,0.35)');
+  });
+  // 肉の壁(肉の巣): 暗い赤紫の組織に太い血管と膨らみ
+  for(let v=0;v<TILE_VARS;v++) paint(FLESH_ROW,v,(ox,oy,rnd)=>{
+    g.fillStyle='#3a0f22'; g.fillRect(ox,oy,T,T);
+    for(let k=0;k<3;k++){ g.fillStyle='rgba(110,30,60,0.55)'; g.beginPath(); g.ellipse(ox+rnd()*T,oy+rnd()*T,6+rnd()*6,4+rnd()*4,rnd()*3,0,TAU); g.fill(); }
+    g.strokeStyle='rgba(160,40,80,0.7)'; g.lineWidth=2.6; for(let k=0;k<2;k++){ const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y); g.bezierCurveTo(x+rnd()*24-12,y+rnd()*24-12,x+rnd()*28-14,y+rnd()*28-14,x+rnd()*32-16,y+rnd()*32-16); g.stroke(); }
+    g.strokeStyle='rgba(255,150,190,0.22)'; g.lineWidth=1; { const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y); g.quadraticCurveTo(x+rnd()*14-7,y+rnd()*14-7,x+rnd()*20-10,y+rnd()*20-10); g.stroke(); }
+    { const x=ox+rnd()*T, y=oy+rnd()*T, r=3+rnd()*2; dot(x,y,r,'rgba(190,80,120,0.55)'); dot(x-r*0.3,y-r*0.35,r*0.35,'rgba(255,210,230,0.6)'); }
+  });
 }
 makeTileAtlas();
 const CHUNK=8;   // タイル数(8×32=256px)
@@ -437,7 +463,8 @@ function renderChunk(ci,cj){
   for(let j=j0;j<j0+CHUNK;j++) for(let i=i0;i<i0+CHUNK;i++){
     if(!inMap(i,j)) continue;
     const x=(i-i0)*T, y=(j-j0)*T, v=Math.floor(hash2(i,j)*TILE_VARS), s=sol(i,j), z=zid(i,j);
-    if(s===SOLID_ROCK) g.drawImage(TILE_ATLAS,v*T,ROCK_ROW*T,T,T,x,y,T,T);
+    const wallRow=G.map.wall==='brick'?BRICK_ROW:(G.map.wall==='flesh'?FLESH_ROW:ROCK_ROW);   // v2.0 階層の壁様式
+    if(s===SOLID_ROCK) g.drawImage(TILE_ATLAS,v*T,wallRow*T,T,T,x,y,T,T);
     else if(s===SOLID_CLIFF) g.drawImage(TILE_ATLAS,v*T,CLIFF_ROW*T,T,T,x,y,T,T);
     else g.drawImage(TILE_ATLAS,v*T,z*T,T,T,x,y,T,T);
     if(s===0){
@@ -457,6 +484,7 @@ function renderChunk(ci,cj){
         if(nz===zn) continue;
         if(zn==='water'){ g.fillStyle='#cdbd92'; g.fillRect(bx,by,bw,bh); g.fillStyle='rgba(120,170,220,0.55)'; if(dj<0) g.fillRect(x,y+6,T,1.5); else if(dj>0) g.fillRect(x,y+T-7.5,T,1.5); else if(di<0) g.fillRect(x+6,y,1.5,T); else g.fillRect(x+T-7.5,y,1.5,T); }
         else if(zn==='nest'){ g.fillStyle='#6e2a4a'; g.fillRect(bx,by,bw,bh); g.fillStyle='rgba(200,110,160,0.6)'; if(dj<0) g.fillRect(x,y,T,1.5); else if(dj>0) g.fillRect(x,y+T-1.5,T,1.5); else if(di<0) g.fillRect(x,y,1.5,T); else g.fillRect(x+T-1.5,y,1.5,T); }
+        else if(zn==='flesh'){ g.fillStyle='#8a3458'; g.fillRect(bx,by,bw,bh); g.fillStyle='rgba(255,170,200,0.55)'; if(dj<0) g.fillRect(x,y,T,1.5); else if(dj>0) g.fillRect(x,y+T-1.5,T,1.5); else if(di<0) g.fillRect(x,y,1.5,T); else g.fillRect(x+T-1.5,y,1.5,T); }
         else if(zn==='damp' && nz!=='water'){ g.fillStyle='rgba(40,80,76,0.75)'; g.fillRect(bx,by,bw,bh); }
         else if(zn==='hotspring'){ g.fillStyle='#7a5e5e'; g.fillRect(bx,by,bw,bh); g.fillStyle='rgba(255,220,210,0.25)'; if(dj<0) g.fillRect(x,y,T,1.5); else if(dj>0) g.fillRect(x,y+T-1.5,T,1.5); else if(di<0) g.fillRect(x,y,1.5,T); else g.fillRect(x+T-1.5,y,1.5,T); }
         else if(zn==='ruin'){ g.fillStyle='#5c5c74'; if(dj<0) g.fillRect(x,y,T,3); else if(dj>0) g.fillRect(x,y+T-3,T,3); else if(di<0) g.fillRect(x,y,3,T); else g.fillRect(x+T-3,y,3,T); }
@@ -465,7 +493,8 @@ function renderChunk(ci,cj){
     }else{
       // 壁・崖の立体感: 下が床なら「面」を描く。崖は縁の明かり
       const below=sol(i,j+1)===0 && inMap(i,j+1);
-      if(below){ g.fillStyle=s===SOLID_ROCK?'#17132a':'#2e2a46'; g.fillRect(x,y+T-9,T,9); g.fillStyle=s===SOLID_ROCK?'rgba(120,110,160,0.35)':'rgba(170,165,210,0.5)'; g.fillRect(x,y+T-9,T,1.5); }
+      if(below){ const wf=G.map.wall==='brick'?['#15151f','rgba(140,140,180,0.35)']:(G.map.wall==='flesh'?['#22060f','rgba(230,120,160,0.4)']:['#17132a','rgba(120,110,160,0.35)']);
+        g.fillStyle=s===SOLID_ROCK?wf[0]:'#2e2a46'; g.fillRect(x,y+T-9,T,9); g.fillStyle=s===SOLID_ROCK?wf[1]:'rgba(170,165,210,0.5)'; g.fillRect(x,y+T-9,T,1.5); }
       if(s===SOLID_CLIFF){ g.strokeStyle='rgba(170,165,210,0.55)'; g.lineWidth=1.5; if(sol(i,j-1)===0) { g.beginPath(); g.moveTo(x,y+0.75); g.lineTo(x+T,y+0.75); g.stroke(); } if(sol(i-1,j)===0){ g.beginPath(); g.moveTo(x+0.75,y); g.lineTo(x+0.75,y+T); g.stroke(); } if(sol(i+1,j)===0){ g.beginPath(); g.moveTo(x+T-0.75,y); g.lineTo(x+T-0.75,y+T); g.stroke(); } }
       else if(sol(i,j-1)===0){ g.fillStyle='rgba(140,130,180,0.28)'; g.fillRect(x,y,T,2); }
     }
@@ -521,15 +550,30 @@ function drawPoi(g,q){
     g.strokeStyle='rgba(220,245,255,0.5)'; g.lineWidth=1.2; g.beginPath(); g.ellipse(0,0,26+Math.sin(t*2)*3,12+Math.sin(t*2)*1.5,0,0,TAU); g.stroke();
     g.fillStyle='rgba(255,240,245,0.16)'; for(let i=0;i<3;i++){ const ph=(t*0.4+i*0.33)%1; g.beginPath(); g.arc(-14+i*14,-10-ph*30,8+ph*8,0,TAU); g.fill(); }
     g.fillStyle='#6a6a80'; for(let i=0;i<7;i++){ const a=i*TAU/7; g.beginPath(); g.ellipse(Math.cos(a)*42,Math.sin(a)*21,5,3,a,0,TAU); g.fill(); }
-  }else if(q.kind==='gate'){
-    const pr=Math.min(1,(M.gateProg||0)/12);
-    g.fillStyle='rgba(8,8,26,0.45)'; g.beginPath(); g.ellipse(0,6,60,16,0,0,TAU); g.fill();
-    g.fillStyle='#2a1420'; g.fillRect(-44,-70,14,76); g.fillRect(30,-70,14,76);
-    g.beginPath(); g.moveTo(-44,-70); g.quadraticCurveTo(0,-104,44,-70); g.lineTo(44,-56); g.quadraticCurveTo(0,-90,-44,-56); g.closePath(); g.fill();
-    g.fillStyle='rgba(255,110,170,'+(0.18+0.12*Math.sin(t*2))+')'; g.beginPath(); g.moveTo(-30,4); g.lineTo(-30,-60); g.quadraticCurveTo(0,-84,30,-60); g.lineTo(30,4); g.closePath(); g.fill();
-    g.strokeStyle='rgba(255,134,179,0.7)'; g.lineWidth=2; g.beginPath(); g.moveTo(-36,-72); g.quadraticCurveTo(0,-106,36,-72); g.stroke();
-    if(pr>0){ g.strokeStyle='#ff86b3'; g.lineWidth=3; g.beginPath(); g.arc(0,-30,52,-Math.PI/2,-Math.PI/2+TAU*pr); g.stroke(); }
-    for(let i=0;i<5;i++){ const a=i*TAU/5+t*0.6; g.fillStyle='rgba(255,150,200,0.5)'; g.beginPath(); g.arc(Math.cos(a)*48,-30+Math.sin(a)*18,1.8,0,TAU); g.fill(); }
+  }else if(q.kind==='stairs'){
+    // 降り口: 床に開いた暗い穴。石段が下へ、下から薄い光と塵が昇る
+    const B=G.B, locked=B&&B.exitLocked;
+    g.fillStyle='rgba(0,0,0,0.55)'; g.beginPath(); g.ellipse(0,6,46,20,0,0,TAU); g.fill();
+    g.fillStyle='#0a0814'; g.beginPath(); g.ellipse(0,4,38,15,0,0,TAU); g.fill();
+    g.fillStyle='#3a3450'; for(let i=0;i<4;i++){ g.fillRect(-26+i*3,-2+i*5,52-i*6,3.5); }
+    g.fillStyle='#55506c'; g.fillRect(-30,-6,60,4);
+    if(!locked){ const grad=g.createRadialGradient(0,2,2,0,2,34); grad.addColorStop(0,'rgba(160,190,255,0.35)'); grad.addColorStop(1,'rgba(160,190,255,0)'); g.fillStyle=grad; g.beginPath(); g.ellipse(0,2,34,13,0,0,TAU); g.fill();
+      for(let i=0;i<4;i++){ const ph=(t*0.3+i/4)%1; g.fillStyle='rgba(200,220,255,'+((1-ph)*0.6).toFixed(2)+')'; g.beginPath(); g.arc(Math.sin(i*2.3+t)*16,2-ph*60,1.5,0,TAU); g.fill(); } }
+    else{ g.strokeStyle='rgba(201,140,255,0.7)'; g.lineWidth=2; for(let i=0;i<3;i++){ const a=i*TAU/3+t*0.4; g.beginPath(); g.moveTo(Math.cos(a)*30,4+Math.sin(a)*12); g.lineTo(Math.cos(a+Math.PI)*30,4+Math.sin(a+Math.PI)*12); g.stroke(); } }
+  }else if(q.kind==='core'){
+    // 魔核の間: 床に広がる根と脈。魔核そのものは魔物として描く
+    g.strokeStyle='rgba(160,40,80,0.45)'; g.lineWidth=3; for(let i=0;i<8;i++){ const a=i*TAU/8+0.2; g.beginPath(); g.moveTo(Math.cos(a)*40,Math.sin(a)*18); g.quadraticCurveTo(Math.cos(a+0.3)*90,Math.sin(a+0.3)*40,Math.cos(a)*140,Math.sin(a)*62); g.stroke(); }
+    g.fillStyle='rgba(120,20,60,'+(0.10+0.05*Math.sin(t*2))+')'; g.beginPath(); g.ellipse(0,0,120,52,0,0,TAU); g.fill();
+  }else if(q.kind==='seal'){
+    // 封印石: 石柱。灯ると金色に光る
+    const B=G.B, lit=B&&B.seals&&B.seals[q.key];
+    g.fillStyle='rgba(8,8,26,0.35)'; g.beginPath(); g.ellipse(0,4,18,7,0,0,TAU); g.fill();
+    g.fillStyle='#4a4a62'; g.fillRect(-12,-2,24,5);
+    g.fillStyle='#5e5e7a'; g.beginPath(); g.moveTo(-8,0); g.lineTo(-6,-40); g.lineTo(6,-40); g.lineTo(8,0); g.closePath(); g.fill();
+    g.strokeStyle='#33334a'; g.lineWidth=1; g.stroke();
+    g.fillStyle=lit?'#ffd76a':'rgba(201,140,255,0.55)'; g.beginPath(); g.arc(0,-22,4,0,TAU); g.fill();
+    glow(g,0,-22,lit?26:12,lit?'255,215,106':'201,140,255',lit?0.5+0.2*Math.sin(t*3):0.25+0.1*Math.sin(t*2));
+    if(lit){ g.strokeStyle='rgba(255,215,106,0.6)'; g.lineWidth=1.2; g.beginPath(); g.moveTo(-4,-30); g.lineTo(4,-30); g.moveTo(-3,-14); g.lineTo(3,-14); g.stroke(); }
   }
   else if(q.kind==='pool'){
     // 清水: 澄んだ小さな水面。使った直後(cd)は濁って見える。イベント中は光る
@@ -552,7 +596,7 @@ function drawPoi(g,q){
     g.strokeStyle=rc; g.lineWidth=1.4; for(let i=0;i<4;i++){ const y=-26+i*6; g.beginPath(); g.moveTo(-6,y); g.lineTo(-6+([7,10,5,9][i]),y); g.stroke(); }
     if(!read) glow(g,0,-18,ev?40:16,'203,213,255',ev?0.45+0.2*Math.sin(t*4):0.3);
   }
-  if(known){ g.fillStyle='rgba(143,211,255,0.9)'; g.font='bold 10px sans-serif'; g.textAlign='center'; g.fillText(POI_DEF[q.kind].name, 0, ({gate:-112,spring:-30,pool:-28,stele:-50})[q.kind]||-50); }
+  if(known){ g.fillStyle='rgba(143,211,255,0.9)'; g.font='bold 10px sans-serif'; g.textAlign='center'; g.fillText(POI_DEF[q.kind].name, 0, ({stairs:-22,core:-70,seal:-56,spring:-30,pool:-28,stele:-50})[q.kind]||-50); }
   g.restore();
 }
 /* ミニマップ(左下): 地形色・壁・知っている場所・彼女・ボス */
@@ -561,7 +605,7 @@ function drawMinimap(g){
   const M=META.map||{}, B=G.B, p=B.hero;
   if(!G.map.mini){
     const c=document.createElement('canvas'); c.width=MAP_W; c.height=MAP_H; const cg=c.getContext('2d');
-    for(let j=0;j<MAP_H;j++) for(let i=0;i<MAP_W;i++){ const s=G.map.solid[j*MAP_W+i]; cg.fillStyle=s===SOLID_ROCK?'#14111f':(s===SOLID_CLIFF?'#5a5478':ZONES[ZONE_IDS[G.map.zone[j*MAP_W+i]]].col); cg.fillRect(i,j,1,1); }
+    for(let j=0;j<MAP_H;j++) for(let i=0;i<MAP_W;i++){ const s=G.map.solid[j*MAP_W+i]; cg.fillStyle=s===SOLID_ROCK?(G.map.wall==='flesh'?'#2a0812':(G.map.wall==='brick'?'#1c1c28':'#14111f')):(s===SOLID_CLIFF?'#5a5478':ZONES[ZONE_IDS[G.map.zone[j*MAP_W+i]]].col); cg.fillRect(i,j,1,1); }
     G.map.mini=c;
   }
   const sc=1, mw=MAP_W*sc, mh=MAP_H*sc, x0=12, y0=H-mh-22-Math.round(typeof barCover==='number'?barCover:0);   // v1.9 横持ちでは戦闘バーの上に
@@ -569,7 +613,7 @@ function drawMinimap(g){
   g.fillStyle='rgba(10,10,26,0.8)'; g.fillRect(x0-3,y0-3,mw+6,mh+6);
   g.imageSmoothingEnabled=false; g.drawImage(G.map.mini,x0,y0,mw,mh); g.imageSmoothingEnabled=true;
   const tx=(x)=>x0+(x+MAP_HW)/MAP_T*sc, ty=(y)=>y0+(y+MAP_HH)/MAP_T*sc;
-  for(const q of G.map.pois){ if(!M.known[q.key]) continue; g.fillStyle=q.kind==='shrine'?(M.visited[q.key]?'#9a9ab0':'#ffd76a'):(q.kind==='spring'?'#8fd3ff':(q.kind==='pool'?'#7fe0ff':(q.kind==='stele'?'#cbd5ff':'#ff86b3'))); g.fillRect(tx(q.x)-2,ty(q.y)-2,4,4); }
+  for(const q of G.map.pois){ if(!M.known[q.key]) continue; g.fillStyle=q.kind==='shrine'?(M.visited[q.key]?'#9a9ab0':'#ffd76a'):(q.kind==='spring'?'#8fd3ff':(q.kind==='pool'?'#7fe0ff':(q.kind==='stele'?'#cbd5ff':(q.kind==='stairs'?'#ffffff':(q.kind==='seal'?((B.seals&&B.seals[q.key])?'#ffe9b0':'#c98cff'):'#ff6b81'))))); g.fillRect(tx(q.x)-2,ty(q.y)-2,4,4); }
   for(const c of B.chests){ g.fillStyle='#ffe9b0'; g.fillRect(tx(c.x)-1,ty(c.y)-1,3,3); }
   for(const e of B.enemies){ if(e.boss&&!e.dead){ g.fillStyle='#ff5d7a'; g.fillRect(tx(e.x)-2,ty(e.y)-2,4,4); } }
   for(const pk of B.picks){ if(pk.dead||!pk.known) continue; g.fillStyle=pk.kind==='shroom'?'#9fe8c8':(pk.kind==='nectar'?'#ffb3cf':'#ffd76a'); g.fillRect(tx(pk.x)-1,ty(pk.y)-1,2,2); }   // v1.8 知っている資源

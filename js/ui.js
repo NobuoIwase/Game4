@@ -78,8 +78,15 @@ const UI={
     switch(act){
       case 'go': this.show(arg); break;
       case 'battle':
+        applyDeckMode();   // v2.0 おまかせ/ランダム編成なら出撃直前に組む
         if(!META.deck.length){ S.deny(); return; }
         this.hideAll(); startBattle(); break;
+      case 'randomBattle':   // v2.0 ランダム編成で出撃(設定は変えない)
+        META.deck=buildDeck('random'); saveMeta(); this.hideAll(); startBattle(); break;
+      case 'deckMode':{
+        const modes=['manual','auto','random'], cur=META.settings.deckMode||'manual';
+        META.settings.deckMode=modes[(modes.indexOf(cur)+1)%modes.length]; saveMeta(); S.pick();
+        this.show(G.screen==='deck'?'deck':'home'); break; }
       case 'deckAdd':{
         const t=tierOf(arg);
         const n=META.deck.filter(id=>tierOf(id)===t).length;
@@ -213,7 +220,7 @@ const UI={
     $('resEss').textContent=Math.floor(META.essence);
     $('resOrb').textContent=Math.floor(META.orbs);
     $('resGen').textContent=genNum(META.gen.idx);
-    $('resRot').textContent='戦歴'+META.gen.battle+'/'+BAL.GEN_LEN;
+    $('resRot').textContent='第'+curFloor().depth+'層 / '+(META.run.day||1)+'日目';
   },
 
   /* ---------- 各スクリーン ---------- */
@@ -222,12 +229,14 @@ const UI={
     const wipeArmed=this._wipeArm && performance.now()-this._wipeArm<3000;
     return `
       <h1>ルミナ・サバイバーズ</h1>
-      <div class="sub">v1.9 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
+      <div class="sub">v2.0 深淵 — MONSTER DECK × AUTO BATTLE</div>
       <p>あなたは<b>夜側の指揮者</b>。デッキから魔物を差し向け、AIで戦う光の少女<b>「ルミナ」</b>を追い詰める。<br>
       彼女に魔物が倒されるほどあなたのエネルギーとエッセンスは増え、彼女もまた強くなる。</p>
       <div style="text-align:center;color:var(--gold);font-size:12px;margin-bottom:8px">${esc(best)} ・ 通算${META.runs}戦 / 捕獲${META.captures}回</div>
       <div class="menu-grid">
-        <button data-act="battle">▶ 出撃<small>5分間の観測戦闘</small></button>
+        <button data-act="battle">▶ 出撃 — 第${curFloor().depth}層 ${esc(curFloor().name)}<small>${(META.run.fails||0)>0?'再挑戦(連敗'+META.run.fails+'/'+BAL.RUN_FAILS_RESET+')':(META.run.day||1)+'日目'} ・ 編成: ${({manual:'手動',auto:'おまかせ',random:'ランダム'})[META.settings.deckMode||'manual']}</small></button>
+        <button class="sub" data-act="randomBattle">🎲 ランダム編成で出撃<small>持っている魔物から無作為に組む</small></button>
+        <button class="sub" data-act="deckMode">🧭 編成モード: ${({manual:'手動',auto:'おまかせ(階層に合わせる)',random:'ランダム'})[META.settings.deckMode||'manual']}<small>出撃直前に自動で組み直す</small></button>
         <button class="sub" data-act="go" data-arg="deck">🃏 デッキ編成<small>${META.deck.length}/${DECK_CAP} 枚</small></button>
         <button class="sub" data-act="go" data-arg="lab">✦ 研究所<small>解放・強化・融合・陣形</small></button>
         <button class="sub" data-act="go" data-arg="altar">◉ オーブの祭壇<small>ルミナの初期状態を書き換える</small></button>
@@ -244,7 +253,9 @@ const UI={
       ・拘束役は接触すると<b>四肢に絡みつく</b>。ルミナは移動と攻撃でもがいて引き剥がすが、<b>スタミナ</b>を消耗する。<br>
       ・スタミナが薄い時に拘束すると<b>押し倒し</b>。<b>HPかスタミナを削りきれば敗北=捕獲</b>。与ダメ・異常・捕獲で<b>オーブ</b>獲得。<br>
       ・ルミナの回復ハートは、彼女が<b>燭台を壊した時だけ</b>落ちる。回復させたくなければ燭台の周りで待ち伏せを。<br>
-      ・ルミナは倒した魔物の経験で戦闘中レベルアップし、武器を融合させて強くなる。さらに<b>${BAL.GEN_LEN}戦ごとの世代内</b>で経験を持ち越す。<br>
+      ・ルミナは倒した魔物の経験で戦闘中レベルアップし、武器を融合させて強くなる。経験は<b>潜行のあいだ</b>持ち越す。<br>
+      ・<b>深淵は5階層</b>。一日=一階層。彼女が<b>降り口に着けば次の階層</b>へ(その日は終わり)、捕まれば同じ階層に再挑戦、<b>二連敗で入口へ戻り経験はリセット</b>(手記だけ残る)。最深部の<b>魔核</b>を討たれると彼女の目的は果たされ、深淵は組み替わる。<br>
+      ・深いほど夜側の<b>EN上限と回復</b>が増え、魔物は硬くなる。階層ごとに得意な種がいる(デッキ編成の画面に表示)。
       ・世代が変わると彼女の経験はリセット。ただし<b>祭壇の書き換え</b>は永続する。<br>
       ・護りが高く、序盤はダメージがほぼ通らない。エッセンスで魔物を育て、オーブで彼女を崩すこと。</p></details>
       <div class="note" style="text-align:center">
@@ -275,6 +286,8 @@ const UI={
     }).join('');
     return `
       <h2>🃏 デッキ編成 <span style="font-size:12px;color:var(--dim)">(${META.deck.length}/${DECK_CAP})</span></h2>
+      <div class="note">次は<b>第${curFloor().depth}層 ${esc(curFloor().name)}</b>。この階層で硬くなる種(HP×${BAL.FLOOR_AFFINITY}): ${curFloor().affinity.filter(id=>MONSTERS[id]).map(id=>esc(MONSTERS[id].name)).join('・')}。EN: 上限×${curFloor().en.max}・回復×${curFloor().en.regen}
+        <span data-act="deckMode" style="cursor:pointer;text-decoration:underline;margin-left:8px">編成モード: ${({manual:'手動',auto:'おまかせ',random:'ランダム'})[META.settings.deckMode||'manual']}</span></div>
       <div class="note">雑魚・中型は全陣形で出せる。大型は<b>精鋭/双璧</b>の少数精鋭のみ、ボスは<b>単騎</b>。戦闘中に彼女が開けた宝箱からは、ランダムな魔物がこちらの手札に加わる(その戦闘限り・枚数制限なし)。</div>
       ${sections}
       <div class="note">陣形は戦闘中に選択します。解放済み: ${META.formations.map(f=>esc(FORMATIONS[f].name)).join(' / ')}</div>
@@ -285,7 +298,7 @@ const UI={
     const rows=[];
     for(const id in MONSTERS){
       const m=MONSTERS[id], st=META.cards[id];
-      if(m.item) continue;
+      if(m.item||m.guardian) continue;
       if(st&&st.owned){
         const atMax=st.lv>=CARD_LV_MAX;
         const cost=atMax?0:cardUpCost(id,st.lv);
@@ -414,7 +427,7 @@ const UI={
         <div class="kv">
           <div>名前 <b>ルミナ</b>(成人・光の守り手)</div>
           <div>世代 <b>第${genNum(META.gen.idx)}</b></div>
-          <div>戦歴 <b>${META.gen.battle}/${BAL.GEN_LEN}</b> <span>(満了で経験リセット)</span></div>
+          <div>潜行の日数 <b>${META.gen.battle}</b> <span>(二連敗か魔核討伐でリセット)</span></div>
         </div>
         <div class="kv" style="margin-top:4px">
           <div>HP <b>${preview.maxHp}</b></div>
@@ -450,7 +463,7 @@ const UI={
         <div class="kv">
           <div>見つけた場所 <b>${Object.values((META.map&&META.map.known)||{}).filter(Boolean).length}/10</b> <span>(祠3・泉2・門1・清水2・石碑2。見えた場所・光茸の光で知った場所を目当てに歩く)</span></div>
           <div>祠の加護 <b>${Object.keys((META.map&&META.map.visited)||{}).length}/3</b> <span>(着くと自己強化が1段・世代内で1度ずつ)</span></div>
-          <div>門の突破 <b>${(META.map&&META.map.gateDone)||0}回</b> <span>(進み ${Math.round((META.map&&META.map.gateProg)||0)}/12秒。日を跨いで進む。2日目以降か3種を理解してから挑む)</span></div>
+          <div>潜行 <b>第${curFloor().depth}層 ${esc(curFloor().name)}</b> <span>(${META.run.day||1}日目・連敗 ${META.run.fails||0}/${BAL.RUN_FAILS_RESET}・最深 第${META.run.deepest||1}層・魔核討伐 ${META.run.clears||0}回)</span></div>
         </div>
         <div class="note" style="margin-top:6px">${Object.keys(ZONES).map(z=>'<b>'+esc(ZONES[z].name)+'</b>: '+esc(ZONES[z].desc)+' — 彼女には: '+esc(ZONES[z].her)).join('<br>')}</div>
         <div class="note" style="margin-top:6px">目当て(v1.8): 彼女は光の柱・宝箱・落ちた品・場所・資源を「価値÷距離」で選び、脅威が薄ければそこへ歩く(進む先のジェムだけ拾う)。HUDの「目当て」チップとミニマップの点線に向かう先が出るので、先回りして待ち伏せできる。イベント(光の柱)は30秒後から50〜75秒ごと。</div>
@@ -493,7 +506,7 @@ const UI={
 
   /* ---------- 図鑑 ---------- */
   htmlCodex(){
-    const ids=Object.keys(MONSTERS).filter(id=>!MONSTERS[id].item);
+    const ids=Object.keys(MONSTERS).filter(id=>!MONSTERS[id].item && (!MONSTERS[id].guardian || (META.codex[id]&&META.codex[id].seen)));   // 魔核は出会ってから載る
     const stageTxt=['見かけた','追記一','追記二','追記三'];
     const cards=ids.map(id=>{
       const m=MONSTERS[id], stg=codexStage(id);
@@ -550,8 +563,12 @@ const UI={
     $('resbar').hidden=false;
     this.refreshRes();
     const cap=sum.outcome==='capture';
-    const title=cap?'★ 捕獲成功':(sum.outcome==='survive'?'守りきられた……':'撤退……');
+    const title=cap?'★ 捕獲成功':(sum.outcome==='descend'?'降りられた……(第'+((sum.floorBefore||1)+1)+'層へ)':(sum.outcome==='clear'?'魔核、討たれる——彼女は目的を果たした':(sum.outcome==='survive'?'守りきられた……':'撤退……')));
     const color=cap?'var(--vio)':'var(--gold)';
+    const runHtml=sum.runNote==='reset'?`<div class="newbadge">⟳ 二連敗——深淵の霧が彼女の記憶を奪い、入口へ。次より第${genNum(META.gen.idx)}世代(手記だけが残る)</div>`
+      :(sum.runNote==='retry'?`<div class="note" style="color:#ff86b3;margin:6px 0">彼女は明日も第${(sum.floor||{}).depth||1}層に立つ(連敗 ${sum.fails}/${BAL.RUN_FAILS_RESET}。あと1敗でリセット)</div>`
+      :(sum.runNote==='descend'?`<div class="note" style="color:#8fd3ff;margin:6px 0">次の潜行は第${sum.nextFloor}層 ${esc((FLOORS[(sum.nextFloor||1)-1]||{}).name||'')}。深いほど夜側のENは多く、魔物は硬い</div>`
+      :(sum.runNote==='clear'?`<div class="newbadge">✦ 深淵は組み替わる。次より第${genNum(META.gen.idx)}世代——彼女はまた入口に立つ</div>`:'')));
     const by=cap&&sum.capturedBy&&MONSTERS[sum.capturedBy]?MONSTERS[sum.capturedBy].name:null;
     const causeTxt=cap?({stamina:'スタミナが尽き、組み伏せられた', charm:'魅了に蕩けたまま、力尽きた', hp:'体力が尽きた'}[sum.cause]||'体力が尽きた'):null;
     const scene=cap?sceneFor('capture',sum.capturedBy):null;
@@ -561,10 +578,11 @@ const UI={
     const cgHtml=cap?`<div id="cgWrap"></div>`:'';
     this.root.innerHTML=`<div class="screen"><div class="inner" style="text-align:center;min-width:340px">
       <h2 style="color:${color}">${title}</h2>
+      ${runHtml}
       ${by?`<div style="font-size:12px;color:var(--body)">とどめ: ${esc(by)}${causeTxt?' — '+esc(causeTxt):''}</div>`:''}
       ${sum.shop&&sum.shop.length?`<div class="note" style="color:var(--gold);margin:6px 0">——夜が明けて、ルミナは自分を強化した——<br>${sum.shop.map(esc).join(' ・ ')}</div>`:''}
       ${sum.shrines&&sum.shrines.length?`<div class="note" style="color:#ffd76a;margin:6px 0">——祠の加護: ${sum.shrines.map(esc).join(' ・ ')}——</div>`:''}
-      ${sum.gateT>0?`<div class="note" style="color:#ff86b3;margin:6px 0">門に挑んだ(${Math.round(sum.gateT)}秒)。突破の進み: ${Math.round(Math.min(12,(META.map&&META.map.gateProg)||0))}/12秒</div>`:''}
+      ${sum.seals>0?`<div class="note" style="color:#ffd76a;margin:6px 0">封印石を ${sum.seals}/3 灯した</div>`:''}
       ${sum.used&&(sum.used.shroom+sum.used.nectar+sum.used.treasure+sum.used.pool+sum.used.stele)>0?`<div class="note" style="color:#9fe8c8;margin:6px 0">地形の資源: ${[['光茸',sum.used.shroom],['蜜の花',sum.used.nectar],['沈んだ宝',sum.used.treasure],['清水',sum.used.pool],['石碑',sum.used.stele]].filter(a=>a[1]>0).map(a=>a[0]+'×'+a[1]).join(' ・ ')}</div>`:''}
       ${sum.eventsN>0?`<div class="note" style="color:#ffe9b0;margin:6px 0">光の柱 ${sum.eventsN}回(彼女が辿り着いた ${sum.eventsDone}回)</div>`:''}
       ${sum.willUp?`<div class="note" style="color:#8fd3ff;margin:6px 0">——抵抗の意志が固くなった(${sum.will}/${BAL.WILL_CAP})。次からの彼女は少し粘る——</div>`:''}
@@ -579,7 +597,7 @@ const UI={
         <span style="color:var(--gold)">🪙 ルミナのコイン +${sum.coins||0}</span>
       </div>
       ${sceneHtml}
-      ${sum.rotReset?`<div class="newbadge">⟳ ルミナの戦闘経験がリセットされた — 次より第${genNum(META.gen.idx)}世代</div>`:''}
+
       <div class="row" style="margin-top:12px">
         <button class="gold" data-act="again">▶ もう一度出撃</button>
         <button class="sub" data-act="go" data-arg="deck">🃏 編成</button>

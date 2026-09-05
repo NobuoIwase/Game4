@@ -5,8 +5,8 @@
 ============================================================ */
 
 const BAL={
-  RUN_TIME:300,            // 1戦=5分(v0.5で試験延長)
-  GEN_LEN:4,               // この戦数ごとにヒロインの経験がリセット
+  RUN_TIME:300,            // (v2.0で未使用: 時間制限は無い。互換のため残す)
+  GEN_LEN:4,               // (v2.0で未使用: 世代は二連敗か魔核討伐で変わる)
   FIELD_CAP:260,           // 場に出せる魔物の上限(超えると召喚不可)——画面を埋める
   EN_BASE:14, EN_PER_LV:3, EN_MAX:80,
   EN_REGEN:1.0, EN_REGEN_LV:0.08,      // v1.1: 初期回復を少し上げた
@@ -145,6 +145,11 @@ const BAL={
   GEM_CAP:600,
 
   CHEST_TIMES:[40,110,180,250],
+  // v2.0 階層
+  EXIT_STAND:2.5, EXIT_WORTH:0.5, EXIT_WORTH_PER_MIN:0.5, EXIT_HP_MIN:0.45,   // 降り口: そばに立つ秒数 / 目当ての価値(時間で増す) / HPがこれ未満なら降りない
+  RUN_FAILS_RESET:2, DESCEND_ESS:60, CLEAR_ESS:40,                           // 二連敗でリセット / 降りられた日・魔核を討たれた日の夜側エッセンス
+  CORE_HP:16000, CORE_WHIP_CD:2.4, CORE_PULSE_CD:7, CORE_SPAWN_CD:9,            // 魔核
+  FLOOR_AFFINITY:1.2, FLESH_HEAT:1.6,                                         // 階層の得意種 HP倍率 / 肉の床の発情ゲージ(毎秒)
   // v1.9 武器の上限: Lv5 までは従来の伸び、Lv6〜8 は覚醒(進化後も効く)。全部が上限なら「ルミナの祈り」(無駄なレベルを出さない)
   WP_EVO_LV:5, WP_OVER_DMG:0.15, WP_OVER_CD:0.93, WP_OVER_AREA:0.05,
   PRAY_DMG:0.04, PRAY_HP:0.03, PRAY_SPD:0.01, PRAY_HEAL:40,
@@ -339,6 +344,13 @@ const MONSTERS={
     desc:'夜の統率者。突進で薙ぎ払い、掠めた相手をよろめかせる。召喚は1戦に1度。',
     trait:'突進/接触よろめき。呪い『吸われ癖』',
   },
+  /* ---- v2.0 最深部の大ボス(カードではない。最終階層の守り) ---- */
+  core:{
+    name:'魔核', role:'大ボス・深淵の心臓', cost:0, unlock:-1, tier:'boss', guardian:true,
+    hp:5200, spd:0, r:58, dmg:14, xp:400, boss:true,
+    desc:'深淵の心臓。肉の巣の最奥で脈打ち、鞭のような根で四肢を繋ぎ、脈動で快感を送り、床から手を生やす。倒せば彼女の目的は果たされる。',
+    trait:'根の繋留/快感の脈動/手の召喚。討たれると深淵が組み替わる',
+  },
   /* ---- v1.6 ボス4種 ---- */
   slimeking:{
     name:'粘獣王', role:'ボス・粘液', cost:24, unlock:1000, tier:'boss',
@@ -378,18 +390,33 @@ const ZONES={
   flower:   { name:'花園',       col:'#2f5638', desc:'媚薬の雲が濃く広い(+20%)。花粉で彼女の敏感化がじわじわ進む', her:'蜜の花(スタミナとHPが戻る。花粉は浴びる)' },
   hotspring:{ name:'温泉',       col:'#5a3a3c', desc:'湯気で彼女の回復+50%。代わりに敏感化と発情ゲージが上がる', her:'泉がある(HPが減っていれば浸かって休む)' },
   ruin:     { name:'石畳の回廊', col:'#3a3a4a', desc:'彼女の足も魔物の足も速い(+6%)', her:'石碑(読むと魔物の知識が進む)。宝箱は回廊に落ちやすい' },
-  nest:     { name:'魔物の巣',   col:'#4a2038', desc:'魔物のHP+15%・速度+10%。門がある', her:'目当ては門だけ。用がなければ避けて歩く' },
+  nest:     { name:'魔物の巣',   col:'#4a2038', desc:'魔物のHP+15%・速度+10%', her:'用がなければ避けて歩く' },
+  flesh:    { name:'肉の床',     col:'#6a2440', desc:'触手・手・壺・ワームのHP+20%・速度+10%。最深部の床', her:'脈がうつる(踏むと発情ゲージがじわじわ上がる)。降り口か魔核だけが目当て' },
 };
 const ZONE_IDS=Object.keys(ZONES);
-const ZONE_HP_MON={ damp:{slug:1.25,leech:1.25,worm:1.25,slimeking:1.25}, nest:{'*':1.15} };
-const ZONE_SPD_MON={ water:{slime:1.3,mistslime:1.3,slimeking:1.3}, ruin:{'*':1.06}, nest:{'*':1.1} };
+const ZONE_HP_MON={ damp:{slug:1.25,leech:1.25,worm:1.25,slimeking:1.25}, nest:{'*':1.15}, flesh:{gtent:1.2,hand:1.2,pot:1.2,worm:1.2,ghosthand:1.2,slugqueen:1.2} };
+const ZONE_SPD_MON={ water:{slime:1.3,mistslime:1.3,slimeking:1.3}, ruin:{'*':1.06}, nest:{'*':1.1}, flesh:{gtent:1.1,hand:1.1,worm:1.1,ghosthand:1.1} };
 const POI_DEF={
   shrine:{ name:'祠',   desc:'着くと彼女の自己強化が1段上がる(世代内で1度ずつ)' },
   spring:{ name:'泉',   desc:'HPが減っていれば湯に浸かって休む。回復するが、敏感化と発情ゲージが上がる' },
-  gate:  { name:'門',   desc:'巣の奥の門。そばに12秒居続けると突破(日を跨いで進む)。突破のたび巣の魔物が湧く' },
+  stairs:{ name:'降り口', desc:'次の階層へ降りる穴。そばに2.5秒立てば降りる=その日は終わり。夜側はその前に捕まえたい' },
+  core:  { name:'魔核の間', desc:'最深部の奥。魔核(大ボス)が待つ。倒せば彼女の目的は果たされる' },
+  seal:  { name:'封印石', desc:'沈んだ回廊の石。3つ全てを灯さないと降り口が開かない(そばに2.5秒)' },
   pool:  { name:'清水', desc:'湿った洞の澄んだ水。敏感化・発情・粘液がひどければ浸かって流す(2秒・45秒に1度)' },
   stele: { name:'石碑', desc:'石畳の回廊の碑文。読むと出会った魔物の知識が1段進み、知らない場所が1つ分かる(1戦1度ずつ)' },
 };
+/* ================= v2.0 階層(深淵) =================
+   一日=一階層。降り口に着けば次の階層へ(その日は終わり)。捕まれば同じ階層に再挑戦、二連敗で入口へ戻る(世代が変わり経験を失う。手記だけ残る)。
+   最終階層は魔核を倒せば目的達成。深いほど夜側のENが多く、魔物も硬い(mon)。affinity=その階層で HP×1.2 になる種 */
+const FLOORS=[
+  { id:'f1', name:'入口の洞',   sub:'苔と水の浅い洞。まだ光が届く',          depth:1, zoneW:{moss:5,damp:3,water:1,ruin:1,flower:1}, wall:'rock',  en:{start:1.0,base:1.0,regen:1.0,max:1.0},     mon:{hp:1.0,dmg:1.0},   affinity:['slug','worm','goblin','hand'], col:'#8fd3ff' },
+  { id:'f2', name:'水鏡の洞',   sub:'浅瀬と湿った洞。足を取られる',          depth:2, zoneW:{damp:4,water:4,moss:2,hotspring:1},        wall:'rock',  en:{start:1.1,base:1.15,regen:1.15,max:1.15}, mon:{hp:1.15,dmg:1.05}, affinity:['slime','mistslime','leech','slimeking','worm'], col:'#7fe0ff' },
+  { id:'f3', name:'蜜の花園',   sub:'花と温泉。甘い匂いが濃い',              depth:3, zoneW:{flower:5,moss:2,hotspring:2,damp:1},        wall:'rock',  en:{start:1.2,base:1.3,regen:1.3,max:1.3},     mon:{hp:1.3,dmg:1.1},   affinity:['flower','moth','gas','imp','succubus','dreamtree'], col:'#ffb3cf' },
+  { id:'f4', name:'沈んだ回廊', sub:'石畳の遺跡。封印石を灯さねば降り口は開かない', depth:4, zoneW:{ruin:6,damp:2,water:1,moss:1},          wall:'brick', en:{start:1.3,base:1.5,regen:1.5,max:1.5},     mon:{hp:1.5,dmg:1.15},  affinity:['gazer','beamer','eye','runemage','tower','bossgazer'], puzzle:'seals', col:'#cbd5ff' },
+  { id:'f5', name:'肉の巣',     sub:'最深部。壁も床も脈打つ。魔核が待つ',    depth:5, zoneW:{flesh:5,nest:3,flower:1,damp:1},           wall:'flesh', en:{start:1.5,base:1.75,regen:1.75,max:1.75}, mon:{hp:1.75,dmg:1.25}, affinity:['gtent','hand','pot','worm','slugqueen','succuqueen','gobking','vampi'], final:true, col:'#ff6b81' },
+];
+const curFloorIdx=()=>Math.min(FLOORS.length-1,Math.max(0,((META.run&&META.run.floor)||1)-1));
+const curFloor=()=>FLOORS[curFloorIdx()];
 /* v1.8 地形の資源(拾い物): 地形帯ごとに生える/沈んでいる。彼女は必要に応じて目当てにする */
 const PICK_DEF={
   shroom:  { name:'光茸',     zone:'moss',   desc:'拾うと経験値。光で 900px 内の場所を知る' },

@@ -283,6 +283,19 @@ idは汎用カタログ準拠。効果はすべて数値・挙動レベルで表
 - 武器: `UPG[wp].max` 5→8。式の Lv は `min(5, Lv)` で止め、`wpOver(Lv)` = {dmg: 1+0.15×(Lv−5), cd: 0.93^(Lv−5), area: 1+0.05×(Lv−5)} を火力・間隔・範囲に掛ける(進化後も効く。オーブは個数=Lv、火力に覚醒)。
   進化条件は `BAL.WP_EVO_LV`(5)。全部が上限で候補が無いレベルアップは `applyPray`: dmgMult×1.04・最大HP+3%・速度+1%・回復 40。
 
+### 3-18. v2.0 深淵(階層・一日一階層・リセット)
+
+- `FLOORS`(data.js): 5階層。`zoneW`(地形帯の重み=ボロノイの母点数)、`wall`(rock/brick/flesh → TILE_ATLAS の行)、`en`(EN 開始/基礎/回復/上限の倍率)、`mon`(HP/攻の倍率)、`affinity`(HP×1.2 の種)、`puzzle:'seals'`、`final`。
+  `META.run={floor,fails,day,clears,deepest}`。`genMap()` の種は 世代×階層(`1000+gi*7919+fl*104729`)。場所の鍵は `f<階層>:<種類><番号>`、`META.map` は世代か階層が変わると捨てる(再挑戦では保つ)。
+- 一日の終わり: 捕獲 / 降り口(`stairs` POI。そばに `EXIT_STAND` 秒で `startDescend` → mode survived → `endBattle('descend')`) / 魔核討伐(`killEnemy` で `B.cleared` → `endBattle('clear')`)。時間制限(RUN_TIME)は使わない。
+  `endBattle`: capture → `run.fails++`、`RUN_FAILS_RESET`(2)で `runReset()`(入口・世代+1・know/zoneKnow/trapKnow を捨てる・加護の減衰)。descend → `run.floor++`。clear → `run.clears++`・`runReset()`。夜側の報酬: 降りられた日 +60、討たれた日 +40。
+- 降り口の目当て: 価値 `EXIT_WORTH + EXIT_WORTH_PER_MIN×分`(時間が経つほど降りたくなる)。HP<45% では降りない。封印の階層は3つの `seal` を灯す(各 2.5 秒)まで `exitLocked`。
+- EN: `enMax = min(EN_MAX×F.en.max, EN_BASE×F.en.base + …)`、回復 ×F.en.regen、開始 ×F.en.start。魔物: `spawnUnit` で HP×F.mon.hp(得意種はさらに ×1.2)、攻×F.mon.dmg。魔核(guardian)は除く。
+- 魔核 `core`(MONSTERS、guardian・カードではない): 最終階層の `core` POI に据わる。`coreTick`: 210px 内で根の鞭(0.6 秒の予兆 → 繋留 r210)、420px 内で 7 秒ごとの脈動(快感 8〜18・発情 14・敏感 4・よろめき)、520px 内で 9 秒ごとに手/ワーム(HP<50% で大触手も)を彼女の周りに生やす。被ダメ ×0.55。
+- 編成: `buildDeck('random'|'auto')`(階級ごとに TIER_CAP まで。auto は得意種+10・練度で並べる)。`META.settings.deckMode` で出撃直前に `applyDeckMode()`。ホームに「ランダム編成で出撃」。
+- オート指揮: ボスは `shuffle` してから出せるものを出す(固定順にならない)。
+- 淫紋の知識 `crestKnow()` = max(刻印師の知識, 紋の罠に掛かった回数 1/3/6 → 認識/理解/熟知)。認識: 見える紋の罠(`B.traps`)を避ける・目当てにしない。理解: 呪弾を ×1.6 で外す。熟知: 40% で紋を払う(`runeHit`/`trapsTick`)。
+
 ### 3-6. 回復=燭台
 
 回復ハートは撃破ドロップしない。マップの**燭台(HP24)を彼女が能動的に撃ち壊した時だけ**

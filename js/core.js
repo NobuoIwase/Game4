@@ -163,7 +163,7 @@ function defaultMeta(){
     v:3,
     essence:0, orbs:0,
     runs:0, captures:0,
-    gen:{ idx:1, battle:0, know:{} },     // 世代 / 世代内の戦闘数(0..GEN_LEN-1) / 世代内の学習 {id:{met,cap}}
+    gen:{ idx:1, battle:0, know:{} },     // 世代(潜行) / 潜行の日数 / 世代内の学習 {id:{met,cap}}
     cards:{ slug:{owned:true,lv:1}, worm:{owned:true,lv:1}, ghost:{owned:true,lv:1} },
     deck:['slug','worm','ghost'],
     formations:['scatter'],
@@ -178,8 +178,9 @@ function defaultMeta(){
     best:null,
     lumina:{ coins:0, will:0, upg:{vital:0,guard:0,bless:0,swift:0,grit:0,zeal:0} },  // 彼女の自己強化(永続)・抵抗の意志
     curse:null,   // ボス敗北の呪い {id,left}
-    map:{ gen:0, known:{}, visited:{}, gateProg:0, gateDone:0, seen:0 },   // 地形マップの記憶(世代ごと)
-    settings:{ autoplay:true, gfx:'hd', gfxAuto:true },   // gfx: 'hd'=描き込み / 'pixel'=ドット。gfxAuto: fps低下で装飾を自動で省く
+    map:{ gen:0, floor:0, known:{}, visited:{}, seen:0 },   // 地形マップの記憶(世代・階層ごと)
+    run:{ floor:1, fails:0, day:1, clears:0, deepest:1, storySeen:{} },   // v2.0 深淵の潜行: 今の階層 / この階層での連敗 / 潜行の日数 / 魔核討伐回数 / 最深到達
+    settings:{ autoplay:true, gfx:'hd', gfxAuto:true, deckMode:'manual' },   // deckMode: manual / auto(階層に合わせておまかせ) / random   // gfx: 'hd'=描き込み / 'pixel'=ドット。gfxAuto: fps低下で装飾を自動で省く
   };
 }
 let META=defaultMeta();
@@ -194,13 +195,15 @@ function loadMeta(){
       META.life=Object.assign(defaultMeta().life, d.life);
       for(const k of ['ailBy','capBy','capCause']) META.life[k]=Object.assign({}, (d.life||{})[k]||{});
       META.nightItems=Object.assign({mist:true}, d.nightItems||{});
+      META.run=Object.assign(defaultMeta().run, d.run||{}); META.run.storySeen=META.run.storySeen||{};
+      META.map=Object.assign(defaultMeta().map, d.map||{}); if(META.map.floor===undefined) META.map.floor=0;
       META.traits=Object.assign({}, d.traits||{});
       META.codex=Object.assign({}, d.codex||{});
       META.rot=Object.assign(defaultMeta().rot, d.rot);
       META.settings=Object.assign(defaultMeta().settings, d.settings);
       META.lumina=Object.assign({coins:0,will:0,upg:{}}, d.lumina);
       META.curse=(d.curse&&d.curse.id&&d.curse.left>0)?d.curse:null;
-      META.map=Object.assign({gen:0, known:{}, visited:{}, gateProg:0, gateDone:0, seen:0}, d.map||{});
+      META.map=Object.assign({gen:0, floor:0, known:{}, visited:{}, seen:0}, d.map||{});
       META.map.known=META.map.known||{}; META.map.visited=META.map.visited||{};
       META.lumina.upg=Object.assign({vital:0,guard:0,bless:0,swift:0,grit:0,zeal:0}, (d.lumina||{}).upg);
       migrateCards();

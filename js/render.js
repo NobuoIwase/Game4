@@ -869,7 +869,8 @@ function drawEnemy(g,e){
 }
 /* 種族ごとの本体描画(drawEnemy から分離。描き込みモードではオフスクリーンで陰影を重ねる) */
 function drawBody(g,e){
-  if(e.id==='slimeking') drawSlimeking(g,e);
+  if(e.id==='core') drawCore(g,e);
+  else if(e.id==='slimeking') drawSlimeking(g,e);
   else if(e.id==='runemage') drawRunemage(g,e);
   else if(e.id==='succuqueen') drawSuccuqueen(g,e);
   else if(e.id==='gobking') drawGobking(g,e);
@@ -2191,6 +2192,35 @@ function drawPlaceCursor(g,id,x,y){
   g.fillText(it.icon+' '+it.name+'  EN'+it.cost, 0, -R*0.7-14);
   g.restore();
 }
+/* v2.0 魔核: 最深部の心臓。濡れた肉の塊、太い根、縦に裂けた目。脈動(pulseT)で膨らみ、鞭(whipT)で根が彼女へ伸びる */
+function drawCore(g,e){
+  const r=e.r, t=e.t, ph=e.maxHp?e.hp/e.maxHp:1;
+  const beat=1+0.045*Math.sin(t*(ph<0.5?5.2:3.4))+(e.pulseT>0?0.12*Math.sin(e.pulseT*9):0);
+  g.save();
+  g.fillStyle='rgba(20,4,12,0.55)'; g.beginPath(); g.ellipse(0,r*0.35,r*1.5,r*0.6,0,0,TAU); g.fill();
+  // 根(床へ広がる)
+  g.strokeStyle='#5a1630'; g.lineWidth=7; g.lineCap='round';
+  for(let i=0;i<9;i++){ const a=i*TAU/9+0.3+Math.sin(t*0.7+i)*0.05; const L=r*1.9+Math.sin(t*1.3+i*2)*6; g.beginPath(); g.moveTo(Math.cos(a)*r*0.7,Math.sin(a)*r*0.35); g.quadraticCurveTo(Math.cos(a+0.25)*r*1.3,Math.sin(a+0.25)*r*0.7,Math.cos(a)*L,Math.sin(a)*L*0.55); g.stroke(); }
+  g.strokeStyle='rgba(200,80,120,0.35)'; g.lineWidth=2.5;
+  for(let i=0;i<9;i++){ const a=i*TAU/9+0.3; const L=r*1.9; g.beginPath(); g.moveTo(Math.cos(a)*r*0.7,Math.sin(a)*r*0.35); g.quadraticCurveTo(Math.cos(a+0.25)*r*1.3,Math.sin(a+0.25)*r*0.7,Math.cos(a)*L,Math.sin(a)*L*0.55); g.stroke(); }
+  // 鞭の予兆: 彼女の方へ根が伸びる
+  if(e.whipT>0){ const k=1-e.whipT/0.6; g.strokeStyle='rgba(255,120,170,'+(0.5+0.4*k)+')'; g.lineWidth=5+3*k; g.beginPath(); g.moveTo(0,0); g.lineTo(Math.cos(e.lookA||0)*r*(1.2+2.2*k),Math.sin(e.lookA||0)*r*(1.2+2.2*k)*0.8); g.stroke(); }
+  // 本体
+  g.save(); g.translate(0,-r*0.25); g.scale(beat,beat);
+  const grad=g.createRadialGradient(-r*0.25,-r*0.3,r*0.15,0,0,r*1.05); grad.addColorStop(0,'#c2456f'); grad.addColorStop(0.55,'#7a1f44'); grad.addColorStop(1,'#3a0b20');
+  g.fillStyle=grad; g.beginPath(); g.ellipse(0,0,r,r*0.86,0,0,TAU); g.fill();
+  for(let i=0;i<5;i++){ const a=i*1.3+0.4; g.fillStyle='rgba(180,60,100,0.55)'; g.beginPath(); g.ellipse(Math.cos(a)*r*0.5,Math.sin(a)*r*0.42,r*0.34,r*0.26,a,0,TAU); g.fill(); }
+  g.strokeStyle='rgba(255,110,160,'+(0.35+(e.pulseT>0?0.4:0))+')'; g.lineWidth=2.2;
+  for(let i=0;i<6;i++){ const a=i*TAU/6+t*0.1; g.beginPath(); g.moveTo(Math.cos(a)*r*0.25,Math.sin(a)*r*0.22); g.bezierCurveTo(Math.cos(a+0.4)*r*0.55,Math.sin(a+0.4)*r*0.5,Math.cos(a-0.2)*r*0.8,Math.sin(a-0.2)*r*0.7,Math.cos(a)*r*0.98,Math.sin(a)*r*0.84); g.stroke(); }
+  g.fillStyle='rgba(255,220,235,0.28)'; g.beginPath(); g.ellipse(-r*0.3,-r*0.4,r*0.32,r*0.16,-0.5,0,TAU); g.fill();
+  // 縦に裂けた目(彼女を見る)
+  const la=e.lookA||0, ex=Math.cos(la)*r*0.12, ey=Math.sin(la)*r*0.08;
+  g.fillStyle='#1a0510'; g.beginPath(); g.ellipse(0,0,r*0.16,r*0.42,0,0,TAU); g.fill();
+  g.fillStyle='#ff5d9a'; g.beginPath(); g.ellipse(ex,ey,r*0.07,r*0.3,0,0,TAU); g.fill();
+  g.fillStyle='#fff'; g.beginPath(); g.ellipse(ex-r*0.02,ey-r*0.12,r*0.025,r*0.06,0,0,TAU); g.fill();
+  g.restore();
+  g.restore();
+}
 function drawBoss(g,e){
   const r=e.r;
   const glow=g.createRadialGradient(0,-r*0.8,r*0.3,0,-r*0.8,r*2.1);
@@ -2360,12 +2390,12 @@ function drawHUD(g){
   g.fillText(fmt(B.time), W/2, 26);
   g.shadowBlur=0;
   g.font='9px '+FONT; g.fillStyle='rgba(190,200,240,0.75)';
-  g.fillText('/ '+fmt(BAL.RUN_TIME)+' まで生存でルミナの勝利', W/2, 42);
+  { const F=B.floor||curFloor(); g.fillText('第'+F.depth+'層 '+F.name+' — '+(F.final?'魔核を討てば目的達成':(B.exitLocked?'封印石 '+Object.keys(B.seals||{}).length+'/3 で降り口が開く':'降り口に着けば次の階層へ')), W/2, 42); }
   // 右上
   g.textAlign='right'; g.font='bold 13px '+FONT; g.fillStyle='#ffd76a';
   g.fillText('被撃破 '+B.kills, W-16, 24);
   g.font='10px '+FONT; g.fillStyle='rgba(200,180,255,0.8)';
-  g.fillText('第'+genNum(META.gen.idx)+'世代 / 戦歴'+(META.gen.battle+1)+'/'+BAL.GEN_LEN, W-16, 42);
+  g.fillText('第'+genNum(META.gen.idx)+'世代 / '+(META.run.day||1)+'日目'+((META.run.fails||0)>0?' / 連敗'+META.run.fails:''), W-16, 42);
   // 夜の深まり(彼女のLv連動の夜側強化)
   const nStat=Math.round(Math.min(BAL.NIGHT_STAT_CAP, BAL.NIGHT_STAT_LV*Math.max(0,p.level-1))*100);
   const nUnit=Math.min(BAL.NIGHT_UNIT_MAX, Math.floor(p.level/BAL.NIGHT_UNIT_LV));
@@ -2460,7 +2490,7 @@ function drawHUD(g){
   drawMinimap(g);
   g.fillText('enemies:'+B.enemies.length+' fps:'+Math.round(G.fps)+(TS>1?' x'+TS:''), 12, H-6);
   g.textAlign='right'; g.fillStyle='rgba(255,255,255,0.3)'; g.font='bold 10px '+FONT;
-  g.fillText('v1.9 侵蝕デッキ', W-12, H-6);
+  g.fillText('v2.0 深淵', W-12, H-6);
 }
 function drawCards(g){
   const B=G.B, c=B.lvCards; if(!c) return;
