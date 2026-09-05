@@ -315,6 +315,16 @@ idは汎用カタログ準拠。効果はすべて数値・挙動レベルで表
   `storyTick`: 落ち着いている時(拘束・発情・魔物30体超でない)に 38〜58 秒ごと、その階層の独り言を吹き出しで。降り口で `descend`、魔核の間を見つけた時に `finalEncounter`(1戦1度)。結果画面: clear=`ending`、reset=`reset`。
 - 表示: `#storybox`(盤面の上、タップか時間で閉じる)。ホームの「物語」画面は序章と到達済みの階層の導入、魔核討伐後は結末を載せる。
 
+### 3-21. v2.1 ADV演出・引き継ぎ・深淵の圧・石の番兵・AIの降りる判断・マップ台詞
+
+- **ADV(ui.js `UI.adv`)**: `showStory(lines,{onEnd})` は文字列でも `{s,t,f}` でも受け(`storyNorm`)、`#adv`(立ち絵 `assets/ref/lumina_novelai.png`→無ければ `assets/cg/defeat.png`、名前札、文字送り 26字/秒、自動送り 1.8s+0.09s/字、とばす)に1行ずつ出す。**表示中は main.js が tick を回さず描画だけ**(`UI.advOpen()`)、`UI.tickAdv(rdt)` で文字送り。話者: n=地の文(立ち絵は暗く)/lumina(立ち絵が揺れる、`f-heat`/`f-shy` で頬の紅潮)/town/voice。結末・リセットは `showResult` の描画後に流し、台本は `<details>`。物語画面(`htmlStory`)と結果画面は `storyLineHtml` で話者札付き。
+- **引き継ぎ(game.js `applyRunHero/snapRunHero`)**: `endBattle` の冒頭で `META.run.hero={level,xp,pray,wp,ps,evo,taste}` を写し、`runReset` で消す。`newHero` の最後に復元: wp/ps を0にしてから `applyUpgStat` を段数ぶん積む(vital/ward/regen/endure の数値も揃う)、`applyPrayStat` で祈りも積む、HP/スタミナは満タン。夜側は `heroLv` 連動の夜の深まり(+4%/Lv・上限+80%、頭数+1/6Lv)と `enMax`(3/Lv・階層上限で頭打ち)が自動的に積み上がる。飽和: `need(l)` に `(1+NEED_SOFT_K·max(0,l-20))`、ジェム経験値に `xpSoft=1/(1+0.03·max(0,Lv-15))`、`PRAY_MAX 30`。
+- **深淵の圧(`pressure()`)**: `min(PRESS_MAX, max(0,B.time-PRESS_T0)/PRESS_T1)`(90秒→210秒で1.0、上限2.0)。`enMax()`×(1+0.35p)、EN回復×(1+0.5p)、`spawnCountFor`×(1+0.3p)、`fieldCap()`=260×(1+0.4p)。HUDに数値、0.35/0.9 で帯と台詞。`B.time` は戦闘ごとに戻るので階層を跨げば圧は消える。
+- **石の番兵(`spawnSentinels/sentinelTick/exitGuarded`)**: 降り口 POI の周り半径78(縦0.7)に `SENTINEL_N[depth-1]` 体。`B.sentRing={x,y,key,phase,stepCd,stepT,alert,n}` を**生きている先頭の個体だけが進める**(共有の拍)。彼女と穴の距離<250 で警戒: 各個体は彼女の方向±0.45π に均等な角度で、穴から `max(40,hd-34)` の点(=彼女の手前)へ同じ速度で寄り、`stepT>0` の0.45秒は全員が彼女へ300px/s。警戒外は輪を回る(位相0.22rad/s、警戒中0.04)。穴から330以上は出ない。接触で `attachMonster(e,'tether',{r:36,needMul:1.5,armsOnly})`→`state='idle'`(据わる。attached にはしない: 描画・脈が続く)。抱えている間は動かない。`damageEnemy`×0.5。再登場(REENTER)・壁裏の置き直し・汎用接触から除外、`detachLimb` で据わったまま。最後の1体が死ぬと帯「番兵が沈黙した」。`poiTick` の降り口は `!exitGuarded()` が条件。
+- **降りる判断(`exitTick`)**: `B.wantExit` は戻らないフラグ。圧≥`EXIT_PRESS`(0.5) / HP<42%(40秒以降) / 目当てが無いか探索だけの累積 `idleGoalT`≥40秒(90秒以降)。切り替わると帯と台詞、`goal` を捨てて `updateGoal` が降り口(価値3.2、`goalValid` は wantExit)を選ぶ。`aiDecide` の「脱出バイアス」: 知っている降り口が開いていれば、逃げ(threat>0.9)にも0.5、牽制の代わりにも0.9で降り口方向を混ぜ、70px内では `threat<1.8` まで踏みとどまる。番兵が居る間は目標点を警戒半径-20(彼女側)に置いて番兵を引き出し、逃げながら撃つ。`leaving`(wantExit)中は `updateGoal` のジェムの群れを外し、降り口以外の場所・資源の価値を×0.3(降り口は6.0)。
+- **往復の解消**: `walk = goalOk && goal.kind∉{gems,explore}`(以前は「近くにジェムが無いとき」だけ歩き、FARM_T/FARM_BREAK で往復していた)。歩くときのジェムは `d<170` かつ前方(cos≥-0.1)かつ `d+dist(gem,goal) ≤ dist(goal)+120`。目当てから90px内(`atGoal`)は足元40px以外を拾わない。`updateGoal` に「ジェムの群れ」(半径130内の個数×0.22、上限2.6、3個以上)を候補に追加し、`goalValid` は残り2個以上。乗り換えヒステリシス `GOAL_KEEP 1.25`。
+- **マップ台詞(`sayLine(path,prio,cd,fallback)`)**: `LINES`(lines.js)から1行、同じ path は cd 秒あける、prio≤1 はエロ状態中は出さない(`heroBubble` の優先度に乗せる)。フック: 種族の初見(`seenT>0.45`、1戦1種1回、`knowLv≥2` なら know)、`startEvent`、POI/資源の発見、`storyTick`(階層の独り言)、`linesTick`(0.5秒ごと: 地形 `G.map.feats` の中心+半径、圧0.35/0.9、HP50%、敵が見えない4秒)、`exitTick`、降り口そば(30秒cd)、番兵(守っている/一斉/沈黙)、道すがらの回収(40秒cd)。
+
 ### 3-6. 回復=燭台
 
 回復ハートは撃破ドロップしない。マップの**燭台(HP24)を彼女が能動的に撃ち壊した時だけ**

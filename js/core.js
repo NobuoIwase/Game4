@@ -193,8 +193,8 @@ function defaultMeta(){
     lumina:{ coins:0, will:0, upg:{vital:0,guard:0,bless:0,swift:0,grit:0,zeal:0} },  // 彼女の自己強化(永続)・抵抗の意志
     curse:null,   // ボス敗北の呪い {id,left}
     map:{ gen:0, floor:0, known:{}, visited:{}, seen:0 },   // 地形マップの記憶(世代・階層ごと)
-    run:{ floor:1, fails:0, day:1, clears:0, deepest:1, storySeen:{} },   // v2.0 深淵の潜行: 今の階層 / この階層での連敗 / 潜行の日数 / 魔核討伐回数 / 最深到達
-    settings:{ autoplay:true, gfx:'hd', gfxAuto:true, deckMode:'manual' },   // deckMode: manual / auto(階層に合わせておまかせ) / random   // gfx: 'hd'=描き込み / 'pixel'=ドット。gfxAuto: fps低下で装飾を自動で省く
+    run:{ floor:1, fails:0, day:1, clears:0, deepest:1, storySeen:{}, hero:null },   // hero: v2.1 引き継ぎ(リセットまで残る彼女のLv・武器・パッシブ・進化)   // v2.0 深淵の潜行: 今の階層 / この階層での連敗 / 潜行の日数 / 魔核討伐回数 / 最深到達
+    settings:{ autoplay:true, gfx:'hd', gfxAuto:true, deckMode:'manual', advAuto:true },   // advAuto: v2.1 物語(ADV)の自動送り   // deckMode: manual / auto(階層に合わせておまかせ) / random   // gfx: 'hd'=描き込み / 'pixel'=ドット。gfxAuto: fps低下で装飾を自動で省く
   };
 }
 let META=defaultMeta();

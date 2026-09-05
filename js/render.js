@@ -10,6 +10,7 @@ const EN_COLORS={
   mistslime:['#ffc2d8','#8fe8c9'], gtent:['#a06ac9','#5a3a7a'],
   vampi:['#c04a6a','#ffd76a','#fff'],
   goblin:['#8fd36a','#4a7a3a'], leech:['#ffb3a0','#d87a6a'],
+  sentinel:['#9aa3c8','#5a6284'],
   tower:['#c98cff','#5a3a7a'],
   spore:['#c9ecff','#7fb8e0'], ghosthand:['#dfe4ff','#aab4e8'], eye:['#f0e8ff','#7a3ff2'],
   succubus:['#ff86b3','#5a1f3a'], web:['#ffb3cf','#fff'],
@@ -357,6 +358,7 @@ function goalName(gl){
   if(gl.kind==='chest') return gl.sub==='boss'?'王の宝箱':'宝箱';
   if(gl.kind==='poi') return (POI_DEF[gl.sub]&&POI_DEF[gl.sub].name)||gl.sub;
   if(gl.kind==='pick') return (PICK_DEF[gl.sub]&&PICK_DEF[gl.sub].name)||gl.sub;
+  if(gl.kind==='gems') return 'ジェムの群れ';
   return '探索';
 }
 function dirName(dx,dy){ const a=Math.atan2(dy,dx); const i=Math.round((a+Math.PI)/(Math.PI/4))%8; return ['西','北西','北','北東','東','南東','南','南西'][i]; }
@@ -881,6 +883,7 @@ function drawBody(g,e){
   else if(e.id==='suiyou') drawSuiyou(g,e);
   else if(e.id==='mouth') drawMouth(g,e);
   else if(e.id==='guardian') drawGuardian(g,e);
+  else if(e.id==='sentinel') drawSentinel(g,e);
   else if(e.id==='slimeking') drawSlimeking(g,e);
   else if(e.id==='runemage') drawRunemage(g,e);
   else if(e.id==='succuqueen') drawSuccuqueen(g,e);
@@ -1005,6 +1008,7 @@ function spriteKey(e){
     case 'suiyou': st=e.sub?'u':''; break;
     case 'mouth': st=(e.grabCd||0)>3?'o':''; break;
     case 'guardian': st=e.aimT>0?'a'+Math.min(3,Math.floor((1-e.aimT/1.2)*4)):''; break;
+    case 'sentinel': st=(G.B&&G.B.sentRing&&G.B.sentRing.stepT>0)?'s':(e.state==='idle'?'h':(G.B&&G.B.sentRing&&G.B.sentRing.alert?'a':'')); break;
     case 'flower': st=e.state+(e.revealed?'r':''); break;
     case 'gtent': st=(e.whipT>0?'w':'')+e.state; break;
     case 'imp': st=Math.cos(e.orbitA||0)>=0?'R':'L'; break;
@@ -2267,6 +2271,34 @@ function drawGuardian(g,e){
   if(aim>0){ g.strokeStyle='rgba(201,140,255,'+(0.3+0.5*aim)+')'; g.lineWidth=1.5; const la=e.lookA||0; for(let i=-1;i<=1;i++){ const a=la+i*0.22; g.beginPath(); g.moveTo(Math.cos(a)*r*0.6,-r*1.1+Math.sin(a)*r*0.6); g.lineTo(Math.cos(a)*r*(1.2+aim*3),-r*1.1+Math.sin(a)*r*(1.2+aim*3)); g.stroke(); } }
   g.restore();
 }
+/* v2.1 石の番兵: 兜をかぶった石像の兵。輪で回る時は腕を胸の前に、警戒すると腕を前へ、踏み込み(stepT)で前傾、抱え込み(idle)では腕を大きく開いて閉じる */
+function drawSentinel(g,e){
+  const r=e.r, t=e.t, R=G.B&&G.B.sentRing, step=(R&&R.stepT>0)?1:0, alert=!!(R&&R.alert), hold=e.state==='idle';
+  const lean=step?0.28:(alert?0.1:0);
+  g.save();
+  g.fillStyle='rgba(8,8,26,0.4)'; g.beginPath(); g.ellipse(0,3,r*1.15,r*0.42,0,0,TAU); g.fill();
+  g.rotate(lean*(e.lookA!==undefined?Math.sign(Math.cos(e.lookA||0))||1:1)*0.35);
+  // 脚(石の柱)
+  g.fillStyle='#565d80'; g.fillRect(-r*0.62,-r*0.9,r*0.46,r*0.95); g.fillRect(r*0.16,-r*0.9,r*0.46,r*0.95);
+  g.fillStyle='#3e4460'; g.fillRect(-r*0.7,-r*0.05,r*0.6,r*0.12); g.fillRect(r*0.1,-r*0.05,r*0.6,r*0.12);
+  // 胴(角の丸い石塊)と胸当て
+  const bodyG=g.createLinearGradient(-r,0,r,0); bodyG.addColorStop(0,'#7a82a8'); bodyG.addColorStop(0.5,'#9aa3c8'); bodyG.addColorStop(1,'#6a7296');
+  g.fillStyle=bodyG; rr(g,-r*0.85,-r*2.05,r*1.7,r*1.25,r*0.35); g.fill();
+  g.strokeStyle='rgba(30,32,56,0.55)'; g.lineWidth=1.2; g.beginPath(); g.moveTo(-r*0.5,-r*1.7); g.lineTo(-r*0.2,-r*1.2); g.moveTo(r*0.45,-r*1.9); g.lineTo(r*0.25,-r*1.45); g.stroke();   // ひび
+  g.fillStyle='rgba(143,211,255,'+(alert?0.55:0.25)+')'; g.beginPath(); g.arc(0,-r*1.5,r*0.16,0,TAU); g.fill();   // 胸の紋(警戒で明るい)
+  // 腕: 輪では胸の前、警戒で前へ、抱え込みでは大きく開いて閉じる形
+  g.strokeStyle='#8790b4'; g.lineWidth=r*0.34; g.lineCap='round';
+  const sw=hold?0.9:(alert?0.55:0.15), fw=hold?r*1.1:(alert?r*0.9:r*0.45), ph=Math.sin(t*2.2)*0.05;
+  for(const sd of [-1,1]){ g.beginPath(); g.moveTo(sd*r*0.8,-r*1.75); g.quadraticCurveTo(sd*r*(1.15+sw*0.3),-r*(1.4+ph),sd*r*(1.0-sw*0.6)+fw*0.0,-r*(1.05+sw*0.4)); g.stroke(); }
+  if(hold||alert){ g.strokeStyle='#9aa3c8'; g.lineWidth=r*0.3; g.beginPath(); g.moveTo(-r*0.45,-r*1.2); g.lineTo(fw*0.5,-r*1.05); g.moveTo(r*0.45,-r*1.2); g.lineTo(fw*0.5,-r*1.05); g.stroke(); }
+  // 兜と面(無表情。目の穴だけ淡く光る)
+  g.fillStyle='#6f77a0'; g.beginPath(); g.arc(0,-r*2.35,r*0.6,Math.PI,0); g.lineTo(r*0.6,-r*2.0); g.lineTo(-r*0.6,-r*2.0); g.closePath(); g.fill();
+  g.fillStyle='#4a5074'; g.fillRect(-r*0.62,-r*2.1,r*1.24,r*0.14);
+  g.fillStyle='#3a3f5e'; g.fillRect(-r*0.42,-r*2.28,r*0.84,r*0.22);
+  const ec=alert?'rgba(160,215,255,0.95)':'rgba(140,170,220,0.55)'; g.fillStyle=ec; g.fillRect(-r*0.32,-r*2.24,r*0.2,r*0.12); g.fillRect(r*0.12,-r*2.24,r*0.2,r*0.12);
+  if(step){ glow(g,0,-r*1.5,r*1.4,'143,211,255',0.35); }
+  g.restore();
+}
 /* v2.0 魔核: 最深部の心臓。濡れた肉の塊、太い根、縦に裂けた目。脈動(pulseT)で膨らみ、鞭(whipT)で根が彼女へ伸びる */
 function drawCore(g,e){
   const r=e.r, t=e.t, ph=e.maxHp?e.hp/e.maxHp:1;
@@ -2486,7 +2518,9 @@ function drawHUD(g){
   if(!narrow){
     g.font='9px '+FONT; g.fillStyle='rgba(190,200,240,0.75)';
     const F=B.floor||curFloor();
-    g.fillText('第'+F.depth+'層 '+F.name+' — '+(F.final?'魔核を討てば目的達成':(B.exitLocked?'封印石 '+Object.keys(B.seals||{}).length+'/3 で降り口が開く':'降り口に着けば次の階層へ')), W/2, 42);
+    const nS=B.enemies.filter(e=>e.id==='sentinel'&&!e.dead).length;
+    const st=F.final?'魔核を討てば目的達成':(B.exitLocked?'封印石 '+Object.keys(B.seals||{}).length+'/3 で降り口が開く':(nS>0?'降り口は石の番兵が守る(残り'+nS+')':'降り口に着けば次の階層へ'))+(B.wantExit?' — 彼女は降りたがっている':(F.final?'':' — 彼女は見るものを見てから降りる'));   // v2.1
+    g.fillText('第'+F.depth+'層 '+F.name+' — '+st, W/2, 42);
   }
   // 右上
   g.textAlign='right'; g.font='bold '+(narrow?12:13)+'px '+FONT; g.fillStyle='#ffd76a';
@@ -2501,6 +2535,10 @@ function drawHUD(g){
     g.fillStyle='rgba(212,168,255,0.95)'; g.font='bold '+(narrow?9:10)+'px '+FONT;
     g.fillText('夜の深まり +'+nStat+'%'+(nUnit>0?' / +'+nUnit+'体':''), narrow?W-10:W-RM, narrow?barY+30:58);
   }
+  { const pr=pressure();   // v2.1 深淵の圧(この階層に居る時間で増す)
+    if(pr>0){ g.fillStyle='rgba(255,140,170,0.95)'; g.font='bold '+(narrow?9:10)+'px '+FONT;
+      g.fillText('深淵の圧 +'+Math.round(pr*100)+'%  EN上限+'+Math.round(pr*BAL.PRESS_EN_MAX*100)+'% 頭数+'+Math.round(pr*BAL.PRESS_UNIT*100)+'%', narrow?W-10:W-RM, narrow?barY+42:72); }
+    else if(!narrow){ g.fillStyle='rgba(200,180,255,0.6)'; g.font='9px '+FONT; g.fillText('深淵の圧 まだ静か('+Math.max(0,Math.ceil(BAL.PRESS_T0-B.time))+'秒)', W-RM, 72); } }
   g.shadowBlur=0;
   // ボスHP
   const boss=B.enemies.find(e=>e.boss&&!e.dead&&!MONSTERS[e.id].guardian)||B.enemies.find(e=>e.boss&&!e.dead);
@@ -2592,7 +2630,7 @@ function drawHUD(g){
   drawMinimap(g);
   g.fillText('enemies:'+B.enemies.length+' fps:'+Math.round(G.fps)+(TS>1?' x'+TS:''), 12, H-6);
   g.textAlign='right'; g.fillStyle='rgba(255,255,255,0.3)'; g.font='bold 10px '+FONT;
-  g.fillText('v2.0 深淵', W-12, H-6);
+  g.fillText('v2.1 深淵', W-12, H-6);
 }
 function drawCards(g){
   const B=G.B, c=B.lvCards; if(!c) return;

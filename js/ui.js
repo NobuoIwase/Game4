@@ -1,4 +1,5 @@
 'use strict';
+const ADV_CPS=26;   // v2.1 物語の文字送り(文字/秒)
 /* ============================================================
    ui.js — DOMスクリーンと戦闘バー
 ============================================================ */
@@ -186,15 +187,51 @@ const UI={
   },
 
   hideAll(){ this.root.innerHTML=''; G.screen=''; },
-  /* v2.0 物語の箱: 数行の地の文を盤面の上に出す。タップか時間で閉じる */
+  /* ===== v2.1 ADV(立ち絵+名前+台詞/地の文)。1行ずつタップで送る。表示中はゲーム時間が止まる(main.js が UI.advOpen() を見る) =====
+     lines: 文字列でも {s,t,f} でも可(storyNorm)。opt.onEnd: 閉じた時に呼ぶ */
+  adv:{ open:false, lines:[], idx:0, typeT:0, shown:0, dwell:0, full:'', onEnd:null },
+  advOpen(){ return !!(this.adv&&this.adv.open); },
   showStory(lines,opt){
-    opt=opt||{}; const box=$('storybox'); if(!box||!lines||!lines.length) return;
-    box.innerHTML=lines.map(l=>esc(l)).join('\n')+'<span class="shint">タップで閉じる</span>';
-    box.hidden=false; if(this._storyTimer) clearTimeout(this._storyTimer);
-    this._storyTimer=setTimeout(()=>this.hideStory(), Math.round((opt.dur||9)*1000));
-    if(!this._storyBound){ this._storyBound=true; box.addEventListener('click',()=>this.hideStory()); }
+    opt=opt||{}; const L=storyNorm(lines);
+    if(!L.length){ if(opt.onEnd) opt.onEnd(); return; }
+    const A=this.adv, box=$('adv'); if(!box){ if(opt.onEnd) opt.onEnd(); return; }
+    if(A.open && A.onEnd){ const f=A.onEnd; A.onEnd=null; f(); }   // 前の物語が開いたままなら、その終了処理だけ済ませて差し替える
+    A.lines=L; A.idx=0; A.open=true; A.onEnd=opt.onEnd||null;
+    if(!this._advBound){ this._advBound=true;
+      box.addEventListener('click',e=>{ if(e.target.closest('#advCtl')) return; initAudio(); this.advNext(); });
+      $('advSkip').addEventListener('click',e=>{ e.stopPropagation(); this.hideStory(); });
+      $('advAuto').addEventListener('click',e=>{ e.stopPropagation(); META.settings.advAuto=!(META.settings.advAuto!==false); saveMeta(); this.advSyncAuto(); });
+      document.addEventListener('keydown',e=>{ if(!this.adv.open) return; if(e.code==='Space'||e.code==='Enter'||e.code==='ArrowRight'){ e.preventDefault(); this.advNext(); } else if(e.code==='Escape'){ this.hideStory(); } });
+      const img=$('advImg'); img.addEventListener('error',()=>{ if(img.dataset.fb!=='1'){ img.dataset.fb='1'; img.src='assets/cg/defeat.png'; } else img.style.visibility='hidden'; }); img.src='assets/ref/lumina_novelai.png';
+    }
+    this.advSyncAuto(); box.hidden=false; this.advRender();
   },
-  hideStory(){ const box=$('storybox'); if(box) box.hidden=true; if(this._storyTimer){ clearTimeout(this._storyTimer); this._storyTimer=null; } },
+  advSyncAuto(){ const b=$('advAuto'); if(b) b.textContent='自動送り: '+((META.settings.advAuto!==false)?'ON':'OFF'); },
+  advRender(){
+    const A=this.adv, ln=A.lines[A.idx]; if(!ln) return;
+    const NAMES={lumina:'ルミナ', town:'街の人', voice:'声', n:''};
+    const nm=$('advName'); nm.textContent=(NAMES[ln.s]!==undefined)?NAMES[ln.s]:ln.s; nm.className=ln.s;
+    const st=$('advStand'); st.className=(ln.s==='lumina'?'speak':'dim')+(ln.f?' f-'+ln.f:'');
+    const tx=$('advText'); tx.className=ln.s; tx.textContent='';
+    A.typeT=0; A.shown=0; A.dwell=0; A.full=(ln.s==='lumina'||ln.s==='town'||ln.s==='voice')?'「'+ln.t+'」':ln.t;
+    $('advHint').textContent=(A.idx>=A.lines.length-1)?'▼ タップで閉じる':'▼ タップで次へ';
+  },
+  tickAdv(rdt){
+    const A=this.adv; if(!A.open) return; const full=A.full||'';
+    if(A.shown<full.length){ A.typeT+=rdt; const n=Math.min(full.length,Math.floor(A.typeT*ADV_CPS)); if(n!==A.shown){ A.shown=n; $('advText').textContent=full.slice(0,n); } }
+    else if(META.settings.advAuto!==false){ A.dwell+=rdt; if(A.dwell>=1.8+full.length*0.09) this.advNext(); }
+  },
+  advNext(){
+    const A=this.adv; if(!A.open) return; const full=A.full||'';
+    if(A.shown<full.length){ A.shown=full.length; $('advText').textContent=full; A.dwell=0; return; }   // 表示途中なら全文を出す
+    A.idx++; if(A.idx>=A.lines.length){ this.hideStory(); return; }
+    this.advRender();
+  },
+  hideStory(){
+    const A=this.adv, was=A.open; A.open=false;
+    const box=$('adv'); if(box) box.hidden=true; const sb=$('storybox'); if(sb) sb.hidden=true;
+    if(was && A.onEnd){ const f=A.onEnd; A.onEnd=null; f(); }
+  },
 
   show(name){
     // 同じ画面の再描画(強化ボタン等)ではスクロール位置を保持する
@@ -239,12 +276,12 @@ const UI={
     const wipeArmed=this._wipeArm && performance.now()-this._wipeArm<3000;
     return `
       <h1>ルミナ・サバイバーズ</h1>
-      <div class="sub">v2.0 深淵 — MONSTER DECK × AUTO BATTLE</div>
+      <div class="sub">v2.1 深淵 — MONSTER DECK × AUTO BATTLE</div>
       <p>あなたは<b>夜側の指揮者</b>。デッキから魔物を差し向け、AIで戦う光の少女<b>「ルミナ」</b>を追い詰める。<br>
       彼女に魔物が倒されるほどあなたのエネルギーとエッセンスは増え、彼女もまた強くなる。</p>
       <div style="text-align:center;color:var(--gold);font-size:12px;margin-bottom:8px">${esc(best)} ・ 通算${META.runs}戦 / 捕獲${META.captures}回</div>
       <div class="menu-grid">
-        <button data-act="battle">▶ 出撃 — 第${curFloor().depth}層 ${esc(curFloor().name)}<small>${(META.run.fails||0)>0?'再挑戦(連敗'+META.run.fails+'/'+BAL.RUN_FAILS_RESET+')':(META.run.day||1)+'日目'} ・ 編成: ${({manual:'手動',auto:'おまかせ',random:'ランダム'})[META.settings.deckMode||'manual']}</small></button>
+        <button data-act="battle">▶ 出撃 — 第${curFloor().depth}層 ${esc(curFloor().name)}<small>${(META.run.fails||0)>0?'再挑戦(連敗'+META.run.fails+'/'+BAL.RUN_FAILS_RESET+')':(META.run.day||1)+'日目'}${(META.run.hero&&META.run.hero.level>1)?' ・ 彼女はLv'+META.run.hero.level+'を引き継ぐ':''} ・ 編成: ${({manual:'手動',auto:'おまかせ',random:'ランダム'})[META.settings.deckMode||'manual']}</small></button>
         <button class="sub" data-act="randomBattle">🎲 ランダム編成で出撃<small>持っている魔物から無作為に組む</small></button>
         <button class="sub" data-act="deckMode">🧭 編成モード: ${({manual:'手動',auto:'おまかせ(階層に合わせる)',random:'ランダム'})[META.settings.deckMode||'manual']}<small>出撃直前に自動で組み直す</small></button>
         <button class="sub" data-act="go" data-arg="deck">🃏 デッキ編成<small>${META.deck.length}/${DECK_CAP} 枚</small></button>
@@ -278,7 +315,7 @@ const UI={
   /* v2.0 物語: 序章と、到達した階層の導入。結末・リセットの記録 */
   htmlStory(){
     const deepest=Math.max(1,META.run.deepest||1);
-    const block=(title,lines,color)=>lines&&lines.length?`<h2 style="font-size:14px;color:${color||'var(--vio)'}">${esc(title)}</h2><div class="note" style="white-space:pre-wrap;line-height:1.8;color:#e8dcf5">${lines.map(esc).join('\n')}</div>`:'';
+    const block=(title,lines,color)=>lines&&lines.length?`<h2 style="font-size:14px;color:${color||'var(--vio)'}">${esc(title)}</h2><div class="note storytext">${lines.map(storyLineHtml).join('')}</div>`:'';   // v2.1 話者付き
     let floorsHtml='';
     for(let k=0;k<FLOORS.length;k++){ const F=FLOORS[k], sf=storyFloor(k+1); if(k+1<=deepest) floorsHtml+=block('第'+F.depth+'層 '+F.name,sf.intro,F.col); else floorsHtml+=`<h2 style="font-size:14px;color:var(--dim)">第${F.depth}層 ${esc(F.name)} <span style="font-size:11px">— まだ辿り着いていない</span></h2>`; }
     return `
@@ -602,10 +639,12 @@ const UI={
       : `<div class="note">敗北シーン: テキスト未実装(js/scenes.js のフックへ別途追加)</div>`):'';
     const cgHtml=cap?`<div id="cgWrap"></div>`:'';
     this.hideStory();
-    const storyHtml=(sum.storyLines&&sum.storyLines.length)?`<div class="note" style="white-space:pre-wrap;line-height:1.8;color:#e8dcf5;text-align:left;margin:8px 0">${sum.storyLines.map(esc).join('\n')}</div>`:'';
+    const storyHtml=(sum.storyLines&&sum.storyLines.length)?`<details style="text-align:left;margin:8px 0"><summary style="cursor:pointer;color:var(--vio);font-size:12px">物語を読み返す</summary><div class="note storytext">${sum.storyLines.map(storyLineHtml).join('')}</div></details>`:'';   // v2.1 本文は ADV で流れる
+    const carryHtml=(sum.carryLv>1 && sum.runNote!=='reset' && sum.runNote!=='clear')?`<div class="note" style="color:#ffd76a;margin:6px 0">引き継ぎ: 彼女は Lv${sum.carryLv} と武器・パッシブをそのまま持ち越す(リセットまで)。夜側もそのぶん強くなる</div>`:'';
     this.root.innerHTML=`<div class="screen"><div class="inner" style="text-align:center;min-width:340px">
       <h2 style="color:${color}">${title}</h2>
       ${runHtml}
+      ${carryHtml}
       ${storyHtml}
       ${by?`<div style="font-size:12px;color:var(--body)">とどめ: ${esc(by)}${causeTxt?' — '+esc(causeTxt):''}</div>`:''}
       ${sum.shop&&sum.shop.length?`<div class="note" style="color:var(--gold);margin:6px 0">——夜が明けて、ルミナは自分を強化した——<br>${sum.shop.map(esc).join(' ・ ')}</div>`:''}
@@ -633,6 +672,7 @@ const UI={
         <button class="sub" data-act="go" data-arg="home">ホーム</button>
       </div>
     </div></div>`;
+    if(sum.storyLines&&sum.storyLines.length) this.showStory(sum.storyLines);   // v2.1 結末・リセットの物語は結果画面の上で流れる
     if(cap) this.tryLoadCG(sum.capturedBy);
   },
 

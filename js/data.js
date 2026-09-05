@@ -150,6 +150,16 @@ const BAL={
   RUN_FAILS_RESET:2, DESCEND_ESS:60, CLEAR_ESS:40,                           // 二連敗でリセット / 降りられた日・魔核を討たれた日の夜側エッセンス
   CORE_HP:16000, CORE_WHIP_CD:2.4, CORE_PULSE_CD:7, CORE_SPAWN_CD:9,            // 魔核
   FLOOR_AFFINITY:1.2, FLESH_HEAT:1.6,                                         // 階層の得意種 HP倍率 / 肉の床の発情ゲージ(毎秒)
+  /* v2.1 深淵の圧(時間経過): PRESS_T0 秒までは静か、その後 PRESS_T1 秒で 1.0 に、PRESS_MAX で頭打ち。EN上限/EN回復/召喚頭数/場の上限に掛かる。階層を跨ぐと時間は戻る */
+  PRESS_T0:90, PRESS_T1:210, PRESS_MAX:2.0, PRESS_EN_MAX:0.35, PRESS_EN_REGEN:0.5, PRESS_UNIT:0.3, PRESS_CAP:0.4,
+  /* v2.1 降りる判断: 圧がこれ以上 / HPがこれ未満 / 目当てが探索しか無い時間がこれ以上 → 「降りよう」に切り替わる。降り口の目当て価値 */
+  EXIT_PRESS:0.5, EXIT_HP:0.42, EXIT_IDLE_T:40, EXIT_WORTH_WANT:6.0,
+  /* v2.1 石の番兵: 階層ごとの数 / 基礎HP(深さで+35%/層) / 被ダメ倍率 / 輪の半径 / 警戒半径(彼女と穴) / 出ない距離 / 一斉の踏み込み(間隔・時間・速度) */
+  SENTINEL_N:[3,3,4,4], SENTINEL_HP:260, SENTINEL_DEF:0.5, SENTINEL_RING:78, SENTINEL_ALERT:250, SENTINEL_LEASH:330, SENTINEL_STEP_CD:5.5, SENTINEL_STEP_T:0.45, SENTINEL_STEP_SPD:300,
+  /* v2.1 ジェムの群れを目当てにする(半径・1個あたりの価値・上限) / 目当ての乗り換えに必要な倍率(ふらつき防止) */
+  GEM_CLUSTER_R:130, GEM_CLUSTER_W:0.22, GEM_CLUSTER_MAX:2.6, GOAL_KEEP:1.25,
+  /* v2.1 成長の飽和(引き継ぎ用): Lv NEED_SOFT_LV 超で必要経験値が +K/Lv、Lv XP_SOFT_LV 超でジェムの経験値が 1/(1+K·超過Lv)、祈りの上限 */
+  NEED_SOFT_LV:20, NEED_SOFT_K:0.05, XP_SOFT_LV:15, XP_SOFT_K:0.03, PRAY_MAX:30,
   // v1.9 武器の上限: Lv5 までは従来の伸び、Lv6〜8 は覚醒(進化後も効く)。全部が上限なら「ルミナの祈り」(無駄なレベルを出さない)
   WP_EVO_LV:5, WP_OVER_DMG:0.15, WP_OVER_CD:0.93, WP_OVER_AREA:0.05,
   PRAY_DMG:0.04, PRAY_HP:0.03, PRAY_SPD:0.01, PRAY_HEAL:40,
@@ -369,6 +379,13 @@ const MONSTERS={
     desc:'沈んだ回廊で祈るように膝をつく石像。額の紋が光ると、淫紋の光弾を扇状に放つ。当たれば淫紋が刻まれ、快感の入りが増す。彼女は知識を積めば外せるようになる。',
     trait:'動かない。1.2秒の予兆の後、淫紋の光弾を3方向に',
   },
+  /* ---- v2.1 降り口の守り手(カードではない。番兵が残っている間は降り口が使えない) ---- */
+  sentinel:{
+    name:'石の番兵', role:'守り手・穴の輪', cost:0, unlock:-1, tier:'large', guardian:true,
+    hp:260, spd:46, r:17, dmg:6, xp:30,
+    desc:'降り口を守る石像の兵。数体が輪になって穴の周りを回り、彼女が近づくと全員が同じ拍で詰めてくる。硬く、光が通りにくい。触れれば石の腕で背後から両腕ごと抱え込む。全員を沈黙させるまで降り口は使えない。',
+    trait:'穴の周りを同期して回る。一斉に踏み込む。石の腕で抱え込む(繋留)。被ダメ半減',
+  },
   /* ---- v2.0 最深部の大ボス(カードではない。最終階層の守り) ---- */
   core:{
     name:'魔核', role:'大ボス・深淵の心臓', cost:0, unlock:-1, tier:'boss', guardian:true,
@@ -424,7 +441,7 @@ const ZONE_SPD_MON={ water:{slime:1.3,mistslime:1.3,slimeking:1.3}, ruin:{'*':1.
 const POI_DEF={
   shrine:{ name:'祠',   desc:'着くと彼女の自己強化が1段上がる(世代内で1度ずつ)' },
   spring:{ name:'泉',   desc:'HPが減っていれば湯に浸かって休む。回復するが、敏感化と発情ゲージが上がる' },
-  stairs:{ name:'降り口', desc:'次の階層へ降りる穴。そばに2.5秒立てば降りる=その日は終わり。夜側はその前に捕まえたい' },
+  stairs:{ name:'降り口', desc:'次の階層へ降りる穴。石の番兵が全員沈黙してから、そばに2.5秒立てば降りる=その日は終わり。彼女は見るものを見てから降りる' },
   core:  { name:'魔核の間', desc:'最深部の奥。魔核(大ボス)が待つ。倒せば彼女の目的は果たされる' },
   seal:  { name:'封印石', desc:'沈んだ回廊の石。3つ全てを灯さないと降り口が開かない(そばに2.5秒)' },
   pool:  { name:'清水', desc:'湿った洞の澄んだ水。敏感化・発情・粘液がひどければ浸かって流す(2秒・45秒に1度)' },
@@ -479,11 +496,11 @@ const SPEC_THREAT={
   slug:1, goblin:0, leech:1, worm:1, ghost:0, slime:0, gas:1, imp:1, flower:2, mistslime:1, gtent:2,
   hand:1, serpent:2, moth:1, pot:2, slugqueen:2, dreamtree:2, vampi:2,
   spore:1, ghosthand:2, eye:1, succubus:3, gazer:3, beamer:3, bossgazer:3, web:2, tower:2,
-  slimeking:2, runemage:3, succuqueen:3, gobking:2, inyoku:1, suiyou:2, mouth:2, guardian:3, core:3 };
+  slimeking:2, runemage:3, succuqueen:3, gobking:2, inyoku:1, suiyou:2, mouth:2, guardian:3, core:3, sentinel:2 };
 const SPEC_DANGER={ flower:130, gtent:90, slug:55, worm:55, gas:60, slime:110, leech:60,
   hand:50, serpent:120, moth:70, pot:95, slugqueen:80, dreamtree:125,
   gazer:70, beamer:60, bossgazer:130, succubus:110, ghosthand:90, spore:60, eye:40, web:90, tower:60,
-  slimeking:120, runemage:150, succuqueen:120, gobking:130, inyoku:70, suiyou:100, mouth:90, guardian:150, core:260 };
+  slimeking:120, runemage:150, succuqueen:120, gobking:130, inyoku:70, suiyou:100, mouth:90, guardian:150, core:260, sentinel:120 };
 const TRAP_SPECIES=new Set(['flower','pot','web','dreamtree','mouth','guardian']);   // 知っていれば、そばのジェムは諦める
 const KNOW_NAMES=['未知','認識','理解','熟知'];
 const CARD_LV_MAX=5;
@@ -639,7 +656,8 @@ const EVOS={
   spring:{ name:'きよめの泉', base:'holy', pair:'area',
     d1:'ひろい聖なる泉が', d2:'ながく残る' },
 };
-const need=l=>Math.floor(6 + l*3.2 + l*l*0.18);
+/* v2.1 引き継ぎで Lv が階層を跨いで積み上がるため、Lv20 を超えると必要量が更に増える(飽和させる) */
+const need=l=>Math.floor((6 + l*3.2 + l*l*0.18)*(1+BAL.NEED_SOFT_K*Math.max(0,l-BAL.NEED_SOFT_LV)));
 
 /* ---------------- 状態表示(ヒロイン) ----------------
    カタログ準拠のid。効果はすべて機構レベル(数値)で表現する。 */

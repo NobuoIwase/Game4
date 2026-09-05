@@ -85,7 +85,7 @@ function genMap(){
     }
   }
   // ---- v2.0 設計された地形: 階層ごとの型を刻む(崖の一本道・水の細道・闘技場・迷路の袋小路・肉の喉道)
-  const feat={shrines:[], pools:[], seals:[], exit:null};
+  const feat={shrines:[], pools:[], seals:[], exit:null, list:[]};   // list: v2.1 地形ごとの中心と半径(彼女がそこへ入った時の台詞に使う)
   const ZI=(z)=>Math.max(0,ZONE_IDS.indexOf(z));
   const farSpot=(minT)=>{ for(let t=0;t<200;t++){ const a=rnd()*TAU, dd=minT+rnd()*10; const i=Math.round(MAP_W/2+Math.cos(a)*dd*1.3), j=Math.round(MAP_H/2+Math.sin(a)*dd*0.8); if(i>8&&j>8&&i<MAP_W-8&&j<MAP_H-8) return {i,j}; } return {i:MAP_W-10,j:MAP_H/2|0}; };
   const usedF=[]; const freeSpot=(minT,rad)=>{ for(let t=0;t<120;t++){ const s=farSpot(minT); if(usedF.every(u=>Math.hypot(u.i-s.i,u.j-s.j)>u.r+rad+3)){ usedF.push({i:s.i,j:s.j,r:rad}); return s; } } return null; };
@@ -108,6 +108,7 @@ function genMap(){
     }
     const pi=horiz?s.i+dir*(L+3):s.i, pj=horiz?s.j:s.j+dir*(L+3);
     feat.shrines.push(T2(pi,pj));
+    { const mi=horiz?s.i+dir*(L/2):s.i, mj=horiz?s.j:s.j+dir*(L/2); feat.list.push(Object.assign({kind:'ridge',r:L*MAP_T*0.5},T2(Math.round(mi),Math.round(mj)))); }
   };
   /* 水の細道: 浅瀬の楕円と、それを渡る1タイルの床。島の中心に清水 */
   const causeway=()=>{
@@ -121,6 +122,7 @@ function genMap(){
     for(let t=-Math.ceil(Math.max(rx,ry))-1;t<=Math.ceil(Math.max(rx,ry))+1;t++){ const i=Math.round(s.i+Math.cos(a)*t), j=Math.round(s.j+Math.sin(a)*t*0.8); if(inMap(i,j)){ zone[j*MAP_W+i]=ZI(mainZone); set(i,j,0); } }
     for(let dj=-1;dj<=1;dj++) for(let di=-1;di<=1;di++){ if(inMap(s.i+di,s.j+dj)){ zone[(s.j+dj)*MAP_W+s.i+di]=ZI(F.zoneW.damp?'damp':mainZone); set(s.i+di,s.j+dj,0); } }
     if(F.zoneW.damp) feat.pools.push(T2(s.i,s.j));
+    feat.list.push(Object.assign({kind:'causeway',r:Math.max(rx,ry)*MAP_T},T2(s.i,s.j)));
   };
   /* 闘技場: 半径 r の広間。周りを崖(または岩)の輪で囲い、2か所だけ切れ目 */
   const arena=(ci,cj,r,ringKind)=>{
@@ -141,7 +143,7 @@ function genMap(){
       else if(grid && !(di===0&&dj===0)){ set(i,j,rnd()<0.75?SOLID_ROCK:0); }
       else set(i,j,0);
     }
-    set(s.i,s.j,0); feat.seals.push(T2(s.i,s.j)); return s;
+    set(s.i,s.j,0); feat.seals.push(T2(s.i,s.j)); feat.list.push(Object.assign({kind:'maze',r:4.5*MAP_T},T2(s.i,s.j))); return s;
   };
   /* 肉の喉道: 曲がりくねった幅3の道を岩で挟み、終点を闘技場(魔核の間)に */
   const throat=(endI,endJ)=>{
@@ -158,9 +160,10 @@ function genMap(){
     if(F.puzzle==='seals'){ for(let k=0;k<3;k++) mazePocket(); }
     // 降り口/魔核の間: 遠くの広間
     const ex=freeSpot(F.final?26:22,F.final?14:10) || farSpot(22);
-    if(F.final){ throat(ex.i,ex.j); arena(ex.i,ex.j,10,SOLID_ROCK); }
+    if(F.final){ throat(ex.i,ex.j); arena(ex.i,ex.j,10,SOLID_ROCK); { const a0=Math.atan2(MAP_H/2-ex.j,MAP_W/2-ex.i); feat.list.push(Object.assign({kind:'throat',r:8*MAP_T},T2(Math.round(ex.i+Math.cos(a0)*14),Math.round(ex.j+Math.sin(a0)*14*0.75)))); } }
     else arena(ex.i,ex.j,fl2>=4?8:7,fl2>=4?SOLID_ROCK:SOLID_CLIFF);
     feat.exit=T2(ex.i,ex.j);
+    feat.list.push(Object.assign({kind:'arena',r:(F.final?10:8)*MAP_T},T2(ex.i,ex.j)));
   }
   // 孤立した1タイルの壁は消す
   for(let j=2;j<MAP_H-2;j++) for(let i=2;i<MAP_W-2;i++){
@@ -219,7 +222,7 @@ function genMap(){
   for(let k=0;k<N;k++){ if(!solid[k] && reachF[k]) zoneTiles[ZONE_IDS[zone[k]]].push(k); }
   // 場所の周りは床を空ける(祠・門の前に立てるように)
   for(const q of pois){ const i=tileI(q.x), j=tileJ(q.y); for(let dj=-2;dj<=2;dj++) for(let di=-2;di<=2;di++){ if(inMap(i+di,j+dj) && i+di>=2 && j+dj>=2 && i+di<MAP_W-2 && j+dj<MAP_H-2) solid[(j+dj)*MAP_W+i+di]=0; } }
-  G.map={seed, gi, floor:fl, wall:F.wall, zone, solid, sites, pois, zoneTiles, mini:null, chunks:new Map(), dist:null, distF:null, flowT:-9, heroTile:null};
+  G.map={seed, gi, floor:fl, wall:F.wall, zone, solid, sites, pois, zoneTiles, feats:feat.list, mini:null, chunks:new Map(), dist:null, distF:null, flowT:-9, heroTile:null};   // feats: v2.1 設計された地形の中心(台詞用)
   if(!META.map || META.map.gen!==gi || META.map.floor!==fl){ META.map={gen:gi, floor:fl, known:{}, visited:{}, seen:0}; saveMeta(); }   // 世代か階層が変われば記憶を捨てる(同じ階層の再挑戦では保つ)
   // 出発点からの流れ場を先に作る(初期召喚の配置に使う)
   G.map.dist=bfsField(ci0,cj0,false); G.map.distF=bfsField(ci0,cj0,true); G.map.heroTile=[ci0,cj0];

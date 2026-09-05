@@ -286,6 +286,33 @@ canvas#cv.arm{ cursor:crosshair; }
   color:#e8dcf5; font-size:13px; line-height:1.75; white-space:pre-wrap; text-align:left; cursor:pointer; pointer-events:auto; }
 #storybox .shint{ display:block; margin-top:8px; font-size:10px; color:var(--dim); text-align:right; }
 body.portrait #storybox{ top:5%; font-size:12px; }
+/* ===== v2.1 ADV(立ち絵+名前+台詞/地の文の箱)。表示中はゲーム時間が止まる。タップで次へ ===== */
+#adv{ position:absolute; inset:0; z-index:30; pointer-events:auto; cursor:pointer; overflow:hidden; }
+#advShade{ position:absolute; inset:0; background:linear-gradient(180deg, rgba(6,4,16,.12) 0%, rgba(6,4,16,.32) 55%, rgba(6,4,16,.86) 100%); }
+#advStand{ position:absolute; left:50%; bottom:0; height:86%; aspect-ratio:832/1216; transform:translateX(-96%); pointer-events:none; transition:filter .25s; }
+#advStand img{ height:100%; width:auto; display:block; filter:drop-shadow(0 10px 24px rgba(0,0,0,.6)); }
+#advStand.dim{ filter:brightness(.5) saturate(.7); }
+#advStand.speak{ animation:advBob .9s ease-in-out infinite alternate; }
+@keyframes advBob{ from{ transform:translateX(-96%) translateY(0); } to{ transform:translateX(-96%) translateY(-5px); } }
+#advTint{ position:absolute; inset:0; opacity:0; transition:opacity .3s; background:radial-gradient(38% 22% at 50% 30%, rgba(255,110,150,.55), rgba(255,110,150,0) 70%); mix-blend-mode:multiply; }
+#advStand.f-heat #advTint, #advStand.f-shy #advTint{ opacity:1; }
+#advBox{ position:absolute; left:50%; bottom:4%; transform:translateX(-50%); width:min(760px,94%); min-height:108px; box-sizing:border-box; padding:16px 18px 24px; border-radius:16px;
+  background:rgba(12,9,28,.92); border:1px solid rgba(201,140,255,.55); box-shadow:0 10px 40px rgba(0,0,0,.55); color:#f0e8ff; font-size:15px; line-height:1.85; text-align:left; }
+#advName{ position:absolute; top:-15px; left:16px; padding:3px 14px; border-radius:10px; font-size:12px; font-weight:bold; color:#3a2a10; background:linear-gradient(180deg,#ffd76a,#e8a53a); box-shadow:0 3px 10px rgba(0,0,0,.4); }
+#advName.n{ display:none; } #advName.town{ background:linear-gradient(180deg,#a8e0ff,#5aa8e0); } #advName.voice{ background:linear-gradient(180deg,#d8b0ff,#8a5ad8); color:#fff; }
+#advText{ min-height:54px; white-space:pre-wrap; word-break:break-word; } #advText.n{ color:#d6d9f2; }
+#advHint{ position:absolute; right:14px; bottom:6px; font-size:10px; color:var(--dim); animation:advBlink 1.2s ease-in-out infinite; }
+@keyframes advBlink{ 0%,100%{opacity:.3} 50%{opacity:1} }
+#advCtl{ position:absolute; right:10px; top:-15px; display:flex; gap:6px; } #advCtl button{ padding:3px 10px; font-size:10px; border-radius:9px; box-shadow:none; }
+body.portrait #advStand{ height:58%; bottom:26%; transform:translateX(-50%); } body.portrait #advStand.speak{ animation:advBobP .9s ease-in-out infinite alternate; }
+@keyframes advBobP{ from{ transform:translateX(-50%) translateY(0); } to{ transform:translateX(-50%) translateY(-5px); } }
+body.portrait #advBox{ bottom:2%; width:96%; font-size:13.5px; padding:14px 14px 22px; }
+/* 物語画面・結果画面の台本表示(話者付き) */
+.storytext{ line-height:1.8; color:#e8dcf5; text-align:left; }
+.storytext .sn{ margin:4px 0; color:#cfd3ee; }
+.storytext .sl{ margin:4px 0 4px 6px; }
+.storytext .who{ display:inline-block; min-width:3.2em; margin-right:6px; padding:0 8px; border-radius:8px; font-size:11px; color:#3a2a10; background:linear-gradient(180deg,#ffd76a,#e8a53a); }
+.storytext .who.t{ background:linear-gradient(180deg,#a8e0ff,#5aa8e0); } .storytext .who.v{ background:linear-gradient(180deg,#d8b0ff,#8a5ad8); color:#fff; }
 /* ===== 縦持ち(v1.9): 戦闘バーを世界の上に重ねず、キャンバスの下に置く。札は小さく一列(横スクロール) ===== */
 body.portrait #stage{ flex-direction:column; justify-content:flex-start; align-items:center; padding-top:4px; box-sizing:border-box; }
 body.portrait canvas#cv{ flex:0 0 auto; }
@@ -380,6 +407,16 @@ body.portrait #battlebar .side button{ font-size:9.5px; padding:4px 8px; white-s
   </div>
   <div id="storybox" hidden title="タップで閉じる"></div>
   <div id="screens"></div>
+  <div id="adv" hidden>
+    <div id="advShade"></div>
+    <div id="advStand" class="dim"><img id="advImg" alt="" draggable="false"><div id="advTint"></div></div>
+    <div id="advBox">
+      <div id="advName"></div>
+      <div id="advText"></div>
+      <div id="advCtl"><button id="advAuto" class="sub" type="button">自動送り: ON</button><button id="advSkip" class="sub" type="button">とばす ≫</button></div>
+      <div id="advHint">▼ タップで次へ</div>
+    </div>
+  </div>
 </div>
 <script src="js/core.js"></script>
 <script src="js/data.js"></script>
@@ -388,6 +425,7 @@ body.portrait #battlebar .side button{ font-size:9.5px; padding:4px 8px; white-s
 <script src="js/codex_v20.js"></script>
 <script src="js/scenes_v20.js"></script>
 <script src="js/story.js"></script>
+<script src="js/lines.js"></script>
 <script src="js/map.js"></script>
 <script src="js/game.js"></script>
 <script src="js/render.js"></script>

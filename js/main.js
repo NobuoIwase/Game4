@@ -25,8 +25,10 @@ function frame(now){
   if(rdt>0.1) rdt=0.1;
   if(rdt>0) G.fps=G.fps*0.95+(1/rdt)*0.05;
   const dt=Math.min(rdt,0.05);
-  const speedy=['battle','levelup','captured','survived'].includes(G.mode) && G.B;
-  const steps=speedy ? TS*(G.spd||1) : 1;
+  const paused=UI.advOpen();   // v2.1 物語(立ち絵+台詞)を表示している間はゲーム時間が止まる
+  const speedy=!paused && ['battle','levelup','captured','survived'].includes(G.mode) && G.B;
+  const steps=paused ? 0 : (speedy ? TS*(G.spd||1) : 1);
+  if(paused) UI.tickAdv(rdt);
   for(let k=0;k<steps;k++){
     switch(G.mode){
       case 'home':     lobbyTick(dt); break;
