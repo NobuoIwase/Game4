@@ -2591,7 +2591,12 @@ function drawHUD(g){
   if(B.event && G.mode==='battle' && !(p.goal&&p.goal.kind==='event')) drawEdgeArrow(g,B.event.x,B.event.y,(EVENT_DEF[B.event.kind]&&EVENT_DEF[B.event.kind].col)||'#fff','光の柱');
   // v2.2 設置一覧: 場に生きている夜側の設置物(記号×数)。オート指揮の設置も含む
   if(B.placed && G.mode==='battle'){
-    const alive={}; for(const it of B.placed){ if(B.time<it.until){ if(it.id==='fake' && !B.chests.some(c=>c.fake&&!c.taken&&Math.abs(c.x-it.x)<1&&Math.abs(c.y-it.y)<1)) continue; alive[it.id]=(alive[it.id]||0)+1; } }
+    const near=(o,it)=>Math.abs(o.x-it.x)<1&&Math.abs(o.y-it.y)<1;
+    const alive={}; for(const it of B.placed){ if(B.time>=it.until) continue;
+      if(it.id==='fake'){ if(!B.chests.some(c=>c.fake&&!c.taken&&near(c,it))) continue; }
+      else if(it.id==='rune'||it.id==='suit'||it.id==='freeze'){ if(!B.traps.some(tr=>tr.night&&tr.armed&&near(tr,it))) continue; }
+      else if(it.id==='web'||it.id==='tower'){ if(!B.enemies.some(e=>e.night&&!e.dead&&e.id===it.id&&near(e,it))) continue; }
+      alive[it.id]=(alive[it.id]||0)+1; }
     const keys=Object.keys(alive);
     if(keys.length){ const txt='設置: '+keys.map(k=>NIGHT_ITEMS[k].icon+'×'+alive[k]).join(' '); g.font='bold 10px '+FONT; const pw=g.measureText(txt).width+22; const px0=10, py0=narrow?chipY+76:100;
       rr(g,px0,py0,pw,20,10); g.fillStyle='rgba(50,25,80,0.82)'; g.fill(); g.strokeStyle='rgba(201,140,255,0.7)'; g.lineWidth=1.2; g.stroke(); g.fillStyle='#e8dcff'; g.textAlign='left'; g.textBaseline='middle'; g.fillText(txt,px0+11,py0+10.5); }

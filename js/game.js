@@ -1533,6 +1533,7 @@ function aiDecide(foc){
     if(!target && threat<0.3){
       let td=520;
       for(const c of B.chests){
+        if(c.lewd && !c.known) continue;   // v2.2 えちえちエリアの箱は見つけてから
         if(G.map && (!passAt(c.x,c.y,false) || !reachableAt(c.x,c.y,false))) continue;   // 壁の中/届かない箱は狙わない(壁に貼りつかない)
         if(gaveUp(c)) continue;
         const d=Math.hypot(c.x-p.x,c.y-p.y);
@@ -1613,6 +1614,7 @@ function aiDecide(foc){
       if(B.time<(p.pauseUntil||0) && threat<0.3 && kind!=='g_stairs' && attachCount(p)===0){ dx=0; dy=0; state='think'; }   // v2.2 目当てを変えた直後の一拍
       else if(kind!=='g_stairs' && kind!=='heart' && kind!=='prop' && !B.wantExit && threat<0.5 && attachCount(p)===0){
         // v2.2 迷い: 進む先が嫌な地形(学習済み)かえちえちエリアなら、境で足を止めて迷う。報酬と体調で入るか諦めるか決める
+        if(p.hesit && p.hesit.key!==giveUpKey(target)) p.hesit=null;   // 目標が変わったら迷いも仕切り直し
         if(p.hesit){
           // 迷っている最中: 境から半歩下がって左右に揺れる。時間が来たら必ず決める(入る/諦める)
           if(B.time<p.hesit.until){ const sw=Math.sin(B.time*2.6), ux=dx, uy=dy; dx=-ux*0.3-uy*sw*0.25; dy=-uy*0.3+ux*sw*0.25; state='hesitate'; }
@@ -1620,16 +1622,17 @@ function aiDecide(foc){
             const nz=p.hesit.zone, worth=(p.goal&&p.goal.worth)||1.5, hpR=p.hp/p.maxHp;
             const pe=0.45+(worth>=2.6?0.3:(worth>=2?0.15:0))+(hpR>0.7?0.15:-0.1)-(p.sensit>=60?0.25:0)-(p.heatLv>0?0.2:0)-(nz==='lewd'&&zoneKnow('lewd')>=1?0.1:0);
             if(Math.random()<pe){ p.brave=p.brave||{}; p.brave[nz]=B.time+60; B.nBrave=(B.nBrave||0)+1; sayLine('brave',1,0,'……いく! ちょっとだけ!'); }
-            else{ p.scared=p.scared||{}; p.scared[nz]=B.time+40; B.nChicken=(B.nChicken||0)+1; giveUpOn(target); if(p.goal && (giveUpKey(p.goal)===giveUpKey(target)||p.goal===target)){ p.goal=null; p.goalT=0; } sayLine('chicken',1,0,'やめとく……こわいし'); dx=0; dy=0; state='hesitate'; }
+            else{ p.scared=p.scared||{}; p.scared[nz]=B.time+40; B.nChicken=(B.nChicken||0)+1; giveUpOn(target); if(p.goal && (giveUpKey(p.goal)===giveUpKey(target)||p.goal===target)){ if(p.goal.kind==='explore'){ p.explore=null; p.exploreUntil=0; } p.goal=null; p.goalT=0; } sayLine('chicken',1,0,'やめとく……こわいし'); dx=0; dy=0; state='hesitate'; }
             p.hesit=null;
           }
         }else{
           const nz=zoneAt(p.x+dx*44,p.y+dy*44);
-          if(nz!==p.zone && p.scared && p.scared[nz]>B.time){ giveUpOn(target); if(p.goal && (giveUpKey(p.goal)===giveUpKey(target)||p.goal===target)){ p.goal=null; p.goalT=0; } dx=-dx*0.5; dy=-dy*0.5; state='hesitate'; }   // 諦めた地形へは、しばらく入らない
+          if(nz!==p.zone && p.scared && p.scared[nz]>B.time){ giveUpOn(target); if(p.goal && (giveUpKey(p.goal)===giveUpKey(target)||p.goal===target)){ if(p.goal.kind==='explore'){ p.explore=null; p.exploreUntil=0; } p.goal=null; p.goalT=0; } dx=-dx*0.5; dy=-dy*0.5; state='hesitate'; }   // 諦めた地形へは、しばらく入らない(探索点なら捨てて別の点を選ぶ)
           const scary=nz!==p.zone && (zoneAvoided(nz) || nz==='lewd') && !(p.brave&&p.brave[nz]>B.time) && !(p.scared&&p.scared[nz]>B.time);
-          if(scary){ p.hesit={zone:nz, until:B.time+1.4+Math.random()*1.8}; B.nHesit=(B.nHesit||0)+1; sayLine('hesitate',1,0,'……はいる? はいらない?'); const sw=Math.sin(B.time*2.6), ux=dx, uy=dy; dx=-ux*0.3-uy*sw*0.25; dy=-uy*0.3+ux*sw*0.25; state='hesitate'; }
+          if(scary){ p.hesit={zone:nz, until:B.time+1.4+Math.random()*1.8, key:giveUpKey(target)}; B.nHesit=(B.nHesit||0)+1; sayLine('hesitate',1,0,'……はいる? はいらない?'); const sw=Math.sin(B.time*2.6), ux=dx, uy=dy; dx=-ux*0.3-uy*sw*0.25; dy=-uy*0.3+ux*sw*0.25; state='hesitate'; }
         }
       }
+      else if(p.hesit) p.hesit=null;   // 迷いの条件が外れた(脅威・拘束・降り口など)なら仕切り直し
       if(kind==='prop' && d<150){ dx*=0.12; dy*=0.12; }   // 燭台を撃ち壊す間は足を止める
       // v2.1 壁の反発のうち、進路(dx,dy)と逆向きの成分は外す(細い入口で押し戻されて回らない)。横へ寄せる成分(通路の真ん中へ)は残す
       { let cx=wpx, cy=wpy; const sm=Math.hypot(dx,dy)||1, ux=dx/sm, uy=dy/sm, dot=cx*ux+cy*uy; if(dot<0){ cx-=ux*dot; cy-=uy*dot; }
@@ -3043,6 +3046,7 @@ function pickExplore(p){
     const a=rand(TAU), dd=rand(600,1200);
     const q=snapFloor(clampMapX(p.x+Math.cos(a)*dd,120), clampMapY(p.y+Math.sin(a)*dd,120), false, 6);
     if(!q || !reachableAt(q.x,q.y,false)) continue;
+    { const qz=zoneAt(q.x,q.y); if(qz==='lewd' || zoneAvoided(qz) || (p.scared&&p.scared[qz]>B.time)) continue; }   // v2.2 嫌な地形・えちえちエリアの中は探索点にしない(境で迷い続けない)
     let sc=Math.hypot(q.x-p.x,q.y-p.y)/1200;
     const leaving=!!B.wantExit;   // v2.2 最終階層でも「魔核へ向かう気」になったら同じ
     for(const po of G.map.pois){ if(!M.known[po.key]){ sc+=Math.max(0,1-Math.hypot(po.x-q.x,po.y-q.y)/700)*(leaving?2:1); if(leaving && (po.kind==='stairs'||po.kind==='core')) sc+=1.5*Math.max(0,1-Math.hypot(po.x-q.x,po.y-q.y)/1600); } }   // まだ見ていない場所のそばほど良い。降りたい時は(石の輪を目印に)降り口/魔核の間の当たりをつける
@@ -3287,7 +3291,7 @@ function coreTick(e,dt,d,dx,dy){
   e.whipCd-=dt; e.pulseCd-=dt; e.spawnCd-=dt; if(e.pulseT>0) e.pulseT-=dt;
   if(e.whipT>0){
     e.whipT-=dt;
-    if(e.whipT<=0){ if(d<260 && attachMonster(e,'tether',{r:210,needMul:1.3})){ e.state='idle'; hurtHero(e.dmg*0.6,e,{noKb:true}); B.bossMark={id:'core',t:B.time}; codexMet('core'); if(ph<BAL.CORE_TWO_PH) attachMonster(e,'tether',{r:210,needMul:1.3}); } e.whipCd=BAL.CORE_WHIP_CD*(holding?1.6:1)*(ph<0.3?0.75:1); }   // 魔核は据わったまま根で繋ぐ(attached にせず、脈動も続く)。v2.2 弱ると根が二本
+    if(e.whipT<=0){ if(d<260 && attachMonster(e,'tether',{r:210,needMul:1.3})){ e.state='idle'; hurtHero(e.dmg*0.6,e,{noKb:true}); B.bossMark={id:'core',t:B.time}; codexMet('core'); if(ph<BAL.CORE_TWO_PH) attachMonster(e,'tether',{r:210,needMul:1.3}); e.state='idle'; } e.whipCd=BAL.CORE_WHIP_CD*(holding?1.6:1)*(ph<0.3?0.75:1); }   // 魔核は据わったまま根で繋ぐ(attached にせず、脈動も続く)。v2.2 弱ると根が二本
   }else if(d<230 && e.whipCd<=0 && !holding){ e.whipT=0.55; sfx(120,50,0.3,'sawtooth',0.08); }
   if(d<BAL.CORE_AURA_R){ addHeatG(4*dt); applySensit(1.0*dt); e.auraT=(e.auraT||0)+dt; if(e.auraT>=1){ e.auraT-=1; hurtHero(2,e,{quiet:true,noKb:true,pierce:true}); } }   // v2.2 脈の圏内: 熱と敏感化、じわじわ削る
   if(d<420 && e.pulseCd<=0){
@@ -3813,9 +3817,9 @@ function spawnInitialProps(){
 function spawnLewdRewards(){
   const B=G.B, L=G.map&&G.map.lewd; if(!L) return;
   const at=(dx,dy)=>snapFloor(L.x+dx,L.y+dy,false,3)||{x:L.x,y:L.y};
-  { const q=at(-MAP_T*1.2,MAP_T*0.6); B.chests.push({x:q.x,y:q.y,t:0,taken:false,bossChest:true,known:false,lewd:true}); }
-  { const q=at(MAP_T*1.4,MAP_T*1.4); B.chests.push({x:q.x,y:q.y,t:0,taken:false,known:false,lewd:true}); }
-  { const q=at(0,-MAP_T*1.6); spawnPick('treasure',q.x,q.y,false); }
+  { const q=at(-MAP_T*2.0,MAP_T*0.8); B.chests.push({x:q.x,y:q.y,t:0,taken:false,bossChest:true,known:false,lewd:true}); }
+  { const q=at(MAP_T*1.8,MAP_T*1.4); B.chests.push({x:q.x,y:q.y,t:0,taken:false,known:false,lewd:true}); }
+  { const q=at(MAP_T*0.6,-MAP_T*2.2); spawnPick('treasure',q.x,q.y,false); }
   { const q=at(-MAP_T*2.2,-MAP_T*0.4); spawnPick('nectar',q.x,q.y,false); const q2=at(MAP_T*2.4,-MAP_T*0.2); spawnPick('nectar',q2.x,q2.y,false); }
 }
 /* v2.2 床から手: 甘い褥に居続けると、床から手が伸びて撫でる(快感と一瞬のよろめき) */

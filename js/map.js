@@ -150,6 +150,7 @@ function genMap(){
     const L=26; const a0=Math.atan2(MAP_H/2-endJ,MAP_W/2-endI);
     for(let t=0;t<=L;t++){
       const a=a0+Math.sin(t*0.45)*0.6, ci=endI+Math.cos(a)*t, cj=endJ+Math.sin(a)*t*0.75;
+      if(t%3===0) usedF.push({i:Math.round(ci),j:Math.round(cj),r:4});   // v2.2 喉道の上に他の地形(えちえちエリア)を置かない
       for(let w=-5;w<=5;w++){ const i=Math.round(ci-Math.sin(a)*w), j=Math.round(cj+Math.cos(a)*w*0.75); if(i<3||j<3||i>=MAP_W-3||j>=MAP_H-3) continue; if(Math.abs(w)<=1) set(i,j,0); else if(Math.abs(w)<=4 && t>2) set(i,j,SOLID_ROCK); }
     }
   };
@@ -160,6 +161,7 @@ function genMap(){
     if(F.puzzle==='seals'){ for(let k=0;k<3;k++) mazePocket(); }
     // 降り口/魔核の間: 遠くの広間
     const ex=freeSpot(F.final?26:22,F.final?14:10) || farSpot(22);
+    if(!usedF.some(u=>u.i===ex.i&&u.j===ex.j)) usedF.push({i:ex.i,j:ex.j,r:F.final?14:10});   // v2.2 予備の位置でも登録
     if(F.final){ throat(ex.i,ex.j); arena(ex.i,ex.j,10,SOLID_ROCK); { const a0=Math.atan2(MAP_H/2-ex.j,MAP_W/2-ex.i); feat.list.push(Object.assign({kind:'throat',r:8*MAP_T},T2(Math.round(ex.i+Math.cos(a0)*14),Math.round(ex.j+Math.sin(a0)*14*0.75)))); } }
     else arena(ex.i,ex.j,fl2>=4?8:7,fl2>=4?SOLID_ROCK:SOLID_CLIFF);
     feat.exit=T2(ex.i,ex.j);
@@ -220,7 +222,6 @@ function genMap(){
     pois.push({kind,x:tileCX(ci0+6),y:tileCY(cj0),key:'f'+fl+':'+kind+pois.length});
   };
   // v2.0 階層ごとの場所。降り口(最終階層は魔核の間)は出発点から遠く
-  if(feat.lewd) place('shrine',null,0,{x:feat.lewd.x+MAP_T*1.5,y:feat.lewd.y-MAP_T});   // v2.2 えちえちエリアの奥の祠
   for(const q of feat.shrines) place('shrine',null,0,q);   // 崖の一本道の先の祠(危険だが寄り道の価値がある)
   const nShr=fl<=3?3:2; for(let k=feat.shrines.length;k<nShr;k++) place('shrine',null,520);
   if(F.zoneW.hotspring) place('spring','hotspring',320); place('spring',null,420);
@@ -228,6 +229,7 @@ function genMap(){
   if(F.zoneW.ruin){ place('stele','ruin',300); place('stele','ruin',300); }
   if(F.final) place('core',null,1100,feat.exit); else place('stairs',null,1000,feat.exit);   // 闘技場の中心
   if(F.puzzle==='seals'){ for(const q of feat.seals) place('seal',null,0,q); for(let k=feat.seals.length;k<3;k++) place('seal',null,500); }
+  if(feat.lewd) place('shrine',null,0,{x:feat.lewd.x,y:feat.lewd.y});   // v2.2 えちえちエリアの祠は真ん中(岩の輪を崩さない位置。既存の場所の鍵を変えないよう最後に置く)
   // v1.8 地形帯ごとの「届く床」の索引(資源の出現・イベントの位置に使う)
   const zoneTiles={}; for(const z of ZONE_IDS) zoneTiles[z]=[];
   for(let k=0;k<N;k++){ if(!solid[k] && reachF[k]) zoneTiles[ZONE_IDS[zone[k]]].push(k); }
