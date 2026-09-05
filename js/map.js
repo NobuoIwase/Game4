@@ -84,6 +84,84 @@ function genMap(){
       set(Math.floor(i),Math.floor(j),SOLID_CLIFF); set(Math.floor(i+Math.sin(a)*1.2),Math.floor(j-Math.cos(a)*1.2),SOLID_CLIFF);
     }
   }
+  // ---- v2.0 設計された地形: 階層ごとの型を刻む(崖の一本道・水の細道・闘技場・迷路の袋小路・肉の喉道)
+  const feat={shrines:[], pools:[], seals:[], exit:null};
+  const ZI=(z)=>Math.max(0,ZONE_IDS.indexOf(z));
+  const farSpot=(minT)=>{ for(let t=0;t<200;t++){ const a=rnd()*TAU, dd=minT+rnd()*10; const i=Math.round(MAP_W/2+Math.cos(a)*dd*1.3), j=Math.round(MAP_H/2+Math.sin(a)*dd*0.8); if(i>8&&j>8&&i<MAP_W-8&&j<MAP_H-8) return {i,j}; } return {i:MAP_W-10,j:MAP_H/2|0}; };
+  const usedF=[]; const freeSpot=(minT,rad)=>{ for(let t=0;t<120;t++){ const s=farSpot(minT); if(usedF.every(u=>Math.hypot(u.i-s.i,u.j-s.j)>u.r+rad+3)){ usedF.push({i:s.i,j:s.j,r:rad}); return s; } } return null; };
+  const T2=(i,j)=>({x:tileCX(i),y:tileCY(j)});
+  /* 崖の一本道: 幅3の床の両側を幅3の崖で挟む。先の袋小路に祠。飛ぶ魔物だけが横から来られる */
+  const ridgePath=()=>{
+    const horiz=rnd()<0.5, L=22+Math.floor(rnd()*6);
+    const s=freeSpot(18,Math.ceil(L/2)+5); if(!s) return;
+    const dir=rnd()<0.5?1:-1;
+    for(let t=-2;t<=L+5;t++){
+      const ci=horiz?s.i+dir*t:s.i, cj=horiz?s.j:s.j+dir*t;
+      for(let w=-5;w<=5;w++){
+        const i=horiz?ci:ci+w, j=horiz?cj+w:cj;
+        if(i<3||j<3||i>=MAP_W-3||j>=MAP_H-3) continue;
+        const inPocket=t>L && Math.hypot(t-(L+3),w)<=3.2;
+        if(Math.abs(w)<=1 || inPocket) set(i,j,0);
+        else if(Math.abs(w)<=4 && t>=0 && t<=L+5 && !inPocket && Math.hypot(t-(L+3),w)<=5.2){ if(t>L) set(i,j,SOLID_CLIFF); else set(i,j,SOLID_CLIFF); }
+        else if(Math.abs(w)<=4 && t>=0 && t<=L) set(i,j,SOLID_CLIFF);
+      }
+    }
+    const pi=horiz?s.i+dir*(L+3):s.i, pj=horiz?s.j:s.j+dir*(L+3);
+    feat.shrines.push(T2(pi,pj));
+  };
+  /* 水の細道: 浅瀬の楕円と、それを渡る1タイルの床。島の中心に清水 */
+  const causeway=()=>{
+    if(!F.zoneW.water) return;
+    const s=freeSpot(16,11); if(!s) return;
+    const rx=8+rnd()*3, ry=5+rnd()*2, a=rnd()*TAU;
+    for(let j=Math.floor(s.j-ry);j<=Math.ceil(s.j+ry);j++) for(let i=Math.floor(s.i-rx);i<=Math.ceil(s.i+rx);i++){
+      if(!inMap(i,j)) continue; const u=(i+0.5-s.i)/rx, w=(j+0.5-s.j)/ry;
+      if(u*u+w*w<=1){ zone[j*MAP_W+i]=ZI('water'); if(solid[j*MAP_W+i]) set(i,j,0); }
+    }
+    for(let t=-Math.ceil(Math.max(rx,ry))-1;t<=Math.ceil(Math.max(rx,ry))+1;t++){ const i=Math.round(s.i+Math.cos(a)*t), j=Math.round(s.j+Math.sin(a)*t*0.8); if(inMap(i,j)){ zone[j*MAP_W+i]=ZI(mainZone); set(i,j,0); } }
+    for(let dj=-1;dj<=1;dj++) for(let di=-1;di<=1;di++){ if(inMap(s.i+di,s.j+dj)){ zone[(s.j+dj)*MAP_W+s.i+di]=ZI(F.zoneW.damp?'damp':mainZone); set(s.i+di,s.j+dj,0); } }
+    if(F.zoneW.damp) feat.pools.push(T2(s.i,s.j));
+  };
+  /* 闘技場: 半径 r の広間。周りを崖(または岩)の輪で囲い、2か所だけ切れ目 */
+  const arena=(ci,cj,r,ringKind)=>{
+    for(let j=Math.floor(cj-r-2);j<=Math.ceil(cj+r+2);j++) for(let i=Math.floor(ci-r-2);i<=Math.ceil(ci+r+2);i++){
+      if(i<3||j<3||i>=MAP_W-3||j>=MAP_H-3) continue;
+      const dd=Math.hypot(i+0.5-ci,(j+0.5-cj)*1.3);
+      if(dd<=r) set(i,j,0);
+      else if(dd<=r+2){ const ang=Math.atan2((j+0.5-cj)*1.3,i+0.5-ci); const g1=Math.abs(((ang-0.3+Math.PI*3)%TAU)-Math.PI), g2=Math.abs(((ang-3.4+Math.PI*3)%TAU)-Math.PI); if(g1>0.42 && g2>0.42) set(i,j,ringKind); else set(i,j,0); }
+    }
+  };
+  /* 迷路の袋小路: 9×9 の岩の格子(ところどころ抜け)。中心に封印石 */
+  const mazePocket=()=>{
+    const s=freeSpot(16,7); if(!s) return null;
+    for(let dj=-4;dj<=4;dj++) for(let di=-4;di<=4;di++){
+      const i=s.i+di, j=s.j+dj; if(i<3||j<3||i>=MAP_W-3||j>=MAP_H-3) continue;
+      const edge=Math.abs(di)===4||Math.abs(dj)===4, grid=(di%2===0)&&(dj%2===0);
+      if(edge){ set(i,j,rnd()<0.22?0:SOLID_ROCK); }
+      else if(grid && !(di===0&&dj===0)){ set(i,j,rnd()<0.75?SOLID_ROCK:0); }
+      else set(i,j,0);
+    }
+    set(s.i,s.j,0); feat.seals.push(T2(s.i,s.j)); return s;
+  };
+  /* 肉の喉道: 曲がりくねった幅3の道を岩で挟み、終点を闘技場(魔核の間)に */
+  const throat=(endI,endJ)=>{
+    const L=26; const a0=Math.atan2(MAP_H/2-endJ,MAP_W/2-endI);
+    for(let t=0;t<=L;t++){
+      const a=a0+Math.sin(t*0.45)*0.6, ci=endI+Math.cos(a)*t, cj=endJ+Math.sin(a)*t*0.75;
+      for(let w=-5;w<=5;w++){ const i=Math.round(ci-Math.sin(a)*w), j=Math.round(cj+Math.cos(a)*w*0.75); if(i<3||j<3||i>=MAP_W-3||j>=MAP_H-3) continue; if(Math.abs(w)<=1) set(i,j,0); else if(Math.abs(w)<=4 && t>2) set(i,j,SOLID_ROCK); }
+    }
+  };
+  {
+    const fl2=F.depth;
+    const nRidge=fl2===3?2:1; for(let k=0;k<nRidge;k++) ridgePath();
+    if(fl2<=2){ causeway(); if(fl2===2) causeway(); }
+    if(F.puzzle==='seals'){ for(let k=0;k<3;k++) mazePocket(); }
+    // 降り口/魔核の間: 遠くの広間
+    const ex=freeSpot(F.final?26:22,F.final?14:10) || farSpot(22);
+    if(F.final){ throat(ex.i,ex.j); arena(ex.i,ex.j,10,SOLID_ROCK); }
+    else arena(ex.i,ex.j,fl2>=4?8:7,fl2>=4?SOLID_ROCK:SOLID_CLIFF);
+    feat.exit=T2(ex.i,ex.j);
+  }
   // 孤立した1タイルの壁は消す
   for(let j=2;j<MAP_H-2;j++) for(let i=2;i<MAP_W-2;i++){
     if(!solid[j*MAP_W+i]) continue;
@@ -111,7 +189,8 @@ function genMap(){
   const reachF=floodReach(solid,ci0,cj0);
   const okTile=(x,y)=>{ const i=tileI(x), j=tileJ(y); return inMap(i,j) && !solid[j*MAP_W+i] && reachF[j*MAP_W+i]; };
   const pois=[];
-  const place=(kind,inZone,minD)=>{
+  const place=(kind,inZone,minD,at)=>{
+    if(at){ const x=at.x, y=at.y; if(okTile(x,y)){ pois.push({kind,x:tileCX(tileI(x)),y:tileCY(tileJ(y)),key:'f'+fl+':'+kind+pois.length}); return; } }   // v2.0 設計された地形が決めた位置
     for(let k=0;k<600;k++){
       const x=(rnd()-0.5)*MAP_HW*1.72, y=(rnd()-0.5)*MAP_HH*1.72;
       if(Math.hypot(x,y)<minD) continue;
@@ -128,12 +207,13 @@ function genMap(){
     pois.push({kind,x:tileCX(ci0+6),y:tileCY(cj0),key:'f'+fl+':'+kind+pois.length});
   };
   // v2.0 階層ごとの場所。降り口(最終階層は魔核の間)は出発点から遠く
-  place('shrine',null,520); place('shrine',null,520); if(fl<=3) place('shrine',null,520);
+  for(const q of feat.shrines) place('shrine',null,0,q);   // 崖の一本道の先の祠(危険だが寄り道の価値がある)
+  const nShr=fl<=3?3:2; for(let k=feat.shrines.length;k<nShr;k++) place('shrine',null,520);
   if(F.zoneW.hotspring) place('spring','hotspring',320); place('spring',null,420);
-  if(F.zoneW.damp){ place('pool','damp',300); place('pool','damp',300); }
+  if(F.zoneW.damp){ for(const q of feat.pools) place('pool',null,0,q); for(let k=feat.pools.length;k<2;k++) place('pool','damp',300); }
   if(F.zoneW.ruin){ place('stele','ruin',300); place('stele','ruin',300); }
-  if(F.final) place('core',null,1100); else place('stairs',null,1000);
-  if(F.puzzle==='seals'){ place('seal',null,500); place('seal',null,500); place('seal',null,500); }
+  if(F.final) place('core',null,1100,feat.exit); else place('stairs',null,1000,feat.exit);   // 闘技場の中心
+  if(F.puzzle==='seals'){ for(const q of feat.seals) place('seal',null,0,q); for(let k=feat.seals.length;k<3;k++) place('seal',null,500); }
   // v1.8 地形帯ごとの「届く床」の索引(資源の出現・イベントの位置に使う)
   const zoneTiles={}; for(const z of ZONE_IDS) zoneTiles[z]=[];
   for(let k=0;k<N;k++){ if(!solid[k] && reachF[k]) zoneTiles[ZONE_IDS[zone[k]]].push(k); }

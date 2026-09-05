@@ -296,6 +296,18 @@ idは汎用カタログ準拠。効果はすべて数値・挙動レベルで表
 - オート指揮: ボスは `shuffle` してから出せるものを出す(固定順にならない)。
 - 淫紋の知識 `crestKnow()` = max(刻印師の知識, 紋の罠に掛かった回数 1/3/6 → 認識/理解/熟知)。認識: 見える紋の罠(`B.traps`)を避ける・目当てにしない。理解: 呪弾を ×1.6 で外す。熟知: 40% で紋を払う(`runeHit`/`trapsTick`)。
 
+### 3-19. v2.0 新種・新武器・設計された地形
+
+- 新種(data.js MONSTERS / game.js *Tick / render.js draw*): 淫翼 `inyoku`(FLYERS。旋回 R150、swoopCd 3〜5 秒で 1.2 秒の急降下。命中で `attachMonster('cling',{armsOnly})`、holdT 1.8 秒で自ら離れる=attached 分岐で detachLimb)。
+  水妖 `suiyou`(`sub`=水面下: 描画は波紋のみ・当たりなし。300px で浮上、脚に cling、絡んでいる間 p.slow 0.6 を維持。420px 以上離れ水場なら再び潜る)。肉壁の口 `mouth`(spd 0。r+p.r+14 で脚に cling(needMul 1.6)。attached 分岐で快感 5.5/s・発情 4/s・敏感 0.8/s)。
+  遺跡の番人 `guardian`(spd 0。420px・視線ありで aimT 1.2 秒 → 呪弾 rune ×3(±0.22rad, 190px/s, src guardian)。`crestKnow` は guardian の知識も数える)。接触判定の除外に4種を追加。
+- 新武器: 聖鎖 `chain`(1.15 秒×0.92^Lv、Lv4 で 2 本・進化 4 本。線分±16px の敵に 12+5(Lv−1)、非ボスに stun 0.55。fx kind chain)。導きの精霊 `spirit`(弾 kind spirit: 520px 内の最寄りへ turn 4/6 で曲がる、命中で splash 40/54)。
+  光の盾 `shield`(向き=速度方向、弧 π(0.9+0.1Lv)、進化で全周。0.5 秒ごとに触れた敵へ 5+2(Lv−1)・呪弾は弧に入れば消える)。進化 hchain/twinspirit/aegis(ペア pierce/reach/regen)。
+- 新パッシブ: reach(`nearestEnemies` の maxD ×(1+0.12Lv))、pierce(ボルト/刃の pierce +Lv)、regen(`p.regen` +0.15)。既存パッシブの max 3→5(dup 3)。
+- 設計された地形(map.js genMap 内、稜線の後・孤立壁の掃除の前): `ridgePath`(幅3の床+両側幅3の崖、L 22〜27、先に半径3.2の袋小路→ `feat.shrines`)、`causeway`(浅瀬の楕円 rx8〜11×ry5〜7 と1タイルの床の道、島中心の3×3を湿地→ `feat.pools`)、
+  `arena(ci,cj,r,ring)`(半径 r の床+幅2の輪、角 0.3/3.4 rad に切れ目)、`mazePocket`(9×9、偶数格子を 75% 岩、外周 78% 岩→ `feat.seals`)、`throat(endI,endJ)`(L26 の曲がる道、幅3床+両側岩)。
+  型の位置は `freeSpot`(出発点から 16〜26 タイル以上、型同士は重ねない)。降り口/魔核の間は `feat.exit` の闘技場中心に `place(kind,null,0,at)` で置く。到達性の掘削は従来どおり後段で保証。
+
 ### 3-6. 回復=燭台
 
 回復ハートは撃破ドロップしない。マップの**燭台(HP24)を彼女が能動的に撃ち壊した時だけ**
