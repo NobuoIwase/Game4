@@ -1289,9 +1289,7 @@ function aiUpdate(dt){
     if(p.stuckT>1.2){ p.stuckT=0; p.unstickT=2.5; B.nUnstick=(B.nUnstick||0)+1; p.explore=null; p.exploreUntil=0; p.dest=null; p.destUntil=0; p.path=null; }
     if(p.unstickT>0) p.unstickT-=dt; }
   // v1.8 ジェム畑に留まった時間(目当てがあるのに拾い続けている)→ FARM_T を超えたら FARM_BREAK 秒は歩く
-  if(p.steerState==='gem' && p.goal) p.farmT+=dt; else p.farmT=Math.max(0,p.farmT-dt*0.5);
-  if(p.farmT>BAL.FARM_T){ p.farmT=0; p.walkT=BAL.FARM_BREAK; }
-  if(p.walkT>0) p.walkT-=dt;
+  // (v1.8 の FARM_T/FARM_BREAK による「拾う/歩く」の交代は v2.1 の道すがら回収と群れの時間割で置き換えた)
 
   // 繋留(蔦)による引き戻し
   for(const sl of attachedSlots(p)){
@@ -1548,16 +1546,24 @@ function aiDecide(foc){
       // v2.1 目当てがあるなら歩く。ジェムは進む先の「道すがら」だけ拾う(ジェム畑と目当ての間を往復しない)。ジェムの群れそのものが目当てなら普通に拾い集める
       walk = goalOk && goal.kind!=='gems' && (goal.kind!=='explore' || leaving);
       atGoal = walk && Math.hypot(goal.x-p.x,goal.y-p.y)<90;
+      // v2.1 ジェムに足を取られない: 目当てへ歩いているのに GOAL_STALL_T 秒で60px も近づけなければ(降り続けるジェムを拾い続けている)、GEM_FAST_T 秒は足元以外のジェムを拾わない
+      if(walk){ const gd=Math.hypot(goal.x-p.x,goal.y-p.y), gk=giveUpKey(goal);
+        if(p.gKey!==gk){ p.gKey=gk; p.gBest=gd; p.gT=B.time; }
+        else if(gd<p.gBest-60){ p.gBest=gd; p.gT=B.time; }
+        else if(B.time-p.gT>BAL.GOAL_STALL_T){ p.noGemUntil=B.time+BAL.GEM_FAST_T; p.gT=B.time; p.gBest=gd; B.nGemFast=(B.nGemFast||0)+1; sayLine('gemFast',0,30,'キラキラは、あとで! すすむ!'); }
+      } else p.gKey=null;
     }
     if(!target){
       // ジェム回収。ガス溜まりの中のジェムは基本見送る——
       // ただし中のジェムが多ければ、意を決して取りに入る
-      let bestGm=null, bd=walk?170:430, bestCl=null;
+      const gemFast=B.time<(p.noGemUntil||0), mag=heroStat(p).magnet;
+      let bestGm=null, bd=gemFast?0:(walk?((B.wantExit||pressure()>=1.5)?BAL.GEM_WALK_R_LEAVE:BAL.GEM_WALK_R):430), bestCl=null;   // v2.1 ジェム断ち中は狙わない。降りると決めた後・圧が高い時は、道すがらの半径を狭く
       const gx=goal?goal.x-p.x:0, gy=goal?goal.y-p.y:0, gdn=Math.hypot(gx,gy)||1;
       for(const gm of B.gems){
         const d=Math.hypot(gm.x-p.x,gm.y-p.y);
         if(d>=bd) continue;
         if(atGoal && d>40) continue;   // v2.1 目当てに着いたら、足元のジェム以外は後で(降り口で立ち続けられる)
+        if(walk && d<mag*0.9) continue;   // v2.1 歩いている時、磁石が拾ってくれる距離のジェムは追わない(飛んでくるジェムを追い回して足が止まらない)
         if(walk && d>44 && (((gm.x-p.x)*gx+(gm.y-p.y)*gy)/(gdn*(d||1))<-0.1 || d+Math.hypot(goal.x-gm.x,goal.y-gm.y)>gdn+120)) continue;   // v2.1 歩くときは進む先の、寄り道120px以内のジェムだけ
         if(nearKnownTrap(gm.x,gm.y)) continue;   // 知っている罠のそばのジェムは諦める
         if(zoneAvoided(zoneAt(gm.x,gm.y))) continue;   // 学習した嫌な地形(浅瀬/花園/温泉)のジェムは諦める
@@ -2940,9 +2946,9 @@ function updateGoal(p){
     else if(ev.kind==='pool') w=poolWant(p)?2.8:0; else if(ev.kind==='stele') w=B.steleRead[ev.key]?0:2.4;
     let ex=ev.x, ey=ev.y;
     if(ev.kind==='shroom' && ev.refs){ let nd=1e9; for(const pk of ev.refs){ if(pk.dead) continue; const dd=Math.hypot(pk.x-p.x,pk.y-p.y); if(dd<nd){ nd=dd; ex=pk.x; ey=pk.y; } } }   // 群生は残っている光茸そのものへ
-    add('event',ev.kind,ex,ey,w,ev,ev.key); }
+    add('event',ev.kind,ex,ey,w*(leaving?0.5:1),ev,ev.key); }
   for(const it of B.items){ if(it.known) add('item',it.kind,it.x,it.y,3.0,it); }
-  for(const c of B.chests){ if(c.known && !c.taken) add('chest',c.bossChest?'boss':'chest',c.x,c.y,c.bossChest?3.0:2.6,c); }
+  for(const c of B.chests){ if(c.known && !c.taken) add('chest',c.bossChest?'boss':'chest',c.x,c.y,(c.bossChest?3.0:2.6)*(leaving?0.3:1),c); }   // v2.1 降りると決めたら箱は後回し
   for(const q of G.map.pois){
     if(!M.known[q.key]) continue; let w=0;
     if(q.kind==='shrine') w=M.visited[q.key]?0:2.2;
@@ -2964,7 +2970,8 @@ function updateGoal(p){
     add('pick',pk.kind,pk.x,pk.y,w,pk);
   }
   // v2.1 ジェムの群れ: 近くにまとまって落ちているなら拾い集めるのも目当て(強化は階層を跨いで残るので、拾える物は拾う)
-  if(!leaving){ let bestG=null, bn=0;
+  if(p.goal && p.goal.kind==='gems'){ p.clusterT=(p.clusterT||0)+BAL.GOAL_RETHINK; if(p.clusterT>=BAL.GEM_FARM_T){ p.clusterT=0; p.noClusterUntil=B.time+BAL.GEM_FARM_CD; sayLine('gemFast',0,30,'キラキラは、あとで! すすむ!'); } } else p.clusterT=Math.max(0,(p.clusterT||0)-BAL.GOAL_RETHINK*0.5);   // v2.1 群れを拾うのは一度に GEM_FARM_T 秒まで、その後 GEM_FARM_CD 秒は他へ
+  if(!leaving && !(B.time<(p.noClusterUntil||0))){ let bestG=null, bn=0;
     for(const gm of B.gems){ if(Math.abs(gm.x-p.x)>560||Math.abs(gm.y-p.y)>560) continue; if(G.map && !passAt(gm.x,gm.y,false)) continue; if(zoneAvoided(zoneAt(gm.x,gm.y))) continue;
       let n=0; for(const g2 of B.gems){ if(Math.abs(g2.x-gm.x)<BAL.GEM_CLUSTER_R && Math.abs(g2.y-gm.y)<BAL.GEM_CLUSTER_R) n++; } if(n>bn){ bn=n; bestG=gm; } }
     if(bestG && bn>=3) add('gems','gems',bestG.x,bestG.y,Math.min(BAL.GEM_CLUSTER_MAX,BAL.GEM_CLUSTER_W*bn),null); }
@@ -2976,8 +2983,8 @@ function updateGoal(p){
   let best=null; for(const c of cands){ if(!best||c.score>best.score) best=c; }
   // v2.1 ふらつき防止: いまの目当てが有効なら、はっきり良い(GOAL_KEEP倍)候補が出るまで乗り換えない
   if(best && p.goal && p.goal.kind!=='explore' && goalValid(p,p.goal) && !(best.ref&&best.ref===p.goal.ref&&best.kind===p.goal.kind)){
-    const cd=Math.hypot(p.goal.x-p.x,p.goal.y-p.y), cs=(p.goal.worth||0)/(1+cd/600);
-    if(best.score<cs*BAL.GOAL_KEEP){ p.goal.d=cd; p.goal.score=cs; return p.goal; }
+    const same=p.goal.ref?cands.find(c=>c.ref===p.goal.ref&&c.kind===p.goal.kind):null;   // 価値は今の評価で(降りると決めた後に箱の価値が下がる等)。候補から外れていれば乗り換える
+    if(same){ const cd=same.d, cs=same.score; if(best.score<cs*BAL.GOAL_KEEP){ p.goal.d=cd; p.goal.score=cs; p.goal.worth=same.worth; return p.goal; } }
   }
   if(best && best.kind==='explore') best.until=p.exploreUntil;
   p.goal=best;

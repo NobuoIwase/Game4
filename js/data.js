@@ -151,7 +151,7 @@ const BAL={
   CORE_HP:16000, CORE_WHIP_CD:2.4, CORE_PULSE_CD:7, CORE_SPAWN_CD:9,            // 魔核
   FLOOR_AFFINITY:1.2, FLESH_HEAT:1.6,                                         // 階層の得意種 HP倍率 / 肉の床の発情ゲージ(毎秒)
   /* v2.1 深淵の圧(時間経過): PRESS_T0 秒までは静か、その後 PRESS_T1 秒で 1.0 に、PRESS_MAX で頭打ち。EN上限/EN回復/召喚頭数/場の上限に掛かる。階層を跨ぐと時間は戻る */
-  PRESS_T0:90, PRESS_T1:210, PRESS_MAX:2.0, PRESS_EN_MAX:0.35, PRESS_EN_REGEN:0.5, PRESS_UNIT:0.3, PRESS_CAP:0.4,
+  PRESS_T0:90, PRESS_T1:210, PRESS_MAX:2.0, PRESS_EN_MAX:0.35, PRESS_EN_REGEN:0.5, PRESS_UNIT:0.3, PRESS_CAP:0.2,
   /* v2.1 降りる判断: 圧がこれ以上 / HPがこれ未満 / 目当てが探索しか無い時間がこれ以上 → 「降りよう」に切り替わる。降り口の目当て価値 */
   EXIT_PRESS:0.5, EXIT_HP:0.42, EXIT_IDLE_T:40, EXIT_WORTH_WANT:6.0,
   /* v2.1 石の番兵: 階層ごとの数 / 基礎HP(深さで+35%/層) / 被ダメ倍率 / 輪の半径 / 警戒半径(彼女と穴) / 出ない距離 / 一斉の踏み込み(間隔・時間・速度) */
@@ -164,6 +164,10 @@ const BAL={
   GIVEUP_T:5, GIVEUP_CD:40,
   /* v2.1 壁ぞい滑り: 半径内の壁へ向かう操舵成分を毎フレーム落とす(狭い隙間で壁にぶつかって戻される「ガクガク」を無くす)。0で無効 */
   WALL_SLIDE_R:24,
+  /* v2.1 ジェムに足を取られない: 目当てへ歩く時に拾う道すがらのジェムの半径(通常 / 降りると決めた後・圧1.5以上)。目当てへ GOAL_STALL_T 秒で60px近づけなければ GEM_FAST_T 秒は足元以外を拾わない */
+  GEM_WALK_R:170, GEM_WALK_R_LEAVE:60, GOAL_STALL_T:10, GEM_FAST_T:8,
+  /* v2.1 ジェムの群れを目当てにするのは1回 GEM_FARM_T 秒まで。その後 GEM_FARM_CD 秒は他の目当てへ(降り続けるジェムで永遠に留まらない) */
+  GEM_FARM_T:12, GEM_FARM_CD:25,
   // v1.9 武器の上限: Lv5 までは従来の伸び、Lv6〜8 は覚醒(進化後も効く)。全部が上限なら「ルミナの祈り」(無駄なレベルを出さない)
   WP_EVO_LV:5, WP_OVER_DMG:0.15, WP_OVER_CD:0.93, WP_OVER_AREA:0.05,
   PRAY_DMG:0.04, PRAY_HP:0.03, PRAY_SPD:0.01, PRAY_HEAL:40,
