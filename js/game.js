@@ -1460,11 +1460,12 @@ function aiDecide(foc){
   // v2.3 戦闘モード: 近くの魔物を倒し切る見込み秒(ttk)と密度で決める。fight → kite(引き撃ち) → flee(逃げに徹する)。切り替えは MODE_HOLD 秒は保つ
   let nNear=0, hpNear=0, awx=0, awy=0; p.dpsEst=heroDpsEst(p);
   { let cx=0, cy=0, cn=0;
-    for(const e of B.enemies){ if(e.dead||e.dormant||e.item||e.state==='attached'||e.id==='imp') continue; if(e.id==='flower' && !e.revealed) continue; if(!inSight(e,p) || e.seenT < BAL.NOTICE_T*(1.4-0.4*foc)) continue; const d=Math.hypot(e.x-p.x,e.y-p.y); if(d<260){ hpNear+=e.hp*(e.boss?0.35:1); const w=1-d/260; cx+=e.x*w; cy+=e.y*w; cn+=w; } if(d<120) nNear++; }
+    for(const e of B.enemies){ if(e.dead||e.dormant||e.item||e.state==='attached'||e.id==='imp') continue; if(e.id==='flower' && !e.revealed) continue; if(MONSTERS[e.id].spd<=0) continue; if(!inSight(e,p) || e.seenT < BAL.NOTICE_T*(1.4-0.4*foc)) continue; const d=Math.hypot(e.x-p.x,e.y-p.y); if(d<260){ hpNear+=e.hp*(e.boss?0.35:1); const w=1-d/260; cx+=e.x*w; cy+=e.y*w; cn+=w; } if(d<120) nNear++; }   // 据わった個体(魔核・夢の樹・番人・口・壺)は数えない(近づけなくなる)
     if(cn>0){ cx/=cn; cy/=cn; const d=Math.hypot(p.x-cx,p.y-cy)||1; awx=(p.x-cx)/d; awy=(p.y-cy)/d; } }   // awx/awy: 群れの重心から離れる向き
   const ttk=hpNear/Math.max(1,p.dpsEst); p.press=ttk/BAL.FLEE_TTK+nNear/BAL.FLEE_N; p.ttkEst=ttk; p.nNear=nNear;
   if(BAL.SMART_AI && B.time>=p.modeUntil){
-    const want=(ttk>BAL.FLEE_TTK||nNear>=BAL.FLEE_N)?'flee':((ttk>BAL.KITE_TTK||nNear>=BAL.KITE_N)?'kite':'fight');
+    const lvK=1+BAL.MODE_LV_K*Math.max(0,BAL.MODE_LV-p.level);   // 低Lvは武器が弱く何でも「倒し切れない」に見える→秒の閾値を緩める(Lv15で等倍)
+    const want=(ttk>BAL.FLEE_TTK*lvK||nNear>=BAL.FLEE_N)?'flee':((ttk>BAL.KITE_TTK*lvK||nNear>=BAL.KITE_N)?'kite':'fight');
     if(want!==p.aiMode){ p.aiMode=want; p.modeUntil=B.time+BAL.MODE_HOLD; p.escape=null; if(want==='flee') sayLine('retreat',1,8,'むり、にげる!'); else if(want==='kite') sayLine('kite',0,12); }
   }
   let dx=0, dy=0, state='wait';
@@ -1479,6 +1480,7 @@ function aiDecide(foc){
     exitD=Math.hypot(exX-p.x,exY-p.y)||1; }
   let exitGo=!!exitQ && (exitOpen || exitD>40);
   // v2.2 降りたいのに降り口をまだ知らない: 探索点を「逃げる先」にして、群れに押されても地図を進む(その場で牽制し続けない)
+  if(B.wantExit && !exitQ && !B.floor.final && (!p.explore || B.time>p.exploreUntil || Math.hypot(p.explore.x-p.x,p.explore.y-p.y)<70)) pickExplore(p);   // v2.3 逃げに徹していても探索点は切らさない(降り口を探す)
   if(B.wantExit && !exitQ && p.explore && !B.floor.final){ exX=p.explore.x; exY=p.explore.y; exitD=Math.hypot(exX-p.x,exY-p.y)||1; exitGo=exitD>60; }
 
   // HPが危険域なら、多少の脅威があっても燭台へ強行する(回復の隙=攻めどころ)
@@ -1513,6 +1515,7 @@ function aiDecide(foc){
     dx+=ax*1.1; dy+=ay*1.1;
     state='prop';
   }else if(BAL.SMART_AI && p.aiMode==='flee'){
+    p.propTarget=null;
     // 逃げに徹する: 体力が薄ければ届くハートへ。降り口が開いていればそこへ、降りたいなら探索点へ、無ければ8方向の中で群れから遠く魔物の薄い床へ。細かい目当ては見ない
     let heart=null; if(p.hp<p.maxHp*0.7){ let td=300; for(const h2 of B.hearts){ if(G.map && (!passAt(h2.x,h2.y,false) || !reachableAt(h2.x,h2.y,false))) continue; if(gaveUp(h2)) continue; const d=Math.hypot(h2.x-p.x,h2.y-p.y); if(d<td){ td=d; heart=h2; } } }
     if(heart){ const sv=steerTo(p,heart.x,heart.y); dx=sv.x+ax*0.4; dy=sv.y+ay*0.4; state='heart'; }
@@ -1520,7 +1523,7 @@ function aiDecide(foc){
       if(!p.escape || B.time>p.escape.until || Math.hypot(p.escape.x-p.x,p.escape.y-p.y)<50){
         let best=null, bs=-1e9;
         if(exitGo){ best={x:exX,y:exY}; }
-        else for(let k=0;k<8;k++){ const a=k*TAU/8+Math.sin(B.time)*0.2, ca=Math.cos(a), sa=Math.sin(a); const q=snapFloor(clampMapX(p.x+ca*420,80),clampMapY(p.y+sa*320,80),false,6); if(!q||!reachableAt(q.x,q.y,false)) continue; const sc=-nearEnemyCount(q.x,q.y,220)*1.0-nearEnemyCount((p.x+q.x)/2,(p.y+q.y)/2,140)*0.7+(awx*ca+awy*sa)*2.5-(zoneFear(zoneAt(q.x,q.y))>=2?3:0); if(sc>bs){ bs=sc; best=q; } }
+        else for(let k=0;k<8;k++){ const a=k*TAU/8+Math.sin(B.time)*0.2, ca=Math.cos(a), sa=Math.sin(a); const q=snapFloor(clampMapX(p.x+ca*420,80),clampMapY(p.y+sa*320,80),false,6); if(!q||!reachableAt(q.x,q.y,false)) continue; const sc=-nearEnemyCount(q.x,q.y,220,true)*1.0-nearEnemyCount((p.x+q.x)/2,(p.y+q.y)/2,140,true)*0.7+(awx*ca+awy*sa)*2.5-(zoneFear(zoneAt(q.x,q.y))>=2?3:0); if(sc>bs){ bs=sc; best=q; } }
         p.escape=best?{x:best.x,y:best.y,until:B.time+2.5}:null;
       }
       if(p.escape){ const sv=steerTo(p,p.escape.x,p.escape.y); dx=sv.x+ax*0.5; dy=sv.y+ay*0.5; }
@@ -1528,8 +1531,9 @@ function aiDecide(foc){
       state='retreat';
     }
   }else if(BAL.SMART_AI && p.aiMode==='kite' && threat<1.6){
+    p.propTarget=null;
     // 引き撃ち: 群れの重心から離れつつ、空いている側へ寄る(武器は自動で撃つ)。下がる側のジェム・ハートだけ拾う(群れの方へは戻らない)
-    let ox=0, oy=0, bs=-1e9; for(let k=0;k<8;k++){ const a=k*TAU/8; const qx=p.x+Math.cos(a)*200, qy=p.y+Math.sin(a)*150; if(!passAt(qx,qy,false)) continue; const sc=-nearEnemyCount(qx,qy,170)+(awx*Math.cos(a)+awy*Math.sin(a))*2; if(sc>bs){ bs=sc; ox=Math.cos(a); oy=Math.sin(a); } }
+    let ox=0, oy=0, bs=-1e9; for(let k=0;k<8;k++){ const a=k*TAU/8; const qx=p.x+Math.cos(a)*200, qy=p.y+Math.sin(a)*150; if(!passAt(qx,qy,false)) continue; const sc=-nearEnemyCount(qx,qy,170,true)+(awx*Math.cos(a)+awy*Math.sin(a))*2; if(sc>bs){ bs=sc; ox=Math.cos(a); oy=Math.sin(a); } }
     dx=awx*0.55+ox*0.45+ax*0.6; dy=awy*0.55+oy*0.45+ay*0.6; state='kite2';
     if(exitGo){ dx=dx*0.7+(exX-p.x)/exitD*0.4; dy=dy*0.7+(exY-p.y)/exitD*0.4; }
     { const m0=Math.hypot(dx,dy)||1, ux=dx/m0, uy=dy/m0; let pick=null, pd=1e9, pk='';
@@ -3254,26 +3258,29 @@ function sentinelTick(e,dt,d,dx,dy){
    Lvで解放され、AIが状況で使う。跳躍=囲まれた時に空いている方へ、浄化=拘束を千切って弾く、壁=瀕死で被ダメ-70% */
 function skillReady(p,id){ return p.level>=SKILLS[id].lv && (p.skillCd[id]||0)<=0; }
 function useSkill(p,id){ const B=G.B; p.skillCd[id]=SKILLS[id].cd; B.nSkill=B.nSkill||{}; B.nSkill[id]=(B.nSkill[id]||0)+1; setBanner('奥義 '+SKILLS[id].name,SKILLS[id].desc.split('。')[0],'#ffd76a'); sayLine('skill.'+id,2,0,SKILLS[id].name+'!'); S.lvup(); }
-function nearEnemyCount(x,y,r){ let n=0; for(const e of G.B.enemies){ if(e.dead||e.dormant||e.item||e.state==='attached') continue; if(Math.hypot(e.x-x,e.y-y)<r) n++; } return n; }
+function nearEnemyCount(x,y,r,all){ let n=0; for(const e of G.B.enemies){ if(e.dead||e.dormant||e.item||e.state==='attached'||e.id==='imp') continue; if(e.id==='flower' && !e.revealed) continue; if(!all && MONSTERS[e.id].spd<=0) continue; if(Math.hypot(e.x-x,e.y-y)<r) n++; } return n; }   // all=true で据わった個体も数える(逃げ先・跳び先の採点)
 function skillTick(dt){
   const B=G.B, p=B.hero;
   for(const k in p.skillCd) if(p.skillCd[k]>0) p.skillCd[k]-=dt;
   if(BAL.SMART_AI){ if(p.aiMode==='flee') B.fleeT=(B.fleeT||0)+dt; else B.fleeT=Math.max(0,(B.fleeT||0)-dt*0.5); }   // 逃げ続けた秒数(exitTick が「降り口を探す」に使う)
   if(p.guardT>0){ p.guardT-=dt; if(Math.random()<dt*10) parts(p.x+rand(-16,16),p.y-rand(0,30),1,['#ffd76a','#fff'],30,0.6); }
   if(G.mode!=='battle') return;
+  if(p.freezeT>0 || (p.stumbleDur||0)>0 || p.bathT>0 || p.poolT>0 || p.readT>0) return;   // 時間停止・よろめき・湯/清水/石碑の間は奥義も出ない
   // 聖光の壁: 瀕死
   if(skillReady(p,'bulwark') && p.hp<p.maxHp*0.35 && !p.pinned){ p.guardT=4; useSkill(p,'bulwark'); parts(p.x,p.y-14,30,['#ffd76a','#fff','#ffe9b0'],200,0.8); }
   // 浄化の脈: 二肢以上を掴まれた／押し倒された
-  if(skillReady(p,'purge') && (attachCount(p)>=2 || p.pinned) && !p.charmBind){
+  if(skillReady(p,'purge') && (attachCount(p)>=2 || p.pinned) && !p.charmBind && p.hypnoLv<2){   // 催眠Ⅱ+では振り払う気が起きない
     for(const sl of attachedSlots(p)) detachLimb(sl,{fling:true});
+    for(const sl of suckSlots(p)) detachSucker(sl,{fling:true});
     if(p.pinned){ p.pinned=false; p.pinBy=null; p.pinEscape=0; p.struggle=0; B.pinScene=null; }
     for(const e of B.enemies){ if(e.dead||e.dormant||e.item) continue; const dx=e.x-p.x, dy=e.y-p.y, d=Math.hypot(dx,dy)||0.001; if(d<120){ if(MONSTERS[e.id].spd>0 && !MONSTERS[e.id].guardian){ e.x+=dx/d*90; e.y+=dy/d*90; collideMap(e,e.r*0.75,canFly(e.id)); } e.stun=Math.max(e.stun||0,e.boss?0.6:1.2); } }
     p.ifr=Math.max(p.ifr,1.0); p.stamina=Math.min(p.staminaMax,p.stamina+20); useSkill(p,'purge'); parts(p.x,p.y-14,40,['#fff','#8fd3ff','#ffd76a'],260,0.9); G.shake=Math.min(8,G.shake+5);
   }
   // 光の跳躍: 囲まれた
-  if(skillReady(p,'blink') && attachCount(p)===0 && !p.pinned && !p.charmBind && p.climaxT<=0 && (nearEnemyCount(p.x,p.y,130)>=6 || (p.press||0)>=1.4)){
-    let best=null, bs=1e9; for(let k=0;k<12;k++){ const a=k*TAU/12; const q=snapFloor(clampMapX(p.x+Math.cos(a)*180,40),clampMapY(p.y+Math.sin(a)*180,40),false,3); if(!q||!reachableAt(q.x,q.y,false)) continue; const sc=nearEnemyCount(q.x,q.y,150)+nearEnemyCount(q.x,q.y,60)*2; if(sc<bs){ bs=sc; best=q; } }
-    if(best && bs<nearEnemyCount(p.x,p.y,150)){ parts(p.x,p.y-14,24,['#fff','#8fd3ff'],200,0.6); p.x=best.x; p.y=best.y; p.vx=p.vy=0; p.path=null; p.ifr=Math.max(p.ifr,0.6); parts(p.x,p.y-14,24,['#fff','#ffd76a'],200,0.6); useSkill(p,'blink'); }
+  if(skillReady(p,'blink') && B.time>=(p.blinkRetry||0) && attachCount(p)===0 && !p.pinned && !p.charmBind && p.climaxT<=0 && (nearEnemyCount(p.x,p.y,130)>=6 || (p.press||0)>=1.4)){
+    let best=null, bs=1e9; for(let k=0;k<12;k++){ const a=k*TAU/12; const q=snapFloor(clampMapX(p.x+Math.cos(a)*180,40),clampMapY(p.y+Math.sin(a)*180,40),false,3); if(!q||!reachableAt(q.x,q.y,false)) continue; const sc=nearEnemyCount(q.x,q.y,150,true)+nearEnemyCount(q.x,q.y,60,true)*2; if(sc<bs){ bs=sc; best=q; } }
+    p.blinkRetry=B.time+0.5;   // 跳べる先が無ければ0.5秒は探し直さない(毎フレームの走査を避ける)
+    if(best && bs<nearEnemyCount(p.x,p.y,150,true)){ parts(p.x,p.y-14,24,['#fff','#8fd3ff'],200,0.6); p.x=best.x; p.y=best.y; p.vx=p.vy=0; p.path=null; p.ifr=Math.max(p.ifr,0.6); parts(p.x,p.y-14,24,['#fff','#ffd76a'],200,0.6); useSkill(p,'blink'); }
   }
 }
 /* v2.3 いまの武器から見た、おおまかな秒間火力(戦う/引き撃ち/逃げるの判断に使う) */
@@ -3756,7 +3763,7 @@ function hurtHero(dmg,src,opt){
   const atk=attachCount(p);
   const mult=p.pinned?BAL.PIN_DMG_MULT:((atk>0||p.charmBind)?BAL.ATTACH_DMG_MULT:1);
   const armor=opt.pierce?0:Math.max(0,p.armor-atk);
-  const net=Math.max(0, dmg*mult*(p.guardT>0?0.3:1)-armor);   // v2.3 聖光の壁: 被ダメ-70%
+  const net=Math.max(0, dmg*mult-armor)*(p.guardT>0?0.3:1);   // v2.3 聖光の壁: 護りを引いた後の被ダメ-70%(小さな当たりまで無効にはしない)
   if(net<=0){
     if(!opt.quiet){
       parts(p.x,p.y-14,3,['#cfe0ff','#8fd3ff'],70,0.3);

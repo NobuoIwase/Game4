@@ -174,7 +174,7 @@ const BAL={
   /* v2.3 迷いの積み上げ: 同じ地形で「やめとく」を選ぶたびに次に入る確率が HESIT_ESC ずつ上がる(入ったら戻る)。SCARED_T 秒はその地形へ寄らない */
   HESIT_ESC:0.22, SCARED_T:40,
   /* v2.3 戦闘の賢さ: 近くの魔物を倒し切るまでの見込み秒(ttk)と密度で 戦う/引き撃ち/逃げに徹する を切り替える。SMART_AI=0 で旧挙動 */
-  SMART_AI:1, KITE_TTK:5.0, KITE_N:7, FLEE_TTK:9, FLEE_N:12, MODE_HOLD:1.2, FLEE_EXIT_T:8, KITE_GEM_R:200,   // 逃げ続けが FLEE_EXIT_T 秒で「降り口を探す」に切り替わる / 引き撃ち中に拾うジェムの距離
+  SMART_AI:1, KITE_TTK:5.0, KITE_N:7, FLEE_TTK:9, FLEE_N:12, MODE_HOLD:1.2, FLEE_EXIT_T:8, KITE_GEM_R:200, MODE_LV:15, MODE_LV_K:0.12,   // 逃げ続けが FLEE_EXIT_T 秒で「降り口を探す」に切り替わる / 引き撃ち中に拾うジェムの距離
   // v1.9 武器の上限: Lv5 までは従来の伸び、Lv6〜8 は覚醒(進化後も効く)。全部が上限なら「ルミナの祈り」(無駄なレベルを出さない)
   WP_EVO_LV:5, WP_OVER_DMG:0.15, WP_OVER_CD:0.93, WP_OVER_AREA:0.05,
   PRAY_DMG:0.04, PRAY_HP:0.03, PRAY_SPD:0.01, PRAY_HEAL:40,
