@@ -183,7 +183,7 @@ canvas#cv.arm{ cursor:crosshair; }
 .hcard:hover{ transform:translateY(-4px); }
 .hcard.sel{ border-color:var(--gold); box-shadow:0 0 14px rgba(255,215,106,.35); transform:translateY(-6px); }
 .hcard.off{ opacity:.42; cursor:default; transform:none; }
-.hcard .nm{ font-size:9px; font-weight:bold; color:#d9d3f5; z-index:2; max-width:100%; padding:0 2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.hcard .nm{ font-size:9px; font-weight:bold; color:#d9d3f5; z-index:2; }
 .hcard .cost{
   position:absolute; top:3px; left:3px; z-index:2; background:var(--vio2);
   border-radius:999px; font-size:10px; font-weight:bold; padding:1px 6px;
@@ -283,62 +283,16 @@ canvas#cv.arm{ cursor:crosshair; }
 /* ===== モバイル(縦持ち)調整 ===== */
 #formrow{ flex-wrap:wrap; justify-content:center; }
 #battlebar .spread{ flex-wrap:wrap; justify-content:center; row-gap:4px; }
-
-/* 手札やアイテムが増えても HUD が高くならないよう、折り返さずに横スクロールさせる。
-   HUD が伸びると盤面(canvas)が縮むので、高さを一定に保つのがそのまま見やすさになる。 */
-#handrow, #itemrow, #formrow{ scrollbar-width:thin; scrollbar-color:rgba(201,140,255,.5) transparent; }
-#handrow::-webkit-scrollbar, #itemrow::-webkit-scrollbar, #formrow::-webkit-scrollbar,
-#guestscroll::-webkit-scrollbar{ height:3px; }
-#handrow::-webkit-scrollbar-thumb, #itemrow::-webkit-scrollbar-thumb, #formrow::-webkit-scrollbar-thumb,
-#guestscroll::-webkit-scrollbar-thumb{ background:rgba(201,140,255,.5); border-radius:999px; }
-#handrow, #itemrow, #formrow{
-  flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden;
-  justify-content:flex-start; max-width:100%; padding-bottom:2px;
-  -webkit-overflow-scrolling:touch; overscroll-behavior-x:contain;
-}
-#handrow{ justify-content:center; }
-#handrow > *, #itemrow > *, #formrow > *{ flex:0 0 auto; }
-#battlebar .spread{ flex-wrap:nowrap; align-items:center; }
-#formrow{ flex:1 1 auto; min-width:0; }
-#battlebar .side{ flex:0 0 auto; }
-
-/* 横持ちの端末は画面が低い。段を減らし、カードも小さくして盤面の高さを稼ぐ */
-@media (max-height:560px){
-  /* ENバー・アイテム・陣形/操作ボタンを1段にまとめる(手札は下に1段) */
-  #battlebar{
-    display:grid; align-items:center; column-gap:8px; row-gap:3px;
-    grid-template-columns:minmax(110px,1fr) auto auto;
-    grid-template-areas:"en item side" "hand hand hand" "guest guest guest";
-  }
-  #enwrap{ grid-area:en; }
-  #itemrow{ grid-area:item; max-width:34vw; }
-  #battlebar .spread{ grid-area:side; width:auto !important; }
-  #handrow{ grid-area:hand; }
-  #guestrow{ grid-area:guest; }
-  #formrow{ max-width:26vw; }
-  .hcard{ width:50px; height:64px; }
-  .hcard .nm{ font-size:8px; }
-  .hcard canvas{ top:2px; transform:translateX(-50%) scale(.8); transform-origin:top center; }
-  .ichip{ font-size:9.5px; padding:3px 8px; }
-  .fchip{ padding:3px 9px; font-size:9.5px; }
-  #battlebar{ gap:3px; bottom:4px; }
-  #battlebar .side button{ font-size:9.5px; padding:4px 9px; }
-  #enbar{ height:10px; }
-  #entext{ font-size:10px; min-width:52px; }
-}
 @media (max-width:720px){
   #resbar{ gap:5px; font-size:10.5px; right:48px; flex-wrap:wrap; }
   #resbar .chip{ padding:3px 9px; }
-  .hcard{ width:52px; height:68px; }
+  .hcard{ width:56px; height:74px; }
   .hcard .nm{ font-size:8px; }
   .hcard canvas{ top:3px; }
-  .hcard .cost{ font-size:9px; padding:0 5px; }
   .fchip{ padding:3px 9px; font-size:9.5px; }
-  .ichip{ font-size:9.5px; padding:3px 8px; }
-  #battlebar{ gap:3px; bottom:4px; }
+  #battlebar{ gap:4px; bottom:4px; }
   #battlebar .side button{ font-size:9.5px; padding:4px 9px; }
   #entext{ font-size:10px; min-width:54px; }
-  #enbar{ height:11px; }
   .menu-grid{ grid-template-columns:1fr; }
   .screen .inner{ padding:14px 14px; }
   .cards{ grid-template-columns:repeat(auto-fill,minmax(124px,1fr)); }

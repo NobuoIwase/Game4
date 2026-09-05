@@ -5,48 +5,24 @@
    debug: ?ts=N でゲーム速度N倍(1-5) / console: __game
 ============================================================ */
 const TAU = Math.PI*2;
-let W = 960, H = 540;                                  // 視界の論理サイズ。端末の縦横比に合わせて resize() で決める
+const W = 960, H = 540;
 const FONT = '"Hiragino Maru Gothic ProN","Yu Gothic UI","Meiryo",sans-serif';
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
 const TS = Math.max(1, Math.min(5, parseInt(new URLSearchParams(location.search).get('ts'),10) || 1));
 
 let dpr=1, viewScale=1;
-/* 視界は「広さ」を一定に保ったまま、端末の縦横比に合わせて形を変える。
-   縦持ちの端末では視界も縦長になり、そのぶん画面いっぱいに描けるので1体1体が大きく見える。
-   (960x540 のまま横長の帯を縦画面に収めると、画面の高さの1/4しか使えず何も見えない) */
-const VIEW_AREA=960*540, AR_MIN=0.52, AR_MAX=2.60;
-let _barH=-1;
-function barHeight(){
-  const bb=document.getElementById('battlebar');
-  return (bb && !bb.hidden) ? Math.round(bb.offsetHeight)+8 : 0;
-}
 function resize(){
   dpr = Math.min(2, window.devicePixelRatio||1);
-  _barH = barHeight();
-  const availW = Math.max(240, window.innerWidth);
-  const availH = Math.max(200, window.innerHeight - _barH);
-  let ar = availW/availH;
-  if(ar<AR_MIN) ar=AR_MIN; else if(ar>AR_MAX) ar=AR_MAX;
-  W = Math.round(Math.sqrt(VIEW_AREA*ar)/2)*2;
-  H = Math.round(Math.sqrt(VIEW_AREA/ar)/2)*2;
-  viewScale = Math.min(availW/W, availH/H) * 0.995;
+  viewScale = Math.min(window.innerWidth/W, window.innerHeight/H) * 0.985;
   cv.style.width  = Math.round(W*viewScale)+'px';
   cv.style.height = Math.round(H*viewScale)+'px';
-  cv.style.marginBottom = _barH+'px';        // 下のHUDのぶんだけ場所を空ける(盤面に被せない)
   cv.width  = Math.round(W*viewScale*dpr);
   cv.height = Math.round(H*viewScale*dpr);
   const bb=document.getElementById('battlebar');
-  bb.style.width = Math.min(1100, Math.round(W*viewScale)-12)+'px';
-  if(typeof makeVignette==='function') makeVignette();   // 画面サイズが変わったら周辺減光を作り直す
+  bb.style.width = Math.min(720, Math.round(W*viewScale)-24)+'px';
 }
-window.addEventListener('resize', resize);
-window.addEventListener('orientationchange', ()=>setTimeout(resize,60));
-resize();
-/* 手札が増減するとHUDの高さが変わる。変わったぶんだけ盤面を作り直す */
-if(window.ResizeObserver){
-  new ResizeObserver(()=>{ if(barHeight()!==_barH) resize(); }).observe(document.getElementById('battlebar'));
-}
+window.addEventListener('resize', resize); resize();
 
 /* ---------------- utils ---------------- */
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
