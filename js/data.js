@@ -145,6 +145,14 @@ const BAL={
   GEM_CAP:600,
 
   CHEST_TIMES:[40,110,180,250],
+  // v1.8 地形の資源・イベント・目当て
+  PICK_SHROOM_N:4, PICK_SHROOM_RESPAWN:30, PICK_SHROOM_MAX:5,       // 光茸: 初期数/追加間隔(s)/上限
+  PICK_NECTAR_N:3, PICK_NECTAR_RESPAWN:25, PICK_NECTAR_MAX:4,       // 蜜の花
+  PICK_TREASURE_CD:28, PICK_TREASURE_MAX:2,                         // 沈んだ宝: 出現間隔/上限
+  POOL_CD:45, POOL_T:2.2, STELE_T:2.0,                              // 清水の再使用/浸かる時間、石碑を読む時間
+  EVENT_FIRST:30, EVENT_CD_MIN:50, EVENT_CD_MAX:75, EVENT_LIFE:60,  // イベントの初回/間隔/光の柱が立つ時間
+  GOAL_RETHINK:3, FARM_T:6, FARM_BREAK:5,                           // 目当ての見直し間隔 / ジェム拾いに留まる上限 / その後歩く時間
+  SHROOM_REVEAL:900, SHROOM_XP:0.06, TREASURE_XP:0.35,             // 光茸の見通し距離・経験値(必要量比)、沈んだ宝の経験値(必要量比)
 
   IMP_TEASE_CAP:2,         // 快感を注げる小淫魔は同時2体まで(数で強くなりすぎ防止)
 
@@ -359,14 +367,15 @@ const MONSTERS={
    彼女は宝箱・祠(永続強化)・泉(休息)・門(突破)を目当てに歩き回る。地形は魔物にも効く */
 const MAP_T=32, MAP_W=112, MAP_H=72;                // タイル寸・横タイル数・縦タイル数(3584×2304px、原点が中心)。v1.7: 32pxのチップで細かく
 const MAP_HW=MAP_W*MAP_T/2, MAP_HH=MAP_H*MAP_T/2;
+/* 地形帯: desc=夜側から見た効き目 / her=彼女がそこへ行きたくなる理由(v1.8 地形の意味) */
 const ZONES={
-  moss:     { name:'苔の広間',   col:'#223a3c', desc:'いつもの床。何も起きない' },
-  damp:     { name:'湿った洞',   col:'#1c3040', desc:'ナメクジ・羽虫・ワーム・粘獣王のHP+25%(ジメジメ)' },
-  water:    { name:'浅瀬',       col:'#1f4a7c', desc:'スライム系の速度+30%。彼女の足は水で12%鈍る' },
-  flower:   { name:'花園',       col:'#2f5638', desc:'媚薬の雲が濃く広い(+20%)。花粉で彼女の敏感化がじわじわ進む' },
-  hotspring:{ name:'温泉',       col:'#5a3a3c', desc:'湯気で彼女の回復+50%。代わりに敏感化と発情ゲージが上がる' },
-  ruin:     { name:'石畳の回廊', col:'#3a3a4a', desc:'彼女の足も魔物の足も速い(+6%)' },
-  nest:     { name:'魔物の巣',   col:'#4a2038', desc:'魔物のHP+15%・速度+10%。門がある' },
+  moss:     { name:'苔の広間',   col:'#223a3c', desc:'いつもの床。何も起きない', her:'光茸が生える(拾うと経験値。光でまわりの場所が分かる)' },
+  damp:     { name:'湿った洞',   col:'#1c3040', desc:'ナメクジ・羽虫・ワーム・粘獣王のHP+25%(ジメジメ)', her:'清水が湧く(浸かると敏感化・発情・粘液が流れる)' },
+  water:    { name:'浅瀬',       col:'#1f4a7c', desc:'スライム系の速度+30%。彼女の足は水で12%鈍る', her:'沈んだ宝(大きな経験値。足を取られながら拾う)' },
+  flower:   { name:'花園',       col:'#2f5638', desc:'媚薬の雲が濃く広い(+20%)。花粉で彼女の敏感化がじわじわ進む', her:'蜜の花(スタミナとHPが戻る。花粉は浴びる)' },
+  hotspring:{ name:'温泉',       col:'#5a3a3c', desc:'湯気で彼女の回復+50%。代わりに敏感化と発情ゲージが上がる', her:'泉がある(HPが減っていれば浸かって休む)' },
+  ruin:     { name:'石畳の回廊', col:'#3a3a4a', desc:'彼女の足も魔物の足も速い(+6%)', her:'石碑(読むと魔物の知識が進む)。宝箱は回廊に落ちやすい' },
+  nest:     { name:'魔物の巣',   col:'#4a2038', desc:'魔物のHP+15%・速度+10%。門がある', her:'目当ては門だけ。用がなければ避けて歩く' },
 };
 const ZONE_IDS=Object.keys(ZONES);
 const ZONE_HP_MON={ damp:{slug:1.25,leech:1.25,worm:1.25,slimeking:1.25}, nest:{'*':1.15} };
@@ -375,6 +384,22 @@ const POI_DEF={
   shrine:{ name:'祠',   desc:'着くと彼女の自己強化が1段上がる(世代内で1度ずつ)' },
   spring:{ name:'泉',   desc:'HPが減っていれば湯に浸かって休む。回復するが、敏感化と発情ゲージが上がる' },
   gate:  { name:'門',   desc:'巣の奥の門。そばに12秒居続けると突破(日を跨いで進む)。突破のたび巣の魔物が湧く' },
+  pool:  { name:'清水', desc:'湿った洞の澄んだ水。敏感化・発情・粘液がひどければ浸かって流す(2秒・45秒に1度)' },
+  stele: { name:'石碑', desc:'石畳の回廊の碑文。読むと出会った魔物の知識が1段進み、知らない場所が1つ分かる(1戦1度ずつ)' },
+};
+/* v1.8 地形の資源(拾い物): 地形帯ごとに生える/沈んでいる。彼女は必要に応じて目当てにする */
+const PICK_DEF={
+  shroom:  { name:'光茸',     zone:'moss',   desc:'拾うと経験値。光で 900px 内の場所を知る' },
+  nectar:  { name:'蜜の花',   zone:'flower', desc:'スタミナ+45・HP+10%。花粉で敏感化+8' },
+  treasure:{ name:'沈んだ宝', zone:'water',  desc:'必要経験値の35%とコイン。浅瀬で足を取られながら拾う' },
+};
+/* v1.8 イベント: 光の柱が立ち、彼女はそこへ向かう(夜側は先回りできる) */
+const EVENT_DEF={
+  chest: { name:'宝箱の光',   sub:'光の柱の下に宝箱。ルミナは向かうだろう', col:'#ffd76a' },
+  shroom:{ name:'光茸の群生', sub:'苔の広間に光茸がまとめて生えた',         col:'#9fe8c8' },
+  pool:  { name:'清水が湧く', sub:'清水が澄みなおした。汚れていれば浸かりに行く', col:'#8fd3ff' },
+  stele: { name:'石碑の輝き', sub:'碑文が光る。読めば知識が2段進む',         col:'#cbd5ff' },
+  star:  { name:'流れ星',     sub:'品が落ちてくる。ルミナは拾いに向かう',     col:'#fff6d8' },
 };
 /* ボス敗北の呪い: ボスの攻撃/影響によって敗北すると、次の CURSE_DAYS 日にわたって残る */
 const BOSS_CURSES={

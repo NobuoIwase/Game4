@@ -283,6 +283,76 @@ function drawItem(g,it){
   }
   g.restore();
 }
+/* v1.8 地形の資源: 光茸(苔の広間)・蜜の花(花園)・沈んだ宝(浅瀬) */
+function drawPick(g,pk){
+  g.save(); g.translate(pk.x,pk.y);
+  const t=pk.t;
+  if(pk.kind==='shroom'){
+    g.fillStyle='rgba(8,8,26,0.3)'; g.beginPath(); g.ellipse(0,2,14,4.5,0,0,TAU); g.fill();
+    glow(g,0,-8,22,'159,232,200',0.28+0.12*Math.sin(t*2.5));
+    const caps=[[-7,0,6,'#7fd8b8'],[5,1,5,'#9fe8c8'],[0,-3,7.5,'#b6f2da']];
+    for(const [x,y,r,c] of caps){
+      g.fillStyle='#d8d8e8'; g.fillRect(x-1.5,y-r*0.6,3,r*0.8+2);
+      g.fillStyle=c; g.beginPath(); g.ellipse(x,y-r*0.7,r,r*0.55,0,Math.PI,TAU); g.fill();
+      g.fillStyle='rgba(255,255,255,0.7)'; g.beginPath(); g.arc(x-r*0.3,y-r*0.95,1.2,0,TAU); g.fill();
+    }
+  }else if(pk.kind==='nectar'){
+    g.fillStyle='rgba(8,8,26,0.3)'; g.beginPath(); g.ellipse(0,2,12,4,0,0,TAU); g.fill();
+    g.strokeStyle='#4f8a4a'; g.lineWidth=2; g.beginPath(); g.moveTo(0,2); g.quadraticCurveTo(2,-8,0,-16); g.stroke();
+    g.fillStyle='#5aa050'; g.beginPath(); g.ellipse(-5,-6,5,2.4,-0.5,0,TAU); g.fill();
+    const sw=1+0.06*Math.sin(t*3);
+    g.translate(0,-18); g.scale(sw,sw);
+    g.fillStyle='#ffb3cf'; for(let i=0;i<6;i++){ const a=i*TAU/6+t*0.2; g.beginPath(); g.ellipse(Math.cos(a)*6,Math.sin(a)*6,5,3,a,0,TAU); g.fill(); }
+    glow(g,0,0,14,'255,215,106',0.3+0.15*Math.sin(t*4));
+    g.fillStyle='#ffd76a'; g.beginPath(); g.arc(0,0,3.6,0,TAU); g.fill();
+    g.fillStyle='rgba(255,236,160,0.9)'; g.beginPath(); g.arc(2,4+((t*0.7)%1)*6,1.6,0,TAU); g.fill();   // 蜜のしずく
+  }else{
+    // 沈んだ宝: 水面の下の小箱。波紋ときらめき
+    g.fillStyle='rgba(60,140,210,0.35)'; g.beginPath(); g.ellipse(0,0,22,10,0,0,TAU); g.fill();
+    g.save(); g.globalAlpha=0.7; g.fillStyle='#6a4a22'; rr(g,-9,-8,18,10,2); g.fill(); g.fillStyle='#8a6a32'; rr(g,-9,-10,18,5,2); g.fill(); g.fillStyle='#ffd76a'; g.fillRect(-1.2,-8,2.4,6); g.restore();
+    g.strokeStyle='rgba(220,245,255,0.5)'; g.lineWidth=1; for(let i=0;i<2;i++){ const ph=(t*0.6+i*0.5)%1; g.beginPath(); g.ellipse(0,0,8+ph*16,(8+ph*16)*0.45,0,0,TAU); g.stroke(); }
+    g.fillStyle='rgba(255,255,255,'+(0.5+0.5*Math.sin(t*6)).toFixed(2)+')'; g.beginPath(); g.arc(-5,-4,1.4,0,TAU); g.fill();
+  }
+  g.restore();
+}
+function hexA(hex,a){ const n=parseInt(hex.slice(1),16); return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+Math.max(0,Math.min(1,a)).toFixed(3)+')'; }
+/* v1.8 イベントの光の柱(遠くからでも見える) */
+function drawEventPillar(g,ev){
+  const c=(EVENT_DEF[ev.kind]&&EVENT_DEF[ev.kind].col)||'#ffffff';
+  const t=ev.t, a=0.34+0.1*Math.sin(t*3);
+  g.save();
+  const grad=g.createLinearGradient(0,ev.y,0,ev.y-700); grad.addColorStop(0,hexA(c,a*1.6)); grad.addColorStop(0.5,hexA(c,a)); grad.addColorStop(1,hexA(c,0));
+  g.fillStyle=grad; g.fillRect(ev.x-30,ev.y-700,60,700);
+  g.fillStyle=hexA(c,a*0.9); g.fillRect(ev.x-8,ev.y-700,16,700);
+  glow(g,ev.x,ev.y,70,c.startsWith('#')?(parseInt(c.slice(1,3),16)+','+parseInt(c.slice(3,5),16)+','+parseInt(c.slice(5,7),16)):'255,255,255',0.25+0.1*Math.sin(t*3));
+  g.strokeStyle=hexA(c,0.6); g.lineWidth=2; g.beginPath(); g.ellipse(ev.x,ev.y+2,30+4*Math.sin(t*2),12+1.5*Math.sin(t*2),0,0,TAU); g.stroke();
+  for(let i=0;i<6;i++){ const ph=(t*0.35+i/6)%1; g.fillStyle=hexA(c,(1-ph)*0.8); g.beginPath(); g.arc(ev.x+Math.sin(i*2.1+t)*14,ev.y-ph*260,2,0,TAU); g.fill(); }
+  g.restore();
+}
+/* v1.8 画面の端に、画面外の目当て/イベントの方向を示す矢印 */
+function drawEdgeArrow(g,wx,wy,col,label){
+  const dx=wx-G.cam.x, dy=wy-G.cam.y;
+  if(Math.abs(dx)<W/2-40 && Math.abs(dy)<H/2-40) return;   // 画面内なら要らない
+  const m=28, k=Math.min((W/2-m)/Math.abs(dx||0.001),(H/2-m)/Math.abs(dy||0.001));
+  const sx=W/2+dx*k, sy=H/2+dy*k, ang=Math.atan2(dy,dx);
+  g.save(); g.translate(sx,sy); g.rotate(ang);
+  g.fillStyle=col; g.shadowColor=col; g.shadowBlur=8;
+  g.beginPath(); g.moveTo(10,0); g.lineTo(-6,-7); g.lineTo(-3,0); g.lineTo(-6,7); g.closePath(); g.fill();
+  g.restore();
+  if(label){ g.save(); g.font='bold 10px '+FONT; g.textAlign='center'; g.textBaseline='middle'; g.fillStyle=col; g.shadowColor='rgba(0,0,0,0.8)'; g.shadowBlur=4;
+    g.fillText(label, clamp(sx-Math.cos(ang)*30,34,W-34), clamp(sy-Math.sin(ang)*30,14,H-14)); g.restore(); }
+}
+/* v1.8 目当ての名前と方角(HUD・ミニマップ用) */
+function goalName(gl){
+  if(!gl) return '';
+  if(gl.kind==='event') return '光の柱('+((EVENT_DEF[gl.sub]&&EVENT_DEF[gl.sub].name)||'')+')';
+  if(gl.kind==='item') return '落ちた品';
+  if(gl.kind==='chest') return gl.sub==='boss'?'王の宝箱':'宝箱';
+  if(gl.kind==='poi') return (POI_DEF[gl.sub]&&POI_DEF[gl.sub].name)||gl.sub;
+  if(gl.kind==='pick') return (PICK_DEF[gl.sub]&&PICK_DEF[gl.sub].name)||gl.sub;
+  return '探索';
+}
+function dirName(dx,dy){ const a=Math.atan2(dy,dx); const i=Math.round((a+Math.PI)/(Math.PI/4))%8; return ['西','北西','北','北東','東','南東','南','南西'][i]; }
 function drawSummonFx(g,s){
   const pr=s.t/0.6, a=1-pr;
   g.save();
@@ -2325,6 +2395,17 @@ function drawHUD(g){
   g.beginPath(); g.arc(23,59,3.6,0,TAU); g.fill();
   g.fillStyle='#cfe7ff'; g.textAlign='left'; g.textBaseline='middle';
   g.fillText(label,32,59.5);
+  // v1.8 目当てチップ: 彼女がいま向かっている先と方角(夜側が先回りして待ち伏せできるように)
+  if(p.goal && G.mode==='battle'){
+    const gl=p.goal, gx=gl.x-p.x, gy=gl.y-p.y, gd=Math.hypot(gx,gy);
+    const gcol=gl.kind==='event'?((EVENT_DEF[gl.sub]&&EVENT_DEF[gl.sub].col)||'#ffd76a'):'#ffe9b0';
+    const gtxt='目当て: '+goalName(gl)+(gd>60?'  '+dirName(gx,gy)+' '+Math.round(gd)+'px':'  ここ');
+    const gw=g.measureText(gtxt).width+26;
+    rr(g,10+cw+8,48,gw,22,11); g.fillStyle='rgba(40,30,20,0.82)'; g.fill(); g.strokeStyle=hexA(gcol,0.7); g.lineWidth=1.3; g.stroke();
+    g.fillStyle=gcol; g.textAlign='left'; g.textBaseline='middle'; g.fillText(gtxt,10+cw+8+13,59.5);
+    drawEdgeArrow(g,gl.x,gl.y,gcol,goalName(gl));
+  }
+  if(B.event && G.mode==='battle' && !(p.goal&&p.goal.kind==='event')) drawEdgeArrow(g,B.event.x,B.event.y,(EVENT_DEF[B.event.kind]&&EVENT_DEF[B.event.kind].col)||'#fff','光の柱');
   // 状態チップ
   let sx=10, sy=76;
   const chips=[];
@@ -2377,7 +2458,7 @@ function drawHUD(g){
   drawMinimap(g);
   g.fillText('enemies:'+B.enemies.length+' fps:'+Math.round(G.fps)+(TS>1?' x'+TS:''), 12, H-6);
   g.textAlign='right'; g.fillStyle='rgba(255,255,255,0.3)'; g.font='bold 10px '+FONT;
-  g.fillText('v1.7 侵蝕デッキ', W-12, H-6);
+  g.fillText('v1.8 侵蝕デッキ', W-12, H-6);
 }
 function drawCards(g){
   const B=G.B, c=B.lvCards; if(!c) return;
@@ -2616,6 +2697,8 @@ function draw(){
     for(const tr of B.traps) drawTrap(g,tr);
     for(const c of B.chests){ if(c.bossChest){ glow(g,c.x,c.y-6,34,'255,215,106',0.35+0.15*Math.sin(c.t*4)); } drawChest(g,c); if(c.fake){ g.save(); g.globalAlpha=0.35; g.fillStyle='#c98cff'; g.beginPath(); g.ellipse(c.x,c.y+2,14,5,0,0,TAU); g.fill(); g.restore(); } }
     for(const it of B.items) drawItem(g,it);
+    for(const pk of B.picks) drawPick(g,pk);                 // v1.8 地形の資源
+    if(B.event) drawEventPillar(g,B.event);                  // v1.8 光の柱
     if(B.ebullets) for(const b of B.ebullets) drawRuneBolt(g,b);
 
     drawSightSectors(g,B);

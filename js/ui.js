@@ -222,7 +222,7 @@ const UI={
     const wipeArmed=this._wipeArm && performance.now()-this._wipeArm<3000;
     return `
       <h1>ルミナ・サバイバーズ</h1>
-      <div class="sub">v1.7 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
+      <div class="sub">v1.8 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
       <p>あなたは<b>夜側の指揮者</b>。デッキから魔物を差し向け、AIで戦う光の少女<b>「ルミナ」</b>を追い詰める。<br>
       彼女に魔物が倒されるほどあなたのエネルギーとエッセンスは増え、彼女もまた強くなる。</p>
       <div style="text-align:center;color:var(--gold);font-size:12px;margin-bottom:8px">${esc(best)} ・ 通算${META.runs}戦 / 捕獲${META.captures}回</div>
@@ -448,11 +448,12 @@ const UI={
       </div>
       <div class="stcard"><h3>探索 <span style="color:var(--dim);font-weight:normal">(地形マップ・世代ごとに地形が変わる)</span></h3>
         <div class="kv">
-          <div>見つけた場所 <b>${Object.values((META.map&&META.map.known)||{}).filter(Boolean).length}/6</b> <span>(祠3・泉2・門1。見えた場所だけを目当てに歩く)</span></div>
+          <div>見つけた場所 <b>${Object.values((META.map&&META.map.known)||{}).filter(Boolean).length}/10</b> <span>(祠3・泉2・門1・清水2・石碑2。見えた場所・光茸の光で知った場所を目当てに歩く)</span></div>
           <div>祠の加護 <b>${Object.keys((META.map&&META.map.visited)||{}).length}/3</b> <span>(着くと自己強化が1段・世代内で1度ずつ)</span></div>
           <div>門の突破 <b>${(META.map&&META.map.gateDone)||0}回</b> <span>(進み ${Math.round((META.map&&META.map.gateProg)||0)}/12秒。日を跨いで進む。2日目以降か3種を理解してから挑む)</span></div>
         </div>
-        <div class="note" style="margin-top:6px">${Object.keys(ZONES).map(z=>esc(ZONES[z].name)+': '+esc(ZONES[z].desc)).join(' / ')}</div>
+        <div class="note" style="margin-top:6px">${Object.keys(ZONES).map(z=>'<b>'+esc(ZONES[z].name)+'</b>: '+esc(ZONES[z].desc)+' — 彼女には: '+esc(ZONES[z].her)).join('<br>')}</div>
+        <div class="note" style="margin-top:6px">目当て(v1.8): 彼女は光の柱・宝箱・落ちた品・場所・資源を「価値÷距離」で選び、脅威が薄ければそこへ歩く(進む先のジェムだけ拾う)。HUDの「目当て」チップとミニマップの点線に向かう先が出るので、先回りして待ち伏せできる。イベント(光の柱)は30秒後から50〜75秒ごと。</div>
       </div>
       <div class="stcard"><h3>抵抗の意志 <span style="color:var(--dim);font-weight:normal">(夜側の強化が行き着いても、彼女は「全く抵抗できない」には落ちない)</span></h3>
         <div class="kv">
@@ -564,6 +565,8 @@ const UI={
       ${sum.shop&&sum.shop.length?`<div class="note" style="color:var(--gold);margin:6px 0">——夜が明けて、ルミナは自分を強化した——<br>${sum.shop.map(esc).join(' ・ ')}</div>`:''}
       ${sum.shrines&&sum.shrines.length?`<div class="note" style="color:#ffd76a;margin:6px 0">——祠の加護: ${sum.shrines.map(esc).join(' ・ ')}——</div>`:''}
       ${sum.gateT>0?`<div class="note" style="color:#ff86b3;margin:6px 0">門に挑んだ(${Math.round(sum.gateT)}秒)。突破の進み: ${Math.round(Math.min(12,(META.map&&META.map.gateProg)||0))}/12秒</div>`:''}
+      ${sum.used&&(sum.used.shroom+sum.used.nectar+sum.used.treasure+sum.used.pool+sum.used.stele)>0?`<div class="note" style="color:#9fe8c8;margin:6px 0">地形の資源: ${[['光茸',sum.used.shroom],['蜜の花',sum.used.nectar],['沈んだ宝',sum.used.treasure],['清水',sum.used.pool],['石碑',sum.used.stele]].filter(a=>a[1]>0).map(a=>a[0]+'×'+a[1]).join(' ・ ')}</div>`:''}
+      ${sum.eventsN>0?`<div class="note" style="color:#ffe9b0;margin:6px 0">光の柱 ${sum.eventsN}回(彼女が辿り着いた ${sum.eventsDone}回)</div>`:''}
       ${sum.willUp?`<div class="note" style="color:#8fd3ff;margin:6px 0">——抵抗の意志が固くなった(${sum.will}/${BAL.WILL_CAP})。次からの彼女は少し粘る——</div>`:''}
       ${sum.newCurse?`<div class="note" style="color:#ff6b81;margin:6px 0">——ボス敗北。呪い『${esc(sum.newCurse.name)}』が${BAL.CURSE_DAYS}日残る: ${esc(sum.newCurse.desc)}——</div>`:''}
       ${sum.curseGone?`<div class="note" style="color:var(--dim);margin:6px 0">呪い『${esc(sum.curseGone.name)}』が抜けた</div>`:''}

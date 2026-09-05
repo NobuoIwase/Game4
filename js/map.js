@@ -129,9 +129,14 @@ function genMap(){
   place('shrine',null,520); place('shrine',null,520); place('shrine',null,520);
   place('spring','hotspring',320); place('spring',null,420);
   place('gate','nest',700);
+  place('pool','damp',300); place('pool','damp',300);       // v1.8 清水(湿った洞)
+  place('stele','ruin',300); place('stele','ruin',300);     // v1.8 石碑(石畳の回廊)
+  // v1.8 地形帯ごとの「届く床」の索引(資源の出現・イベントの位置に使う)
+  const zoneTiles={}; for(const z of ZONE_IDS) zoneTiles[z]=[];
+  for(let k=0;k<N;k++){ if(!solid[k] && reachF[k]) zoneTiles[ZONE_IDS[zone[k]]].push(k); }
   // 場所の周りは床を空ける(祠・門の前に立てるように)
   for(const q of pois){ const i=tileI(q.x), j=tileJ(q.y); for(let dj=-2;dj<=2;dj++) for(let di=-2;di<=2;di++){ if(inMap(i+di,j+dj) && i+di>=2 && j+dj>=2 && i+di<MAP_W-2 && j+dj<MAP_H-2) solid[(j+dj)*MAP_W+i+di]=0; } }
-  G.map={seed, gi, zone, solid, sites, pois, mini:null, chunks:new Map(), dist:null, distF:null, flowT:-9, heroTile:null};
+  G.map={seed, gi, zone, solid, sites, pois, zoneTiles, mini:null, chunks:new Map(), dist:null, distF:null, flowT:-9, heroTile:null};
   if(!META.map || META.map.gen!==gi){ META.map={gen:gi, known:{}, visited:{}, gateProg:0, gateDone:0, seen:0}; saveMeta(); }
   if(META.map.gatePos){ const g=pois.find(q=>q.kind==='gate'); if(g && passAt(META.map.gatePos.x,META.map.gatePos.y,false)){ g.x=META.map.gatePos.x; g.y=META.map.gatePos.y; } }
   // 出発点からの流れ場を先に作る(初期召喚の配置に使う)
@@ -295,10 +300,22 @@ function learnZone(z,amt){
     if(note) heroBubble(h,note+'。ここは、とおらない',false,1);
   }
 }
-function heroZoneCost(z){ const k=zoneKnow(z); return z==='water'?2.4*k:(z==='flower'?1.3*k:(z==='hotspring'?1.8*k:0)); }
+function heroZoneCost(z){ const k=zoneKnow(z); return z==='water'?2.4*k:(z==='flower'?1.3*k:(z==='hotspring'?1.8*k:(z==='nest'?0.8:0))); }   // 巣は学習に関わらず少し避ける(門が目当ての時は経路が通る)
 function heroZoneCostBetween(x1,y1,x2,y2){ const n=Math.ceil(Math.hypot(x2-x1,y2-y1)/24)||1; let c=0; for(let k=1;k<=n;k++){ const t=k/n; c+=heroZoneCost(zoneAt(x1+(x2-x1)*t,y1+(y2-y1)*t)); } return c; }
 function zoneAvoided(z){ return heroZoneCost(z)>=1.2; }
 
+/* v1.8 地形帯の中の届く床から1点(fx,fy から minD〜maxD の範囲。無ければその帯のどこか、帯が無ければ null) */
+function randZoneSpot(z,fx,fy,minD,maxD){
+  const T=G.map&&G.map.zoneTiles&&G.map.zoneTiles[z]; if(!T||!T.length) return null;
+  for(let k=0;k<60;k++){
+    const t=T[(Math.random()*T.length)|0]; const i=t%MAP_W, j=(t-i)/MAP_W;
+    const x=tileCX(i)+rand(-10,10), y=tileCY(j)+rand(-8,8);
+    if(fx!==undefined){ const d=Math.hypot(x-fx,y-fy); if(d<minD||d>maxD) continue; }
+    if(!passAt(x,y,false)) continue;
+    return {x,y};
+  }
+  const t=T[(Math.random()*T.length)|0]; const i=t%MAP_W, j=(t-i)/MAP_W; return {x:tileCX(i),y:tileCY(j)};
+}
 /* ================= 配置 ================= */
 function snapFloor(x,y,fly,maxR){
   const i=tileI(x), j=tileJ(y);
@@ -514,7 +531,28 @@ function drawPoi(g,q){
     if(pr>0){ g.strokeStyle='#ff86b3'; g.lineWidth=3; g.beginPath(); g.arc(0,-30,52,-Math.PI/2,-Math.PI/2+TAU*pr); g.stroke(); }
     for(let i=0;i<5;i++){ const a=i*TAU/5+t*0.6; g.fillStyle='rgba(255,150,200,0.5)'; g.beginPath(); g.arc(Math.cos(a)*48,-30+Math.sin(a)*18,1.8,0,TAU); g.fill(); }
   }
-  if(known){ g.fillStyle='rgba(143,211,255,0.9)'; g.font='bold 10px sans-serif'; g.textAlign='center'; g.fillText(POI_DEF[q.kind].name, 0, q.kind==='gate'?-112:(q.kind==='spring'?-30:-50)); }
+  else if(q.kind==='pool'){
+    // 清水: 澄んだ小さな水面。使った直後(cd)は濁って見える。イベント中は光る
+    const B=G.B, cd=B&&B.poolCd&&B.poolCd[q.key]>0, ev=B&&B.event&&B.event.key===q.key;
+    g.fillStyle='rgba(8,8,26,0.3)'; g.beginPath(); g.ellipse(0,3,34,15,0,0,TAU); g.fill();
+    g.fillStyle='#4a4a5c'; for(let i=0;i<8;i++){ const a=i*TAU/8+0.3; g.beginPath(); g.ellipse(Math.cos(a)*33,Math.sin(a)*15,5,3.2,a,0,TAU); g.fill(); }
+    const grad=g.createRadialGradient(0,0,3,0,0,30); grad.addColorStop(0,cd?'rgba(140,190,210,0.7)':'rgba(200,250,255,0.95)'); grad.addColorStop(1,cd?'rgba(60,110,140,0.6)':'rgba(70,170,220,0.7)');
+    g.fillStyle=grad; g.beginPath(); g.ellipse(0,0,30,13,0,0,TAU); g.fill();
+    g.strokeStyle='rgba(230,255,255,'+(cd?0.2:0.55)+')'; g.lineWidth=1; for(let i=0;i<2;i++){ const ph=(t*0.5+i*0.5)%1; g.beginPath(); g.ellipse(0,0,6+ph*22,(6+ph*22)*0.42,0,0,TAU); g.stroke(); }
+    if(!cd){ g.fillStyle='rgba(255,255,255,'+(0.5+0.4*Math.sin(t*5))+')'; g.beginPath(); g.arc(-9,-3,1.6,0,TAU); g.fill(); g.beginPath(); g.arc(11,4,1.2,0,TAU); g.fill(); }
+    if(ev) glow(g,0,-4,44,'143,211,255',0.35+0.15*Math.sin(t*4));
+  }else if(q.kind==='stele'){
+    // 石碑: 碑文の刻まれた石板。読んだ後は光が消える。イベント中は強く光る
+    const B=G.B, read=B&&B.steleRead&&B.steleRead[q.key], ev=B&&B.event&&B.event.key===q.key;
+    g.fillStyle='rgba(8,8,26,0.35)'; g.beginPath(); g.ellipse(0,4,20,7,0,0,TAU); g.fill();
+    g.fillStyle='#4e4e66'; g.fillRect(-14,-2,28,5);
+    g.fillStyle='#62627e'; g.beginPath(); g.moveTo(-10,0); g.lineTo(-10,-30); g.quadraticCurveTo(0,-40,10,-30); g.lineTo(10,0); g.closePath(); g.fill();
+    g.strokeStyle='#3a3a50'; g.lineWidth=1; g.stroke();
+    const rc=read?'rgba(170,170,200,0.45)':'rgba(203,213,255,'+(0.7+0.3*Math.sin(t*3))+')';
+    g.strokeStyle=rc; g.lineWidth=1.4; for(let i=0;i<4;i++){ const y=-26+i*6; g.beginPath(); g.moveTo(-6,y); g.lineTo(-6+([7,10,5,9][i]),y); g.stroke(); }
+    if(!read) glow(g,0,-18,ev?40:16,'203,213,255',ev?0.45+0.2*Math.sin(t*4):0.3);
+  }
+  if(known){ g.fillStyle='rgba(143,211,255,0.9)'; g.font='bold 10px sans-serif'; g.textAlign='center'; g.fillText(POI_DEF[q.kind].name, 0, ({gate:-112,spring:-30,pool:-28,stele:-50})[q.kind]||-50); }
   g.restore();
 }
 /* ミニマップ(左下): 地形色・壁・知っている場所・彼女・ボス */
@@ -531,9 +569,13 @@ function drawMinimap(g){
   g.fillStyle='rgba(10,10,26,0.8)'; g.fillRect(x0-3,y0-3,mw+6,mh+6);
   g.imageSmoothingEnabled=false; g.drawImage(G.map.mini,x0,y0,mw,mh); g.imageSmoothingEnabled=true;
   const tx=(x)=>x0+(x+MAP_HW)/MAP_T*sc, ty=(y)=>y0+(y+MAP_HH)/MAP_T*sc;
-  for(const q of G.map.pois){ if(!M.known[q.key]) continue; g.fillStyle=q.kind==='shrine'?(M.visited[q.key]?'#9a9ab0':'#ffd76a'):(q.kind==='spring'?'#8fd3ff':'#ff86b3'); g.fillRect(tx(q.x)-2,ty(q.y)-2,4,4); }
+  for(const q of G.map.pois){ if(!M.known[q.key]) continue; g.fillStyle=q.kind==='shrine'?(M.visited[q.key]?'#9a9ab0':'#ffd76a'):(q.kind==='spring'?'#8fd3ff':(q.kind==='pool'?'#7fe0ff':(q.kind==='stele'?'#cbd5ff':'#ff86b3'))); g.fillRect(tx(q.x)-2,ty(q.y)-2,4,4); }
   for(const c of B.chests){ g.fillStyle='#ffe9b0'; g.fillRect(tx(c.x)-1,ty(c.y)-1,3,3); }
   for(const e of B.enemies){ if(e.boss&&!e.dead){ g.fillStyle='#ff5d7a'; g.fillRect(tx(e.x)-2,ty(e.y)-2,4,4); } }
+  for(const pk of B.picks){ if(pk.dead||!pk.known) continue; g.fillStyle=pk.kind==='shroom'?'#9fe8c8':(pk.kind==='nectar'?'#ffb3cf':'#ffd76a'); g.fillRect(tx(pk.x)-1,ty(pk.y)-1,2,2); }   // v1.8 知っている資源
+  if(p.goal){ const gl=p.goal; g.strokeStyle='rgba(255,233,176,0.55)'; g.lineWidth=1; g.setLineDash([2,2]); g.beginPath(); g.moveTo(tx(p.x),ty(p.y)); g.lineTo(tx(gl.x),ty(gl.y)); g.stroke(); g.setLineDash([]);
+    g.strokeStyle='#ffe9b0'; g.beginPath(); g.arc(tx(gl.x),ty(gl.y),3.5+Math.sin(performance.now()*0.006),0,TAU); g.stroke(); }   // v1.8 目当て
+  if(B.event){ const c=(EVENT_DEF[B.event.kind]&&EVENT_DEF[B.event.kind].col)||'#fff'; g.fillStyle=c; g.globalAlpha=0.6+0.4*Math.sin(performance.now()*0.008); g.beginPath(); g.arc(tx(B.event.x),ty(B.event.y),3,0,TAU); g.fill(); g.globalAlpha=0.9; }   // v1.8 光の柱
   g.fillStyle='#fff'; g.beginPath(); g.arc(tx(p.x),ty(p.y),2.2,0,TAU); g.fill();
   g.strokeStyle='rgba(255,255,255,0.35)'; g.lineWidth=1; g.strokeRect(tx(G.cam.x-W/2),ty(G.cam.y-H/2),W/MAP_T*sc,H/MAP_T*sc);
   g.strokeStyle='rgba(201,140,255,0.6)'; g.strokeRect(x0-3,y0-3,mw+6,mh+6);
