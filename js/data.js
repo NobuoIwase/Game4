@@ -145,6 +145,9 @@ const BAL={
   GEM_CAP:600,
 
   CHEST_TIMES:[40,110,180,250],
+  // v1.9 武器の上限: Lv5 までは従来の伸び、Lv6〜8 は覚醒(進化後も効く)。全部が上限なら「ルミナの祈り」(無駄なレベルを出さない)
+  WP_EVO_LV:5, WP_OVER_DMG:0.15, WP_OVER_CD:0.93, WP_OVER_AREA:0.05,
+  PRAY_DMG:0.04, PRAY_HP:0.03, PRAY_SPD:0.01, PRAY_HEAL:40,
   // v1.8 地形の資源・イベント・目当て
   PICK_SHROOM_N:4, PICK_SHROOM_RESPAWN:30, PICK_SHROOM_MAX:5,       // 光茸: 初期数/追加間隔(s)/上限
   PICK_NECTAR_N:3, PICK_NECTAR_RESPAWN:25, PICK_NECTAR_MAX:4,       // 蜜の花
@@ -528,16 +531,16 @@ const shaveCost=rank=>Math.round(6+3*rank);   // 自己強化を1段削ぐオー
 
 /* ---------------- ヒロインの武器/パッシブ ---------------- */
 const UPG={
-  bolt:  {name:'ホーリーボルト',   d1:'ひかりの矢で',    d2:'じどうこうげき',  max:5, kind:'wp'},
-  orb:   {name:'セイントオーブ',   d1:'まもりの光球が',  d2:'まわりをかいてん', max:5, kind:'wp'},
-  nova:  {name:'ピュアノヴァ',     d1:'じょうかの波動で', d2:'まわりをいっそう', max:5, kind:'wp'},
-  whip:  {name:'プリズムウィップ', d1:'ひかりのムチが',  d2:'まえをなぎはらう', max:5, kind:'wp'},
-  rain:  {name:'スターレイン',     d1:'ながれ星が',      d2:'ふりそそぐ',      max:5, kind:'wp'},
-  cross: {name:'クロスブーメラン', d1:'ひかりの十字が',  d2:'いって、もどる',  max:5, kind:'wp'},
-  sanct: {name:'せいいき',         d1:'まわりの光が',    d2:'ふれた敵をやく',  max:5, kind:'wp'},
-  blade: {name:'ひかりの刃',       d1:'むいた方向へ',    d2:'刃をとばす',      max:5, kind:'wp'},
-  thunder:{name:'てんらい',        d1:'いかずちが',      d2:'ランダムにおちる', max:5, kind:'wp'},
-  holy:  {name:'せいすい',         d1:'なげた聖水が',    d2:'地面をきよめる',  max:5, kind:'wp'},
+  bolt:  {name:'ホーリーボルト',   d1:'ひかりの矢で',    d2:'じどうこうげき',  max:8, kind:'wp'},
+  orb:   {name:'セイントオーブ',   d1:'まもりの光球が',  d2:'まわりをかいてん', max:8, kind:'wp'},
+  nova:  {name:'ピュアノヴァ',     d1:'じょうかの波動で', d2:'まわりをいっそう', max:8, kind:'wp'},
+  whip:  {name:'プリズムウィップ', d1:'ひかりのムチが',  d2:'まえをなぎはらう', max:8, kind:'wp'},
+  rain:  {name:'スターレイン',     d1:'ながれ星が',      d2:'ふりそそぐ',      max:8, kind:'wp'},
+  cross: {name:'クロスブーメラン', d1:'ひかりの十字が',  d2:'いって、もどる',  max:8, kind:'wp'},
+  sanct: {name:'せいいき',         d1:'まわりの光が',    d2:'ふれた敵をやく',  max:8, kind:'wp'},
+  blade: {name:'ひかりの刃',       d1:'むいた方向へ',    d2:'刃をとばす',      max:8, kind:'wp'},
+  thunder:{name:'てんらい',        d1:'いかずちが',      d2:'ランダムにおちる', max:8, kind:'wp'},
+  holy:  {name:'せいすい',         d1:'なげた聖水が',    d2:'地面をきよめる',  max:8, kind:'wp'},
   speed: {name:'スピードシューズ', d1:'いどう速度',      d2:'+10%',            max:3, kind:'ps'},
   vital: {name:'マックスハート',   d1:'さいだいHP+25',   d2:'いまも回復する',   max:3, kind:'ps'},
   magnet:{name:'ジェムマグネット', d1:'ジェムの回収',    d2:'はんいUP',        max:3, kind:'ps'},
@@ -549,7 +552,7 @@ const UPG={
   luck:  {name:'よつばのクローバー', d1:'燭台のアイテム', d2:'でやすく',        max:3, kind:'ps'},
   endure:{name:'ねばりのリボン',   d1:'スタミナ上限',    d2:'+10%',            max:3, kind:'ps'},
 };
-/* 融合進化(本家の進化に相当): baseがLv最大+ペアパッシブLv2以上で解禁 */
+/* 融合進化(本家の進化に相当): baseが Lv5(BAL.WP_EVO_LV)+ペアパッシブLv2以上で解禁。武器の Lv6〜8 は「覚醒」(進化後も効く: 火力+15%/段・間隔×0.93/段・範囲+5%/段) */
 const EVOS={
   sstar:{ name:'シューティングスター', base:'bolt', pair:'speed',
     d1:'星の矢が6連で', d2:'つらぬいていく' },

@@ -166,7 +166,7 @@ button:focus-visible{ outline:3px solid var(--blue); outline-offset:2px; }
 .gchip .cnt{ position:absolute; bottom:13px; right:2px; z-index:2; color:#ffd76a; font-size:7.5px; font-weight:bold; text-shadow:0 1px 2px rgba(0,0,0,.8); pointer-events:none; }
 .gchip .cd{ position:absolute; left:0; bottom:0; width:100%; background:rgba(8,6,18,.72); z-index:3; pointer-events:none; }
 .gchip .combo{ position:absolute; top:14px; right:2px; z-index:4; background:#ffd76a; color:#241c08; border-radius:999px; font-size:8px; font-weight:bold; padding:0 4px; pointer-events:none; }
-#itemrow{ display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
+#itemrow{ display:flex; gap:6px; flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; max-width:100%; justify-content:safe center; padding-bottom:2px; scrollbar-width:thin; scrollbar-color:rgba(201,140,255,.5) transparent; }   /* v1.9: 一列(はみ出したら横スクロール) */
 .ichip{ position:relative; overflow:hidden; font-size:10.5px; padding:4px 10px; border-radius:999px; background:rgba(22,17,44,.92); border:1.4px solid var(--card-line); color:#d9d3f5; cursor:pointer; user-select:none; }
 .ichip b{ color:var(--vio); font-weight:bold; }
 .ichip .icd{ position:absolute; left:0; bottom:0; height:100%; background:rgba(120,80,255,.28); z-index:0; pointer-events:none; }
@@ -280,9 +280,42 @@ canvas#cv.arm{ cursor:crosshair; }
 .tierlbl{ font-size:9.5px; font-weight:normal; padding:1px 6px; border-radius:999px; border:1px solid var(--tc,#888); color:var(--tc,#ccc); vertical-align:middle; }
 @media (prefers-reduced-motion: reduce){ button,.hcard{ transition:none; } }
 
+/* ===== 縦持ち(v1.9): 戦闘バーを世界の上に重ねず、キャンバスの下に置く。札は小さく一列(横スクロール) ===== */
+body.portrait #stage{ flex-direction:column; justify-content:flex-start; align-items:center; padding-top:4px; box-sizing:border-box; }
+body.portrait canvas#cv{ flex:0 0 auto; }
+body.portrait #battlebar{ position:static; left:auto; bottom:auto; transform:none; width:100% !important; max-width:100vw; gap:3px; padding:4px 4px 6px; box-sizing:border-box; }
+body.portrait #enwrap{ gap:6px; }
+body.portrait #enbar{ height:11px; }
+body.portrait #handrow{ flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; justify-content:flex-start; max-width:100%; padding:2px 2px 3px; gap:4px; scrollbar-width:thin; scrollbar-color:rgba(201,140,255,.5) transparent; }
+body.portrait .hcard{ width:46px; height:58px; flex:0 0 auto; border-radius:8px; padding-bottom:2px; }
+body.portrait .hcard canvas{ top:2px; transform:translateX(-50%) scale(.7); transform-origin:top center; }
+body.portrait .hcard .nm{ font-size:7px; max-width:44px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+body.portrait .hcard .cost{ font-size:8.5px; padding:0 4px; top:2px; left:2px; }
+body.portrait .hcard .cnt{ font-size:7px; bottom:11px; right:2px; }
+body.portrait .hcard .combo{ font-size:8px; padding:0 4px; top:2px; right:2px; }
+body.portrait .hcard .tg{ font-size:7px; right:2px; top:2px; padding:1px 2px; }
+body.portrait .hcard:hover, body.portrait .hcard.sel{ transform:none; }
+body.portrait #guestrow{ padding:1px 2px 2px; }
+body.portrait .gchip{ width:40px; height:50px; }
+body.portrait .gchip canvas{ transform:translateX(-50%) scale(.6); }
+body.portrait #itemrow{ flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; justify-content:flex-start; max-width:100%; padding-bottom:2px; gap:4px; }
+body.portrait .ichip{ flex:0 0 auto; font-size:9.5px; padding:3px 8px; white-space:nowrap; }
+body.portrait #battlebar .spread{ flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; justify-content:flex-start; gap:6px; align-items:center; padding-bottom:2px; }
+body.portrait #formrow{ flex-wrap:nowrap; flex:0 0 auto; gap:4px; }
+body.portrait .fchip{ flex:0 0 auto; font-size:9.5px; padding:3px 8px; white-space:nowrap; }
+body.portrait #battlebar .side{ flex:0 0 auto; }
+body.portrait #battlebar .side button{ font-size:9.5px; padding:4px 8px; white-space:nowrap; }
+
 /* ===== モバイル(縦持ち)調整 ===== */
-#formrow{ flex-wrap:wrap; justify-content:center; }
-#battlebar .spread{ flex-wrap:wrap; justify-content:center; row-gap:4px; }
+#battlebar .spread{ flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; justify-content:safe center; gap:6px; align-items:center; padding-bottom:2px; scrollbar-width:thin; }   /* v1.9: 陣形とボタンも一列 */
+#formrow{ flex-wrap:nowrap; flex:0 0 auto; }
+#battlebar .side{ flex:0 0 auto; }
+.fchip,.ichip{ white-space:nowrap; flex:0 0 auto; }
+/* 札が10枚以上なら小さめの札で一列に */
+#handrow.dense .hcard{ width:56px; height:74px; }
+#handrow.dense .hcard .nm{ font-size:8px; }
+#handrow.dense .hcard canvas{ top:3px; }
+#handrow.dense .hcard .cnt{ font-size:8px; bottom:15px; }
 @media (max-width:720px){
   #resbar{ gap:5px; font-size:10.5px; right:48px; flex-wrap:wrap; }
   #resbar .chip{ padding:3px 9px; }

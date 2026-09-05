@@ -1542,6 +1542,8 @@ function nearestEnemies(n,maxD){
   arr.sort((a,b)=>a.d-b.d);
   return arr.slice(0,n).map(o=>o.e);
 }
+/* v1.9 武器の覚醒(Lv6〜8): 従来の式は Lv5 で止め、超えた段ぶんを火力・間隔・範囲に掛ける(進化後も効く) */
+function wpOver(lv){ const ov=Math.max(0,lv-BAL.WP_EVO_LV); return {dmg:1+BAL.WP_OVER_DMG*ov, cd:Math.pow(BAL.WP_OVER_CD,ov), area:1+BAL.WP_OVER_AREA*ov}; }
 function weaponsUpdate(dt){
   const B=G.B, p=B.hero;
   const atkMult=((p.pinned||p.charmBind||p.climaxT>0||p.freezeT>0||p.begT>0||p.selfT>0||p.sniffT>0||p.bathT>0||p.poolT>0||p.readT>0)?0:1)*Math.pow(0.75,armCount(p))   // 腕を拘束されるほど攻撃が乱れる
@@ -1553,7 +1555,7 @@ function weaponsUpdate(dt){
     p.boltT-=dt*atkMult;
     if(p.boltT<=0){
       const evo=p.evo.sstar>0;
-      const lv=p.wp.bolt;
+      const lvR=p.wp.bolt, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
       const shots=(evo?7:Math.min(5,1+Math.ceil(lv*0.8)))+dupN(p);   // 手数で強くなる
       // 回復が要るときは燭台を狙う
       const wantProp=p.propTarget && !p.propTarget.dead &&
@@ -1565,21 +1567,21 @@ function weaponsUpdate(dt){
           p.boltT=0.55;
           const a=Math.atan2((t.y-10)-(p.y-14), t.x-p.x);
           B.bullets.push({x:p.x,y:p.y-14,vx:Math.cos(a)*460,vy:Math.sin(a)*460,
-            dmg:15+5*(lv-1), pierce:0, life:1.2, last:null, evo:false});
+            dmg:(15+5*(lv-1))*ov.dmg, pierce:0, life:1.2, last:null, evo:false});
           S.pew();
           if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN);
         }else p.boltT=0.15;
       }else{
         const ts=nearestEnemies(shots,evo?640:560);
         if(ts.length && B.bullets.length<150){
-          p.boltT=(evo?0.55:0.7)*Math.pow(0.87,lv-1);
+          p.boltT=(evo?0.55:0.7)*Math.pow(0.87,lv-1)*ov.cd;
           for(let i=0;i<shots;i++){
             const t=ts[Math.min(i,ts.length-1)];
             const dx=t.x-p.x, dy=(t.y-t.r)-(p.y-14);
             const sp=evo?520:460, spread=(i-(shots-1)/2)*0.06;
             const a=Math.atan2(dy,dx)+spread;
             B.bullets.push({x:p.x,y:p.y-14,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,
-              dmg:(evo?21:15+5*(lv-1)), pierce:evo?2:(lv>=4?1:0), life:1.3, last:null, evo});
+              dmg:(evo?21:15+5*(lv-1))*ov.dmg, pierce:evo?2:(lv>=4?1:0), life:1.3, last:null, evo});
           }
           S.pew();
           if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN);
@@ -1594,9 +1596,9 @@ function weaponsUpdate(dt){
     p.novaT-=dt*atkMult;
     if(p.novaT<=0){
       const evo=p.evo.sburst>0;
-      const lv=p.wp.nova;
-      p.novaT=(evo?4.0:4.3)-0.4*(lv-1);
-      const R=(evo?180:100+20*(lv-1))*areaMult(p), dmg=(evo?34:16+7*(lv-1));
+      const lvR=p.wp.nova, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      p.novaT=((evo?4.0:4.3)-0.4*(lv-1))*ov.cd;
+      const R=(evo?180:100+20*(lv-1))*areaMult(p)*ov.area, dmg=(evo?34:16+7*(lv-1))*ov.dmg;
       p.novaAnim=0.5; p.novaR=R;
       G.shake=Math.min(7,G.shake+3);
       S.nova();
@@ -1620,11 +1622,11 @@ function weaponsUpdate(dt){
   if(p.wp.whip>0){
     p.whipT-=dt*atkMult;
     if(p.whipT<=0){
-      const evo=p.evo.srush>0, lv=p.wp.whip;
-      p.whipT=(evo?0.65:1.0)*Math.pow(0.9,lv-1);
+      const evo=p.evo.srush>0, lvR=p.wp.whip, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      p.whipT=(evo?0.65:1.0)*Math.pow(0.9,lv-1)*ov.cd;
       p.whipSide*=-1;
-      const range=(evo?165:105+11*lv)*areaMult(p), half=(evo?165:46+5*lv)*areaMult(p);
-      const dmg=evo?22:10+4*(lv-1);
+      const range=(evo?165:105+11*lv)*areaMult(p)*ov.area, half=(evo?165:46+5*lv)*areaMult(p)*ov.area;
+      const dmg=(evo?22:10+4*(lv-1))*ov.dmg;
       p.whipAnim=0.16;
       p.whipDir=evo?0:(p.whipSide>0?p.face:-p.face);   // 0=全方位
       p.whipR=range;
@@ -1649,8 +1651,8 @@ function weaponsUpdate(dt){
   if(p.wp.rain>0){
     p.rainT-=dt*atkMult;
     if(p.rainT<=0){
-      const evo=p.evo.scomet>0, lv=p.wp.rain;
-      p.rainT=(evo?1.5:2.3)*Math.pow(0.88,lv-1);
+      const evo=p.evo.scomet>0, lvR=p.wp.rain, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      p.rainT=(evo?1.5:2.3)*Math.pow(0.88,lv-1)*ov.cd;
       const drops=(evo?6:1+Math.ceil(lv/2))+dupN(p);
       const ts=nearestEnemies(drops*2,540);
       let fired=false;
@@ -1660,7 +1662,7 @@ function weaponsUpdate(dt){
         const tx=t.x+rand(-26,26), ty=t.y+rand(-16,16);
         if(B.bullets.length<170){
           B.bullets.push({kind:'rain', x:tx+rand(-40,40), y:ty-300, tx, ty,
-            vx:0, vy:540, dmg:evo?26:12+5*(lv-1), splash:(evo?76:48)*areaMult(p), life:1.0, last:null, evo});
+            vx:0, vy:540, dmg:(evo?26:12+5*(lv-1))*ov.dmg, splash:(evo?76:48)*areaMult(p)*ov.area, life:1.0, last:null, evo});
           fired=true;
         }
       }
@@ -1672,17 +1674,17 @@ function weaponsUpdate(dt){
   if(p.wp.cross>0){
     p.crossT-=dt*atkMult;
     if(p.crossT<=0){
-      const evo=p.evo.sjudge>0, lv=p.wp.cross;
+      const evo=p.evo.sjudge>0, lvR=p.wp.cross, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
       const ts=nearestEnemies(1,500);
       if(ts.length && B.bullets.length<170){
-        p.crossT=(evo?1.3:1.7)*Math.pow(0.9,lv-1);
+        p.crossT=(evo?1.3:1.7)*Math.pow(0.9,lv-1)*ov.cd;
         const a=Math.atan2((ts[0].y-ts[0].r)-(p.y-12), ts[0].x-p.x);
         const sp=evo?430:360;
         const nC=1+dupN(p);
         for(let i=0;i<nC;i++){
           const a2=a+(i-(nC-1)/2)*0.4;
           B.bullets.push({kind:'cross', x:p.x, y:p.y-12, vx:Math.cos(a2)*sp, vy:Math.sin(a2)*sp,
-            spd:sp, dmg:evo?20:9+4*(lv-1), retT:evo?0.55:0.42, ret:false, life:2.4, last:null, evo});
+            spd:sp, dmg:(evo?20:9+4*(lv-1))*ov.dmg, retT:evo?0.55:0.42, ret:false, life:2.4, last:null, evo});
         }
         sfx(320,180,0.12,'square',0.04);
         if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN);
@@ -1691,12 +1693,12 @@ function weaponsUpdate(dt){
   }
   /* --- せいいき: 常時の光の領域。触れた敵を焼き続ける。進化=広域+自己回復 --- */
   if(p.wp.sanct>0){
-    const evo=p.evo.gsanct>0, lv=p.wp.sanct;
+    const evo=p.evo.gsanct>0, lvR=p.wp.sanct, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
     p.sanctPulse+=dt*atkMult;
-    p.sanctR=((evo?130:70+8*lv))*areaMult(p);
+    p.sanctR=((evo?130:70+8*lv))*areaMult(p)*ov.area;
     if(p.sanctPulse>=0.5){
       p.sanctPulse-=0.5;
-      const dmg=evo?14:6+3*(lv-1);
+      const dmg=(evo?14:6+3*(lv-1))*ov.dmg;
       let hit=false;
       for(const e of B.enemies){
         if(e.dead||e.dormant) continue;
@@ -1710,8 +1712,8 @@ function weaponsUpdate(dt){
   if(p.wp.blade>0){
     p.bladeT-=dt*atkMult;
     if(p.bladeT<=0){
-      const evo=p.evo.kblade>0, lv=p.wp.blade;
-      p.bladeT=(evo?0.42:0.85)*Math.pow(0.9,lv-1);
+      const evo=p.evo.kblade>0, lvR=p.wp.blade, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      p.bladeT=(evo?0.42:0.85)*Math.pow(0.9,lv-1)*ov.cd;
       const n=(evo?4:1+Math.floor(lv/2))+dupN(p);
       const dirs=evo?[p.face,-p.face]:[p.face];
       for(const dir of dirs){
@@ -1720,7 +1722,7 @@ function weaponsUpdate(dt){
           const spread=(i-(n-1)/2)*0.07;
           const sp=580;
           B.bullets.push({kind:'blade', x:p.x+dir*8, y:p.y-14+(i-(n-1)/2)*4, vx:Math.cos(spread)*sp*dir, vy:Math.sin(spread)*sp,
-            dmg:evo?16:10+3*(lv-1), pierce:evo?3:1, life:0.9, last:null, evo});
+            dmg:(evo?16:10+3*(lv-1))*ov.dmg, pierce:evo?3:1, life:0.9, last:null, evo});
         }
       }
       sfx(700,300,0.06,'square',0.03);
@@ -1731,12 +1733,12 @@ function weaponsUpdate(dt){
   if(p.wp.thunder>0){
     p.thunderT-=dt*atkMult;
     if(p.thunderT<=0){
-      const evo=p.evo.judgment>0, lv=p.wp.thunder;
+      const evo=p.evo.judgment>0, lvR=p.wp.thunder, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
       const n=(evo?6:1+Math.floor((lv+1)/2))+dupN(p);
       const ts=nearestEnemies(n*3,440);
       if(ts.length){
-        p.thunderT=(evo?2.0:2.6)*Math.pow(0.9,lv-1);
-        const splash=(evo?52:34)*areaMult(p), dmg=evo?30:18+6*(lv-1);
+        p.thunderT=(evo?2.0:2.6)*Math.pow(0.9,lv-1)*ov.cd;
+        const splash=(evo?52:34)*areaMult(p)*ov.area, dmg=(evo?30:18+6*(lv-1))*ov.dmg;
         const picked=shuffle(ts.slice()).slice(0,n);
         for(const t of picked){
           for(const e of B.enemies){
@@ -1758,18 +1760,18 @@ function weaponsUpdate(dt){
     if(p.holyT<=0){
       // v1.1: 本家の聖水どおり、投げる先は【ランダム】。彼女が敵を誘導しないと当たらない。
       // 進化(きよめの泉)で初めて敵の足元を狙うようになり、Lvを積んでようやく使い物になる
-      const evo=p.evo.spring>0, lv=p.wp.holy;
+      const evo=p.evo.spring>0, lvR=p.wp.holy, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
       const n=(evo?3:1+Math.floor((lv-1)/2))+dupN(p);
       const ts=evo?nearestEnemies(n*2,420):[];
       if(!evo || ts.length){
-        p.holyT=(evo?2.4:3.0)*Math.pow(0.92,lv-1);
+        p.holyT=(evo?2.4:3.0)*Math.pow(0.92,lv-1)*ov.cd;
         for(let i=0;i<n;i++){
           let tx,ty;
           if(evo){ const t=ts[(Math.random()*ts.length)|0]; tx=t.x+rand(-20,20); ty=t.y+rand(-12,12); }
           else{ const a=rand(TAU), d2=rand(40,170); tx=p.x+Math.cos(a)*d2; ty=p.y-10+Math.sin(a)*d2*0.8; }
           if(B.zones.length>24) B.zones.shift();
-          B.zones.push({x:tx, y:ty, r:(evo?72:34+3*lv)*areaMult(p),
-            t:0, life:evo?6:3.0, dmg:evo?9:3+1*(lv-1), tick:0, evo});
+          B.zones.push({x:tx, y:ty, r:(evo?72:34+3*lv)*areaMult(p)*ov.area,
+            t:0, life:evo?6:3.0, dmg:(evo?9:3+1*(lv-1))*ov.dmg, tick:0, evo});
           parts(tx,ty,6,['#8fd3ff','#e8f4ff'],90,0.4);
         }
         sfx(520,700,0.1,'sine',0.04);
@@ -1790,7 +1792,7 @@ function readyEvos(){
   const p=G.B.hero, out=[];
   for(const k in EVOS){
     const e=EVOS[k];
-    if(!p.evo[k] && p.wp[e.base]>=UPG[e.base].max && p.ps[e.pair]>=2) out.push(k);
+    if(!p.evo[k] && p.wp[e.base]>=BAL.WP_EVO_LV && p.ps[e.pair]>=2) out.push(k);   // 進化は Lv5 で解禁(上限 8 でも待たせない)
   }
   return out;
 }
@@ -1814,10 +1816,7 @@ function offerLevelup(){
   });
   const evos=readyEvos();
   const pool=avail.concat(evos.map(k=>'EVO:'+k));
-  if(!pool.length){
-    p.hp=Math.min(p.maxHp,p.hp+40); floatTxt(p.x,p.y-64,'かいふく!','#7ee89a',13,1.4); S.lvup();
-    return;
-  }
+  if(!pool.length){ applyPray(); return; }   // v1.9 全部が上限: レベルを無駄にしない
   const opts=shuffle(pool.slice()).slice(0,3);
   let pick=0, bw=-1;
   opts.forEach((k,i)=>{
@@ -1836,6 +1835,16 @@ function offerLevelup(){
   G.mode='levelup';
   S.lvup();
 }
+/* v1.9 ルミナの祈り: 取れる強化が無いレベルアップの受け皿。火力+4%・最大HP+3%・速度+1%(その戦闘の間)、少し回復 */
+function applyPray(){
+  const B=G.B, p=B.hero; p.pray=(p.pray||0)+1;
+  p.dmgMult=(p.dmgMult||1)*(1+BAL.PRAY_DMG);
+  const addHp=Math.round(p.maxHp*BAL.PRAY_HP); p.maxHp+=addHp; p.hp=Math.min(p.maxHp,p.hp+addHp+BAL.PRAY_HEAL);
+  p.baseSpeed*=1+BAL.PRAY_SPD;
+  floatTxt(p.x,p.y-64,'ルミナの祈り '+p.pray+' — 火力+'+Math.round(BAL.PRAY_DMG*100)+'%・HP+'+Math.round(BAL.PRAY_HP*100)+'%','#ffd76a',12,1.6);
+  heroBubble(p,pickRand(['……まだ、つよくなれる','ひかり、こたえて']),true,1);
+  parts(p.x,p.y-16,18,['#fff','#ffd76a'],160,0.6); S.lvup();
+}
 function applyUpg(k){
   const B=G.B, p=B.hero;
   if(k.startsWith('EVO:')){
@@ -1850,7 +1859,7 @@ function applyUpg(k){
   if(k==='vital'){ p.maxHp=Math.round(p.maxHp)+25; p.hp=Math.min(p.maxHp,p.hp+25); }
   if(k==='ward'){ p.armor++; }
   if(k==='endure'){ const add=Math.round(p.staminaMax*0.1); p.staminaMax+=add; p.stamina=Math.min(p.staminaMax,p.stamina+add); }
-  floatTxt(p.x,p.y-64,UPG[k].name+' Lv'+curLv(k)+'!','#ffd76a',13,1.5);
+  floatTxt(p.x,p.y-64,UPG[k].name+' Lv'+curLv(k)+(UPG[k].kind==='wp'&&curLv(k)>BAL.WP_EVO_LV?' 覚醒!':'!'),'#ffd76a',13,1.5);
   heroBubble(p,'つよくなった♪',true);
 }
 function lvTick(dt){
@@ -2170,7 +2179,7 @@ function enemiesUpdate(dt){
       for(let i=0;i<n;i++){
         const o=orbPos(i,n);
         if(Math.hypot(e.x-o.x,(e.y-e.r)-o.y)<e.r+(evo?14:11)){
-          damageEnemy(e,(evo?16:11+4*(p.wp.orb-1)));
+          damageEnemy(e,(evo?16:11+4*(Math.min(BAL.WP_EVO_LV,p.wp.orb)-1))*wpOver(p.wp.orb).dmg);
           if(evo) p.hp=Math.min(p.maxHp,p.hp+1);
           e.orbCd=0.4;
           parts(o.x,o.y,3,['#fff','#ffd76a'],90,0.3);
