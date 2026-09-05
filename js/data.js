@@ -344,6 +344,31 @@ const MONSTERS={
     desc:'夜の統率者。突進で薙ぎ払い、掠めた相手をよろめかせる。召喚は1戦に1度。',
     trait:'突進/接触よろめき。呪い『吸われ癖』',
   },
+  /* ---- v2.0 新種 ---- */
+  inyoku:{
+    name:'淫翼', role:'飛行・腕の拘束', cost:5, unlock:380, tier:'mid',
+    hp:34, spd:96, r:12, dmg:4, xp:6,
+    desc:'桃色の翼を持つ小さな飛行種。彼女の頭上を旋回し、急降下して両腕に抱きつく。数秒で離れて舞い戻り、翼の粉が肌を敏感にする。崖の一本道の上では逃げ場がない。',
+    trait:'旋回→急降下で腕に抱きつく(短時間)。翼の粉で敏感化',
+  },
+  suiyou:{
+    name:'水妖', role:'潜伏・脚の拘束', cost:5, unlock:400, tier:'mid',
+    hp:40, spd:60, r:13, dmg:5, xp:7,
+    desc:'浅瀬と湿地の水面下に潜む。近づくと水そのものが腕の形になって浮かび上がり、脚に絡んで水へ引き込む。冷たいのに、絡まれた場所だけ熱い。浅瀬では速い。',
+    trait:'水面下で待ち、300px 内で浮かぶ。脚に絡み、足を鈍らせる',
+  },
+  mouth:{
+    name:'肉壁の口', role:'設置・脚の拘束', cost:8, unlock:700, tier:'large',
+    hp:200, spd:0, r:18, dmg:6, xp:14,
+    desc:'肉の床に開いた口。近づいた脚を吸い、粘膜で舐め上げながら快感を送り続ける。動かない。彼女が気づかずに踏み込むのを待つ罠。',
+    trait:'動かない。脚を吸って離さず、快感と発情を送り続ける',
+  },
+  guardian:{
+    name:'遺跡の番人', role:'設置・淫紋の光弾', cost:9, unlock:760, tier:'large',
+    hp:220, spd:0, r:20, dmg:7, xp:16,
+    desc:'沈んだ回廊で祈るように膝をつく石像。額の紋が光ると、淫紋の光弾を扇状に放つ。当たれば淫紋が刻まれ、快感の入りが増す。彼女は知識を積めば外せるようになる。',
+    trait:'動かない。1.2秒の予兆の後、淫紋の光弾を3方向に',
+  },
   /* ---- v2.0 最深部の大ボス(カードではない。最終階層の守り) ---- */
   core:{
     name:'魔核', role:'大ボス・深淵の心臓', cost:0, unlock:-1, tier:'boss', guardian:true,
@@ -410,10 +435,10 @@ const POI_DEF={
    最終階層は魔核を倒せば目的達成。深いほど夜側のENが多く、魔物も硬い(mon)。affinity=その階層で HP×1.2 になる種 */
 const FLOORS=[
   { id:'f1', name:'入口の洞',   sub:'苔と水の浅い洞。まだ光が届く',          depth:1, zoneW:{moss:5,damp:3,water:1,ruin:1,flower:1}, wall:'rock',  en:{start:1.0,base:1.0,regen:1.0,max:1.0},     mon:{hp:1.0,dmg:1.0},   affinity:['slug','worm','goblin','hand'], col:'#8fd3ff' },
-  { id:'f2', name:'水鏡の洞',   sub:'浅瀬と湿った洞。足を取られる',          depth:2, zoneW:{damp:4,water:4,moss:2,hotspring:1},        wall:'rock',  en:{start:1.1,base:1.15,regen:1.15,max:1.15}, mon:{hp:1.15,dmg:1.05}, affinity:['slime','mistslime','leech','slimeking','worm'], col:'#7fe0ff' },
-  { id:'f3', name:'蜜の花園',   sub:'花と温泉。甘い匂いが濃い',              depth:3, zoneW:{flower:5,moss:2,hotspring:2,damp:1},        wall:'rock',  en:{start:1.2,base:1.3,regen:1.3,max:1.3},     mon:{hp:1.3,dmg:1.1},   affinity:['flower','moth','gas','imp','succubus','dreamtree'], col:'#ffb3cf' },
-  { id:'f4', name:'沈んだ回廊', sub:'石畳の遺跡。封印石を灯さねば降り口は開かない', depth:4, zoneW:{ruin:6,damp:2,water:1,moss:1},          wall:'brick', en:{start:1.3,base:1.5,regen:1.5,max:1.5},     mon:{hp:1.5,dmg:1.15},  affinity:['gazer','beamer','eye','runemage','tower','bossgazer'], puzzle:'seals', col:'#cbd5ff' },
-  { id:'f5', name:'肉の巣',     sub:'最深部。壁も床も脈打つ。魔核が待つ',    depth:5, zoneW:{flesh:5,nest:3,flower:1,damp:1},           wall:'flesh', en:{start:1.5,base:1.75,regen:1.75,max:1.75}, mon:{hp:1.75,dmg:1.25}, affinity:['gtent','hand','pot','worm','slugqueen','succuqueen','gobking','vampi'], final:true, col:'#ff6b81' },
+  { id:'f2', name:'水鏡の洞',   sub:'浅瀬と湿った洞。足を取られる',          depth:2, zoneW:{damp:4,water:4,moss:2,hotspring:1},        wall:'rock',  en:{start:1.1,base:1.15,regen:1.15,max:1.15}, mon:{hp:1.15,dmg:1.05}, affinity:['slime','mistslime','leech','slimeking','worm','suiyou'], col:'#7fe0ff' },
+  { id:'f3', name:'蜜の花園',   sub:'花と温泉。甘い匂いが濃い',              depth:3, zoneW:{flower:5,moss:2,hotspring:2,damp:1},        wall:'rock',  en:{start:1.2,base:1.3,regen:1.3,max:1.3},     mon:{hp:1.3,dmg:1.1},   affinity:['flower','moth','gas','imp','succubus','dreamtree','inyoku'], col:'#ffb3cf' },
+  { id:'f4', name:'沈んだ回廊', sub:'石畳の遺跡。封印石を灯さねば降り口は開かない', depth:4, zoneW:{ruin:6,damp:2,water:1,moss:1},          wall:'brick', en:{start:1.3,base:1.5,regen:1.5,max:1.5},     mon:{hp:1.5,dmg:1.15},  affinity:['gazer','beamer','eye','runemage','tower','bossgazer','guardian'], puzzle:'seals', col:'#cbd5ff' },
+  { id:'f5', name:'肉の巣',     sub:'最深部。壁も床も脈打つ。魔核が待つ',    depth:5, zoneW:{flesh:5,nest:3,flower:1,damp:1},           wall:'flesh', en:{start:1.5,base:1.75,regen:1.75,max:1.75}, mon:{hp:1.75,dmg:1.25}, affinity:['gtent','hand','pot','worm','slugqueen','succuqueen','gobking','vampi','mouth'], final:true, col:'#ff6b81' },
 ];
 const curFloorIdx=()=>Math.min(FLOORS.length-1,Math.max(0,((META.run&&META.run.floor)||1)-1));
 const curFloor=()=>FLOORS[curFloorIdx()];
@@ -454,12 +479,12 @@ const SPEC_THREAT={
   slug:1, goblin:0, leech:1, worm:1, ghost:0, slime:0, gas:1, imp:1, flower:2, mistslime:1, gtent:2,
   hand:1, serpent:2, moth:1, pot:2, slugqueen:2, dreamtree:2, vampi:2,
   spore:1, ghosthand:2, eye:1, succubus:3, gazer:3, beamer:3, bossgazer:3, web:2, tower:2,
-  slimeking:2, runemage:3, succuqueen:3, gobking:2 };
+  slimeking:2, runemage:3, succuqueen:3, gobking:2, inyoku:1, suiyou:2, mouth:2, guardian:3, core:3 };
 const SPEC_DANGER={ flower:130, gtent:90, slug:55, worm:55, gas:60, slime:110, leech:60,
   hand:50, serpent:120, moth:70, pot:95, slugqueen:80, dreamtree:125,
   gazer:70, beamer:60, bossgazer:130, succubus:110, ghosthand:90, spore:60, eye:40, web:90, tower:60,
-  slimeking:120, runemage:150, succuqueen:120, gobking:130 };
-const TRAP_SPECIES=new Set(['flower','pot','web','dreamtree']);   // 知っていれば、そばのジェムは諦める
+  slimeking:120, runemage:150, succuqueen:120, gobking:130, inyoku:70, suiyou:100, mouth:90, guardian:150, core:260 };
+const TRAP_SPECIES=new Set(['flower','pot','web','dreamtree','mouth','guardian']);   // 知っていれば、そばのジェムは諦める
 const KNOW_NAMES=['未知','認識','理解','熟知'];
 const CARD_LV_MAX=5;
 const cardLvMult=lv=>({ hp:1+0.08*(lv-1), dmg:1+0.10*(lv-1) });   // Lvは主に頭数で強くなる
@@ -568,16 +593,22 @@ const UPG={
   blade: {name:'ひかりの刃',       d1:'むいた方向へ',    d2:'刃をとばす',      max:8, kind:'wp'},
   thunder:{name:'てんらい',        d1:'いかずちが',      d2:'ランダムにおちる', max:8, kind:'wp'},
   holy:  {name:'せいすい',         d1:'なげた聖水が',    d2:'地面をきよめる',  max:8, kind:'wp'},
-  speed: {name:'スピードシューズ', d1:'いどう速度',      d2:'+10%',            max:3, kind:'ps'},
-  vital: {name:'マックスハート',   d1:'さいだいHP+25',   d2:'いまも回復する',   max:3, kind:'ps'},
-  magnet:{name:'ジェムマグネット', d1:'ジェムの回収',    d2:'はんいUP',        max:3, kind:'ps'},
-  haste: {name:'クイックリボン',   d1:'こうげき速度',    d2:'+8%',             max:3, kind:'ps'},
-  ward:  {name:'プチバリア',       d1:'まもり',          d2:'+1',              max:3, kind:'ps'},
-  growth:{name:'ラーニングピアス', d1:'けいけんち',      d2:'+12%',            max:3, kind:'ps'},
-  area:  {name:'ひろがるろうそく', d1:'こうげき範囲',    d2:'+10%',            max:3, kind:'ps'},
-  dup:   {name:'ふたごの鏡',       d1:'とうしゃ数',      d2:'+1',              max:2, kind:'ps'},
-  luck:  {name:'よつばのクローバー', d1:'燭台のアイテム', d2:'でやすく',        max:3, kind:'ps'},
-  endure:{name:'ねばりのリボン',   d1:'スタミナ上限',    d2:'+10%',            max:3, kind:'ps'},
+  chain: {name:'せいさ',           d1:'ひかりの鎖が',    d2:'なぎ、しばる',    max:8, kind:'wp'},
+  spirit:{name:'みちびきの精霊',   d1:'ちいさな光が',    d2:'追いかけてはぜる', max:8, kind:'wp'},
+  shield:{name:'ひかりの盾',       d1:'まえに盾が',      d2:'やいて、はじく',  max:8, kind:'wp'},
+  speed: {name:'スピードシューズ', d1:'いどう速度',      d2:'+10%',            max:5, kind:'ps'},
+  vital: {name:'マックスハート',   d1:'さいだいHP+25',   d2:'いまも回復する',   max:5, kind:'ps'},
+  magnet:{name:'ジェムマグネット', d1:'ジェムの回収',    d2:'はんいUP',        max:5, kind:'ps'},
+  haste: {name:'クイックリボン',   d1:'こうげき速度',    d2:'+8%',             max:5, kind:'ps'},
+  ward:  {name:'プチバリア',       d1:'まもり',          d2:'+1',              max:5, kind:'ps'},
+  growth:{name:'ラーニングピアス', d1:'けいけんち',      d2:'+12%',            max:5, kind:'ps'},
+  area:  {name:'ひろがるろうそく', d1:'こうげき範囲',    d2:'+10%',            max:5, kind:'ps'},
+  dup:   {name:'ふたごの鏡',       d1:'とうしゃ数',      d2:'+1',              max:3, kind:'ps'},
+  luck:  {name:'よつばのクローバー', d1:'燭台のアイテム', d2:'でやすく',        max:5, kind:'ps'},
+  endure:{name:'ねばりのリボン',   d1:'スタミナ上限',    d2:'+10%',            max:5, kind:'ps'},
+  reach: {name:'とおくの手',       d1:'こうげきの',      d2:'とどく距離+12%',  max:5, kind:'ps'},
+  pierce:{name:'つらぬくピン',     d1:'ひかりの弾が',    d2:'1体ぶん貫通',     max:3, kind:'ps'},
+  regen: {name:'いのりの露',       d1:'HPがすこしずつ',  d2:'もどる',          max:5, kind:'ps'},
 };
 /* 融合進化(本家の進化に相当): baseが Lv5(BAL.WP_EVO_LV)+ペアパッシブLv2以上で解禁。武器の Lv6〜8 は「覚醒」(進化後も効く: 火力+15%/段・間隔×0.93/段・範囲+5%/段) */
 const EVOS={
@@ -597,6 +628,12 @@ const EVOS={
     d1:'ひろい聖域が', d2:'やきながら癒す' },
   kblade:{ name:'せんじん', base:'blade', pair:'dup',
     d1:'刃のあらしが', d2:'前後にはしる' },
+  hchain:{ name:'しばりの聖鎖', base:'chain', pair:'pierce',
+    d1:'三条の鎖が', d2:'なぎ、しばりつける' },
+  twinspirit:{ name:'精霊のむれ', base:'spirit', pair:'reach',
+    d1:'四つの光が', d2:'かけまわる' },
+  aegis:{ name:'ひかりのイージス', base:'shield', pair:'regen',
+    d1:'ぜんほういの盾が', d2:'やいて、はじく' },
   judgment:{ name:'しんばつ', base:'thunder', pair:'luck',
     d1:'雷の柱が', d2:'いっせいにおちる' },
   spring:{ name:'きよめの泉', base:'holy', pair:'area',

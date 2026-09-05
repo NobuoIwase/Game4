@@ -31,6 +31,7 @@ function newHero(){
     ps:{speed:0, vital:0, magnet:0, haste:0, ward:0, growth:0, area:0, dup:0, luck:0, endure:0},
     evo:{sstar:0, sring:0, sburst:0, srush:0, scomet:0, sjudge:0, gsanct:0, kblade:0, judgment:0, spring:0},
     boltT:0.6, novaT:2.5, orbAng:0, novaAnim:0, novaR:0,
+    chainT:1.0, spiritT:1.2, shieldPulse:0, shieldR:0, shieldArc:0, shieldAng:0,   // v2.0 新武器
     whipT:1.1, whipAnim:0, whipDir:1, whipSide:1, whipR:0, rainT:2.2, crossT:1.6,
     sanctT:0, sanctPulse:0, bladeT:1.0, thunderT:2.0, holyT:2.4,
     dazeT:0, hypno:null,                 // 催眠電波(v1.1)
@@ -1553,7 +1554,7 @@ function aiDecide(foc){
 
 /* 知っている(理解以上)罠のそば */
 /* v2.0 淫紋への知識: 刻印師の知識か、紋の罠に掛かった回数(1=認識 / 3=理解 / 6=熟知)。認識で罠を避け、理解で呪弾を強く外し、熟知なら4割で紋を払う */
-function crestKnow(){ const k=((META.gen.trapKnow||{}).rune)||0; return Math.max(knowLv('runemage'), k>=6?3:(k>=3?2:(k>=1?1:0))); }
+function crestKnow(){ const k=((META.gen.trapKnow||{}).rune)||0; return Math.max(knowLv('runemage'), knowLv('guardian'), k>=6?3:(k>=3?2:(k>=1?1:0))); }
 function learnTrap(kind){ META.gen.trapKnow=META.gen.trapKnow||{}; META.gen.trapKnow[kind]=(META.gen.trapKnow[kind]||0)+1; }
 function nearKnownTrap(x,y){
   const B=G.B;
@@ -1566,6 +1567,7 @@ function nearKnownTrap(x,y){
 }
 /* ================= ヒロイン武器 ================= */
 function nearestEnemies(n,maxD){
+  maxD*=1+0.12*((G.B&&G.B.hero.ps.reach)||0);   // v2.0 とおくの手
   const B=G.B, p=B.hero;
   const arr=[];
   for(const e of B.enemies){
@@ -1619,7 +1621,7 @@ function weaponsUpdate(dt){
             const sp=evo?520:460, spread=(i-(shots-1)/2)*0.06;
             const a=Math.atan2(dy,dx)+spread;
             B.bullets.push({x:p.x,y:p.y-14,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,
-              dmg:(evo?21:15+5*(lv-1))*ov.dmg, pierce:evo?2:(lv>=4?1:0), life:1.3, last:null, evo});
+              dmg:(evo?21:15+5*(lv-1))*ov.dmg, pierce:(evo?2:(lv>=4?1:0))+(p.ps.pierce||0), life:1.3, last:null, evo});
           }
           S.pew();
           if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN);
@@ -1760,7 +1762,7 @@ function weaponsUpdate(dt){
           const spread=(i-(n-1)/2)*0.07;
           const sp=580;
           B.bullets.push({kind:'blade', x:p.x+dir*8, y:p.y-14+(i-(n-1)/2)*4, vx:Math.cos(spread)*sp*dir, vy:Math.sin(spread)*sp,
-            dmg:(evo?16:10+3*(lv-1))*ov.dmg, pierce:evo?3:1, life:0.9, last:null, evo});
+            dmg:(evo?16:10+3*(lv-1))*ov.dmg, pierce:(evo?3:1)+(p.ps.pierce||0), life:0.9, last:null, evo});
         }
       }
       sfx(700,300,0.06,'square',0.03);
@@ -1790,6 +1792,56 @@ function weaponsUpdate(dt){
         G.shake=Math.min(6,G.shake+2);
         if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN*0.8);
       }else p.thunderT=0.2;
+    }
+  }
+  /* --- v2.0 せいさ(聖鎖): いちばん近い敵へ鎖を打ち、線上の敵を薙いで短く縛る。進化=三条 --- */
+  if(p.wp.chain>0){
+    p.chainT-=dt*atkMult;
+    if(p.chainT<=0){
+      const evo=p.evo.hchain>0, lvR=p.wp.chain, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      const ts=nearestEnemies(evo?4:(lv>=4?2:1),(evo?300:240)*areaMult(p));
+      if(ts.length){
+        p.chainT=(evo?0.9:1.15)*Math.pow(0.92,lv-1)*ov.cd;
+        const dmg=(evo?26:12+5*(lv-1))*ov.dmg, wdt=(evo?20:16)*areaMult(p)*ov.area;
+        for(const t of ts){
+          const x1=p.x, y1=p.y-14, x2=t.x, y2=t.y-t.r*0.6, L=Math.hypot(x2-x1,y2-y1)||1, ux=(x2-x1)/L, uy=(y2-y1)/L;
+          for(const e of B.enemies){
+            if(e.dead||e.dormant) continue;
+            const rx=e.x-x1, ry=(e.y-e.r*0.6)-y1, al=rx*ux+ry*uy; if(al<0||al>L+e.r) continue;
+            const px=rx-ux*al, py=ry-uy*al; if(Math.hypot(px,py)<wdt+e.r*0.6){ damageEnemy(e,dmg); if(!e.boss) e.stun=Math.max(e.stun,evo?0.9:0.55); }
+          }
+          B.fx.push({kind:'chain',x:x1,y:y1,x2,y2,t:0,life:0.28,evo});
+        }
+        sfx(700,260,0.12,'square',0.04);
+        if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN);
+      }else p.chainT=0.15;
+    }
+  }
+  /* --- v2.0 みちびきの精霊: 敵を追う小さな光。当たれば小範囲ではぜる。進化=四つ --- */
+  if(p.wp.spirit>0){
+    p.spiritT-=dt*atkMult;
+    if(p.spiritT<=0){
+      const evo=p.evo.twinspirit>0, lvR=p.wp.spirit, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      const ts=nearestEnemies(1,520);
+      if(ts.length && B.bullets.length<170){
+        p.spiritT=(evo?1.1:1.7)*Math.pow(0.9,lv-1)*ov.cd;
+        const n=(evo?4:1+Math.floor(lv/3))+dupN(p);
+        for(let i=0;i<n;i++){ const a=rand(TAU); B.bullets.push({kind:'spirit', x:p.x+Math.cos(a)*18, y:p.y-14+Math.sin(a)*12, vx:Math.cos(a)*120, vy:Math.sin(a)*120, spd:evo?300:240, turn:evo?6:4, dmg:(evo?24:14+5*(lv-1))*ov.dmg, splash:(evo?54:40)*areaMult(p)*ov.area, life:3.0, target:null, last:null, evo}); }
+        sfx(900,1300,0.15,'sine',0.03);
+      }else p.spiritT=0.2;
+    }
+  }
+  /* --- v2.0 ひかりの盾: 向いている側に光の弧。触れた敵を焼き、敵弾(呪弾)を弾く。進化=全方位 --- */
+  if(p.wp.shield>0){
+    const evo=p.evo.aegis>0, lvR=p.wp.shield, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+    p.shieldPulse+=dt*atkMult; p.shieldR=(evo?52:38+3*lv)*areaMult(p)*ov.area; p.shieldArc=evo?TAU:Math.PI*(0.9+0.1*lv);
+    if(Math.hypot(p.vx,p.vy)>20) p.shieldAng=Math.atan2(p.vy,p.vx); else if(!p.shieldArc||p.shieldAng===0) p.shieldAng=p.face>0?0:Math.PI;
+    const inArc=(a)=>{ let da=((a-p.shieldAng+Math.PI*3)%TAU)-Math.PI; return Math.abs(da)<=p.shieldArc/2; };
+    for(const b of B.ebullets){ if(b.dead) continue; const dx=b.x-p.x, dy=b.y-(p.y-10), d=Math.hypot(dx,dy); if(d<p.shieldR+b.r && inArc(Math.atan2(dy,dx))){ b.dead=true; parts(b.x,b.y,8,['#fff','#8fd3ff'],120,0.4); sfx(1200,600,0.08,'square',0.04); } }
+    if(p.shieldPulse>=0.5){
+      p.shieldPulse-=0.5; const dmg=(evo?12:5+2*(lv-1))*ov.dmg; let hit=false;
+      for(const e of B.enemies){ if(e.dead||e.dormant||e.state==='attached') continue; const dx=e.x-p.x, dy=e.y-(p.y-10), d=Math.hypot(dx,dy)||0.001; if(d<p.shieldR+e.r && inArc(Math.atan2(dy,dx))){ damageEnemy(e,dmg); hit=true; if(!e.boss){ e.x+=dx/d*10; e.y+=dy/d*10; } } }
+      if(hit && restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN*0.5);
     }
   }
   /* --- せいすい: 聖水を投げ、地面に清めの水溜まりを残す(継続ダメージ) --- */
@@ -1896,6 +1948,7 @@ function applyUpg(k){
   if(UPG[k].kind==='wp') p.wp[k]++; else p.ps[k]++;
   if(k==='vital'){ p.maxHp=Math.round(p.maxHp)+25; p.hp=Math.min(p.maxHp,p.hp+25); }
   if(k==='ward'){ p.armor++; }
+  if(k==='regen'){ p.regen+=0.15; }   // v2.0 いのりの露
   if(k==='endure'){ const add=Math.round(p.staminaMax*0.1); p.staminaMax+=add; p.stamina=Math.min(p.staminaMax,p.stamina+add); }
   floatTxt(p.x,p.y-64,UPG[k].name+' Lv'+curLv(k)+(UPG[k].kind==='wp'&&curLv(k)>BAL.WP_EVO_LV?' 覚醒!':'!'),'#ffd76a',13,1.5);
   heroBubble(p,'つよくなった♪',true);
@@ -1974,9 +2027,14 @@ function spawnUnit(id, x, y, o){
   if(id==='runemage'){ u.castCd=2.5; u.runeCd=6; u.lookA=0; }
   if(id==='succuqueen'){ u.orbitA=rand(TAU); u.orbitDir=Math.random()<0.5?-1:1; u.pulseCd=3; u.spawnCd=8; u.kissCd=2; }
   if(id==='gobking'){ u.muskCd=0.5; u.hornCd=4; }
+  if(id==='inyoku'){ u.orbitA=rand(TAU); u.orbitDir=Math.random()<0.5?-1:1; u.swoopCd=rand(2,4); u.swoopT=0; u.holdT=0; }
+  if(id==='suiyou'){ u.sub=false; u.grabCd=0; }
+  if(id==='mouth'){ u.grabCd=1.5; u.lickT=0; }
+  if(id==='guardian'){ u.castCd=3; u.aimT=0; u.lookA=0; }
   if(id==='core'){ u.whipCd=2; u.whipT=0; u.pulseCd=5; u.pulseT=0; u.spawnCd=4; u.lookA=0; u.hp=u.maxHp=BAL.CORE_HP*(1+0.08*Math.max(0,(META.gen.idx||1)-1)); }
   // 地形の恩恵: 湿地で粘る種のHP、巣の魔物のHP。速度は毎フレーム今いる地形で決まる(spd0 が素の速度)
   u.spd0=u.spd; u.zone=zoneAt(x,y); u.item=!!MONSTERS[id].item;   // 設置物は押し合いで動かない
+  if(id==='suiyou') u.sub=(u.zone==='water'||u.zone==='damp');   // v2.0 水妖は水の中で待つ
   { const hm=zoneMonHp(u.zone,id); if(hm!==1){ u.hp*=hm; u.maxHp*=hm; } }
   u.parent=o.parent||null;
   if(!B.codexSeen[id] && !MONSTERS[id].item){ B.codexSeen[id]=1; codexMark(id,'seen'); }
@@ -2095,6 +2153,9 @@ function enemiesUpdate(dt){
     if(e.state==='attached'){
       const anch=e.suck?suckAnchor(p,e.suck):limbAnchor(p,e.limb);
       e.x=anch.x; e.y=anch.y;
+      if(e.id==='inyoku'){ e.holdT=(e.holdT||0)-dt; if(e.holdT<=0 && e.limb){ detachLimb(e.limb,{}); e.swoopCd=rand(3,5); e.orbitA=rand(TAU); e.y-=40; } }   // v2.0 淫翼は数秒で離れて舞い戻る
+      if(e.id==='suiyou') p.slow=Math.max(p.slow,0.6);                                                                                              // v2.0 水妖に絡まれている間は足が鈍い
+      if(e.id==='mouth'){ applyPleasure(5.5*unitPmul(e)*dt); addHeatG(4*dt); applySensit(0.8*dt); e.lickT=(e.lickT||0)+dt; if(e.lickT>0.9){ e.lickT=0; parts(p.x+rand(-10,10),p.y+rand(4,16),3,['#ffb3cf','#fff'],60,0.4); } }   // v2.0 肉壁の口: 吸いながら舐め続ける
       continue;
     }
     // 魅了拘束の相手: 彼女に縋りつかれてその場を動かない
@@ -2132,7 +2193,15 @@ function enemiesUpdate(dt){
     e.zone=zoneAt(e.x,e.y); if(e.spd0!==undefined) e.spd=e.spd0*zoneMonSpd(e.zone,e.id);
     e.x=clampMapX(e.x,e.r); e.y=clampMapY(e.y,e.r);
     if(e.stun>0){ e.stun-=dt; }
-    else if(e.id==='core'){
+    else if(e.id==='inyoku'){
+      inyokuTick(e,dt,d,dx,dy);
+    }else if(e.id==='suiyou'){
+      suiyouTick(e,dt,d,dx,dy);
+    }else if(e.id==='mouth'){
+      mouthTick(e,dt,d);
+    }else if(e.id==='guardian'){
+      guardianTick(e,dt,d,dx,dy);
+    }else if(e.id==='core'){
       coreTick(e,dt,d,dx,dy);
     }else if(e.id==='dreamtree'){
       dreamtreeTick(e,dt,d);
@@ -2252,7 +2321,7 @@ function enemiesUpdate(dt){
     // 接触
     if(!e.dead && !e.dormant && e.state!=='attached' && p.ifr<=0
        && e.id!=='flower' && e.id!=='imp' && e.id!=='gas' && e.id!=='pot' && e.id!=='tower' && e.id!=='web' && e.id!=='eye'
-       && e.id!=='gazer' && e.id!=='beamer'
+       && e.id!=='gazer' && e.id!=='beamer' && e.id!=='mouth' && e.id!=='guardian' && e.id!=='suiyou' && e.id!=='inyoku'
        && Math.hypot(e.x-p.x,e.y-p.y)<e.r+p.r){
       contactHit(e);
     }
@@ -2908,6 +2977,62 @@ function startDescend(){
   parts(p.x,p.y-10,26,['#8fd3ff','#fff','#cbd5ff'],160,1.0); S.clear();
   G.mode='survived'; B.winT=2.4;
 }
+/* ================= v2.0 新種 ================= */
+/* 淫翼: 頭上を旋回し、急降下して両腕に抱きつく(数秒で離れて舞い戻る)。翼の粉で敏感に */
+function inyokuTick(e,dt,d,dx,dy){
+  const B=G.B, p=B.hero;
+  if(e.blocked){ e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt; return; }
+  e.swoopCd-=dt;
+  if(e.swoopT>0){
+    e.swoopT-=dt;
+    const tx=p.x, ty=p.y-30, ddx=tx-e.x, ddy=ty-e.y, dd=Math.hypot(ddx,ddy)||0.001;
+    e.x+=ddx/dd*e.spd*1.9*dt; e.y+=ddy/dd*e.spd*1.9*dt;
+    if(dd<p.r+e.r+6 && p.ifr<=0){
+      if(attachMonster(e,'cling',{armsOnly:true,needMul:0.6})){ e.holdT=1.8; applySensit(4); spawnCloud(p.x,p.y-10,30,1.6,BAL.SENSIT_GAS*0.4,'moth'); }
+      else{ applySensit(3); applyPleasure(2); }
+      e.swoopT=0; e.swoopCd=rand(3,5);
+    }
+    return;
+  }
+  e.orbitA+=e.orbitDir*1.6*dt;
+  const R=150, tx=p.x+Math.cos(e.orbitA)*R, ty=p.y-70+Math.sin(e.orbitA)*R*0.45;
+  const ddx=tx-e.x, ddy=ty-e.y, dd=Math.hypot(ddx,ddy)||0.001, sp=Math.min(e.spd*1.3, dd*4);
+  e.x+=ddx/dd*sp*dt; e.y+=ddy/dd*sp*dt;
+  if(e.swoopCd<=0 && d<260 && attachedSlots(p).length<3){ e.swoopT=1.2; sfx(900,500,0.15,'triangle',0.04); }
+}
+/* 水妖: 水面下に潜み、近づくと浮かんで脚に絡み、水へ引く(足が鈍る) */
+function suiyouTick(e,dt,d,dx,dy){
+  const B=G.B, p=B.hero;
+  const wet=(e.zone==='water'||e.zone==='damp');
+  if(e.sub){ if(d<300 || !wet){ e.sub=false; B.spawnFx.push({x:e.x,y:e.y,t:0,r:e.r+6}); } else return; }
+  if(e.grabCd>0) e.grabCd-=dt;
+  if(d<p.r+e.r+4 && e.grabCd<=0 && p.ifr<=0){
+    if(attachMonster(e,'cling',{legFirst:true})){ p.slow=Math.max(p.slow,1.2); return; }
+    e.grabCd=1.2;
+  }
+  e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt;
+  if(d>420 && wet) e.sub=true;
+}
+/* 肉壁の口: 動かない。近づいた脚を吸い、粘膜で舐めながら快感を送り続ける */
+function mouthTick(e,dt,d){
+  const B=G.B, p=B.hero;
+  const holding=attachedSlots(p).some(sl=>p.limbs[sl].mon===e);
+  if(e.grabCd>0) e.grabCd-=dt;
+  if(holding){ e.lickT+=dt; applyPleasure(6*unitPmul(e)*dt); addHeatG(4*dt); applySensit(0.8*dt); if(e.lickT>0.9){ e.lickT=0; parts(p.x+rand(-10,10),p.y+rand(4,16),3,['#ffb3cf','#fff'],60,0.4); } return; }
+  if(d<e.r+p.r+14 && e.grabCd<=0 && p.ifr<=0){ if(attachMonster(e,'cling',{legFirst:true,needMul:1.6})) e.grabCd=4; else e.grabCd=1.5; }
+}
+/* 遺跡の番人: 動かない石像。額の紋が光り、淫紋の光弾を扇状に放つ(1.2秒の予兆) */
+function guardianTick(e,dt,d,dx,dy){
+  const B=G.B, p=B.hero;
+  e.lookA=Math.atan2(dy,dx);
+  if(e.castCd>0) e.castCd-=dt;
+  if(e.aimT>0){
+    e.aimT-=dt;
+    if(e.aimT<=0){ const a0=e.lookA; for(let i=-1;i<=1;i++){ const a=a0+i*0.22; B.ebullets.push({kind:'rune', x:e.x, y:e.y-e.r*1.1, vx:Math.cos(a)*190, vy:Math.sin(a)*190, t:0, life:3.0, r:8, src:'guardian'}); } sfx(500,900,0.25,'sine',0.05); e.castCd=5.5; }
+    return;
+  }
+  if(d<420 && e.castCd<=0 && losClear(e.x,e.y,p.x,p.y,true)) e.aimT=1.2;
+}
 /* ================= v2.0 魔核(最深部の大ボス) =================
    動かない。根の鞭で四肢を繋ぎ(大触手と同じ繋留)、脈動で快感・発情・敏感化を送り、床から手を生やす。HPが減るほど脈が速い */
 function coreTick(e,dt,d,dx,dy){
@@ -3349,6 +3474,21 @@ function bulletsUpdate(dt){
           if(Math.hypot(pr.x-b.tx,pr.y-b.ty)<b.splash+12) damageProp(pr,b.dmg);
         }
         if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN*0.6);
+      }
+      continue;
+    }
+    /* --- v2.0 みちびきの精霊: いちばん近い敵へ曲がりながら追い、当たれば小範囲ではぜる --- */
+    if(b.kind==='spirit'){
+      b.life-=dt;
+      if(!b.target||b.target.dead||b.target.dormant){ let bt=null, bd=520; for(const e of B.enemies){ if(e.dead||e.dormant||e.state==='attached') continue; const dd=Math.hypot(e.x-b.x,e.y-b.y); if(dd<bd){ bd=dd; bt=e; } } b.target=bt; }
+      if(b.target){ const dx=b.target.x-b.x, dy=(b.target.y-b.target.r*0.6)-b.y, d=Math.hypot(dx,dy)||1; b.vx+=(dx/d*b.spd-b.vx)*Math.min(1,dt*b.turn); b.vy+=(dy/d*b.spd-b.vy)*Math.min(1,dt*b.turn); }
+      b.x+=b.vx*dt; b.y+=b.vy*dt;
+      if(Math.random()<0.6) parts(b.x,b.y,1,[b.evo?'#ffe3ef':'#e8f4ff','#fff'],16,0.3);
+      let hitE=null;
+      for(const e of B.enemies){ if(e.dead||e.dormant||e.state==='attached') continue; if(Math.hypot(e.x-b.x,(e.y-e.r*0.6)-b.y)<e.r+8){ hitE=e; break; } }
+      if(hitE||b.life<=0){
+        if(hitE){ for(const e of B.enemies){ if(e.dead||e.dormant) continue; if(Math.hypot(e.x-b.x,(e.y-e.r*0.6)-b.y)<b.splash+e.r) damageEnemy(e,b.dmg); } parts(b.x,b.y,b.evo?12:8,['#e8f4ff','#fff','#ffd76a'],130,0.4); sfx(1000,300,0.1,'sine',0.04); if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN*0.6); }
+        b.life=0;
       }
       continue;
     }

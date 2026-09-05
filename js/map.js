@@ -11,7 +11,7 @@
    定数 MAP_T/MAP_W/MAP_H/MAP_HW/MAP_HH/ZONES は data.js
 ============================================================ */
 const SOLID_ROCK=1, SOLID_CLIFF=2;
-const FLYERS=new Set(['ghost','moth','imp','succubus','succuqueen','eye','gas','spore','ghosthand']);   // 崖を越えられる(飛ぶ/浮く)
+const FLYERS=new Set(['ghost','moth','imp','succubus','succuqueen','eye','gas','spore','ghosthand','inyoku']);   // 崖を越えられる(飛ぶ/浮く)
 function canFly(id){ return FLYERS.has(id); }
 function mapGen(){ return META.gen.idx||1; }
 function tileI(x){ return Math.floor((x+MAP_HW)/MAP_T); }
