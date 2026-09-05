@@ -222,7 +222,7 @@ const UI={
     const wipeArmed=this._wipeArm && performance.now()-this._wipeArm<3000;
     return `
       <h1>ルミナ・サバイバーズ</h1>
-      <div class="sub">v1.8 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
+      <div class="sub">v1.9 侵蝕デッキ — MONSTER DECK × AUTO BATTLE</div>
       <p>あなたは<b>夜側の指揮者</b>。デッキから魔物を差し向け、AIで戦う光の少女<b>「ルミナ」</b>を追い詰める。<br>
       彼女に魔物が倒されるほどあなたのエネルギーとエッセンスは増え、彼女もまた強くなる。</p>
       <div style="text-align:center;color:var(--gold);font-size:12px;margin-bottom:8px">${esc(best)} ・ 通算${META.runs}戦 / 捕獲${META.captures}回</div>
@@ -625,6 +625,7 @@ const UI={
     this.refreshFormRow();
     this.syncBattleButtons();
     $('btnSpd').textContent='▶ ×'+(G.spd||1);
+    if(typeof resize==='function') resize();   // v1.9 縦持ちではバーの高さぶんキャンバスを縮める
   },
   /* 手札の要素(デッキ札+客札)。客札は別の帯に小さく並ぶ */
   handEls(){ return [...$('handrow').children, ...$('guestrow').querySelectorAll('.gchip')]; },
@@ -654,6 +655,7 @@ const UI={
         row.appendChild(el);
       }
     }
+    row.classList.toggle('dense', G.B.hand.filter(h=>!h.temp).length>9);   // v1.9 札が多い時は小さめで一列
     grow.hidden=guests.length===0;
     if(guests.length){
       const lbl=document.createElement('div'); lbl.className='glbl'; lbl.innerHTML='客 <b>'+guests.length+'</b>';

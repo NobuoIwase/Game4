@@ -564,7 +564,7 @@ function drawMinimap(g){
     for(let j=0;j<MAP_H;j++) for(let i=0;i<MAP_W;i++){ const s=G.map.solid[j*MAP_W+i]; cg.fillStyle=s===SOLID_ROCK?'#14111f':(s===SOLID_CLIFF?'#5a5478':ZONES[ZONE_IDS[G.map.zone[j*MAP_W+i]]].col); cg.fillRect(i,j,1,1); }
     G.map.mini=c;
   }
-  const sc=1, mw=MAP_W*sc, mh=MAP_H*sc, x0=12, y0=H-mh-22;
+  const sc=1, mw=MAP_W*sc, mh=MAP_H*sc, x0=12, y0=H-mh-22-Math.round(typeof barCover==='number'?barCover:0);   // v1.9 横持ちでは戦闘バーの上に
   g.save(); g.globalAlpha=0.9;
   g.fillStyle='rgba(10,10,26,0.8)'; g.fillRect(x0-3,y0-3,mw+6,mh+6);
   g.imageSmoothingEnabled=false; g.drawImage(G.map.mini,x0,y0,mw,mh); g.imageSmoothingEnabled=true;

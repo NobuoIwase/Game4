@@ -2298,12 +2298,14 @@ function drawPinScene(g){
   const beat=B.pinScene.beats[B.pinSceneIdx % B.pinScene.beats.length];
   g.save();
   const w2=Math.min(640,W-80);
-  rr(g,W/2-w2/2,H-142,w2,44,10);
+  const bc=(typeof barCover==='number'?barCover:0);
+  const by=bc>H*0.3 ? 104 : H-26-bc-44;   // 重なる戦闘バーの上。バーが高い(小さい窓)なら彼女に被せず上へ。縦持ち(bc=0)は下端近く
+  rr(g,W/2-w2/2,by,w2,44,10);
   g.fillStyle='rgba(14,10,28,0.82)'; g.fill();
   g.strokeStyle='rgba(255,110,150,0.5)'; g.lineWidth=1.2; g.stroke();
   g.fillStyle='#e8d8ea'; g.font='12px '+FONT;
   g.textAlign='center'; g.textBaseline='middle';
-  g.fillText(beat, W/2, H-120);
+  g.fillText(beat, W/2, by+22);
   g.restore();
 }
 
@@ -2458,7 +2460,7 @@ function drawHUD(g){
   drawMinimap(g);
   g.fillText('enemies:'+B.enemies.length+' fps:'+Math.round(G.fps)+(TS>1?' x'+TS:''), 12, H-6);
   g.textAlign='right'; g.fillStyle='rgba(255,255,255,0.3)'; g.font='bold 10px '+FONT;
-  g.fillText('v1.8 侵蝕デッキ', W-12, H-6);
+  g.fillText('v1.9 侵蝕デッキ', W-12, H-6);
 }
 function drawCards(g){
   const B=G.B, c=B.lvCards; if(!c) return;

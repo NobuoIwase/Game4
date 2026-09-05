@@ -11,18 +11,31 @@ const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
 const TS = Math.max(1, Math.min(5, parseInt(new URLSearchParams(location.search).get('ts'),10) || 1));
 
-let dpr=1, viewScale=1;
+let dpr=1, viewScale=1, barCover=0;   // barCover: 横持ちで戦闘バーが世界の下端を覆う高さ(世界px)。縦持ちでは重ねないので 0
 function resize(){
   dpr = Math.min(2, window.devicePixelRatio||1);
-  viewScale = Math.min(window.innerWidth/W, window.innerHeight/H) * 0.985;
+  const bb=document.getElementById('battlebar');
+  // v1.9 縦持ち: キャンバスを上に、戦闘バーをその下に(重ねない)。キャンバスは残りの高さに収める
+  const portrait = window.innerHeight > window.innerWidth*1.05;
+  document.body.classList.toggle('portrait', portrait);
+  let availH=window.innerHeight;
+  if(portrait && bb && !bb.hidden){ availH=Math.max(220, window.innerHeight-bb.offsetHeight-12); }
+  viewScale = Math.min(window.innerWidth/W, availH/H) * 0.985;
   cv.style.width  = Math.round(W*viewScale)+'px';
   cv.style.height = Math.round(H*viewScale)+'px';
   cv.width  = Math.round(W*viewScale*dpr);
   cv.height = Math.round(H*viewScale*dpr);
-  const bb=document.getElementById('battlebar');
-  bb.style.width = Math.min(720, Math.round(W*viewScale)-24)+'px';
+  if(bb){
+    if(portrait){ bb.style.width='100%'; barCover=0; }
+    else{ bb.style.width = Math.min(1100, Math.round(W*viewScale)-24)+'px'; barCover = bb.hidden?0:(bb.offsetHeight+8)/viewScale; }   // 札13枚が一列に収まる幅まで広げる
+  }
 }
 window.addEventListener('resize', resize); resize();
+// 戦闘バーの高さが変わったら(表示/非表示・客札の増減)キャンバスの寸法を合わせ直す
+if(window.ResizeObserver){
+  let lastBarH=-1;
+  new ResizeObserver(()=>{ const bb=document.getElementById('battlebar'); const bh=bb.hidden?0:bb.offsetHeight; if(bh!==lastBarH){ lastBarH=bh; resize(); } }).observe(document.getElementById('battlebar'));
+}
 
 /* ---------------- utils ---------------- */
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
