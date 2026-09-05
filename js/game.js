@@ -687,7 +687,7 @@ function detachLimb(slot, opt){
     }
     if(opt.fling){
       mon.stun=1.2;
-      mon.hp-=mon.maxHp*(mon.boss?0.05:0.35);   // ボスは振りほどかれても大きくは削れない(呑み込みで自滅しない)
+      mon.hp-=mon.maxHp*(mon.id==='core'?BAL.CORE_FLING:(mon.id==='sentinel'?0.08:(mon.boss?0.05:0.35)));   // ボスは振りほどかれても大きくは削れない(呑み込みで自滅しない)。v2.2 魔核は0.5%(根を千切っても心臓は削れない)、番兵は8%
       const a=rand(TAU);
       if(MONSTERS[mon.id].spd>0){ mon.x+=Math.cos(a)*30; mon.y+=Math.sin(a)*30; collideMap(mon,mon.r*0.75,canFly(mon.id)); }   // 据わった個体(魔核・口)は飛ばされない
       parts(mon.x,mon.y,8,['#fff','#c98cff'],140,0.5);
@@ -3287,9 +3287,9 @@ function coreTick(e,dt,d,dx,dy){
   e.whipCd-=dt; e.pulseCd-=dt; e.spawnCd-=dt; if(e.pulseT>0) e.pulseT-=dt;
   if(e.whipT>0){
     e.whipT-=dt;
-    if(e.whipT<=0){ if(d<260 && attachMonster(e,'tether',{r:210,needMul:1.3})){ e.state='idle'; hurtHero(e.dmg*0.6,e,{noKb:true}); B.bossMark={id:'core',t:B.time}; codexMet('core'); if(ph<0.6) attachMonster(e,'tether',{r:210,needMul:1.3}); } e.whipCd=BAL.CORE_WHIP_CD*(holding?1.6:1)*(ph<0.3?0.75:1); }   // 魔核は据わったまま根で繋ぐ(attached にせず、脈動も続く)。v2.2 弱ると根が二本
+    if(e.whipT<=0){ if(d<260 && attachMonster(e,'tether',{r:210,needMul:1.3})){ e.state='idle'; hurtHero(e.dmg*0.6,e,{noKb:true}); B.bossMark={id:'core',t:B.time}; codexMet('core'); if(ph<BAL.CORE_TWO_PH) attachMonster(e,'tether',{r:210,needMul:1.3}); } e.whipCd=BAL.CORE_WHIP_CD*(holding?1.6:1)*(ph<0.3?0.75:1); }   // 魔核は据わったまま根で繋ぐ(attached にせず、脈動も続く)。v2.2 弱ると根が二本
   }else if(d<230 && e.whipCd<=0 && !holding){ e.whipT=0.55; sfx(120,50,0.3,'sawtooth',0.08); }
-  if(d<BAL.CORE_AURA_R){ addHeatG(6*dt); applySensit(1.2*dt); e.auraT=(e.auraT||0)+dt; if(e.auraT>=1){ e.auraT-=1; hurtHero(2,e,{quiet:true,noKb:true,pierce:true}); } }   // v2.2 脈の圏内: 熱と敏感化、じわじわ削る
+  if(d<BAL.CORE_AURA_R){ addHeatG(4*dt); applySensit(1.0*dt); e.auraT=(e.auraT||0)+dt; if(e.auraT>=1){ e.auraT-=1; hurtHero(2,e,{quiet:true,noKb:true,pierce:true}); } }   // v2.2 脈の圏内: 熱と敏感化、じわじわ削る
   if(d<420 && e.pulseCd<=0){
     e.pulseCd=BAL.CORE_PULSE_CD*(ph<0.5?0.7:1)*(ph<0.3?0.8:1); e.pulseT=0.7;
     applyPleasure(10+14*(1-ph)); addHeatG(16); applySensit(5); p.stumbleDur=Math.max(p.stumbleDur,ph<0.5?0.8:0.5);

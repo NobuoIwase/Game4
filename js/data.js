@@ -148,7 +148,7 @@ const BAL={
   // v2.0 階層
   EXIT_STAND:2.5, EXIT_WORTH:0.5, EXIT_WORTH_PER_MIN:0.5, EXIT_HP_MIN:0.45,   // 降り口: そばに立つ秒数 / 目当ての価値(時間で増す) / HPがこれ未満なら降りない
   RUN_FAILS_RESET:2, DESCEND_ESS:60, CLEAR_ESS:40,                           // 二連敗でリセット / 降りられた日・魔核を討たれた日の夜側エッセンス
-  CORE_HP:32000, CORE_HP_LV:0.06, CORE_HP_LV_CAP:3.5, CORE_WHIP_CD:1.9, CORE_PULSE_CD:5.5, CORE_SPAWN_CD:7, CORE_DEF:0.4, CORE_AURA_R:140,   // 魔核(v2.2 強化: HP↑・被ダメ↓・間隔↓・脈の圏内は熱と敏感化)
+  CORE_HP:26000, CORE_HP_LV:0.04, CORE_HP_LV_CAP:3.0, CORE_WHIP_CD:2.2, CORE_PULSE_CD:5.5, CORE_SPAWN_CD:7, CORE_DEF:0.4, CORE_AURA_R:140, CORE_FLING:0.025, CORE_TWO_PH:0.4,   // 魔核(v2.2 強化: HP↑・被ダメ↓・間隔↓・脈の圏内は熱と敏感化)
   RING_CD:25, RING_R:470, RING_STUN:0.9,                                         // v2.2 包囲円陣: オート指揮の間隔 / 輪の半径 / 出現直後の硬直
   FLOOR_AFFINITY:1.2, FLESH_HEAT:1.6,                                         // 階層の得意種 HP倍率 / 肉の床の発情ゲージ(毎秒)
   /* v2.1 深淵の圧(時間経過): PRESS_T0 秒までは静か、その後 PRESS_T1 秒で 1.0 に、PRESS_MAX で頭打ち。EN上限/EN回復/召喚頭数/場の上限に掛かる。階層を跨ぐと時間は戻る */
