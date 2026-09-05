@@ -403,18 +403,23 @@ function steerTo(p,tx,ty){
 }
 /* 地形の学習: 浅瀬(足を取られる)・花園(花粉)・温泉(火照る)。3で「覚えた」 */
 function zoneKnow(z){ const K=(META.gen&&META.gen.zoneKnow)||{}; return Math.min(1,(K[z]||0)/3); }
+/* v2.2 地形の嫌い方(0〜3): その地形の fear × max(見て分かる分 innate, 踏んで学んだ分 zoneKnow) */
+function zoneFear(z){ const Z=ZONES[z]; if(!Z) return 0; let f=(Z.fear||0)*Math.max(Z.innate||0, zoneKnow(z));
+  if(Z.hazard==='slow' && G.B && G.B.hero && typeof heroStat==='function'){ const sp=heroStat(G.B.hero).speed/154; f*=Math.max(0.3,Math.min(1.2,1/Math.max(0.5,sp))); }   // v2.2 足が速いほど、足を取られる地形は気にしない
+  return f; }
+function fearTag(f){ return f>=3?'入りたくない':(f>=2?'できれば避けたい':(f>=1?'ちょっと嫌':'')); }
 function learnZone(z,amt){
   if(!META.gen) return; META.gen.zoneKnow=META.gen.zoneKnow||{};
   const before=zoneKnow(z); META.gen.zoneKnow[z]=(META.gen.zoneKnow[z]||0)+amt;
   if(before<1 && zoneKnow(z)>=1 && G.B && G.mode==='battle'){
     const h=G.B.hero, note={water:'あしを、とられる',flower:'はなの、においが……',hotspring:'ゆげで、からだが……',lewd:'からだが、へんになる……'}[z]||'';
-    floatTxt(h.x,h.y-84,'学習: '+ZONES[z].name+'は避ける','#8fd3ff',11,1.8);
+    const f=zoneFear(z); floatTxt(h.x,h.y-84,'学習: '+ZONES[z].name+(f>=2?'は避ける':(f>=1?'はちょっと嫌':'は慣れた')),'#8fd3ff',11,1.8);   // v2.2 嫌い方の段で言い方が変わる
     if(note) heroBubble(h,note+'。ここは、とおらない',false,1);
   }
 }
-function heroZoneCost(z){ if(G.B&&G.B.hero&&G.B.hero.scared&&G.B.hero.scared[z]>G.B.time) return 4; const k=zoneKnow(z); return z==='water'?2.4*k:(z==='flower'?1.3*k:(z==='hotspring'?1.8*k:(z==='nest'?0.8:(z==='lewd'?0.3+2.0*k:0)))); }   // v2.2 甘い褥は覚えるほど避ける(境で迷う)。迷って諦めた地形は40秒、経路が強く避ける   // 巣は学習に関わらず少し避ける(門が目当ての時は経路が通る)
+function heroZoneCost(z){ if(G.B&&G.B.hero&&G.B.hero.scared&&G.B.hero.scared[z]>G.B.time) return 4; const f=zoneFear(z); const C=BAL.FEAR_COST; return f>=3?C[3]:(f>=2?C[2]:(f>=1?C[1]:0.3*f)); }   // v2.2 嫌い方の段で経路コスト(1: 0.5 / 2: 1.5 / 3: 3.0)。迷って諦めた地形は40秒 4   // 巣は学習に関わらず少し避ける(門が目当ての時は経路が通る)
 function heroZoneCostBetween(x1,y1,x2,y2){ const n=Math.ceil(Math.hypot(x2-x1,y2-y1)/24)||1; let c=0; for(let k=1;k<=n;k++){ const t=k/n; c+=heroZoneCost(zoneAt(x1+(x2-x1)*t,y1+(y2-y1)*t)); } return c; }
-function zoneAvoided(z){ return heroZoneCost(z)>=1.2; }
+function zoneAvoided(z){ return zoneFear(z)>=2; }   // v2.2 「できれば避けたい」以上
 
 /* v1.8 地形帯の中の届く床から1点(fx,fy から minD〜maxD の範囲。無ければその帯のどこか、帯が無ければ null) */
 function randZoneSpot(z,fx,fy,minD,maxD){

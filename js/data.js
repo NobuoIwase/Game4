@@ -169,6 +169,8 @@ const BAL={
   GEM_WALK_R:170, GEM_WALK_R_LEAVE:60, GOAL_STALL_T:10, GEM_FAST_T:8,
   /* v2.1 ジェムの群れを目当てにするのは1回 GEM_FARM_T 秒まで。その後 GEM_FARM_CD 秒は他の目当てへ(降り続けるジェムで永遠に留まらない) */
   GEM_FARM_T:12, GEM_FARM_CD:25,
+  /* v2.2 地形の嫌い方の閾値: fear≥2 で境で迷う、fear≥3 は価値 FEAR3_WORTH 以上の目当てが無ければ入らない。経路コスト fear1/2/3 */
+  FEAR3_WORTH:2.4, FEAR_COST:[0,0.5,1.5,3.0],
   // v1.9 武器の上限: Lv5 までは従来の伸び、Lv6〜8 は覚醒(進化後も効く)。全部が上限なら「ルミナの祈り」(無駄なレベルを出さない)
   WP_EVO_LV:5, WP_OVER_DMG:0.15, WP_OVER_CD:0.93, WP_OVER_AREA:0.05,
   PRAY_DMG:0.04, PRAY_HP:0.03, PRAY_SPD:0.01, PRAY_HEAL:40,
@@ -435,16 +437,17 @@ const MAP_T=32, MAP_W=112, MAP_H=72;                // タイル寸・横タイ�
 const MAP_HW=MAP_W*MAP_T/2, MAP_HH=MAP_H*MAP_T/2;
 /* 地形帯: desc=夜側から見た効き目 / her=彼女がそこへ行きたくなる理由(v1.8 地形の意味) */
 const ZONES={
-  moss:     { name:'苔の広間',   col:'#223a3c', desc:'いつもの床。何も起きない', her:'光茸が生える(拾うと経験値。光でまわりの場所が分かる)' },
-  damp:     { name:'湿った洞',   col:'#1c3040', desc:'ナメクジ・羽虫・ワーム・粘獣王のHP+25%(ジメジメ)', her:'清水が湧く(浸かると敏感化・発情・粘液が流れる)' },
-  water:    { name:'浅瀬',       col:'#1f4a7c', desc:'スライム系の速度+30%。彼女の足は水で12%鈍る', her:'沈んだ宝(大きな経験値。足を取られながら拾う)' },
-  flower:   { name:'花園',       col:'#2f5638', desc:'媚薬の雲が濃く広い(+20%)。花粉で彼女の敏感化がじわじわ進む', her:'蜜の花(スタミナとHPが戻る。花粉は浴びる)' },
-  hotspring:{ name:'温泉',       col:'#5a3a3c', desc:'湯気で彼女の回復+50%。代わりに敏感化と発情ゲージが上がる', her:'泉がある(HPが減っていれば浸かって休む)' },
-  ruin:     { name:'石畳の回廊', col:'#3a3a4a', desc:'彼女の足も魔物の足も速い(+6%)', her:'石碑(読むと魔物の知識が進む)。宝箱は回廊に落ちやすい' },
-  nest:     { name:'魔物の巣',   col:'#4a2038', desc:'魔物のHP+15%・速度+10%', her:'用がなければ避けて歩く' },
-  flesh:    { name:'肉の床',     col:'#6a2440', desc:'触手・手・壺・ワームのHP+20%・速度+10%。最深部の床', her:'脈がうつる(踏むと発情ゲージがじわじわ上がる)。降り口か魔核だけが目当て' },
-  lewd:     { name:'甘い褥',     col:'#7a2a5a', desc:'v2.2 えちえちエリア。彼女の発情と敏感化がじわじわ進み、5秒ごとに床から手が伸びる。魔物の速度+8%。王の宝箱・宝箱・祠・宝が置いてある', her:'いいものがある……でも、からだがへんになる' },
+  moss:     { name:'苔の広間',   col:'#223a3c', fear:0, innate:0, desc:'いつもの床。何も起きない', her:'光茸が生える(拾うと経験値。光でまわりの場所が分かる)' },
+  damp:     { name:'湿った洞',   col:'#1c3040', fear:0, innate:0, desc:'ナメクジ・羽虫・ワーム・粘獣王のHP+25%(ジメジメ)', her:'清水が湧く(浸かると敏感化・発情・粘液が流れる)' },
+  water:    { name:'浅瀬',       col:'#1f4a7c', fear:1, innate:0, hazard:'slow', desc:'スライム系の速度+30%。彼女の足は水で12%鈍る', her:'沈んだ宝(大きな経験値。足を取られながら拾う)' },
+  flower:   { name:'花園',       col:'#2f5638', fear:1, innate:0, desc:'媚薬の雲が濃く広い(+20%)。花粉で彼女の敏感化がじわじわ進む', her:'蜜の花(スタミナとHPが戻る。花粉は浴びる)' },
+  hotspring:{ name:'温泉',       col:'#5a3a3c', fear:2, innate:0, desc:'湯気で彼女の回復+50%。代わりに敏感化と発情ゲージが上がる', her:'泉がある(HPが減っていれば浸かって休む)' },
+  ruin:     { name:'石畳の回廊', col:'#3a3a4a', fear:0, innate:0, desc:'彼女の足も魔物の足も速い(+6%)', her:'石碑(読むと魔物の知識が進む)。宝箱は回廊に落ちやすい' },
+  nest:     { name:'魔物の巣',   col:'#4a2038', fear:2, innate:0.5, desc:'魔物のHP+15%・速度+10%', her:'用がなければ避けて歩く' },
+  flesh:    { name:'肉の床',     col:'#6a2440', fear:2, innate:0.5, desc:'触手・手・壺・ワームのHP+20%・速度+10%。最深部の床', her:'脈がうつる(踏むと発情ゲージがじわじわ上がる)。降り口か魔核だけが目当て' },
+  lewd:     { name:'甘い褥',     col:'#7a2a5a', fear:3, innate:1, desc:'v2.2 えちえちエリア。彼女の発情と敏感化がじわじわ進み、5秒ごとに床から手が伸びる。魔物の速度+8%。王の宝箱・宝箱・祠・宝が置いてある', her:'いいものがある……でも、からだがへんになる' },
 };
+/* fear: 彼女がその地形をどれだけ嫌うか(0 気にしない / 1 ちょっと嫌 / 2 できれば避けたい / 3 入りたくない)。innate: 見ただけで分かる分(0〜1)。残りは踏んで学ぶ(zoneKnow) */
 const ZONE_IDS=Object.keys(ZONES);
 const ZONE_HP_MON={ damp:{slug:1.25,leech:1.25,worm:1.25,slimeking:1.25}, nest:{'*':1.15}, flesh:{gtent:1.2,hand:1.2,pot:1.2,worm:1.2,ghosthand:1.2,slugqueen:1.2}, lewd:{'*':1.1} };
 const ZONE_SPD_MON={ water:{slime:1.3,mistslime:1.3,slimeking:1.3}, ruin:{'*':1.06}, nest:{'*':1.1}, flesh:{gtent:1.1,hand:1.1,worm:1.1,ghosthand:1.1}, lewd:{'*':1.08} };
