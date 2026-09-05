@@ -84,6 +84,8 @@ function drawChest(g,c){
   g.strokeStyle='rgba(255,215,106,0.8)'; g.lineWidth=1.2;
   rr(g,-11,-16,22,16,3); g.stroke();
   g.restore();
+  if(c.fake && c.night && !c.taken) drawNightMark(g,c.x,c.y-30,'🎁');   // v2.2 偽りの宝箱の印(夜側だけが知っている)
+  else if(c.lewd && !c.taken){ glow(g,c.x,c.y-6,26,'255,140,200',0.25+0.1*Math.sin(c.t*3)); }   // v2.2 えちえちエリアの報酬は桃色に光る
 }
 function drawProp(g,pr){
   // 燭台(壊すと回復ドロップ)
@@ -2194,6 +2196,15 @@ function drawTrap(g,tr){
     heartPath(g,0,-2,0.8); g.fill();
   }
   g.restore();
+  if(tr.night && tr.armed) drawNightMark(g,tr.x,tr.y-tr.r*0.55-12,{rune:'✧',suit:'🎀',freeze:'⏳'}[tr.kind||'rune']);   // v2.2 設置の印
+}
+/* v2.2 夜側の設置物の印: 小さな紫のひし形と品の記号(プレイヤーだけが見て分かる) */
+function drawNightMark(g,x,y,icon){
+  g.save(); g.translate(x,y); g.globalAlpha=0.9;
+  g.fillStyle='rgba(120,60,200,0.85)'; g.beginPath(); g.moveTo(0,-7); g.lineTo(6,0); g.lineTo(0,7); g.lineTo(-6,0); g.closePath(); g.fill();
+  g.strokeStyle='rgba(230,200,255,0.9)'; g.lineWidth=1; g.stroke();
+  if(icon){ g.font='9px '+FONT; g.textAlign='center'; g.textBaseline='middle'; g.fillStyle='#fff'; g.fillText(icon,0,-14); }
+  g.restore();
 }
 /* アイテム設置カーソル(場の座標) */
 function drawPlaceCursor(g,id,x,y){
@@ -2535,7 +2546,7 @@ function drawHUD(g){
     g.fillStyle='rgba(212,168,255,0.95)'; g.font='bold '+(narrow?9:10)+'px '+FONT;
     g.fillText('夜の深まり +'+nStat+'%'+(nUnit>0?' / +'+nUnit+'体':''), narrow?W-10:W-RM, narrow?barY+30:58);
   }
-  { const pr=pressure();   // v2.1 深淵の圧(この階層に居る時間で増す)
+  { const pr=pressure();   // v2.2 深淵の圧(この階層に居る時間で増す)
     if(pr>0){ g.fillStyle='rgba(255,140,170,0.95)'; g.font='bold '+(narrow?9:10)+'px '+FONT;
       g.fillText('深淵の圧 +'+Math.round(pr*100)+'%  EN上限+'+Math.round(pr*BAL.PRESS_EN_MAX*100)+'% 頭数+'+Math.round(pr*BAL.PRESS_UNIT*100)+'%', narrow?W-10:W-RM, narrow?barY+42:72); }
     else if(!narrow){ g.fillStyle='rgba(200,180,255,0.6)'; g.font='9px '+FONT; g.fillText('深淵の圧 まだ静か('+Math.max(0,Math.ceil(BAL.PRESS_T0-B.time))+'秒)', W-RM, 72); } }
@@ -2578,6 +2589,13 @@ function drawHUD(g){
     drawEdgeArrow(g,gl.x,gl.y,gcol,goalName(gl));
   }
   if(B.event && G.mode==='battle' && !(p.goal&&p.goal.kind==='event')) drawEdgeArrow(g,B.event.x,B.event.y,(EVENT_DEF[B.event.kind]&&EVENT_DEF[B.event.kind].col)||'#fff','光の柱');
+  // v2.2 設置一覧: 場に生きている夜側の設置物(記号×数)。オート指揮の設置も含む
+  if(B.placed && G.mode==='battle'){
+    const alive={}; for(const it of B.placed){ if(B.time<it.until){ if(it.id==='fake' && !B.chests.some(c=>c.fake&&!c.taken&&Math.abs(c.x-it.x)<1&&Math.abs(c.y-it.y)<1)) continue; alive[it.id]=(alive[it.id]||0)+1; } }
+    const keys=Object.keys(alive);
+    if(keys.length){ const txt='設置: '+keys.map(k=>NIGHT_ITEMS[k].icon+'×'+alive[k]).join(' '); g.font='bold 10px '+FONT; const pw=g.measureText(txt).width+22; const px0=10, py0=narrow?chipY+76:100;
+      rr(g,px0,py0,pw,20,10); g.fillStyle='rgba(50,25,80,0.82)'; g.fill(); g.strokeStyle='rgba(201,140,255,0.7)'; g.lineWidth=1.2; g.stroke(); g.fillStyle='#e8dcff'; g.textAlign='left'; g.textBaseline='middle'; g.fillText(txt,px0+11,py0+10.5); }
+  }
   // 状態チップ
   let sx=10, sy=narrow?chipY+50:76;
   const chips=[];
@@ -2630,7 +2648,7 @@ function drawHUD(g){
   drawMinimap(g);
   g.fillText('enemies:'+B.enemies.length+' fps:'+Math.round(G.fps)+(TS>1?' x'+TS:''), 12, H-6);
   g.textAlign='right'; g.fillStyle='rgba(255,255,255,0.3)'; g.font='bold 10px '+FONT;
-  g.fillText('v2.1 深淵', W-12, H-6);
+  g.fillText('v2.2 深淵', W-12, H-6);
 }
 function drawCards(g){
   const B=G.B, c=B.lvCards; if(!c) return;
@@ -2904,6 +2922,7 @@ function draw(){
       if(e.state==='attached') continue;
       if(Math.abs(e.x-cvx)>W/2+80 || Math.abs(e.y-cvy)>H/2+100) continue;   // 画面外は描かない
       drawEnemy(g,e);
+      if(e.night && !e.dead) drawNightMark(g,e.x,e.y-e.r-18,e.id==='web'?'🕸':'📡');   // v2.2 設置の印
     }
 
     // せいいき(聖域): 彼女を中心にした光の輪。脈動の瞬間に明滅

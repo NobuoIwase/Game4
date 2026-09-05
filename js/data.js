@@ -148,7 +148,8 @@ const BAL={
   // v2.0 階層
   EXIT_STAND:2.5, EXIT_WORTH:0.5, EXIT_WORTH_PER_MIN:0.5, EXIT_HP_MIN:0.45,   // 降り口: そばに立つ秒数 / 目当ての価値(時間で増す) / HPがこれ未満なら降りない
   RUN_FAILS_RESET:2, DESCEND_ESS:60, CLEAR_ESS:40,                           // 二連敗でリセット / 降りられた日・魔核を討たれた日の夜側エッセンス
-  CORE_HP:16000, CORE_WHIP_CD:2.4, CORE_PULSE_CD:7, CORE_SPAWN_CD:9,            // 魔核
+  CORE_HP:32000, CORE_HP_LV:0.06, CORE_HP_LV_CAP:3.5, CORE_WHIP_CD:1.9, CORE_PULSE_CD:5.5, CORE_SPAWN_CD:7, CORE_DEF:0.4, CORE_AURA_R:140,   // 魔核(v2.2 強化: HP↑・被ダメ↓・間隔↓・脈の圏内は熱と敏感化)
+  RING_CD:25, RING_R:470, RING_STUN:0.9,                                         // v2.2 包囲円陣: オート指揮の間隔 / 輪の半径 / 出現直後の硬直
   FLOOR_AFFINITY:1.2, FLESH_HEAT:1.6,                                         // 階層の得意種 HP倍率 / 肉の床の発情ゲージ(毎秒)
   /* v2.1 深淵の圧(時間経過): PRESS_T0 秒までは静か、その後 PRESS_T1 秒で 1.0 に、PRESS_MAX で頭打ち。EN上限/EN回復/召喚頭数/場の上限に掛かる。階層を跨ぐと時間は戻る */
   PRESS_T0:90, PRESS_T1:210, PRESS_MAX:2.0, PRESS_EN_MAX:0.35, PRESS_EN_REGEN:0.5, PRESS_UNIT:0.3, PRESS_CAP:0.2,
@@ -442,10 +443,11 @@ const ZONES={
   ruin:     { name:'石畳の回廊', col:'#3a3a4a', desc:'彼女の足も魔物の足も速い(+6%)', her:'石碑(読むと魔物の知識が進む)。宝箱は回廊に落ちやすい' },
   nest:     { name:'魔物の巣',   col:'#4a2038', desc:'魔物のHP+15%・速度+10%', her:'用がなければ避けて歩く' },
   flesh:    { name:'肉の床',     col:'#6a2440', desc:'触手・手・壺・ワームのHP+20%・速度+10%。最深部の床', her:'脈がうつる(踏むと発情ゲージがじわじわ上がる)。降り口か魔核だけが目当て' },
+  lewd:     { name:'甘い褥',     col:'#7a2a5a', desc:'v2.2 えちえちエリア。彼女の発情と敏感化がじわじわ進み、5秒ごとに床から手が伸びる。魔物の速度+8%。王の宝箱・宝箱・祠・宝が置いてある', her:'いいものがある……でも、からだがへんになる' },
 };
 const ZONE_IDS=Object.keys(ZONES);
-const ZONE_HP_MON={ damp:{slug:1.25,leech:1.25,worm:1.25,slimeking:1.25}, nest:{'*':1.15}, flesh:{gtent:1.2,hand:1.2,pot:1.2,worm:1.2,ghosthand:1.2,slugqueen:1.2} };
-const ZONE_SPD_MON={ water:{slime:1.3,mistslime:1.3,slimeking:1.3}, ruin:{'*':1.06}, nest:{'*':1.1}, flesh:{gtent:1.1,hand:1.1,worm:1.1,ghosthand:1.1} };
+const ZONE_HP_MON={ damp:{slug:1.25,leech:1.25,worm:1.25,slimeking:1.25}, nest:{'*':1.15}, flesh:{gtent:1.2,hand:1.2,pot:1.2,worm:1.2,ghosthand:1.2,slugqueen:1.2}, lewd:{'*':1.1} };
+const ZONE_SPD_MON={ water:{slime:1.3,mistslime:1.3,slimeking:1.3}, ruin:{'*':1.06}, nest:{'*':1.1}, flesh:{gtent:1.1,hand:1.1,worm:1.1,ghosthand:1.1}, lewd:{'*':1.08} };
 const POI_DEF={
   shrine:{ name:'祠',   desc:'着くと彼女の自己強化が1段上がる(世代内で1度ずつ)' },
   spring:{ name:'泉',   desc:'HPが減っていれば湯に浸かって休む。回復するが、敏感化と発情ゲージが上がる' },
@@ -459,11 +461,11 @@ const POI_DEF={
    一日=一階層。降り口に着けば次の階層へ(その日は終わり)。捕まれば同じ階層に再挑戦、二連敗で入口へ戻る(世代が変わり経験を失う。手記だけ残る)。
    最終階層は魔核を倒せば目的達成。深いほど夜側のENが多く、魔物も硬い(mon)。affinity=その階層で HP×1.2 になる種 */
 const FLOORS=[
-  { id:'f1', name:'入口の洞',   sub:'苔と水の浅い洞。まだ光が届く',          depth:1, zoneW:{moss:5,damp:3,water:1,ruin:1,flower:1}, wall:'rock',  en:{start:1.0,base:1.0,regen:1.0,max:1.0},     mon:{hp:1.0,dmg:1.0},   affinity:['slug','worm','goblin','hand'], col:'#8fd3ff' },
-  { id:'f2', name:'水鏡の洞',   sub:'浅瀬と湿った洞。足を取られる',          depth:2, zoneW:{damp:4,water:4,moss:2,hotspring:1},        wall:'rock',  en:{start:1.1,base:1.15,regen:1.15,max:1.15}, mon:{hp:1.15,dmg:1.05}, affinity:['slime','mistslime','leech','slimeking','worm','suiyou'], col:'#7fe0ff' },
-  { id:'f3', name:'蜜の花園',   sub:'花と温泉。甘い匂いが濃い',              depth:3, zoneW:{flower:5,moss:2,hotspring:2,damp:1},        wall:'rock',  en:{start:1.2,base:1.3,regen:1.3,max:1.3},     mon:{hp:1.3,dmg:1.1},   affinity:['flower','moth','gas','imp','succubus','dreamtree','inyoku'], col:'#ffb3cf' },
-  { id:'f4', name:'沈んだ回廊', sub:'石畳の遺跡。封印石を灯さねば降り口は開かない', depth:4, zoneW:{ruin:6,damp:2,water:1,moss:1},          wall:'brick', en:{start:1.3,base:1.5,regen:1.5,max:1.5},     mon:{hp:1.5,dmg:1.15},  affinity:['gazer','beamer','eye','runemage','tower','bossgazer','guardian'], puzzle:'seals', col:'#cbd5ff' },
-  { id:'f5', name:'肉の巣',     sub:'最深部。壁も床も脈打つ。魔核が待つ',    depth:5, zoneW:{flesh:5,nest:3,flower:1,damp:1},           wall:'flesh', en:{start:1.5,base:1.75,regen:1.75,max:1.75}, mon:{hp:1.75,dmg:1.25}, affinity:['gtent','hand','pot','worm','slugqueen','succuqueen','gobking','vampi','mouth'], final:true, col:'#ff6b81' },
+  { id:'f1', name:'入口の洞',   sub:'苔と水の浅い洞。まだ光が届く',          depth:1, zoneW:{moss:5,damp:3,water:1,ruin:1,flower:1}, wall:'rock',  en:{start:1.0,base:1.0,regen:1.0,max:1.0},     mon:{hp:1.0,dmg:1.0},   affinity:['slug','worm','goblin','hand'], col:'#8fd3ff', lewd:{name:'蜜の窪地', sub:'甘い蜜が溜まる窪み。床がぬめり、手が伸びる。奥に王の宝箱'} },
+  { id:'f2', name:'水鏡の洞',   sub:'浅瀬と湿った洞。足を取られる',          depth:2, zoneW:{damp:4,water:4,moss:2,hotspring:1},        wall:'rock',  en:{start:1.1,base:1.15,regen:1.15,max:1.15}, mon:{hp:1.15,dmg:1.05}, affinity:['slime','mistslime','leech','slimeking','worm','suiyou'], col:'#7fe0ff', lewd:{name:'湯けむりの隠れ湯', sub:'湯気の濃い隠れ湯。火照りが止まらない。奥に王の宝箱'} },
+  { id:'f3', name:'蜜の花園',   sub:'花と温泉。甘い匂いが濃い',              depth:3, zoneW:{flower:5,moss:2,hotspring:2,damp:1},        wall:'rock',  en:{start:1.2,base:1.3,regen:1.3,max:1.3},     mon:{hp:1.3,dmg:1.1},   affinity:['flower','moth','gas','imp','succubus','dreamtree','inyoku'], col:'#ffb3cf', lewd:{name:'花の褥', sub:'花びらが敷き詰められた褥。花粉が濃い。奥に王の宝箱'} },
+  { id:'f4', name:'沈んだ回廊', sub:'石畳の遺跡。封印石を灯さねば降り口は開かない', depth:4, zoneW:{ruin:6,damp:2,water:1,moss:1},          wall:'brick', en:{start:1.3,base:1.5,regen:1.5,max:1.5},     mon:{hp:1.5,dmg:1.15},  affinity:['gazer','beamer','eye','runemage','tower','bossgazer','guardian'], puzzle:'seals', col:'#cbd5ff', lewd:{name:'淫紋の間', sub:'床いちめんに紋が刻まれた間。踏むほど身体が疼く。奥に王の宝箱'} },
+  { id:'f5', name:'肉の巣',     sub:'最深部。壁も床も脈打つ。魔核が待つ',    depth:5, zoneW:{flesh:5,nest:3,flower:1,damp:1},           wall:'flesh', en:{start:1.5,base:1.75,regen:1.75,max:1.75}, mon:{hp:1.75,dmg:1.25}, affinity:['gtent','hand','pot','worm','slugqueen','succuqueen','gobking','vampi','mouth'], final:true, col:'#ff6b81', lewd:{name:'肉の褥', sub:'脈打つ肉の褥。横になれば、もう起きられない。奥に王の宝箱'} },
 ];
 const curFloorIdx=()=>Math.min(FLOORS.length-1,Math.max(0,((META.run&&META.run.floor)||1)-1));
 const curFloor=()=>FLOORS[curFloorIdx()];
@@ -530,8 +532,8 @@ const FORMATIONS={
     desc:'一方向から横列で押し寄せる。' },
   ambush:{ name:'潜伏', count:3, factor:1.6, unlock:280,
     desc:'進行方向の先に伏せて置く。設置系・鈍足と好相性。' },
-  ring:{ name:'包囲円陣', count:10, factor:4.0, unlock:380,
-    desc:'広い楕円の円陣で取り囲み、輪を締める。速い魔物は少なく、遅い魔物ほど多く、動かない魔物が最も多い。' },
+  ring:{ name:'包囲円陣', count:10, factor:4.6, unlock:380, tiers:['fodder'],
+    desc:'広い楕円の円陣で取り囲み、輪を締める。雑魚だけが組める。輪は遠く、出た直後は1秒ほど動けない。速い魔物は少なく、遅い魔物ほど多く、動かない魔物が最も多い。' },
   duo:{ name:'双璧', count:2, factor:1.8, unlock:300, elite:1.25,
     desc:'2体を強化(×1.25)して並べる。大型向きの少数精鋭。' },
   burst:{ name:'大散開', count:7, factor:2.5, unlock:260,

@@ -315,6 +315,16 @@ idは汎用カタログ準拠。効果はすべて数値・挙動レベルで表
   `storyTick`: 落ち着いている時(拘束・発情・魔物30体超でない)に 38〜58 秒ごと、その階層の独り言を吹き出しで。降り口で `descend`、魔核の間を見つけた時に `finalEncounter`(1戦1度)。結果画面: clear=`ending`、reset=`reset`。
 - 表示: `#storybox`(盤面の上、タップか時間で閉じる)。ホームの「物語」画面は序章と到達済みの階層の導入、魔核討伐後は結末を載せる。
 
+### 3-22. v2.2 包囲の調整・設置するオート指揮・迷うヒロイン・えちえちエリア・魔核
+
+- **包囲円陣**: `FORMATIONS.ring.tiers=['fodder']` を `resolveForm` が見る(中型は burst→wave→scatter へ)。`RING_R`=470(縦0.75)、出た個体に `stun=RING_STUN`(0.9)。`playCard` が `B.ringCd=RING_CD`(25)を立て、`autoDirector` は `held` の時だけ、かつ `ringCd<=0` の時だけ ring を候補にする。放出(flush)では使わない。
+- **魔核**: `spawnUnit` で HP=`CORE_HP`(32000)×(1+0.08·(世代-1))×(1+min(CORE_HP_LV_CAP=3.5, CORE_HP_LV=0.06·(彼女Lv-1)))。`damageEnemy`×`CORE_DEF`(0.4)。`coreTick`: 鞭は d<230 で予兆0.55秒→`attachMonster(tether r210)`、HP<60% なら二本目、CD は 1.9×(抱えていれば1.6)×(HP<30%で0.75)。脈動 5.5×(HP<50%で0.7)×(HP<30%で0.8)、快感 10+14·(1-HP比)。召喚 7×(HP<30%で0.55)、3/4/5体、HP<30% で口(mouth)も。半径 `CORE_AURA_R`=140 で熱+6/s・敏感化+1.2/s・毎秒2(護り無視)。
+- **設置するオート指揮(`chooseNightItem`)**: `B.itemT` を 0.42 秒刻みで減らし、12秒以降 4〜6秒ごとに候補を重み付き抽選: 歩いている(速度>60・非拘束)なら 1.1秒先に pool 3 / rune 2.5 / suit 2 / freeze 2.5、経路中なら 1.6秒先に web 2。拘束中は足元に mist 4。止まっていれば mist 3、EN>上限60% で 240px 先に tower 1.2。40秒以降、偽りの宝箱が場に無く目当てが箱でなければ向いている方 420〜560px に fake 1.5。`canPlaceItem` で解放/CD/EN を確認、`B.en>=cost+min(reserve/2,10)`。`placeItem(id,x,y,{auto})` は罠・偽箱・巣・塔に `night:true`、`B.placed` に {id,x,y,t,until,auto} を残す(HUDの一覧、`NIGHT_ITEM_LIFE`)。
+- **設置の印(`drawNightMark`)**: 紫のひし形+記号。罠は armed の間、偽箱は取られるまで、巣/塔は生きている間。えちえちエリアの報酬箱は桃色に光る(`c.lewd`)。
+- **えちえちエリア**: `ZONES.lewd`(col #7a2a5a)。genMap: `freeSpot(15,7)`→(13,6)→(11,5)→used を避けた farSpot の順で必ず1か所。半径4.2タイルの床を `lewd` にし、その外側1.6タイルを岩の輪(切れ目2、角0.9/3.9rad)に。`feat.lewd`→`G.map.lewd`、`feats` に kind 'lewd'。祠は輪の内側(+1.5,-1)に。`spawnLewdRewards`: 王の宝箱・宝箱(`lewd:true`, known:false)・沈んだ宝・蜜の花2。`statesTick`: `learnZone('lewd',0.45/s)`(3秒で学習=避ける)、熱+2.4/s、敏感化+1.6/s、5秒ごと `floorGrope`(快感 6+4·敏感段、熱+6、よろめき0.45、`awardAil('grope')`)。帯の名前は `FLOORS[k].lewd.name`(初回に帯も)。`heroZoneCost('lewd')=0.3+2.0k`。
+- **迷い(aiDecide 目当て分岐)**: `p.pauseUntil`(updateGoal で目当てが変わった時25%で0.5〜1.1秒)→ state 'think'。`p.hesit={zone,until}`: 次の一歩(44px先)の地形が `zoneAvoided` か lewd で、`brave[zone]`/`scared[zone]` が切れていれば開始(1.4〜3.2秒)。迷っている間は境から半歩下がって左右に揺れる(state 'hesitate')。時間が来たら必ず決める: 入る確率 = 0.45 +0.3(価値≥2.6 / +0.15 ≥2) +0.15(HP>70%、以下なら-0.1) -0.25(敏感化≥60) -0.2(発情) -0.1(lewd を学習済み)。入る→`brave[zone]`=60秒。やめる→`scared[zone]`=40秒、目標を `giveUpOn`、`heroZoneCost` が 4 を返して経路も避け、次の一歩が scared の地形なら目標を捨てて半歩戻る。降り口/燭台/ハート/脱出中は迷わない。
+- **最終階層**: `exitTick` は final でも働き、`wantExit` で「魔核へ向かう気」(帯と台詞)。`updateGoal` の core の価値は `EXIT_WORTH_WANT`、`pickExplore` は未知の core へ当たりをつける。
+
 ### 3-21. v2.1 ADV演出・引き継ぎ・深淵の圧・石の番兵・AIの降りる判断・マップ台詞
 
 - **ADV(ui.js `UI.adv`)**: `showStory(lines,{onEnd})` は文字列でも `{s,t,f}` でも受け(`storyNorm`)、`#adv`(立ち絵 `assets/ref/lumina_novelai.png`→無ければ `assets/cg/defeat.png`、名前札、文字送り 26字/秒、自動送り 1.8s+0.09s/字、とばす)に1行ずつ出す。**表示中は main.js が tick を回さず描画だけ**(`UI.advOpen()`)、`UI.tickAdv(rdt)` で文字送り。話者: n=地の文(立ち絵は暗く)/lumina(立ち絵が揺れる、`f-heat`/`f-shy` で頬の紅潮)/town/voice。結末・リセットは `showResult` の描画後に流し、台本は `<details>`。物語画面(`htmlStory`)と結果画面は `storyLineHtml` で話者札付き。

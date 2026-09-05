@@ -164,6 +164,16 @@ function genMap(){
     else arena(ex.i,ex.j,fl2>=4?8:7,fl2>=4?SOLID_ROCK:SOLID_CLIFF);
     feat.exit=T2(ex.i,ex.j);
     feat.list.push(Object.assign({kind:'arena',r:(F.final?10:8)*MAP_T},T2(ex.i,ex.j)));
+    // v2.2 えちえちエリア: 岩の輪(切れ目2)に囲まれた小さな窪地。中は zone 'lewd'。報酬(王の宝箱・宝箱・宝・蜜)は startBattle 側で置く
+    { let s=freeSpot(15,7)||freeSpot(13,6)||freeSpot(11,5); if(!s){ for(let t=0;t<200&&!s;t++){ const c=farSpot(12+rnd()*6); if(usedF.every(u=>Math.hypot(u.i-c.i,u.j-c.j)>u.r+3)) s=c; } }   // 混んだ階層(水の細道×2・迷路×3)でも必ず置く
+      if(s){ const rr0=4.2;
+        for(let j=Math.floor(s.j-rr0-2);j<=Math.ceil(s.j+rr0+2);j++) for(let i=Math.floor(s.i-rr0-2);i<=Math.ceil(s.i+rr0+2);i++){
+          if(i<3||j<3||i>=MAP_W-3||j>=MAP_H-3) continue;
+          const dd=Math.hypot(i+0.5-s.i,(j+0.5-s.j)*1.3);
+          if(dd<=rr0){ set(i,j,0); zone[j*MAP_W+i]=ZI('lewd'); }
+          else if(dd<=rr0+1.6){ const ang=Math.atan2((j+0.5-s.j)*1.3,i+0.5-s.i); const g1=Math.abs(((ang-0.9+Math.PI*3)%TAU)-Math.PI), g2=Math.abs(((ang-3.9+Math.PI*3)%TAU)-Math.PI); if(g1>0.5 && g2>0.5) set(i,j,SOLID_ROCK); else { set(i,j,0); zone[j*MAP_W+i]=ZI('lewd'); } }
+        }
+        feat.lewd=Object.assign({r:rr0*MAP_T},T2(s.i,s.j)); feat.list.push(Object.assign({kind:'lewd',r:(rr0+1.5)*MAP_T},T2(s.i,s.j))); } }
   }
   // 孤立した1タイルの壁は消す
   for(let j=2;j<MAP_H-2;j++) for(let i=2;i<MAP_W-2;i++){
@@ -210,6 +220,7 @@ function genMap(){
     pois.push({kind,x:tileCX(ci0+6),y:tileCY(cj0),key:'f'+fl+':'+kind+pois.length});
   };
   // v2.0 階層ごとの場所。降り口(最終階層は魔核の間)は出発点から遠く
+  if(feat.lewd) place('shrine',null,0,{x:feat.lewd.x+MAP_T*1.5,y:feat.lewd.y-MAP_T});   // v2.2 えちえちエリアの奥の祠
   for(const q of feat.shrines) place('shrine',null,0,q);   // 崖の一本道の先の祠(危険だが寄り道の価値がある)
   const nShr=fl<=3?3:2; for(let k=feat.shrines.length;k<nShr;k++) place('shrine',null,520);
   if(F.zoneW.hotspring) place('spring','hotspring',320); place('spring',null,420);
@@ -222,7 +233,7 @@ function genMap(){
   for(let k=0;k<N;k++){ if(!solid[k] && reachF[k]) zoneTiles[ZONE_IDS[zone[k]]].push(k); }
   // 場所の周りは床を空ける(祠・門の前に立てるように)
   for(const q of pois){ const i=tileI(q.x), j=tileJ(q.y); for(let dj=-2;dj<=2;dj++) for(let di=-2;di<=2;di++){ if(inMap(i+di,j+dj) && i+di>=2 && j+dj>=2 && i+di<MAP_W-2 && j+dj<MAP_H-2) solid[(j+dj)*MAP_W+i+di]=0; } }
-  G.map={seed, gi, floor:fl, wall:F.wall, zone, solid, sites, pois, zoneTiles, feats:feat.list, mini:null, chunks:new Map(), dist:null, distF:null, flowT:-9, heroTile:null};   // feats: v2.1 設計された地形の中心(台詞用)
+  G.map={seed, gi, floor:fl, wall:F.wall, zone, solid, sites, pois, zoneTiles, feats:feat.list, lewd:feat.lewd||null, mini:null, chunks:new Map(), dist:null, distF:null, flowT:-9, heroTile:null};   // feats: v2.1 設計された地形の中心(台詞用)
   if(!META.map || META.map.gen!==gi || META.map.floor!==fl){ META.map={gen:gi, floor:fl, known:{}, visited:{}, seen:0}; saveMeta(); }   // 世代か階層が変われば記憶を捨てる(同じ階層の再挑戦では保つ)
   // 出発点からの流れ場を先に作る(初期召喚の配置に使う)
   G.map.dist=bfsField(ci0,cj0,false); G.map.distF=bfsField(ci0,cj0,true); G.map.heroTile=[ci0,cj0];
@@ -394,12 +405,12 @@ function learnZone(z,amt){
   if(!META.gen) return; META.gen.zoneKnow=META.gen.zoneKnow||{};
   const before=zoneKnow(z); META.gen.zoneKnow[z]=(META.gen.zoneKnow[z]||0)+amt;
   if(before<1 && zoneKnow(z)>=1 && G.B && G.mode==='battle'){
-    const h=G.B.hero, note={water:'あしを、とられる',flower:'はなの、においが……',hotspring:'ゆげで、からだが……'}[z]||'';
+    const h=G.B.hero, note={water:'あしを、とられる',flower:'はなの、においが……',hotspring:'ゆげで、からだが……',lewd:'からだが、へんになる……'}[z]||'';
     floatTxt(h.x,h.y-84,'学習: '+ZONES[z].name+'は避ける','#8fd3ff',11,1.8);
     if(note) heroBubble(h,note+'。ここは、とおらない',false,1);
   }
 }
-function heroZoneCost(z){ const k=zoneKnow(z); return z==='water'?2.4*k:(z==='flower'?1.3*k:(z==='hotspring'?1.8*k:(z==='nest'?0.8:0))); }   // 巣は学習に関わらず少し避ける(門が目当ての時は経路が通る)
+function heroZoneCost(z){ if(G.B&&G.B.hero&&G.B.hero.scared&&G.B.hero.scared[z]>G.B.time) return 4; const k=zoneKnow(z); return z==='water'?2.4*k:(z==='flower'?1.3*k:(z==='hotspring'?1.8*k:(z==='nest'?0.8:(z==='lewd'?0.3+2.0*k:0)))); }   // v2.2 甘い褥は覚えるほど避ける(境で迷う)。迷って諦めた地形は40秒、経路が強く避ける   // 巣は学習に関わらず少し避ける(門が目当ての時は経路が通る)
 function heroZoneCostBetween(x1,y1,x2,y2){ const n=Math.ceil(Math.hypot(x2-x1,y2-y1)/24)||1; let c=0; for(let k=1;k<=n;k++){ const t=k/n; c+=heroZoneCost(zoneAt(x1+(x2-x1)*t,y1+(y2-y1)*t)); } return c; }
 function zoneAvoided(z){ return heroZoneCost(z)>=1.2; }
 
@@ -507,6 +518,13 @@ function makeTileAtlas(){
         for(let k=0;k<2;k++){ const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y); g.bezierCurveTo(x+rnd()*20-10,y+rnd()*20-10,x+rnd()*24-12,y+rnd()*24-12,x+rnd()*28-14,y+rnd()*28-14); g.stroke(); }
         for(let k=0;k<2;k++){ const x=ox+rnd()*T, y=oy+rnd()*T, r=2+rnd()*2.2; dot(x,y,r,'rgba(170,90,130,0.7)'); dot(x-r*0.3,y-r*0.3,r*0.35,'rgba(255,200,230,0.55)'); }
         g.fillStyle='rgba(30,8,24,0.4)'; g.beginPath(); g.ellipse(ox+rnd()*T,oy+rnd()*T,6,3.5,rnd(),0,TAU); g.fill();
+      }else if(z==='lewd'){
+        // v2.2 甘い褥: 桃色に濡れた床。膨らみのハイライト、小さなハート、光る粒、細い蔦
+        g.fillStyle='rgba(255,120,180,0.16)'; g.beginPath(); g.ellipse(ox+rnd()*T,oy+rnd()*T,10+rnd()*6,6+rnd()*4,rnd()*3,0,TAU); g.fill();
+        for(let k=0;k<2;k++){ const x=ox+rnd()*T, y=oy+rnd()*T, r=2+rnd()*2; dot(x,y,r,'rgba(255,150,200,0.55)'); dot(x-r*0.3,y-r*0.3,r*0.4,'rgba(255,230,240,0.75)'); }
+        { const x=ox+rnd()*T, y=oy+rnd()*T; g.fillStyle='rgba(255,140,190,0.6)'; g.beginPath(); g.moveTo(x,y+3); g.bezierCurveTo(x-4,y-1,x-2,y-4,x,y-1.5); g.bezierCurveTo(x+2,y-4,x+4,y-1,x,y+3); g.fill(); }
+        g.strokeStyle='rgba(255,170,210,0.35)'; g.lineWidth=1.2; { const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y); g.quadraticCurveTo(x+rnd()*16-8,y+rnd()*16-8,x+rnd()*20-10,y+rnd()*20-10); g.stroke(); }
+        if(rnd()<0.5) dot(ox+rnd()*T,oy+rnd()*T,1.2,'rgba(255,255,255,0.8)');
       }else if(z==='flesh'){
         // 肉の床: 濡れた桃色の組織。太い血管、膨らみのハイライト、小さな窪み
         g.fillStyle='rgba(120,40,70,0.35)'; g.beginPath(); g.ellipse(ox+rnd()*T,oy+rnd()*T,9+rnd()*6,6+rnd()*4,rnd()*3,0,TAU); g.fill();
@@ -582,6 +600,7 @@ function renderChunk(ci,cj){
         if(zn==='water'){ g.fillStyle='#cdbd92'; g.fillRect(bx,by,bw,bh); g.fillStyle='rgba(120,170,220,0.55)'; if(dj<0) g.fillRect(x,y+6,T,1.5); else if(dj>0) g.fillRect(x,y+T-7.5,T,1.5); else if(di<0) g.fillRect(x+6,y,1.5,T); else g.fillRect(x+T-7.5,y,1.5,T); }
         else if(zn==='nest'){ g.fillStyle='#6e2a4a'; g.fillRect(bx,by,bw,bh); g.fillStyle='rgba(200,110,160,0.6)'; if(dj<0) g.fillRect(x,y,T,1.5); else if(dj>0) g.fillRect(x,y+T-1.5,T,1.5); else if(di<0) g.fillRect(x,y,1.5,T); else g.fillRect(x+T-1.5,y,1.5,T); }
         else if(zn==='flesh'){ g.fillStyle='#8a3458'; g.fillRect(bx,by,bw,bh); g.fillStyle='rgba(255,170,200,0.55)'; if(dj<0) g.fillRect(x,y,T,1.5); else if(dj>0) g.fillRect(x,y+T-1.5,T,1.5); else if(di<0) g.fillRect(x,y,1.5,T); else g.fillRect(x+T-1.5,y,1.5,T); }
+        else if(zn==='lewd'){ g.fillStyle='#a03a7a'; g.fillRect(bx,by,bw,bh); g.fillStyle='rgba(255,170,230,0.75)'; if(dj<0) g.fillRect(x,y,T,2); else if(dj>0) g.fillRect(x,y+T-2,T,2); else if(di<0) g.fillRect(x,y,2,T); else g.fillRect(x+T-2,y,2,T); }   // v2.2 甘い褥の縁は桃色に光る
         else if(zn==='damp' && nz!=='water'){ g.fillStyle='rgba(40,80,76,0.75)'; g.fillRect(bx,by,bw,bh); }
         else if(zn==='hotspring'){ g.fillStyle='#7a5e5e'; g.fillRect(bx,by,bw,bh); g.fillStyle='rgba(255,220,210,0.25)'; if(dj<0) g.fillRect(x,y,T,1.5); else if(dj>0) g.fillRect(x,y+T-1.5,T,1.5); else if(di<0) g.fillRect(x,y,1.5,T); else g.fillRect(x+T-1.5,y,1.5,T); }
         else if(zn==='ruin'){ g.fillStyle='#5c5c74'; if(dj<0) g.fillRect(x,y,T,3); else if(dj>0) g.fillRect(x,y+T-3,T,3); else if(di<0) g.fillRect(x,y,3,T); else g.fillRect(x+T-3,y,3,T); }
