@@ -1525,10 +1525,11 @@ function aiDecide(foc){
     const goal=(!target && G.map) ? updateGoal(p) : null;
     let walk=false, goalOk=false, atGoal=false;
     if(goal){
-      const urgent=goal.kind==='event'||goal.kind==='item'||goal.score>=1.2||(goal.kind==='poi'&&goal.sub==='stairs');   // v2.1 降り口は急ぎ
+      const leaving=!!(B.wantExit&&!B.floor.final);
+      const urgent=goal.kind==='event'||goal.kind==='item'||goal.score>=1.2||(goal.kind==='poi'&&goal.sub==='stairs')||(leaving&&goal.kind==='explore');   // v2.1 降り口(と、降り口を探す探索)は急ぎ
       goalOk = threat<(urgent?0.6:0.3);                                   // 脅威が濃いときは目当てへ歩かない(牽制/回避に戻る)
       // v2.1 目当てがあるなら歩く。ジェムは進む先の「道すがら」だけ拾う(ジェム畑と目当ての間を往復しない)。ジェムの群れそのものが目当てなら普通に拾い集める
-      walk = goalOk && goal.kind!=='gems' && goal.kind!=='explore';
+      walk = goalOk && goal.kind!=='gems' && (goal.kind!=='explore' || leaving);
       atGoal = walk && Math.hypot(goal.x-p.x,goal.y-p.y)<90;
     }
     if(!target){
@@ -2976,7 +2977,8 @@ function pickExplore(p){
     const q=snapFloor(clampMapX(p.x+Math.cos(a)*dd,120), clampMapY(p.y+Math.sin(a)*dd,120), false, 6);
     if(!q || !reachableAt(q.x,q.y,false)) continue;
     let sc=Math.hypot(q.x-p.x,q.y-p.y)/1200;
-    for(const po of G.map.pois){ if(!M.known[po.key]) sc+=Math.max(0,1-Math.hypot(po.x-q.x,po.y-q.y)/700); }   // まだ見ていない場所のそばほど良い
+    const leaving=!!(B.wantExit&&!B.floor.final);
+    for(const po of G.map.pois){ if(!M.known[po.key]){ sc+=Math.max(0,1-Math.hypot(po.x-q.x,po.y-q.y)/700)*(leaving?2:1); if(leaving && po.kind==='stairs') sc+=1.5*Math.max(0,1-Math.hypot(po.x-q.x,po.y-q.y)/1600); } }   // まだ見ていない場所のそばほど良い。降りたい時は(石の輪を目印に)降り口の当たりをつける
     if(sc>cs){ cs=sc; cand={x:q.x,y:q.y}; }
   }
   p.explore=cand; p.exploreUntil=B.time+30;
