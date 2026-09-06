@@ -66,6 +66,15 @@ const BAL={
   CORE_FIGHT_HP:0.34,      // これより体力があるうちは、引き撃ちも逃げも選ばず攻める
   CORE_FOCUS_D:900,        // 狙いの優先(距離からこのぶん差し引いて、魔核を先に撃つ)
   CORE_PULL_R:300, CORE_PULL_K:0.5,   // 魔核から離れていたら、この強さで詰め寄る
+  /* --- v4.0 強化魔核: 体力を下げる代わりに、世代ごとに技を得る --- */
+  CORE_SK_MINION:1, CORE_SK_BIG:2, CORE_SK_BEAM:3, CORE_SK_RAGE:4,   // その技を覚える世代
+  CORE_MINION_CD:12, CORE_MINION_N:[3,3,4,4,5], CORE_MINION_HEAL:0.0011, CORE_MINION_HEAL_MAX:0.0033,   // 落とし子: 頭数と、巻きついている間に親が塞ぐ割合/秒(合計の上限つき)
+  CORE_BIG_CD:30, CORE_BIG_MAX:2,          // 大型召喚の間隔と、場に出せる数
+  CORE_BEAM_CD:20, CORE_BEAM_CHARGE:2.6, CORE_BEAM_FIRE:0.85, CORE_BEAM_W:82, CORE_BEAM_LEN:1100,   // 大溜め→広範囲絶頂光線
+  CORE_BEAM_PLEA:44, CORE_BEAM_SENS:12,
+  CORE_RAGE_PH:0.5, CORE_RAGE_GAS_CD:8, CORE_RAGE_GAS_R:300, CORE_RAGE_GAS_LIFE:9,   // 発狂: 広範囲媚薬ガス
+  CORE_RAGE_SLAM_CD:6, CORE_RAGE_SLAM_R:300, CORE_RAGE_SLAM_DMG:1.5,                 // 発狂: 広範囲の薙ぎ
+  CORE_RAGE_CD:0.72,                        // 発狂中は他の技の間隔もこの倍に
 
   /* --- v3.2 甘い褥の巣窟(えちえちエリア) --- */
   DEN_ENTER_HEAT:22, DEN_ENTER_SENS:14,       // 敷居をまたいだ瞬間、匂いに殴られる
@@ -189,7 +198,7 @@ const BAL={
   // v2.0 階層
   EXIT_STAND:2.5, EXIT_WORTH:0.5, EXIT_WORTH_PER_MIN:0.5, EXIT_HP_MIN:0.45,   // 降り口: そばに立つ秒数 / 目当ての価値(時間で増す) / HPがこれ未満なら降りない
   RUN_FAILS_RESET:2, DESCEND_ESS:40, DESCEND_ESS_DEPTH:15, CLEAR_ESS:120, CLEAR_ESS_ERA:60,   // 二連敗でリセット / 降りられた日(+深さ)・魔核を討たれた日(+世代)の夜側エッセンス(v3.1 調整)
-  CORE_HP:28000, CORE_HP_LV:0.025, CORE_HP_LV_CAP:1.8, CORE_WHIP_CD:2.2, CORE_PULSE_CD:5.5, CORE_SPAWN_CD:7, CORE_DEF:0.4, CORE_AURA_R:140, CORE_FLING:0.025, CORE_TWO_PH:0.4,   // 魔核(v2.2 強化: HP↑・被ダメ↓・間隔↓・脈の圏内は熱と敏感化)
+  CORE_HP:22400, CORE_HP_LV:0.025, CORE_HP_LV_CAP:1.8, CORE_WHIP_CD:2.2, CORE_PULSE_CD:5.5, CORE_SPAWN_CD:7, CORE_DEF:0.4, CORE_AURA_R:140, CORE_FLING:0.025, CORE_TWO_PH:0.4,   // 魔核(v2.2 強化: HP↑・被ダメ↓・間隔↓・脈の圏内は熱と敏感化)
   RING_CD:25, RING_R:470, RING_STUN:0.9,                                         // v2.2 包囲円陣: オート指揮の間隔 / 輪の半径 / 出現直後の硬直
   FLOOR_AFFINITY:1.2, FLESH_HEAT:1.6,                                         // 階層の得意種 HP倍率 / 肉の床の発情ゲージ(毎秒)
   /* v2.1 深淵の圧(時間経過): PRESS_T0 秒までは静か、その後 PRESS_T1 秒で 1.0 に、PRESS_MAX で頭打ち。EN上限/EN回復/召喚頭数/場の上限に掛かる。階層を跨ぐと時間は戻る */
@@ -458,6 +467,13 @@ const MONSTERS={
     hp:5200, spd:0, r:58, dmg:14, xp:400, boss:true,
     desc:'深淵の心臓。肉の巣の最奥で脈打ち、鞭のような根で四肢を繋ぎ、脈動で快感を送り、床から手を生やす。倒せば彼女の目的は果たされる。',
     trait:'根の繋留/快感の脈動/手の召喚。討たれると深淵が組み替わる',
+  },
+  /* ---- v4.0 魔核の専用ミニオン(カードではない。魔核が産む) ---- */
+  coreling:{
+    name:'核の落とし子', role:'魔核の眷属・吸い上げ', cost:0, unlock:-1, tier:'small', guardian:true,
+    hp:34, spd:158, r:9, dmg:3, xp:6,
+    desc:'魔核の根がちぎれて生まれた、桃色の幼い塊。自分の意思を持たず、まっすぐ彼女へ這い寄って手足に巻きつく。巻きついている間、吸い上げたものを根伝いに親へ送り返す——親の傷が塞がっていく。',
+    trait:'速い。巻きつくと魔核の傷が塞がる。個体は脆い',
   },
   /* ---- v1.6 ボス4種 ---- */
   slimeking:{

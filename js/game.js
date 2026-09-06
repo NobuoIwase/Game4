@@ -2631,6 +2631,8 @@ function enemiesUpdate(dt){
       guardianTick(e,dt,d,dx,dy);
     }else if(e.id==='core'){
       coreTick(e,dt,d,dx,dy);
+    }else if(e.id==='coreling'){
+      corelingTick(e,dt,d,dx,dy);
     }else if(e.id==='sentinel'){
       sentinelTick(e,dt,d,dx,dy);
     }else if(e.id==='dreamtree'){
@@ -3804,9 +3806,45 @@ function coreTick(e,dt,d,dx,dy){
     B.bossMark={id:'core',t:B.time}; codexMet('core'); sfx(60,40,0.6,'sine',0.1); G.shake=Math.min(8,G.shake+4);
   }
   if(d<520 && e.spawnCd<=0 && B.enemies.length<fieldCap()-6){
-    e.spawnCd=BAL.CORE_SPAWN_CD*(ph<0.3?0.55:1); const n=ph<0.3?5:(ph<0.6?4:3), pool=ph<0.3?['hand','worm','gtent','mouth']:(ph<0.6?['hand','worm','gtent']:['hand','worm']);   // v2.2 弱るほど多く、口も生える
+    e.spawnCd=BAL.CORE_SPAWN_CD*(ph<0.3?0.55:1)*(e.rage?BAL.CORE_RAGE_CD:1); const n=ph<0.3?5:(ph<0.6?4:3), pool=ph<0.3?['hand','worm','gtent','mouth']:(ph<0.6?['hand','worm','gtent']:['hand','worm']);   // v2.2 弱るほど多く、口も生える
     for(let i=0;i<n;i++){ const a=rand(TAU); spawnUnit(pickRand(pool), p.x+Math.cos(a)*110, p.y+Math.sin(a)*80, {enVal:0, gemMul:0.3}); }
     B.spawnFx.push({x:p.x,y:p.y,t:0,r:60});
+  }
+  /* ---- v4.0 世代で覚えた技 ---- */
+  if(coreSkill(e,'MINION')){   // 巻きついている落とし子が、吸い上げたものを根伝いに送り返す(合計に上限)
+    let n=0; for(const q of B.enemies){ if(!q.dead && q.id==='coreling' && q.parent===e && q.state==='attached') n++; }
+    if(n>0 && e.hp<e.maxHp){
+      const rate=Math.min(BAL.CORE_MINION_HEAL_MAX, BAL.CORE_MINION_HEAL*n);
+      e.hp=Math.min(e.maxHp, e.hp+e.maxHp*rate*dt); e.drainN=n; e.drainT=0.4;
+      if(Math.random()<dt*2.5) floatTxt(e.x+rand(-30,30),e.y-e.r-10,'＋','#ff9ec2',11,0.7);
+    } else e.drainN=0;
+    if(e.drainT>0) e.drainT-=dt;
+  }
+  if(coreSkill(e,'RAGE') && !e.rage && ph<=BAL.CORE_RAGE_PH) coreRageEnter(e);
+  if(e.rage) coreRageTick(e,dt);
+  if(coreSkill(e,'MINION')){
+    e.minionCd=(e.minionCd===undefined?4:e.minionCd)-dt;
+    if(e.minionCd<=0 && d<620 && B.enemies.length<fieldCap()-4){ e.minionCd=BAL.CORE_MINION_CD*(e.rage?BAL.CORE_RAGE_CD:1)*(ph<0.4?0.8:1); coreSpawnMinions(e); }
+  }
+  if(coreSkill(e,'BIG')){
+    e.bigCd=(e.bigCd===undefined?14:e.bigCd)-dt;
+    let nb=0; for(const q of B.enemies){ if(!q.dead && q.fromCore) nb++; }
+    if(e.bigCd<=0 && d<620 && nb<BAL.CORE_BIG_MAX && B.enemies.length<fieldCap()-2){ e.bigCd=BAL.CORE_BIG_CD*(e.rage?BAL.CORE_RAGE_CD:1); coreSpawnBig(e); }
+  }
+  if(coreSkill(e,'BEAM')){
+    if(e.beamT>0){   // 溜めている間: 狙いはゆっくりしか動かない(避けられる)
+      e.beamT-=dt;
+      const want=coreBeamAim(e), da=((want-e.beamA+Math.PI*3)%(Math.PI*2))-Math.PI;
+      e.beamA+=Math.max(-0.5*dt,Math.min(0.5*dt,da));
+      if(e.beamT<=0){ coreBeamFire(e); e.beamCd=BAL.CORE_BEAM_CD*(e.rage?BAL.CORE_RAGE_CD:1); }
+    }else{
+      e.beamCd=(e.beamCd===undefined?9:e.beamCd)-dt;
+      if(e.beamCd<=0 && d<BAL.CORE_BEAM_LEN){
+        e.beamT=BAL.CORE_BEAM_CHARGE; e.beamA=coreBeamAim(e);
+        floatTxt(e.x,e.y-e.r-30,'——溜めている','#ff86b3',13,1.6); sfx(200,900,BAL.CORE_BEAM_CHARGE,'sine',0.04);
+        for(const h of B.heroes){ if(!h.out) sayPartyOrLine(h,'feat.coreCharge','なにか、ためてる……! よけて!'); }
+      }
+    }
   }
 }
 /* ================= v1.6 ボス4種 ================= */
@@ -4416,6 +4454,113 @@ function gainFloorLight(kind,x,y){
   }
   if(x!==undefined) pushLight(x,y,260,BAL.DARK_MEM_T*2,1);
   if(darkLevel()>0.25){ floatTxt(x!==undefined?x:B.hero.x, (y!==undefined?y:B.hero.y)-96, '灯りが増えた','#ffe9a8',12,1.6); sayLine('feat.lightUp',0,14,'あかるく、なった……! これで、みえる'); }
+}
+
+/* ================= v4.0 強化魔核 =================
+   厚みで押すのをやめ、技で押す。世代(討伐回数)ごとに一つずつ覚える:
+     世代1 落とし子の群れ(巻きつくと親の傷が塞がる) / 世代2 大型の眷属を呼ぶ
+     世代3 大溜めからの広範囲絶頂光線               / 世代4 半分で発狂(広範囲媚薬ガスと薙ぎ)
+   代わりに素の体力は下げた(CORE_HP 28000 → 22400) */
+function coreSkill(e,k){ const era=(e.era!==undefined?e.era:eraNow()); return era>=BAL['CORE_SK_'+k]; }
+/* 落とし子: 親の根から千切れて生まれる。巻きついている間、親の傷が塞がる */
+function coreMinions(e){ let n=0; for(const q of G.B.enemies){ if(!q.dead && q.id==='coreling' && q.parent===e) n++; } return n; }
+function coreSpawnMinions(e){
+  const B=G.B, p=B.hero, ph=e.hp/e.maxHp;
+  const arr=BAL.CORE_MINION_N, n=arr[Math.min(arr.length-1, Math.max(0,((e.era||0)-BAL.CORE_SK_MINION)))]+(ph<0.4?1:0);
+  for(let i=0;i<n;i++){
+    if(B.enemies.length>=fieldCap()) break;
+    const a=rand(TAU), q=spawnUnit('coreling', e.x+Math.cos(a)*(e.r+22), e.y+Math.sin(a)*(e.r*0.6+16), {enVal:0, gemMul:0.25});
+    if(q){ q.parent=e; q.born=B.time; }
+  }
+  B.spawnFx.push({x:e.x,y:e.y,t:0,r:e.r+30});
+  B.fx.push({kind:'corebirth', x:e.x, y:e.y, t:0, life:0.7});
+  sfx(180,90,0.3,'sawtooth',0.06);
+  floatTxt(e.x,e.y-e.r-26,'落とし子','#ff9ec2',12,1.2);
+}
+/* 大型の眷属: その階層の相性種から、大きいものを一体だけ呼ぶ */
+function coreSpawnBig(e){
+  const B=G.B, p=B.hero, F=B.floor;
+  const pool=(F.affinity||[]).filter(id=>MONSTERS[id] && !MONSTERS[id].item && id!=='core' && (MONSTERS[id].boss||MONSTERS[id].tier==='large'));
+  const id=pool.length?pickRand(pool):'gtent';
+  const a=rand(TAU), q=spawnUnit(id, p.x+Math.cos(a)*230, p.y+Math.sin(a)*170, {enVal:0, gemMul:0.5});
+  if(!q) return;
+  q.fromCore=true; q.hp=q.maxHp=Math.round(q.maxHp*1.15);
+  B.spawnFx.push({x:q.x,y:q.y,t:0,r:q.r+40});
+  setBanner('魔核が'+MONSTERS[id].name+'を産み落とした','根がほどけて、形になる','#ff6b81');
+  G.shake=Math.min(10,G.shake+5); sfx(90,50,0.5,'sawtooth',0.09);
+}
+/* 大溜め→広範囲絶頂光線: 2.6秒の予兆(線が伸びて濃くなる)の後、太い光が抜ける */
+function coreBeamAim(e){
+  const B=G.B; let t=null, td=1e9;
+  for(const h of B.heroes){ if(h.out) continue; const d=Math.hypot(h.x-e.x,h.y-e.y); if(d<td){ td=d; t=h; } }
+  return t?Math.atan2((t.y-12)-e.y, t.x-e.x):(e.lookA||0);
+}
+function coreBeamFire(e){
+  const B=G.B, a=e.beamA, dx=Math.cos(a), dy=Math.sin(a);
+  let len=BAL.CORE_BEAM_LEN; for(let s=20;s<=BAL.CORE_BEAM_LEN;s+=12){ if(!passAt(e.x+dx*s,e.y+dy*s,true)){ len=s-12; break; } }
+  B.fx.push({kind:'corebeam', x:e.x, y:e.y, ang:a, len, w:BAL.CORE_BEAM_W, t:0, life:BAL.CORE_BEAM_FIRE});
+  G.shake=Math.min(14,G.shake+8); sfx(300,1400,0.6,'sine',0.09); G.hurtFlash=Math.max(G.hurtFlash||0,0.5);
+  for(const h of B.heroes){
+    if(h.out) continue;
+    const rx=h.x-e.x, ry=(h.y-12)-e.y, along=rx*dx+ry*dy;
+    if(along<0||along>len) continue;
+    if(Math.abs(rx*dy-ry*dx)>BAL.CORE_BEAM_W) continue;
+    const ci0=B.ci; B.ci=h.hi;
+    applyPleasure(BAL.CORE_BEAM_PLEA); applySensit(BAL.CORE_BEAM_SENS); addHeatG(30);
+    h.stumbleDur=Math.max(h.stumbleDur,1.1);
+    hurtHero(e.dmg*0.8,e,{noKb:true,pierce:true});
+    floatTxt(h.x,h.y-64,'絶頂光線','#ff86b3',13,1.4);
+    sayPartyOrLine(h,'feat.coreBeam','ひかりが……ぬける……っ、あ……');
+    parts(h.x,h.y-12,16,['#ff86b3','#fff','#ffd0e4'],150,0.8);
+    B.ci=ci0;
+  }
+}
+/* 発狂: 体力が半分を切ると、根がほどけて暴れる */
+function coreRageEnter(e){
+  const B=G.B;
+  e.rage=true; e.rageGasCd=1.2; e.rageSlamCd=2.4;
+  setBanner('魔核が発狂した','根がほどけ、甘い霧を吐き、腕のように薙ぐ','#ff2e6a');
+  G.shake=Math.min(16,G.shake+10); sfx(70,30,0.9,'sawtooth',0.12);
+  B.fx.push({kind:'corerage', x:e.x, y:e.y, t:0, life:1.2});
+  for(const h of B.heroes){ if(!h.out) sayPartyOrLine(h,'feat.coreRage','こわれた……!? まだ、うごくの……!'); }
+}
+function coreRageTick(e,dt){
+  const B=G.B;
+  e.rageGasCd-=dt; e.rageSlamCd-=dt;
+  if(e.rageGasCd<=0){   // 広範囲の媚薬ガス: 魔核を中心に大きく吐き出す
+    e.rageGasCd=BAL.CORE_RAGE_GAS_CD;
+    spawnCloud(e.x,e.y,BAL.CORE_RAGE_GAS_R,BAL.CORE_RAGE_GAS_LIFE,BAL.SENSIT_GAS*1.35,'gas');
+    B.fx.push({kind:'coregas', x:e.x, y:e.y, r:BAL.CORE_RAGE_GAS_R, t:0, life:0.9});
+    floatTxt(e.x,e.y-e.r-26,'甘い霧','#ff9ec2',12,1.4); sfx(160,70,0.6,'sine',0.06);
+  }
+  if(e.rageSlamCd<=0){   // 広範囲の薙ぎ: 輪が広がり、触れたら弾かれる
+    e.rageSlamCd=BAL.CORE_RAGE_SLAM_CD;
+    B.fx.push({kind:'coreslam', x:e.x, y:e.y, r:BAL.CORE_RAGE_SLAM_R, t:0, life:0.5});
+    G.shake=Math.min(12,G.shake+6); sfx(110,40,0.4,'square',0.08);
+    for(const h of B.heroes){
+      if(h.out) continue;
+      const d=Math.hypot(h.x-e.x,h.y-e.y); if(d>BAL.CORE_RAGE_SLAM_R) continue;
+      const ci0=B.ci; B.ci=h.hi;
+      hurtHero(e.dmg*BAL.CORE_RAGE_SLAM_DMG,e,{});
+      applySensit(4); h.stumbleDur=Math.max(h.stumbleDur,0.6);
+      const dd=Math.hypot(h.x-e.x,h.y-e.y)||1; h.vx+=(h.x-e.x)/dd*260; h.vy+=(h.y-e.y)/dd*260;
+      B.ci=ci0;
+    }
+  }
+}
+/* 落とし子の動き: まっすぐ這い寄って巻きつく。巻きついている間、親の傷が塞がる */
+function corelingTick(e,dt,d,dx,dy){
+  const B=G.B, p=B.hero;
+  if(e.state==='attached'){   // 吸い上げは親の側でまとめて(coreDrain)。ここでは絵だけ
+    if(Math.random()<dt*3) parts(e.x+rand(-6,6),e.y-4,1,['#ff9ec2','#ffd0e4'],50,0.5);
+    return;
+  }
+  const rush=(attachCount(p)>0||p.pinned||p.climaxT>0)?1.35:1;
+  e.x+=dx/d*e.spd*rush*dt; e.y+=dy/d*e.spd*rush*dt;
+  if(d<e.r+16 && (e.grabCd=(e.grabCd||0)-dt)<=0){
+    e.grabCd=1.1;
+    if(attachMonster(e,'cling',{r:0,needMul:0.75})){ codexMet('coreling'); }
+  }
 }
 /* ================= v4.0 魔核戦の専念 =================
    魔核の間に踏み込んだら、彼女はもう魔核から離れない。離れてよいのは、

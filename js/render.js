@@ -257,6 +257,32 @@ function drawFx(g,f){
     g.lineWidth=4*(1-pr*0.4); g.globalAlpha=a; g.strokeStyle='#fff';
     g.beginPath(); g.moveTo(f.x,f.y); g.lineTo(f.x+Math.cos(f.ang)*f.len, f.y+Math.sin(f.ang)*f.len); g.stroke();
     g.restore();
+  }else if(f.kind==='corebeam'){   // v4.0 魔核の広範囲絶頂光線: 太い桃色の柱
+    const pr=f.t/f.life, a=1-pr, ex=f.x+Math.cos(f.ang)*f.len, ey=f.y+Math.sin(f.ang)*f.len;
+    g.save(); g.lineCap='round';
+    g.globalAlpha=a*0.30; g.strokeStyle='#ff86b3'; g.lineWidth=f.w*2.1*(1-pr*0.35);
+    g.beginPath(); g.moveTo(f.x,f.y); g.lineTo(ex,ey); g.stroke();
+    g.globalAlpha=a*0.62; g.strokeStyle='#ffb3cf'; g.lineWidth=f.w*(1-pr*0.4);
+    g.beginPath(); g.moveTo(f.x,f.y); g.lineTo(ex,ey); g.stroke();
+    g.globalAlpha=a; g.strokeStyle='#fff'; g.lineWidth=f.w*0.28*(1-pr*0.5);
+    g.beginPath(); g.moveTo(f.x,f.y); g.lineTo(ex,ey); g.stroke();
+    g.restore();
+  }else if(f.kind==='coregas'){   // v4.0 発狂: 吐き出される甘い霧の輪
+    g.globalAlpha=(1-pr)*0.5; g.strokeStyle='#ff9ec2'; g.lineWidth=6;
+    g.beginPath(); g.ellipse(f.x,f.y,f.r*(0.2+0.8*pr),f.r*(0.2+0.8*pr)*0.72,0,0,TAU); g.stroke();
+    g.globalAlpha=(1-pr)*0.18; g.fillStyle='#ff9ec2';
+    g.beginPath(); g.ellipse(f.x,f.y,f.r*(0.2+0.8*pr),f.r*(0.2+0.8*pr)*0.72,0,0,TAU); g.fill();
+  }else if(f.kind==='coreslam'){   // v4.0 発狂: 広範囲の薙ぎ
+    g.globalAlpha=(1-pr)*0.85; g.strokeStyle='#ff2e6a'; g.lineWidth=9*(1-pr*0.6);
+    g.shadowColor='#ff2e6a'; g.shadowBlur=16;
+    g.beginPath(); g.ellipse(f.x,f.y,f.r*pr,f.r*pr*0.68,0,0,TAU); g.stroke();
+  }else if(f.kind==='corebirth'){   // v4.0 落とし子が生まれる
+    g.globalAlpha=(1-pr)*0.8; g.strokeStyle='#ff9ec2'; g.lineWidth=2.4;
+    for(let i=0;i<7;i++){ const a=i*TAU/7+pr*1.2, rr=26+pr*70; g.beginPath(); g.moveTo(f.x,f.y); g.quadraticCurveTo(f.x+Math.cos(a+0.5)*rr*0.6,f.y+Math.sin(a+0.5)*rr*0.4,f.x+Math.cos(a)*rr,f.y+Math.sin(a)*rr*0.66); g.stroke(); }
+  }else if(f.kind==='corerage'){   // v4.0 発狂に入る瞬間
+    g.globalAlpha=(1-pr)*0.9; g.strokeStyle='#ff2e6a'; g.lineWidth=5*(1-pr*0.5);
+    g.shadowColor='#ff2e6a'; g.shadowBlur=22;
+    for(let k=0;k<3;k++){ const rr=(70+k*60)*(0.4+pr); g.beginPath(); g.ellipse(f.x,f.y,rr,rr*0.7,0,0,TAU); g.stroke(); }
   }else if(f.kind==='pulse'){
     // 女王の甘い脈動: 広がる桃色の輪
     g.globalAlpha=(1-pr)*0.8;
@@ -904,6 +930,7 @@ function drawEnemy(g,e){
 /* 種族ごとの本体描画(drawEnemy から分離。描き込みモードではオフスクリーンで陰影を重ねる) */
 function drawBody(g,e){
   if(e.id==='core') drawCore(g,e);
+  else if(e.id==='coreling') drawCoreling(g,e);
   else if(e.id==='inyoku') drawInyoku(g,e);
   else if(e.id==='suiyou') drawSuiyou(g,e);
   else if(e.id==='mouth') drawMouth(g,e);
@@ -1098,6 +1125,10 @@ const MON_IRIS={
   gazer(g,e){ const gl=e.gzState==='aim'?clamp(1-(e.gzT||0)/BAL.GAZE_AIM,0,1):(e.gzState==='flash'?1:0); g.save(); g.translate(0,-e.r); drawIris(g,e.r*0.95,e.lookA||0,gl); g.restore(); },
   eye(g,e){ const gl=clamp(1-((e.gazeCd===undefined?3:e.gazeCd)/1.2),0,1); const oy=-e.r*1.2+Math.sin(tq(e)*3)*2; g.save(); g.translate(0,oy); drawIris(g,e.r*0.9,eyeLookA(e,oy),gl,gl>0.3?'#b46cff':'#7a3ff2'); g.restore(); },
   beamer(g,e){ drawBeamerCrystal(g,e,Math.sin(tq(e)*1.1)*2,-e.r*1.4); },
+  coreling(g,e){ if(e.state!=='attached') return; const r=e.r, t=(G.B?G.B.time:0);   // v4.0 吸い上げている輪(親へ送っている合図)
+    g.save(); g.globalAlpha=0.45+0.3*Math.abs(Math.sin(t*4)); g.strokeStyle='#ff8cb9'; g.lineWidth=2;
+    g.beginPath(); g.ellipse(0,-r*0.2,r*1.35,r*1.2,0,0,TAU); g.stroke();
+    g.fillStyle='#fff0f6'; g.globalAlpha=0.9; g.beginPath(); g.ellipse(0,-r*0.3,r*0.09,r*0.3,0,0,TAU); g.fill(); g.restore(); },
 };
 /* 焼いた絵の上に重ねる生きた部分(≤3回の塗り)。ゴーストの瞳は彼女を追い、小淫魔は近づくと頰を染め、目玉は瞬く */
 const MON_OVER={
@@ -2378,6 +2409,26 @@ function drawSentinel(g,e){
   g.restore();
 }
 /* v2.0 魔核: 最深部の心臓。濡れた肉の塊、太い根、縦に裂けた目。脈動(pulseT)で膨らみ、鞭(whipT)で根が彼女へ伸びる */
+/* v4.0 核の落とし子: 魔核の根がちぎれて生まれた、桃色の幼い塊。尾を引きずって這い寄る */
+function drawCoreling(g,e){
+  const r=e.r, t=e.t, wob=Math.sin(t*7)*0.12;
+  g.save();
+  g.fillStyle='rgba(20,4,12,0.4)'; g.beginPath(); g.ellipse(0,r*0.5,r*1.1,r*0.4,0,0,TAU); g.fill();
+  // 尾(親の根の名残)
+  g.strokeStyle='#8a3a5a'; g.lineWidth=r*0.42; g.lineCap='round';
+  g.beginPath(); g.moveTo(0,0); g.quadraticCurveTo(-r*1.1,Math.sin(t*5)*r*0.5,-r*1.9,Math.sin(t*5+1)*r*0.6); g.stroke();
+  // 体
+  const grad=g.createRadialGradient(-r*0.3,-r*0.4,r*0.15,0,0,r*1.15);
+  grad.addColorStop(0,'#ffc2d8'); grad.addColorStop(0.55,'#e2789f'); grad.addColorStop(1,'#a03a62');
+  g.fillStyle=grad; g.beginPath(); g.ellipse(0,-r*0.2,r*(1+wob),r*(0.92-wob),0,0,TAU); g.fill();
+  // 脈(親と同じ拍)
+  g.strokeStyle='rgba(255,120,170,'+(0.35+0.3*Math.abs(Math.sin(t*3.4)))+')'; g.lineWidth=1.6;
+  for(let i=0;i<3;i++){ const a=i*2.1+0.5; g.beginPath(); g.moveTo(0,-r*0.2); g.quadraticCurveTo(Math.cos(a)*r*0.5,-r*0.2+Math.sin(a)*r*0.4,Math.cos(a)*r*0.95,-r*0.2+Math.sin(a)*r*0.8); g.stroke(); }
+  // 目(ひとつ。親を小さくしたかたち)
+  g.fillStyle='#1a0510'; g.beginPath(); g.ellipse(0,-r*0.3,r*0.2,r*0.42,0,0,TAU); g.fill();
+  g.fillStyle='#ff5d9a'; g.beginPath(); g.ellipse(0,-r*0.3,r*0.09,r*0.3,0,0,TAU); g.fill();
+  g.restore();
+}
 function drawCore(g,e){
   const r=e.r, t=e.t, ph=e.maxHp?e.hp/e.maxHp:1, era=e.era||0;   // v3.0 世代で見た目が変わる(0: 小さく淡く弱そう → 濃く、根と目が増える)
   const CC=era===0?['#e29ab8','#b06a8a','#7a4a66','#8a3a5a']:(era<=2?['#c2456f','#7a1f44','#3a0b20','#5a1630']:['#9a1848','#4a0a26','#160310','#3a0818']);
@@ -2390,6 +2441,20 @@ function drawCore(g,e){
   for(let i=0;i<nRoot;i++){ const a=i*TAU/9+0.3+Math.sin(t*0.7+i)*0.05; const L=r*1.9+Math.sin(t*1.3+i*2)*6; g.beginPath(); g.moveTo(Math.cos(a)*r*0.7,Math.sin(a)*r*0.35); g.quadraticCurveTo(Math.cos(a+0.25)*r*1.3,Math.sin(a+0.25)*r*0.7,Math.cos(a)*L,Math.sin(a)*L*0.55); g.stroke(); }
   g.strokeStyle='rgba(200,80,120,0.35)'; g.lineWidth=2.5;
   for(let i=0;i<9;i++){ const a=i*TAU/9+0.3; const L=r*1.9; g.beginPath(); g.moveTo(Math.cos(a)*r*0.7,Math.sin(a)*r*0.35); g.quadraticCurveTo(Math.cos(a+0.25)*r*1.3,Math.sin(a+0.25)*r*0.7,Math.cos(a)*L,Math.sin(a)*L*0.55); g.stroke(); }
+  // v4.0 発狂: 根がほどけて逆立ち、赤い脈が走る
+  if(e.rage){ const rg=0.45+0.3*Math.abs(Math.sin(t*6));
+    g.strokeStyle='rgba(255,46,106,'+rg.toFixed(2)+')'; g.lineWidth=3.4; g.lineCap='round';
+    for(let i=0;i<12;i++){ const a=i*TAU/12+Math.sin(t*2+i)*0.25, L=r*(2.1+0.35*Math.sin(t*4+i));
+      g.beginPath(); g.moveTo(Math.cos(a)*r*0.8,Math.sin(a)*r*0.45); g.quadraticCurveTo(Math.cos(a-0.4)*L*0.7,Math.sin(a-0.4)*L*0.45,Math.cos(a)*L,Math.sin(a)*L*0.6); g.stroke(); }
+    glow(g,0,-r*0.25,r*2.1,'255,46,106',0.18+0.1*Math.sin(t*7)); }
+  // v4.0 大溜め: 狙いの線がじわじわ濃くなる(避ける猶予)
+  if(e.beamT>0){ const k=1-e.beamT/BAL.CORE_BEAM_CHARGE, a=e.beamA||0, L=BAL.CORE_BEAM_LEN;
+    g.save(); g.globalAlpha=0.16+0.5*k; g.strokeStyle='#ff86b3'; g.lineWidth=BAL.CORE_BEAM_W*2*(0.25+0.75*k); g.lineCap='butt';
+    g.beginPath(); g.moveTo(0,-r*0.25); g.lineTo(Math.cos(a)*L,-r*0.25+Math.sin(a)*L); g.stroke();
+    g.globalAlpha=0.4+0.6*k; g.strokeStyle='#fff'; g.lineWidth=2+5*k;
+    g.beginPath(); g.moveTo(0,-r*0.25); g.lineTo(Math.cos(a)*L,-r*0.25+Math.sin(a)*L); g.stroke();
+    g.restore();
+    glow(g,0,-r*0.25,r*(0.8+1.4*k),'255,134,179',0.25+0.45*k); }
   // 鞭の予兆: 彼女の方へ根が伸びる
   if(e.whipT>0){ const k=1-e.whipT/0.6; g.strokeStyle='rgba(255,120,170,'+(0.5+0.4*k)+')'; g.lineWidth=5+3*k; g.beginPath(); g.moveTo(0,0); g.lineTo(Math.cos(e.lookA||0)*r*(1.2+2.2*k),Math.sin(e.lookA||0)*r*(1.2+2.2*k)*0.8); g.stroke(); }
   // 本体

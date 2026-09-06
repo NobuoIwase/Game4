@@ -315,6 +315,16 @@ idは汎用カタログ準拠。効果はすべて数値・挙動レベルで表
   `storyTick`: 落ち着いている時(拘束・発情・魔物30体超でない)に 38〜58 秒ごと、その階層の独り言を吹き出しで。降り口で `descend`、魔核の間を見つけた時に `finalEncounter`(1戦1度)。結果画面: clear=`ending`、reset=`reset`。
 - 表示: `#storybox`(盤面の上、タップか時間で閉じる)。ホームの「物語」画面は序章と到達済みの階層の導入、魔核討伐後は結末を載せる。
 
+### 3-30. v4.0 (C) 強化魔核
+
+- **素の体力**: `CORE_HP` 28000 → 22400。世代の倍率(`CORE_ERA_HP0 + CORE_ERA_HP_K*era`)と Lv 補正はそのまま。
+- **技の解禁** (`coreSkill(e,k)`): 個体が生まれた時の世代 `e.era` と `BAL.CORE_SK_<技>` を比べる。1 落とし子 / 2 大型 / 3 光線 / 4 発狂。
+- **落とし子** (`coreling`, `coreSpawnMinions`, `corelingTick`): カードではない専用種(`guardian:true`)。`CORE_MINION_CD`(12秒、発狂中は 0.72 倍、体力4割以下で 0.8 倍)ごとに `CORE_MINION_N`(世代で 3→5、体力4割以下で +1)体。速く(spd158)脆い(hp34)。触れると `cling` で巻きつく(`needMul` 0.75 = 振りほどきやすい)。**吸い上げは親の側でまとめて処理**する: 巻きついている数 n に対し `min(CORE_MINION_HEAL_MAX(0.33%/s), CORE_MINION_HEAL(0.11%/s)*n)` を親の HP へ。絵は `drawCoreling`(焼き絵)+ `MON_IRIS.coreling`(巻きついている輪だけ生描き。状態を焼かない)。
+- **大型の眷属** (`coreSpawnBig`): `CORE_BIG_CD`(30秒)ごとに、その階層の `affinity` のうち `boss||tier==='large'` から一体。`fromCore` を立てて `CORE_BIG_MAX`(2)まで。HP 1.15 倍。バナーで告げる。
+- **広範囲絶頂光線** (`coreBeamAim`/`coreBeamFire`): `CORE_BEAM_CD`(20秒)ごとに `CORE_BEAM_CHARGE`(2.6秒)の溜めへ。溜めている間、狙い `e.beamA` は**毎秒 0.5 ラジアンまで**しか近い方のヒロインを追えない(帯から歩いて出れば避けられる)。発射で `corebeam` の fx、帯の半幅 `CORE_BEAM_W`(82)、長さは壁まで(最大 1100)。命中で快感 +44・敏感 +12・発情ゲージ +30・よろけ 1.1 秒・貫通ダメージ。溜めの見た目は `drawCore` の中(局所座標)で、濃さが `k=1-beamT/CHARGE` で上がる。
+- **発狂** (`coreRageEnter`/`coreRageTick`): `hp/maxHp <= CORE_RAGE_PH`(0.5)で一度だけ。バナー・画面揺れ・`corerage` の輪、両者に `feat.coreRage`。以後 `CORE_RAGE_GAS_CD`(8秒)ごとに半径 `CORE_RAGE_GAS_R`(300)の媚薬雲(通常の 1.35 倍の濃さ)、`CORE_RAGE_SLAM_CD`(6秒)ごとに半径 300 の薙ぎ(`dmg*1.5`・敏感 +4・よろけ・吹き飛ばし)。落とし子・大型・光線の間隔も `CORE_RAGE_CD`(0.72)倍。根が逆立つ絵と赤い脈。
+- **図鑑**: `js/codex_v20.js` の末尾に `coreling`(lore / note.base / add×3 / after)。場面文は `SCENES.default` に落ちる。
+
 ### 3-29. v4.0 (B) 魔核戦の専念
 
 - **入る条件** (`coreWarTick`): 最終階層に魔核が生きていて、誰かが `CORE_WAR_R`(540)以内に入るか、魔核の HP が満タンを割った瞬間に `B.coreWar=true`。以後その戦闘の間は解けない。入った時に全員の目当てと探索点を捨て、バナーと台詞(`feat.coreWar`)。
