@@ -148,7 +148,7 @@ const BAL={
   // v2.0 階層
   EXIT_STAND:2.5, EXIT_WORTH:0.5, EXIT_WORTH_PER_MIN:0.5, EXIT_HP_MIN:0.45,   // 降り口: そばに立つ秒数 / 目当ての価値(時間で増す) / HPがこれ未満なら降りない
   RUN_FAILS_RESET:2, DESCEND_ESS:60, CLEAR_ESS:40,                           // 二連敗でリセット / 降りられた日・魔核を討たれた日の夜側エッセンス
-  CORE_HP:26000, CORE_HP_LV:0.04, CORE_HP_LV_CAP:3.0, CORE_WHIP_CD:2.2, CORE_PULSE_CD:5.5, CORE_SPAWN_CD:7, CORE_DEF:0.4, CORE_AURA_R:140, CORE_FLING:0.025, CORE_TWO_PH:0.4,   // 魔核(v2.2 強化: HP↑・被ダメ↓・間隔↓・脈の圏内は熱と敏感化)
+  CORE_HP:28000, CORE_HP_LV:0.04, CORE_HP_LV_CAP:3.0, CORE_WHIP_CD:2.2, CORE_PULSE_CD:5.5, CORE_SPAWN_CD:7, CORE_DEF:0.4, CORE_AURA_R:140, CORE_FLING:0.025, CORE_TWO_PH:0.4,   // 魔核(v2.2 強化: HP↑・被ダメ↓・間隔↓・脈の圏内は熱と敏感化)
   RING_CD:25, RING_R:470, RING_STUN:0.9,                                         // v2.2 包囲円陣: オート指揮の間隔 / 輪の半径 / 出現直後の硬直
   FLOOR_AFFINITY:1.2, FLESH_HEAT:1.6,                                         // 階層の得意種 HP倍率 / 肉の床の発情ゲージ(毎秒)
   /* v2.1 深淵の圧(時間経過): PRESS_T0 秒までは静か、その後 PRESS_T1 秒で 1.0 に、PRESS_MAX で頭打ち。EN上限/EN回復/召喚頭数/場の上限に掛かる。階層を跨ぐと時間は戻る */
@@ -173,6 +173,10 @@ const BAL={
   FEAR3_WORTH:2.4, FEAR_COST:[0,0.5,1.5,3.0],
   /* v2.3 迷いの積み上げ: 同じ地形で「やめとく」を選ぶたびに次に入る確率が HESIT_ESC ずつ上がる(入ったら戻る)。SCARED_T 秒はその地形へ寄らない */
   HESIT_ESC:0.22, SCARED_T:40,
+  /* v2.4 視界の記憶: SEEN_T 秒ごとに半径 SEEN_R×SEEN_RY の楕円を「見た」にする。探索点は未探索率×EXPLORE_UNSEEN_W − 距離×EXPLORE_DIST_W で選ぶ(SEEN_EXPLORE=0 で旧挙動)。BOSS_PICK=1 でボスを想定した武器選び */
+  SEEN_T:0.25, SEEN_R:560, SEEN_RY:400, SEEN_EXPLORE:1, EXPLORE_UNSEEN_W:2.5, EXPLORE_DIST_W:0.4, EXPLORE_DONE:0.96, BOSS_PICK:1, BOSS_MEMORY_T:60,
+  /* v2.4 ボス級(カードのボス)は彼女の Lv で厚くなり(+5%/Lv、上限 +250%)、光が通りにくい(被ダメ 80%)。魔核・番兵は各自の値 */
+  BOSS_HP_LV:0.05, BOSS_HP_LV_CAP:2.5, BOSS_DEF:0.8,
   /* v2.3 戦闘の賢さ: 近くの魔物を倒し切るまでの見込み秒(ttk)と密度で 戦う/引き撃ち/逃げに徹する を切り替える。SMART_AI=0 で旧挙動 */
   SMART_AI:1, KITE_TTK:5.0, KITE_N:7, FLEE_TTK:9, FLEE_N:12, MODE_HOLD:1.2, FLEE_EXIT_T:8, KITE_GEM_R:200, MODE_LV:15, MODE_LV_K:0.12,   // 逃げ続けが FLEE_EXIT_T 秒で「降り口を探す」に切り替わる / 引き撃ち中に拾うジェムの距離
   // v1.9 武器の上限: Lv5 までは従来の伸び、Lv6〜8 は覚醒(進化後も効く)。全部が上限なら「ルミナの祈り」(無駄なレベルを出さない)
@@ -303,9 +307,9 @@ const MONSTERS={
   /* ---- v1.0 追加: ボス ---- */
   dreamtree:{
     name:'淫夢の樹', role:'ボス・巣', cost:24, unlock:1100, tier:'boss',
-    hp:1300, spd:0, r:30, dmg:0, xp:90, boss:true,
+    hp:1700, spd:0, r:30, dmg:0, xp:90, boss:true,
     desc:'桃色の花を咲かせた黒い樹。根を伸ばして近づく者の脚を繋ぎ、幹の洞から地上ワームを生み続ける。花の香は甘く、近いほど身体が熱を覚える。召喚は1戦に1度。',
-    trait:'根の繋留/ワーム生成/甘香の領域',
+    trait:'根の繋留(5.5秒ごと・170px)/ワーム生成(繋いでいる間は2体ずつ)/甘香の領域(150px)/12秒ごとの花粉の雨(220px: 敏感化+発情)',
   },
   /* ---- v1.2 追加(状態異常拡張) ---- */
   spore:{
@@ -346,9 +350,9 @@ const MONSTERS={
   },
   bossgazer:{
     name:'ボスゲイザー', role:'ボス・多眼', cost:26, unlock:1200, tier:'boss',
-    hp:1450, spd:30, r:30, dmg:6, xp:90, boss:true,
+    hp:1800, spd:30, r:30, dmg:6, xp:90, boss:true,
     desc:'三つの眼柄を持つゲイザーの王。三つの視界がそれぞれ別の拍で彼女を探し、閃光を重ねる。彼女は視界を見て避けるが、三つ同時には避けきれない。召喚は1戦に1度。',
-    trait:'三つの視界が交互に閃光(催眠Lv+1)。接触で殴打',
+    trait:'三つの視界が交互に閃光(催眠Lv+1。照準が速く間隔が短い)。催眠にかかった彼女へは1.5倍速で迫る。接触で殴打',
   },
   /* ---- 設置物(デッキには入らない。夜側のアイテムで建てる) ---- */
   web:{
@@ -365,9 +369,9 @@ const MONSTERS={
   },
   vampi:{
     name:'ヴァンピロード', role:'ボス', cost:26, unlock:900, tier:'boss',
-    hp:1500, spd:55, r:28, dmg:20, xp:90, boss:true,
+    hp:1900, spd:55, r:28, dmg:22, xp:90, boss:true,
     desc:'夜の統率者。突進で薙ぎ払い、掠めた相手をよろめかせる。召喚は1戦に1度。',
-    trait:'突進/接触よろめき。呪い『吸われ癖』',
+    trait:'突進(370px/s)。突進の直後、45%で二段目の突進。接触よろめき。呪い『吸われ癖』',
   },
   /* ---- v2.0 新種 ---- */
   inyoku:{
@@ -411,27 +415,27 @@ const MONSTERS={
   /* ---- v1.6 ボス4種 ---- */
   slimeking:{
     name:'粘獣王', role:'ボス・粘液', cost:24, unlock:1000, tier:'boss',
-    hp:1600, spd:26, r:30, dmg:4, xp:90, boss:true,
+    hp:2000, spd:26, r:30, dmg:4, xp:90, boss:true,
     desc:'巣の底に溜まった粘液が、意思を持って立ち上がった王。歩いた跡に広い粘液の帯を残し、追いつけば身体を呑んで脚を絡め取る。呑まれている間、粘液は服の内側まで染みてくる。',
-    trait:'粘液の帯(足が鈍る)を残す。接触で【呑み込み】: 脚を粘液で繋留+敏感化。呪い『粘膜の記憶』',
+    trait:'広い粘液の帯(8秒残る)。彼女が粘液に足を取られている間は1.5倍速で追う。接触で【呑み込み】: 脚を粘液で繋留+敏感化。呪い『粘膜の記憶』',
   },
   runemage:{
     name:'淫紋の刻印師', role:'ボス・術者', cost:25, unlock:1150, tier:'boss',
-    hp:1350, spd:18, r:24, dmg:0, xp:90, boss:true,
+    hp:1650, spd:18, r:24, dmg:0, xp:90, boss:true,
     desc:'淫紋を刻む術者。間合いを保ち、桃色の呪弾を放つ。当たった場所から淫紋が身体に焼きつき、以後、快感の入りが増す。足元にも淫紋を伏せる。',
-    trait:'呪弾(命中で淫紋Lv+1・快感)。淫紋の罠を伏せる。呪い『淫紋焼き付け』',
+    trait:'呪弾3.8秒ごと(命中で淫紋Lv+1・快感)。HP半分を切ると三方向の呪弾、罠を2つずつ伏せる。呪い『淫紋焼き付け』',
   },
   succuqueen:{
     name:'夢魔の女王', role:'ボス・甘い夢', cost:25, unlock:1250, tier:'boss',
-    hp:1450, spd:48, r:26, dmg:3, xp:90, boss:true,
+    hp:1800, spd:48, r:26, dmg:3, xp:90, boss:true,
     desc:'淫魔たちの女王。周りを舞いながら甘い夢の波を放ち、発情を深め、火照った身体に寸止めをかける。口づけで敏感にし、小淫魔を呼ぶ。',
-    trait:'6秒ごとの甘い波(発情ゲージ+。発情中なら寸止め)。接触で口づけ(敏感化)。小淫魔召喚。呪い『甘い夢の残り香』',
+    trait:'5.2秒ごとの甘い波(発情ゲージ+。発情中なら寸止め)。接触で口づけ(敏感化・発情中なら寸止め)。小淫魔を3体ずつ(8体まで)。呪い『甘い夢の残り香』',
   },
   gobking:{
     name:'ゴブリンの王', role:'ボス・雄臭', cost:24, unlock:950, tier:'boss',
-    hp:1750, spd:40, r:27, dmg:9, xp:90, boss:true, musk:true,
+    hp:2200, spd:40, r:27, dmg:10, xp:90, boss:true, musk:true,
     desc:'群れの長。濃い雄の臭いを常に撒き、呼び笛で手下を集める。突進で薙ぎ払う。臭いの中に居続ければ、発情していなくても身体が熱を覚えていく。',
-    trait:'濃い雄臭の雲を撒く(発情・敏感化)。9秒ごとに手下3体。突進。呪い『雄臭の刷り込み』',
+    trait:'濃い雄臭の雲(110px)を撒く。8秒ごとに手下3体と号令(320px内の手下が4秒間1.35倍速)。突進。呪い『雄臭の刷り込み』',
   },
 };
 /* ---------------- 地形マップ(v1.6・実験) ----------------
@@ -623,31 +627,31 @@ const shaveCost=rank=>Math.round(6+3*rank);   // 自己強化を1段削ぐオー
 
 /* ---------------- ヒロインの武器/パッシブ ---------------- */
 const UPG={
-  bolt:  {name:'ホーリーボルト',   d1:'ひかりの矢で',    d2:'じどうこうげき',  max:8, kind:'wp'},
-  orb:   {name:'セイントオーブ',   d1:'まもりの光球が',  d2:'まわりをかいてん', max:8, kind:'wp'},
-  nova:  {name:'ピュアノヴァ',     d1:'じょうかの波動で', d2:'まわりをいっそう', max:8, kind:'wp'},
-  whip:  {name:'プリズムウィップ', d1:'ひかりのムチが',  d2:'まえをなぎはらう', max:8, kind:'wp'},
-  rain:  {name:'スターレイン',     d1:'ながれ星が',      d2:'ふりそそぐ',      max:8, kind:'wp'},
-  cross: {name:'クロスブーメラン', d1:'ひかりの十字が',  d2:'いって、もどる',  max:8, kind:'wp'},
-  sanct: {name:'せいいき',         d1:'まわりの光が',    d2:'ふれた敵をやく',  max:8, kind:'wp'},
-  blade: {name:'ひかりの刃',       d1:'むいた方向へ',    d2:'刃をとばす',      max:8, kind:'wp'},
-  thunder:{name:'てんらい',        d1:'いかずちが',      d2:'ランダムにおちる', max:8, kind:'wp'},
-  holy:  {name:'せいすい',         d1:'なげた聖水が',    d2:'地面をきよめる',  max:8, kind:'wp'},
-  chain: {name:'せいさ',           d1:'ひかりの鎖が',    d2:'なぎ、しばる',    max:8, kind:'wp'},
-  spirit:{name:'みちびきの精霊',   d1:'ちいさな光が',    d2:'追いかけてはぜる', max:8, kind:'wp'},
-  shield:{name:'ひかりの盾',       d1:'まえに盾が',      d2:'やいて、はじく',  max:8, kind:'wp'},
+  bolt:  {name:'ホーリーボルト',   d1:'ひかりの矢で',    d2:'じどうこうげき',  max:8, kind:'wp', bossW:1.5},
+  orb:   {name:'セイントオーブ',   d1:'まもりの光球が',  d2:'まわりをかいてん', max:8, kind:'wp', bossW:0.8},
+  nova:  {name:'ピュアノヴァ',     d1:'じょうかの波動で', d2:'まわりをいっそう', max:8, kind:'wp', bossW:0.55},
+  whip:  {name:'プリズムウィップ', d1:'ひかりのムチが',  d2:'まえをなぎはらう', max:8, kind:'wp', bossW:1.0},
+  rain:  {name:'スターレイン',     d1:'ながれ星が',      d2:'ふりそそぐ',      max:8, kind:'wp', bossW:0.6},
+  cross: {name:'クロスブーメラン', d1:'ひかりの十字が',  d2:'いって、もどる',  max:8, kind:'wp', bossW:1.2},
+  sanct: {name:'せいいき',         d1:'まわりの光が',    d2:'ふれた敵をやく',  max:8, kind:'wp', bossW:0.6},
+  blade: {name:'ひかりの刃',       d1:'むいた方向へ',    d2:'刃をとばす',      max:8, kind:'wp', bossW:1.5},
+  thunder:{name:'てんらい',        d1:'いかずちが',      d2:'ランダムにおちる', max:8, kind:'wp', bossW:1.2},
+  holy:  {name:'せいすい',         d1:'なげた聖水が',    d2:'地面をきよめる',  max:8, kind:'wp', bossW:0.9},
+  chain: {name:'せいさ',           d1:'ひかりの鎖が',    d2:'なぎ、しばる',    max:8, kind:'wp', bossW:1.3},
+  spirit:{name:'みちびきの精霊',   d1:'ちいさな光が',    d2:'追いかけてはぜる', max:8, kind:'wp', bossW:1.3},
+  shield:{name:'ひかりの盾',       d1:'まえに盾が',      d2:'やいて、はじく',  max:8, kind:'wp', bossW:0.9},
   speed: {name:'スピードシューズ', d1:'いどう速度',      d2:'+10%',            max:5, kind:'ps'},
   vital: {name:'マックスハート',   d1:'さいだいHP+25',   d2:'いまも回復する',   max:5, kind:'ps'},
-  magnet:{name:'ジェムマグネット', d1:'ジェムの回収',    d2:'はんいUP',        max:5, kind:'ps'},
-  haste: {name:'クイックリボン',   d1:'こうげき速度',    d2:'+8%',             max:5, kind:'ps'},
+  magnet:{name:'ジェムマグネット', d1:'ジェムの回収',    d2:'はんいUP',        max:5, kind:'ps', bossW:0.8},
+  haste: {name:'クイックリボン',   d1:'こうげき速度',    d2:'+8%',             max:5, kind:'ps', bossW:1.3},
   ward:  {name:'プチバリア',       d1:'まもり',          d2:'+1',              max:5, kind:'ps'},
   growth:{name:'ラーニングピアス', d1:'けいけんち',      d2:'+12%',            max:5, kind:'ps'},
-  area:  {name:'ひろがるろうそく', d1:'こうげき範囲',    d2:'+10%',            max:5, kind:'ps'},
-  dup:   {name:'ふたごの鏡',       d1:'とうしゃ数',      d2:'+1',              max:3, kind:'ps'},
+  area:  {name:'ひろがるろうそく', d1:'こうげき範囲',    d2:'+10%',            max:5, kind:'ps', bossW:0.8},
+  dup:   {name:'ふたごの鏡',       d1:'とうしゃ数',      d2:'+1',              max:3, kind:'ps', bossW:1.3},
   luck:  {name:'よつばのクローバー', d1:'燭台のアイテム', d2:'でやすく',        max:5, kind:'ps'},
   endure:{name:'ねばりのリボン',   d1:'スタミナ上限',    d2:'+10%',            max:5, kind:'ps'},
-  reach: {name:'とおくの手',       d1:'こうげきの',      d2:'とどく距離+12%',  max:5, kind:'ps'},
-  pierce:{name:'つらぬくピン',     d1:'ひかりの弾が',    d2:'1体ぶん貫通',     max:3, kind:'ps'},
+  reach: {name:'とおくの手',       d1:'こうげきの',      d2:'とどく距離+12%',  max:5, kind:'ps', bossW:1.1},
+  pierce:{name:'つらぬくピン',     d1:'ひかりの弾が',    d2:'1体ぶん貫通',     max:3, kind:'ps', bossW:1.6},
   regen: {name:'いのりの露',       d1:'HPがすこしずつ',  d2:'もどる',          max:5, kind:'ps'},
 };
 /* 融合進化(本家の進化に相当): baseが Lv5(BAL.WP_EVO_LV)+ペアパッシブLv2以上で解禁。武器の Lv6〜8 は「覚醒」(進化後も効く: 火力+15%/段・間隔×0.93/段・範囲+5%/段) */

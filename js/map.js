@@ -734,7 +734,18 @@ function drawMinimap(g){
   const sc=1, mw=MAP_W*sc, mh=MAP_H*sc, x0=12, y0=H-mh-22-Math.round(typeof barCover==='number'?barCover:0);   // v1.9 横持ちでは戦闘バーの上に
   g.save(); g.globalAlpha=0.9;
   g.fillStyle='rgba(10,10,26,0.8)'; g.fillRect(x0-3,y0-3,mw+6,mh+6);
-  g.imageSmoothingEnabled=false; g.drawImage(G.map.mini,x0,y0,mw,mh); g.imageSmoothingEnabled=true;
+  g.imageSmoothingEnabled=false; g.drawImage(G.map.mini,x0,y0,mw,mh);
+  if(G.map.seen){   // v2.4 未探索の霧(見た範囲は晴れる)
+    const now=performance.now();
+    if(!G.map.fog || G.map.fogT<0 || now-G.map.fogT>500){
+      if(!G.map.fog){ G.map.fog=document.createElement('canvas'); G.map.fog.width=MAP_W; G.map.fog.height=MAP_H; }
+      const fg=G.map.fog.getContext('2d'), im=fg.createImageData(MAP_W,MAP_H), dd=im.data;
+      for(let k=0;k<MAP_W*MAP_H;k++){ if(G.map.seen[k]) continue; const o=k*4; dd[o]=8; dd[o+1]=6; dd[o+2]=18; dd[o+3]=G.map.solid[k]===0?200:120; }
+      fg.putImageData(im,0,0); G.map.fogT=now;
+    }
+    g.drawImage(G.map.fog,x0,y0,mw,mh);
+  }
+  g.imageSmoothingEnabled=true;
   const tx=(x)=>x0+(x+MAP_HW)/MAP_T*sc, ty=(y)=>y0+(y+MAP_HH)/MAP_T*sc;
   for(const q of G.map.pois){ if(!M.known[q.key]) continue; g.fillStyle=q.kind==='shrine'?(M.visited[q.key]?'#9a9ab0':'#ffd76a'):(q.kind==='spring'?'#8fd3ff':(q.kind==='pool'?'#7fe0ff':(q.kind==='stele'?'#cbd5ff':(q.kind==='stairs'?'#ffffff':(q.kind==='seal'?((B.seals&&B.seals[q.key])?'#ffe9b0':'#c98cff'):'#ff6b81'))))); g.fillRect(tx(q.x)-2,ty(q.y)-2,4,4); }
   for(const c of B.chests){ g.fillStyle='#ffe9b0'; g.fillRect(tx(c.x)-1,ty(c.y)-1,3,3); }
@@ -746,5 +757,6 @@ function drawMinimap(g){
   g.fillStyle='#fff'; g.beginPath(); g.arc(tx(p.x),ty(p.y),2.2,0,TAU); g.fill();
   g.strokeStyle='rgba(255,255,255,0.35)'; g.lineWidth=1; g.strokeRect(tx(G.cam.x-W/2),ty(G.cam.y-H/2),W/MAP_T*sc,H/MAP_T*sc);
   g.strokeStyle='rgba(201,140,255,0.6)'; g.strokeRect(x0-3,y0-3,mw+6,mh+6);
+  if(G.map.seen && G.map.passN){ g.font='bold 9px '+FONT; g.fillStyle='rgba(220,225,255,0.85)'; g.textAlign='right'; g.textBaseline='bottom'; g.fillText('探索 '+Math.round(100*G.map.seenN/G.map.passN)+'%', x0+mw, y0-4); }   // v2.4 探索率
   g.restore();
 }

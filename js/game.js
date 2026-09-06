@@ -227,8 +227,10 @@ function startBattle(){
     wantExit:false, wantExitWhy:'', idleGoalT:0, sentRing:null, metLine:{}, lineCd:{}, featSaid:{}, pressSaid:0, lowSaid:false, calmT:0,   // v2.1 降りる判断 / 番兵の輪 / 台詞の記録
     giveUp:new Map(),                                                                              // v2.1 諦めた目標(ref → いつまで外すか)
     placed:[], itemT:9, ringCd:0, lewdSeen:false,                                                  // v2.2 夜側の設置物 / 包囲円陣の間隔 / えちえちエリアの初見
+    seenT:0, bossSeen:!!(META.run&&META.run.bossSeen), exploreSaid:false,                          // v2.4 視界の記憶 / この run でボスを見た(武器選びに使う)
   };
   genMap();               // 地形(世代×階層で変わる)
+  initSeen();             // v2.4 見た範囲の記憶(同じ階層への再挑戦は覚えている)
   { const F=G.B.floor; G.B.exitLocked=(F.puzzle==='seals');
     if(F.final){ const q=G.map.pois.find(o=>o.kind==='core'); if(q){ spawnUnit('core',q.x,q.y,{}); } }   // v2.0 最終階層: 魔核が待つ
     else spawnSentinels(); }   // v2.1 降り口は石の番兵が守る
@@ -263,6 +265,7 @@ function endBattle(outcome){
   const B=G.B;
   if(B.over) return;
   B.over=true;
+  saveSeen(); if(B.bossSeen){ META.run.bossSeen=true; }   // v2.4 見た範囲とボスの記憶を run に残す
   const gb=Math.min(3,META.gen.battle||0);
   let orbGain=B.orbFrag, essGain=Math.round(B.essence);
   if(outcome==='capture'){ orbGain+=BAL.ORB_CAPTURE + BAL.ORB_CAPTURE_GEN*gb; essGain+=BAL.CAPTURE_ESS_BONUS; }
@@ -335,7 +338,7 @@ function endBattle(outcome){
 
 /* v2.0 潜行のリセット: 入口へ戻り、世代が変わる(経験・知識を失う。手記と永続強化は残る) */
 function runReset(){
-  META.run.floor=1; META.run.fails=0; META.run.day=1; META.run.hero=null;   // v2.1 引き継ぎも消える
+  META.run.floor=1; META.run.fails=0; META.run.day=1; META.run.hero=null; META.run.seen={}; META.run.bossSeen=false;   // v2.1 引き継ぎも消える / v2.4 見た範囲とボスの記憶も
   META.gen.battle=0; META.gen.idx++;
   META.rot={dmg:0, ail:0, captures:0, battles:0};
   META.gen.know={}; META.gen.zoneKnow={}; META.gen.trapKnow={};   // 世代が変わると、覚えたことも忘れる(手記に書いた分だけ残る)
@@ -970,8 +973,8 @@ function gazerEyes(e){
 }
 /* ボスの眼の扇: 描画(drawSightSectors)・回避(aiDecide)・当たり(eyeCycle)が同じ幾何を使う——半径は GAZE_R+GAZE_BOSS_EXTRA、横幅は通常ゲイザーと同じ */
 function bossEyeSpec(e,ey,i){
-  return {x:e.x+ey.dx, y:e.y+ey.dy, ang:ey.ang, r:BAL.GAZE_R+BAL.GAZE_BOSS_EXTRA, spread:BAL.GAZE_ANG, state:ey.state, t:ey.t, tmax:BAL.GAZE_AIM*1.1,
-          cd:BAL.GAZE_CD*1.2, scatter:i===1?0:(i===0?-1:1), off:ey.off||0};
+  return {x:e.x+ey.dx, y:e.y+ey.dy, ang:ey.ang, r:BAL.GAZE_R+BAL.GAZE_BOSS_EXTRA, spread:BAL.GAZE_ANG, state:ey.state, t:ey.t, tmax:BAL.GAZE_AIM*0.95,   // v2.4 照準が速く、間隔が短い
+          cd:BAL.GAZE_CD*1.0, scatter:i===1?0:(i===0?-1:1), off:ey.off||0};
 }
 function inSector(ey,p){
   const dx=p.x-ey.x, dy=(p.y-10)-ey.y, d=Math.hypot(dx,dy);
@@ -1849,7 +1852,7 @@ function weaponsUpdate(dt){
         const dx=e.x-p.x, dy=e.y-p.y, d=Math.hypot(dx,dy);
         if(d<R+e.r){
           damageEnemy(e,dmg);                        // 絡みついた個体もノヴァでは剥がし得る
-          if(d>0.01 && !e.boss && e.state!=='attached'){ e.x+=dx/d*30; e.y+=dy/d*30; e.stun=Math.max(e.stun,evo?0.6:0.35); }
+          if(d>0.01 && !e.boss && e.state!=='attached' && MONSTERS[e.id].spd>0){ e.x+=dx/d*30; e.y+=dy/d*30; e.stun=Math.max(e.stun,evo?0.6:0.35); }
         }
       }
       for(const pr of B.props){
@@ -2042,7 +2045,7 @@ function weaponsUpdate(dt){
     for(const b of B.ebullets){ if(b.dead) continue; const dx=b.x-p.x, dy=b.y-(p.y-10), d=Math.hypot(dx,dy); if(d<p.shieldR+b.r && inArc(Math.atan2(dy,dx))){ b.dead=true; parts(b.x,b.y,8,['#fff','#8fd3ff'],120,0.4); sfx(1200,600,0.08,'square',0.04); } }
     if(p.shieldPulse>=0.5){
       p.shieldPulse-=0.5; const dmg=(evo?12:5+2*(lv-1))*ov.dmg; let hit=false;
-      for(const e of B.enemies){ if(e.dead||e.dormant||e.state==='attached') continue; const dx=e.x-p.x, dy=e.y-(p.y-10), d=Math.hypot(dx,dy)||0.001; if(d<p.shieldR+e.r && inArc(Math.atan2(dy,dx))){ damageEnemy(e,dmg); hit=true; if(!e.boss){ e.x+=dx/d*10; e.y+=dy/d*10; } } }
+      for(const e of B.enemies){ if(e.dead||e.dormant||e.state==='attached') continue; const dx=e.x-p.x, dy=e.y-(p.y-10), d=Math.hypot(dx,dy)||0.001; if(d<p.shieldR+e.r && inArc(Math.atan2(dy,dx))){ damageEnemy(e,dmg); hit=true; if(!e.boss && MONSTERS[e.id].spd>0){ e.x+=dx/d*10; e.y+=dy/d*10; } } }
       if(hit && restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN*0.5);
     }
   }
@@ -2110,19 +2113,22 @@ function offerLevelup(){
   const pool=avail.concat(evos.map(k=>'EVO:'+k));
   if(!pool.length){ applyPray(); return; }   // v1.9 全部が上限: レベルを無駄にしない
   const opts=shuffle(pool.slice()).slice(0,3);
+  const bossy=BAL.BOSS_PICK && bossExpected();   // v2.4 ボスが居る/居た・最終階層: 単体火力・貫通・手数を選び、広範囲は後回し
   let pick=0, bw=-1;
   opts.forEach((k,i)=>{
     let w=1;
-    if(k.startsWith('EVO:')) w=6;
+    if(k.startsWith('EVO:')){ w=6; if(bossy){ const bwv=(UPG[EVOS[k.slice(4)].base]||{}).bossW||1; w*=bwv>=1.2?1.35:(bwv<0.8?0.75:1); } }
     else{
       if(UPG[k].kind==='wp') w=curLv(k)===0?3:2.2;
       if(UPG[k].kind==='wp' && curLv(k)>0) w*=1.5;   // 手持ちの武器を伸ばしたがる
       if(k==='vital' && p.hp<p.maxHp*0.5) w=4;
       w*=p.taste[k]||1;   // 今夜の好み: 噛み合わない夜はビルドが散る
+      if(bossy) w*=UPG[k].bossW||1;
     }
     w*=rand(0.9,1.1);
     if(w>bw){ bw=w; pick=i; }
   });
+  { const k=opts[pick]; const base=k.startsWith('EVO:')?EVOS[k.slice(4)].base:k; if(bossy && (UPG[base]&&(UPG[base].bossW||1)>=1.2)){ B.nBossPick=(B.nBossPick||0)+1; sayLine('bossPick',0,25); } }
   B.lvCards={opts,pick,t:0,revealed:false};
   G.mode='levelup';
   S.lvup();
@@ -2185,11 +2191,12 @@ function spawnUnit(id, x, y, o){
   const night=MONSTERS[id].boss?1:1+Math.min(BAL.NIGHT_STAT_CAP, BAL.NIGHT_STAT_LV*Math.max(0,heroLv-1))*nscale;
   const flesh=1+0.10*altarLv('mhp');           // 魔性の肉(オーブ・HPのみ)
   const pm=(o.mult||1)*night;
+  const bossm=(MONSTERS[id].boss&&!MONSTERS[id].guardian)?(1+Math.min(BAL.BOSS_HP_LV_CAP,BAL.BOSS_HP_LV*Math.max(0,(B.hero?B.hero.level:1)-1))):1;   // v2.4 ボス級は彼女の Lv で厚くなる(魔核・番兵は各自)
   const F=B.floor||curFloor();   // v2.0 階層: 深いほど硬い。得意種はさらに硬い
   const fhp=MONSTERS[id].guardian?1:F.mon.hp*(F.affinity.includes(id)?BAL.FLOOR_AFFINITY:1), fdm=MONSTERS[id].guardian?1:F.mon.dmg;
   const u={
     id, x, y,
-    hp:d.hp*elite*pm*flesh*fhp, maxHp:d.hp*elite*pm*flesh*fhp, spd:MONSTERS[id].spd, r:MONSTERS[id].r*(elite>1?1.2:1),
+    hp:d.hp*elite*pm*flesh*fhp*bossm, maxHp:d.hp*elite*pm*flesh*fhp*bossm, spd:MONSTERS[id].spd, r:MONSTERS[id].r*(elite>1?1.2:1),
     dmg:d.dmg*elite*pm*fdm, xp:Math.round(MONSTERS[id].xp*(1+0.1*(d.lv-1))*(elite>1?1.6:1)),
     enVal:o.enVal||0, gemMul:o.gemMul!==undefined?o.gemMul:1,
     boss:!!MONSTERS[id].boss, lv:d.lv, elite:elite>1,
@@ -2249,6 +2256,7 @@ function damageEnemy(e,dmg){
   if(e.id==='tower') dmg*=0.3;                        // 催眠電波の塔: 骨の骨組みは光を通しにくい
   if(e.id==='core') dmg*=BAL.CORE_DEF;                // 魔核: 厚い肉(v2.2 0.45)
   if(e.id==='sentinel') dmg*=BAL.SENTINEL_DEF;        // v2.1 石の番兵: 光が通りにくい
+  else if(e.boss && !MONSTERS[e.id].guardian) dmg*=BAL.BOSS_DEF;   // v2.4 ボス級: 被ダメ 80%
   // 魅了: その個体への攻撃は無意識に鈍る(Lvごとに与ダメ減)
   const cl=G.B?charmLvFor(G.B.hero,e):0;
   if(cl>0){
@@ -2395,7 +2403,7 @@ function enemiesUpdate(dt){
       if(e.boss){ floatTxt(e.x,e.y-e.r-20,'まわりこんできた!','#ff6b81',11,1.2); }
       continue;
     }
-    e.zone=zoneAt(e.x,e.y); if(e.spd0!==undefined) e.spd=e.spd0*zoneMonSpd(e.zone,e.id);
+    e.zone=zoneAt(e.x,e.y); if(e.spd0!==undefined) e.spd=e.spd0*zoneMonSpd(e.zone,e.id)*((e.hasteT||0)>0?1.35:1); if((e.hasteT||0)>0) e.hasteT-=dt;   // v2.4 王の号令で一時的に速い
     e.x=clampMapX(e.x,e.r); e.y=clampMapY(e.y,e.r);
     if(e.stun>0){ e.stun-=dt; }
     else if(e.id==='inyoku'){
@@ -2575,7 +2583,9 @@ function heroSeparate(list,p){
     if(e.item||e.boss&&e.bstate==='charge') continue;
     const dx=e.x-p.x, dy=e.y-p.y, d=Math.hypot(dx,dy)||0.001;
     const want=(e.r+p.r)*0.62;   // 接触判定(r+r)の内側までは寄れる——中心には入らない
-    if(d<want){ const ux=dx/d, uy=dy/d, over=want-d; e.x+=ux*over*0.9; e.y+=uy*over*0.9; }
+    if(d<want){ const ux=dx/d, uy=dy/d, over=want-d;
+      if(MONSTERS[e.id].spd<=0){ p.x-=ux*over; p.y-=uy*over; }   // v2.4 据わった個体(魔核・夢の樹・番人・口・壺)は押されない。彼女が押し戻される
+      else { e.x+=ux*over*0.9; e.y+=uy*over*0.9; } }
   }
 }
 function wormTick(e,dt,d,dx,dy){
@@ -2822,23 +2832,28 @@ function dreamtreeTick(e,dt,d){
   if(e.spawnCd<=0){
     e.spawnCd=5;
     const kids=B.enemies.filter(k=>!k.dead&&k.parent===e).length;
-    if(kids<8 && B.enemies.length<fieldCap()){
+    const nk=holding?2:1;   // v2.4 繋いでいる間は2体ずつ
+    for(let i=0;i<nk;i++){ if(kids+i>=10 || B.enemies.length>=fieldCap()) break;
       const a=rand(TAU);
       spawnUnit('worm', e.x+Math.cos(a)*26, e.y+Math.sin(a)*14, {enVal:0, gemMul:0, mult:1.2, parent:e});
       parts(e.x,e.y-e.r,8,['#e86a9c','#5a3a7a'],90,0.5);
     }
   }
-  // 根の繋留
-  if(!holding && d<150 && e.rootCd<=0){
+  // v2.4 花粉の雨: 12秒ごとに 220px へ(敏感化・発情)
+  e.pollenCd=(e.pollenCd===undefined?6:e.pollenCd)-dt;
+  if(e.pollenCd<=0){ e.pollenCd=12; B.fx.push({kind:'pulse', x:e.x, y:e.y-e.r, t:0, life:1.0, r:220, col:'#ffb3cf'}); sfx(700,300,0.5,'sine',0.04);
+    if(d<220 && !p.pinned && p.freezeT<=0){ applySensit(6); addHeatG(12); heroBubble(p,pickRand(['はなの、こな……っ','けほ……あまい……','からだが、ぽかぽか、して……']),true,2); codexMet('dreamtree'); B.bossMark={id:'dreamtree',t:B.time}; } }
+  // 根の繋留(v2.4 170px・5.5秒)
+  if(!holding && d<170 && e.rootCd<=0){
     if(attachMonster(e,'tether',{r:130})){
       heroBubble(p,pickRand(['ね、が……あし、に……っ','うごか、ない……ひっぱられ……','やだ、木に、ひきずられ……っ']),true,2);
     }
-    e.rootCd=7;
+    e.rootCd=5.5;
   }
-  // 甘香の領域: 近いほど身体が熱を覚える
-  if(d<120 && !p.pinned){
+  // 甘香の領域: 近いほど身体が熱を覚える(v2.4 150px)
+  if(d<150 && !p.pinned){
     applySensit(3*dt);
-    applyPleasure(2.0*dt*(holding?1.6:1));
+    applyPleasure(2.4*dt*(holding?1.6:1));
     codexMet('dreamtree');
     if(Math.random()<dt*0.25) heroBubble(p,pickRand(['はな、の、においが……','ちかづくと、あつく……','こんな、におい、で……っ']),false,1);
   }
@@ -2953,7 +2968,7 @@ function gazerTick(e,dt,d,dx,dy){
 function bossgazerTick(e,dt,d,dx,dy){
   const p=G.B.hero;
   e.lookA=Math.atan2(dy,dx);
-  if(d>120){ e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt; }
+  { const sp=e.spd*(p.hypnoLv>=1?1.5:1); if(d>120){ e.x+=dx/d*sp*dt; e.y+=dy/d*sp*dt; } }   // v2.4 催眠にかかった彼女へは速く迫る
   for(const ey of e.eyes){
     // 眼柄の位置(胴の周りに三つ)
     // 触手の先端に眼球。真ん中は本人を狙い、両脇は本人の周りをばらばらに狙う(逃げ先を潰す)
@@ -3097,19 +3112,64 @@ function pickDest(p){
   return p.dest;
 }
 /* 探索点: 届く床の上から、まだ見ていない場所のそばを選ぶ(詰まり脱出でも使う) */
+/* ================= v2.4 視界の記憶 =================
+   見えた範囲をタイル単位で覚える(G.map.seen)。同じ世代・同じ階層なら再挑戦でも覚えている(META.run.seen にビット詰めで保存)。
+   探索点は「まだ見ていないタイルが多い所」を優先し、近い所から埋める。ミニマップには未探索の霧 */
+function initSeen(){
+  const M=G.map; if(!M) return; const key=M.gi+':'+M.floor;
+  if(!M.seen || M.seenKey!==key){ M.seen=new Uint8Array(MAP_W*MAP_H); M.seenKey=key; const pk=META.run&&META.run.seen&&META.run.seen[key]; if(pk) unpackSeen(pk,M.seen); }
+  let pn=0, sn=0; for(let k=0;k<M.seen.length;k++){ if(M.solid[k]===0){ pn++; if(M.seen[k]) sn++; } }
+  M.passN=pn; M.seenN=sn; M.fog=null; M.fogT=-9;
+}
+function packSeen(a){ const b=new Uint8Array(Math.ceil(a.length/8)); for(let i=0;i<a.length;i++) if(a[i]) b[i>>3]|=1<<(i&7); let s=''; for(let i=0;i<b.length;i++) s+=String.fromCharCode(b[i]); return btoa(s); }
+function unpackSeen(str,a){ try{ const s=atob(str); for(let i=0;i<a.length;i++){ const c=s.charCodeAt(i>>3); if(c===c && ((c>>(i&7))&1)) a[i]=1; } }catch(e){} }
+function saveSeen(){ const M=G.map; if(!M||!M.seen||!META.run) return; META.run.seen=META.run.seen||{}; META.run.seen[M.seenKey]=packSeen(M.seen); }
+function seenFrac(){ const M=G.map; return (M&&M.passN)?M.seenN/M.passN:1; }
+function seenTick(dt){
+  const B=G.B, p=B.hero, M=G.map; if(!M||!M.seen) return;
+  B.seenT-=dt; if(B.seenT>0) return; B.seenT=BAL.SEEN_T;
+  const rx=BAL.SEEN_R, ry=BAL.SEEN_RY, i0=Math.max(0,tileI(p.x-rx)), i1=Math.min(MAP_W-1,tileI(p.x+rx)), j0=Math.max(0,tileJ(p.y-ry)), j1=Math.min(MAP_H-1,tileJ(p.y+ry));
+  for(let j=j0;j<=j1;j++){ const yy=(tileCY(j)-p.y)/ry; for(let i=i0;i<=i1;i++){ const k=j*MAP_W+i; if(M.seen[k]) continue; const xx=(tileCX(i)-p.x)/rx; if(xx*xx+yy*yy>1) continue; M.seen[k]=1; if(M.solid[k]===0) M.seenN++; } }
+  M.fogT=-9;   // ミニマップの霧を作り直す
+  if(!B.exploreSaid && seenFrac()>=BAL.EXPLORE_DONE && B.time>30){ B.exploreSaid=true; sayLine('exploreDone',0,0,'ここ、だいたい みたかも'); }
+}
+/* その点の周り(±rt タイル)で、床のうちまだ見ていない割合 */
+function unseenAround(x,y,rt){
+  const M=G.map; if(!M||!M.seen) return 0; const ci=tileI(x), cj=tileJ(y); let n=0, u=0;
+  for(let j=Math.max(0,cj-rt);j<=Math.min(MAP_H-1,cj+rt);j++) for(let i=Math.max(0,ci-rt);i<=Math.min(MAP_W-1,ci+rt);i++){ const k=j*MAP_W+i; if(M.solid[k]!==0) continue; n++; if(!M.seen[k]) u++; }
+  return n?u/n:0;
+}
+/* v2.4 ボスを想定するか: 見えているボス / 最終階層(魔核) / 最近ボスに何かされた / この run でボスを見た */
+function bossExpected(){
+  const B=G.B; if(!B) return false; const p=B.hero;
+  if(B.floor&&B.floor.final) return true;
+  if(B.bossSeen || (META.run&&META.run.bossSeen)) return true;
+  if(B.bossMark && B.time-B.bossMark.t<BAL.BOSS_MEMORY_T) return true;
+  return B.enemies.some(e=>e.boss&&!e.dead&&inSight(e,p));
+}
 function pickExplore(p){
   const M=META.map, B=G.B; if(!G.map||!M) return null;
-  let cand=null, cs=-1;
+  const useSeen=BAL.SEEN_EXPLORE && G.map.seen && seenFrac()<0.97;   // ほぼ見尽くしたら旧来のうろつきへ
+  const leaving=!!B.wantExit;   // v2.2 最終階層でも「魔核へ向かう気」になったら同じ
+  const okZone=(q)=>{ const qz=zoneAt(q.x,q.y); return !(zoneFear(qz)>=2 || (p.scared&&p.scared[qz]>B.time)); };   // v2.2 「できれば避けたい」以上の地形の中は探索点にしない
+  const cands=[];
   for(let k=0;k<12;k++){
     const a=rand(TAU), dd=rand(600,1200);
     const q=snapFloor(clampMapX(p.x+Math.cos(a)*dd,120), clampMapY(p.y+Math.sin(a)*dd,120), false, 6);
-    if(!q || !reachableAt(q.x,q.y,false)) continue;
-    { const qz=zoneAt(q.x,q.y); if(zoneFear(qz)>=2 || (p.scared&&p.scared[qz]>B.time)) continue; }   // v2.2 「できれば避けたい」以上の地形の中は探索点にしない。浅瀬や花園はうろつく
-    let sc=Math.hypot(q.x-p.x,q.y-p.y)/1200;
-    const leaving=!!B.wantExit;   // v2.2 最終階層でも「魔核へ向かう気」になったら同じ
-    for(const po of G.map.pois){ if(!M.known[po.key]){ sc+=Math.max(0,1-Math.hypot(po.x-q.x,po.y-q.y)/700)*(leaving?2:1); if(leaving && (po.kind==='stairs'||po.kind==='core')) sc+=1.5*Math.max(0,1-Math.hypot(po.x-q.x,po.y-q.y)/1600); } }   // まだ見ていない場所のそばほど良い。降りたい時は(石の輪を目印に)降り口/魔核の間の当たりをつける
+    if(!q || !reachableAt(q.x,q.y,false) || !okZone(q)) continue;
+    cands.push(q);
+  }
+  if(useSeen){   // v2.4 まだ見ていない床から直接いくつか(近い所が選ばれやすい)
+    let got=0; for(let t=0;t<48 && got<8;t++){ const i=(Math.random()*MAP_W)|0, j=(Math.random()*MAP_H)|0, k=j*MAP_W+i; if(G.map.solid[k]!==0 || G.map.seen[k]) continue; const q={x:tileCX(i),y:tileCY(j)}; if(Math.hypot(q.x-p.x,q.y-p.y)<200) continue; if(!reachableAt(q.x,q.y,false) || !okZone(q)) continue; cands.push(q); got++; }
+  }
+  let cand=null, cs=-1e9;
+  for(const q of cands){
+    const dist=Math.hypot(q.x-p.x,q.y-p.y);
+    let sc=useSeen ? unseenAround(q.x,q.y,7)*BAL.EXPLORE_UNSEEN_W - dist/1200*BAL.EXPLORE_DIST_W : dist/1200;
+    for(const po of G.map.pois){ if(!M.known[po.key]){ sc+=Math.max(0,1-Math.hypot(po.x-q.x,po.y-q.y)/700)*(leaving?2:1); if(leaving && (po.kind==='stairs'||po.kind==='core')) sc+=1.5*Math.max(0,1-Math.hypot(po.x-q.x,po.y-q.y)/1600); } }   // まだ見ていない場所の近くを優先
     if(sc>cs){ cs=sc; cand={x:q.x,y:q.y}; }
   }
+  if(cand && useSeen && unseenAround(cand.x,cand.y,7)>0.5 && Math.random()<0.35) sayLine('exploreNew',0,20);
   p.explore=cand; p.exploreUntil=B.time+30;
   return cand;
 }
@@ -3317,7 +3377,7 @@ function linesTick(dt){
   if(pr>=0.35 && B.pressSaid<1){ B.pressSaid=1; setBanner('深淵の圧が高まる','魔物が増え、夜側のENが伸びる','#ff86b3'); sayLine('pressure.mid',0,0,'なんか、ふえてきた……?'); }
   if(pr>=0.9 && B.pressSaid<2){ B.pressSaid=2; setBanner('深淵の圧','ここに長く居すぎた','#ff5d7a'); sayLine('pressure.high',1,0,'ここ、ながくいたらまずい……!'); }
   if(p.hp<p.maxHp*0.5 && !B.lowSaid){ B.lowSaid=true; sayLine('hurtLow',1,0); } else if(p.hp>p.maxHp*0.72) B.lowSaid=false;
-  let near=0; for(const e of B.enemies){ if(!e.dead&&!e.dormant&&inSight(e,p)) near++; }
+  let near=0; for(const e of B.enemies){ if(!e.dead&&!e.dormant&&inSight(e,p)){ near++; if(e.boss) B.bossSeen=true; } }   // v2.4 ボスを見た(以後の武器選びはボスを想定)
   B.calmT=near===0?(B.calmT||0)+0.5:0; if(B.calmT>=4 && B.time>30){ B.calmT=0; sayLine('calm',0,45); }
 }
 /* ================= v2.0 新種 ================= */
@@ -3387,7 +3447,7 @@ function coreTick(e,dt,d,dx,dy){
   if(e.whipT>0){
     e.whipT-=dt;
     if(e.whipT<=0){ if(d<260 && attachMonster(e,'tether',{r:210,needMul:1.3})){ e.state='idle'; hurtHero(e.dmg*0.6,e,{noKb:true}); B.bossMark={id:'core',t:B.time}; codexMet('core'); if(ph<BAL.CORE_TWO_PH) attachMonster(e,'tether',{r:210,needMul:1.3}); e.state='idle'; } e.whipCd=BAL.CORE_WHIP_CD*(holding?1.6:1)*(ph<0.3?0.75:1); }   // 魔核は据わったまま根で繋ぐ(attached にせず、脈動も続く)。v2.2 弱ると根が二本
-  }else if(d<230 && e.whipCd<=0 && !holding){ e.whipT=0.55; sfx(120,50,0.3,'sawtooth',0.08); }
+  }else if(d<250 && e.whipCd<=0 && !holding){ e.whipT=0.55; sfx(120,50,0.3,'sawtooth',0.08); }   // v2.4 230→250
   if(d<BAL.CORE_AURA_R){ addHeatG(4*dt); applySensit(1.0*dt); e.auraT=(e.auraT||0)+dt; if(e.auraT>=1){ e.auraT-=1; hurtHero(2,e,{quiet:true,noKb:true,pierce:true}); } }   // v2.2 脈の圏内: 熱と敏感化、じわじわ削る
   if(d<420 && e.pulseCd<=0){
     e.pulseCd=BAL.CORE_PULSE_CD*(ph<0.5?0.7:1)*(ph<0.3?0.8:1); e.pulseT=0.7;
@@ -3411,9 +3471,12 @@ function bossChargeTick(e,dt,d,dx,dy){
   }else if(e.bstate==='tele'){
     if(e.bt<=0){ e.bstate='charge'; e.bt=0.6; e.cdx=dx/d; e.cdy=dy/d; sfx(300,900,0.3,'sawtooth',0.1); }
   }else{
-    e.x+=e.cdx*340*dt; e.y+=e.cdy*340*dt;
+    e.x+=e.cdx*370*dt; e.y+=e.cdy*370*dt;   // v2.4 340→370
     parts(e.x,e.y,1,['#c04a6a','#7a2a4a'],40,0.3);
-    if(e.bt<=0){ e.bstate='chase'; e.bt=rand(3.2,4.7); }
+    if(e.bt<=0){
+      if(e.id==='vampi' && !e.dash2 && d<420 && Math.random()<0.45){ e.dash2=true; e.bstate='tele'; e.bt=0.35; floatTxt(e.x,e.y-e.r-16,'二段突進!','#ff6b81',11,1.0); }   // v2.4 ヴァンピロード: 45%で二段目
+      else { e.dash2=false; e.bstate='chase'; e.bt=rand(3.2,4.7); }
+    }
   }
 }
 /* 粘獣王: 粘液の帯を残しながら迫り、追いつけば脚を呑む(粘液の繋留2本+敏感化+鈍足) */
@@ -3421,9 +3484,9 @@ function slimekingTick(e,dt,d,dx,dy){
   const B=G.B, p=B.hero;
   if(e.state==='attached') return;
   e.lookA=Math.atan2(dy,dx);
-  e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt;
+  { const sp=e.spd*((p.slow>0 && d<300)?1.5:1); e.x+=dx/d*sp*dt; e.y+=dy/d*sp*dt; }   // v2.4 粘液に足を取られている彼女へは1.5倍速
   e.trailT-=dt;
-  if(e.trailT<=0){ e.trailT=0.22; if(B.trails.length<90) B.trails.push({x:e.x+rand(-10,10),y:e.y+rand(-6,6),r:20,t:0,life:6}); }
+  if(e.trailT<=0){ e.trailT=0.22; if(B.trails.length<90) B.trails.push({x:e.x+rand(-10,10),y:e.y+rand(-6,6),r:24,t:0,life:8}); }   // v2.4 広く長く残る
   e.grabCd-=dt;
   if(e.grabCd<=0 && d<e.r+p.r+6 && !p.pinned && p.climaxT<=0 && p.freezeT<=0){
     let n=0; for(let i=0;i<2;i++){ if(attachMonster(e,'tether',{r:26, legFirst:true, needMul:1.6})) n++; else break; }
@@ -3444,12 +3507,13 @@ function runemageTick(e,dt,d,dx,dy){
   else if(d>330){ e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt; }
   e.castCd-=dt; e.runeCd-=dt;
   if(e.castCd<=0 && d<520 && inSight(e,p) && p.climaxT<=0){
-    e.castCd=4.5;
+    e.castCd=3.8;   // v2.4 4.5→3.8
     const a=Math.atan2((p.y-14)-(e.y-e.r*1.2), p.x-e.x);
-    B.ebullets.push({kind:'rune', x:e.x, y:e.y-e.r*1.2, vx:Math.cos(a)*210, vy:Math.sin(a)*210, t:0, life:3.2, r:9, src:'runemage'});
+    const fan=e.hp<e.maxHp*0.5?[-0.28,0,0.28]:[0];   // v2.4 HP半分を切ると三方向
+    for(const da of fan) B.ebullets.push({kind:'rune', x:e.x, y:e.y-e.r*1.2, vx:Math.cos(a+da)*210, vy:Math.sin(a+da)*210, t:0, life:3.2, r:9, src:'runemage'});
     sfx(500,900,0.25,'sine',0.05);
   }
-  if(e.runeCd<=0 && d<400 && B.traps.length<12){ e.runeCd=13; B.traps.push({kind:'rune',x:p.x+rand(-60,60),y:p.y+rand(-40,40),t:0,life:45,r:26,armed:true,src:'runemage'}); }
+  if(e.runeCd<=0 && d<400 && B.traps.length<12){ e.runeCd=13; const nt=e.hp<e.maxHp*0.5?2:1; for(let i=0;i<nt;i++) B.traps.push({kind:'rune',x:p.x+rand(-70,70),y:p.y+rand(-50,50),t:0,life:45,r:26,armed:true,src:'runemage'}); }   // v2.4 弱ると2つずつ
 }
 /* 呪弾の命中: 淫紋Lv+1(最大3)・快感・よろめき */
 function runeHit(b){
@@ -3480,7 +3544,7 @@ function succuqueenTick(e,dt,d,dx,dy){
   e.lookA=Math.atan2(dy,dx);
   e.pulseCd-=dt; e.spawnCd-=dt; e.kissCd-=dt;
   if(e.pulseCd<=0){
-    e.pulseCd=6;
+    e.pulseCd=5.2;   // v2.4 6→5.2
     B.fx.push({kind:'pulse', x:e.x, y:e.y-e.r, t:0, life:1.0, r:170, col:'#ff9ec2'});
     sfx(600,300,0.5,'sine',0.05);
     if(d<170 && p.climaxT<=0 && p.freezeT<=0){
@@ -3491,14 +3555,14 @@ function succuqueenTick(e,dt,d,dx,dy){
     }
   }
   if(e.kissCd<=0 && d<e.r+p.r+8 && p.climaxT<=0){
-    e.kissCd=5; applySensit(10); addHeatG(20);
+    e.kissCd=5; applySensit(10); addHeatG(20); if(p.heatLv>=1) applyDeny(e);   // v2.4 火照っていれば口づけでも寸止め
     heroBubble(p,'んっ……!? くち、に……',true,2);
     B.bossMark={id:'succuqueen',t:B.time}; codexMet('succuqueen');
   }
   if(e.spawnCd<=0){
     e.spawnCd=15;
-    if(aliveOf('imp')<6 && B.enemies.length<fieldCap()-2){
-      for(let i=0;i<2;i++){ const a=rand(TAU); spawnUnit('imp', e.x+Math.cos(a)*30, e.y+Math.sin(a)*30, {parent:e, enVal:0, gemMul:0}); }
+    if(aliveOf('imp')<8 && B.enemies.length<fieldCap()-3){
+      for(let i=0;i<3;i++){ const a=rand(TAU); spawnUnit('imp', e.x+Math.cos(a)*30, e.y+Math.sin(a)*30, {parent:e, enVal:0, gemMul:0}); }   // v2.4 3体ずつ・8体まで
       setBanner('女王の呼び声','小淫魔が集う','#ff9ec2');
     }
   }
@@ -3508,11 +3572,12 @@ function gobkingTick(e,dt,d,dx,dy){
   const B=G.B, p=B.hero;
   bossChargeTick(e,dt,d,dx,dy);
   e.muskCd-=dt; e.hornCd-=dt;
-  if(e.muskCd<=0 && d<520){ e.muskCd=1.8; const c=spawnCloud(e.x,e.y+2,90,5,BAL.SENSIT_GAS*0.6,'musk'); if(c) c.boss='gobking'; }
+  if(e.muskCd<=0 && d<520){ e.muskCd=1.5; const c=spawnCloud(e.x,e.y+2,110,5,BAL.SENSIT_GAS*0.6,'musk'); if(c) c.boss='gobking'; }   // v2.4 濃く広く
   if(e.hornCd<=0 && d<480){
-    e.hornCd=9; let n=0;
+    e.hornCd=8; let n=0, hasted=0;
     for(let i=0;i<3;i++){ if(aliveOf('goblin')>=12||B.enemies.length>=fieldCap()) break; const a=rand(TAU); spawnUnit('goblin', e.x+Math.cos(a)*40, e.y+Math.sin(a)*40, {parent:e, enVal:0, gemMul:0}); n++; }
-    if(n){ setBanner('呼び笛','ゴブリンの王が手下を呼んだ','#8fd36a'); sfx(180,420,0.4,'square',0.06); }
+    for(const g2 of B.enemies){ if(!g2.dead && g2.id==='goblin' && Math.hypot(g2.x-e.x,g2.y-e.y)<320){ g2.hasteT=4; hasted++; } }   // v2.4 号令: 近くの手下が4秒間速くなる
+    if(n||hasted){ setBanner('呼び笛と号令','ゴブリンの王が手下を呼び、駆り立てた','#8fd36a'); sfx(180,420,0.4,'square',0.06); }
   }
 }
 
@@ -4647,6 +4712,7 @@ function battleTick(dt){
   storyTick(dt);                   // v2.0 階層の独り言
   exitTick(dt); linesTick(dt);     // v2.1 降りる判断 / 場面に合わせた台詞
   skillTick(dt);                   // v2.3 奥義
+  seenTick(dt);                    // v2.4 見た範囲を覚える
 
   // EN回復
   B.en=Math.min(enMax(), B.en+(BAL.EN_REGEN+0.12*altarLv('enregen')+BAL.EN_REGEN_LV*p.level)*B.floor.en.regen*(1+BAL.PRESS_EN_REGEN*pressure())*dt);   // v2.0 深いほど速く溜まる / v2.1 長居するほど速い
