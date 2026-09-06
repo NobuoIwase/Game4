@@ -182,8 +182,8 @@ function drawZone(g,z){
   g.save();
   g.globalAlpha=a*0.55;
   const zg=g.createRadialGradient(z.x,z.y,z.r*0.2,z.x,z.y,z.r);
-  zg.addColorStop(0,z.evo?'rgba(200,240,255,0.55)':'rgba(160,220,255,0.45)');
-  zg.addColorStop(1,'rgba(120,180,255,0.05)');
+  zg.addColorStop(0,z.fire?'rgba(255,170,90,0.6)':(z.evo?'rgba(200,240,255,0.55)':'rgba(160,220,255,0.45)'));   // v3.0 火柱は炎の色
+  zg.addColorStop(1,z.fire?'rgba(255,110,40,0.08)':'rgba(120,180,255,0.05)');
   g.fillStyle=zg;
   g.beginPath(); g.ellipse(z.x,z.y,z.r,z.r*0.62,0,0,TAU); g.fill();
   g.strokeStyle='rgba(220,245,255,0.7)'; g.lineWidth=1.4;
@@ -397,9 +397,12 @@ LUMINA_HD.onload=()=>{ LUMINA_HD_OK=true; };
 LUMINA_HD.onerror=()=>{ LUMINA_HD_OK=false; };
 LUMINA_HD.src='assets/sprites/lumina_hd.png';
 const gfxHd=()=>LUMINA_HD_OK && ((META.settings&&META.settings.gfx)||'hd')==='hd';
+/* v3.0 フレイラのスプライト(tools/make_freila.py で生成。手描き原画を置けば差し替わる) */
+const FREILA_SPR=new Image(); let FREILA_OK=false; FREILA_SPR.onload=()=>{ FREILA_OK=true; }; FREILA_SPR.onerror=()=>{ FREILA_OK=false; }; FREILA_SPR.src='assets/sprites/freila.png';
+const FREILA_HD=new Image(); let FREILA_HD_OK=false; FREILA_HD.onload=()=>{ FREILA_HD_OK=true; }; FREILA_HD.onerror=()=>{ FREILA_HD_OK=false; }; FREILA_HD.src='assets/sprites/freila_hd.png';
 /* v1.4: 原本(160×240)から端末の実ピクセル寸のスプライトを一度だけ焼く(色変種込み)。毎フレームの ctx.filter を廃止 */
 const LUMINA_H=60;                    // 論理高さ(足元アンカー -hgt+2 は据え置き)
-const LUMINA_VAR={key:''};
+const HERO_VARS={lumina:{key:''}, freila:{key:''}};   // v3.0 ヒロインごとの焼き絵
 function bakeVariants(img,cw,ch,smooth){
   let src=img;                        // 2段階で縮小(1回で縮めるとぼやける)
   while(smooth && src.height>ch*2){
@@ -415,15 +418,17 @@ function bakeVariants(img,cw,ch,smooth){
   };
   return { normal:mk(), heat:mk('rgba(255,120,160,0.22)'), climax:mk('rgba(255,90,150,0.34)','rgba(255,255,255,0.07)'), hurt:mk('rgba(255,255,255,0.62)') };
 }
-function luminaVariants(hd){
+function heroVariants(id,hd){
+  const VAR=HERO_VARS[id]||HERO_VARS.lumina;
   const ds=Math.max(0.5,Math.round(dpr*viewScale*4)/4);   // 論理1pxあたりの実ピクセル(0.25刻み)。resize() で変わる
   const key=(hd?'hd':'px')+ds;
-  if(LUMINA_VAR.key===key) return LUMINA_VAR;
-  const img=hd?LUMINA_HD:LUMINA_SPR;
+  if(VAR.key===key) return VAR;
+  const img=id==='freila'?(hd?FREILA_HD:FREILA_SPR):(hd?LUMINA_HD:LUMINA_SPR);
   const hgt=hd?LUMINA_H:img.height*1.05, w=img.width*hgt/img.height;
-  Object.assign(LUMINA_VAR,{key,w,h:hgt}, hd?bakeVariants(img,Math.round(w*ds),Math.round(hgt*ds),true):bakeVariants(img,img.width,img.height,false));
-  return LUMINA_VAR;
+  Object.assign(VAR,{key,w,h:hgt}, hd?bakeVariants(img,Math.round(w*ds),Math.round(hgt*ds),true):bakeVariants(img,img.width,img.height,false));
+  return VAR;
 }
+const luminaVariants=hd=>heroVariants('lumina',hd);
 const HALO_ST=(()=>{ const c=document.createElement('canvas'); c.width=c.height=40; const t=c.getContext('2d');
   const gr=t.createRadialGradient(20,20,2,20,20,20); gr.addColorStop(0,'rgba(255,215,106,0.35)'); gr.addColorStop(1,'rgba(255,215,106,0)');
   t.fillStyle=gr; t.fillRect(0,0,40,40); return c; })();
@@ -449,8 +454,8 @@ function drawGirlSprite(g,x,y,opt){
   if(pinned) g.rotate(Math.sin(t*9)*0.07);
   if(climax) g.rotate(Math.sin(t*30)*0.05);     // びくっ、びくっ
   const sy=(pinned?0.84:1)*(climax?1-Math.abs(Math.sin(t*13))*0.09:1);
-  const hd=gfxHd();
-  const V=luminaVariants(hd);
+  const hd=gfxHd() && (opt.id==='freila'?FREILA_HD_OK:true);
+  const V=heroVariants(opt.id||'lumina',hd);
   const img=G.hurtFlash>0.15?V.hurt:climax?V.climax:heat>=60?V.heat:V.normal;
   const w=V.w, hgt=V.h*sy;
   g.imageSmoothingEnabled=!!hd; if(hd) g.imageSmoothingQuality='high';
@@ -483,7 +488,7 @@ function drawGirlSprite(g,x,y,opt){
   g.restore();
 }
 function drawGirl(g,x,y,opt){
-  if(LUMINA_OK){ drawGirlSprite(g,x,y,opt); return; }
+  if(opt.id==='freila'?FREILA_OK:LUMINA_OK){ drawGirlSprite(g,x,y,opt); return; }
   if(opt.mood==='climax') opt=Object.assign({},opt,{mood:'pinned'});
   const t=opt.t, face=opt.face||1, moving=opt.moving, mood=opt.mood||'normal';
   const heat=opt.heat||0;
@@ -2312,20 +2317,22 @@ function drawSentinel(g,e){
 }
 /* v2.0 魔核: 最深部の心臓。濡れた肉の塊、太い根、縦に裂けた目。脈動(pulseT)で膨らみ、鞭(whipT)で根が彼女へ伸びる */
 function drawCore(g,e){
-  const r=e.r, t=e.t, ph=e.maxHp?e.hp/e.maxHp:1;
+  const r=e.r, t=e.t, ph=e.maxHp?e.hp/e.maxHp:1, era=e.era||0;   // v3.0 世代で見た目が変わる(0: 小さく淡く弱そう → 濃く、根と目が増える)
+  const CC=era===0?['#e29ab8','#b06a8a','#7a4a66','#8a3a5a']:(era<=2?['#c2456f','#7a1f44','#3a0b20','#5a1630']:['#9a1848','#4a0a26','#160310','#3a0818']);
+  const nRoot=Math.min(15,(era===0?5:9)+Math.max(0,era-2)*2);
   const beat=1+0.045*Math.sin(t*(ph<0.5?5.2:3.4))+(e.pulseT>0?0.12*Math.sin(e.pulseT*9):0);
   g.save();
   g.fillStyle='rgba(20,4,12,0.55)'; g.beginPath(); g.ellipse(0,r*0.35,r*1.5,r*0.6,0,0,TAU); g.fill();
   // 根(床へ広がる)
-  g.strokeStyle='#5a1630'; g.lineWidth=7; g.lineCap='round';
-  for(let i=0;i<9;i++){ const a=i*TAU/9+0.3+Math.sin(t*0.7+i)*0.05; const L=r*1.9+Math.sin(t*1.3+i*2)*6; g.beginPath(); g.moveTo(Math.cos(a)*r*0.7,Math.sin(a)*r*0.35); g.quadraticCurveTo(Math.cos(a+0.25)*r*1.3,Math.sin(a+0.25)*r*0.7,Math.cos(a)*L,Math.sin(a)*L*0.55); g.stroke(); }
+  g.strokeStyle=CC[3]; g.lineWidth=era===0?5:7; g.lineCap='round';
+  for(let i=0;i<nRoot;i++){ const a=i*TAU/9+0.3+Math.sin(t*0.7+i)*0.05; const L=r*1.9+Math.sin(t*1.3+i*2)*6; g.beginPath(); g.moveTo(Math.cos(a)*r*0.7,Math.sin(a)*r*0.35); g.quadraticCurveTo(Math.cos(a+0.25)*r*1.3,Math.sin(a+0.25)*r*0.7,Math.cos(a)*L,Math.sin(a)*L*0.55); g.stroke(); }
   g.strokeStyle='rgba(200,80,120,0.35)'; g.lineWidth=2.5;
   for(let i=0;i<9;i++){ const a=i*TAU/9+0.3; const L=r*1.9; g.beginPath(); g.moveTo(Math.cos(a)*r*0.7,Math.sin(a)*r*0.35); g.quadraticCurveTo(Math.cos(a+0.25)*r*1.3,Math.sin(a+0.25)*r*0.7,Math.cos(a)*L,Math.sin(a)*L*0.55); g.stroke(); }
   // 鞭の予兆: 彼女の方へ根が伸びる
   if(e.whipT>0){ const k=1-e.whipT/0.6; g.strokeStyle='rgba(255,120,170,'+(0.5+0.4*k)+')'; g.lineWidth=5+3*k; g.beginPath(); g.moveTo(0,0); g.lineTo(Math.cos(e.lookA||0)*r*(1.2+2.2*k),Math.sin(e.lookA||0)*r*(1.2+2.2*k)*0.8); g.stroke(); }
   // 本体
   g.save(); g.translate(0,-r*0.25); g.scale(beat,beat);
-  const grad=g.createRadialGradient(-r*0.25,-r*0.3,r*0.15,0,0,r*1.05); grad.addColorStop(0,'#c2456f'); grad.addColorStop(0.55,'#7a1f44'); grad.addColorStop(1,'#3a0b20');
+  const grad=g.createRadialGradient(-r*0.25,-r*0.3,r*0.15,0,0,r*1.05); grad.addColorStop(0,CC[0]); grad.addColorStop(0.55,CC[1]); grad.addColorStop(1,CC[2]);
   g.fillStyle=grad; g.beginPath(); g.ellipse(0,0,r,r*0.86,0,0,TAU); g.fill();
   for(let i=0;i<5;i++){ const a=i*1.3+0.4; g.fillStyle='rgba(180,60,100,0.55)'; g.beginPath(); g.ellipse(Math.cos(a)*r*0.5,Math.sin(a)*r*0.42,r*0.34,r*0.26,a,0,TAU); g.fill(); }
   g.strokeStyle='rgba(255,110,160,'+(0.35+(e.pulseT>0?0.4:0))+')'; g.lineWidth=2.2;
@@ -2336,8 +2343,17 @@ function drawCore(g,e){
   g.fillStyle='#1a0510'; g.beginPath(); g.ellipse(0,0,r*0.16,r*0.42,0,0,TAU); g.fill();
   g.fillStyle='#ff5d9a'; g.beginPath(); g.ellipse(ex,ey,r*0.07,r*0.3,0,0,TAU); g.fill();
   g.fillStyle='#fff'; g.beginPath(); g.ellipse(ex-r*0.02,ey-r*0.12,r*0.025,r*0.06,0,0,TAU); g.fill();
+  if(era>=3){ for(let i=0;i<Math.min(6,era-2);i++){ const a=i*1.05+0.6+t*0.05; const ox=Math.cos(a)*r*0.62, oy=Math.sin(a)*r*0.5; g.fillStyle='#1a0510'; g.beginPath(); g.ellipse(ox,oy,r*0.07,r*0.16,0,0,TAU); g.fill(); g.fillStyle='#ff5d9a'; g.beginPath(); g.ellipse(ox+Math.cos(la)*r*0.02,oy+Math.sin(la)*r*0.02,r*0.03,r*0.1,0,0,TAU); g.fill(); } }   // v3.0 深い世代ほど目が増える
   g.restore();
   g.restore();
+}
+/* v3.0 捕まってその場に残っている子の印: 紫の輪と「救出」の進み */
+function drawCaptiveMark(g,p){
+  const c=p.captive, t=G.B.time; g.save();
+  g.strokeStyle='rgba(201,140,255,0.75)'; g.lineWidth=2; g.setLineDash([4,4]); g.beginPath(); g.ellipse(p.x,p.y-4,26,12,0,0,TAU); g.stroke(); g.setLineDash([]);
+  if(c.rescue>0){ g.strokeStyle='#8fd3ff'; g.lineWidth=3; g.beginPath(); g.arc(p.x,p.y-52,14,-Math.PI/2,-Math.PI/2+TAU*Math.min(1,c.rescue/BAL.RESCUE_T)); g.stroke(); }
+  g.font='bold 10px '+FONT; g.textAlign='center'; g.textBaseline='middle'; g.fillStyle='#e8d8ff'; g.shadowColor='rgba(0,0,0,0.8)'; g.shadowBlur=3;
+  g.fillText(c.rescue>0?'救出中…':'捕まっている', p.x, p.y-70+Math.sin(t*3)*1.5); g.restore();
 }
 function drawBoss(g,e){
   const r=e.r;
@@ -2478,47 +2494,31 @@ function drawHUD(g){
   g.textAlign='center'; g.textBaseline='middle';
   g.fillText('Lv '+p.level,41,26.5);
 
-  // HP / スタミナ / 護り
+  // HP / スタミナ / 護り(v3.0 ヒロインごとに一段)
   const barX = narrow ? 10 : 82;
-  const barY = narrow ? 44 : 14;
+  const barY0 = narrow ? 44 : 14;
   const barW = narrow ? Math.max(120, W-152) : 150;
-  rr(g,barX,barY,barW,11,6);
-  g.fillStyle='rgba(20,24,50,0.78)'; g.fill();
-  const hr=clamp(p.hp/p.maxHp,0,1);
-  if(hr>0){
-    rr(g,barX,barY,barW*hr,11,6);
-    g.fillStyle=hr>0.35?'#ff5d7a':'#ff9c2e'; g.fill();
-  }
-  rr(g,barX,barY,barW,11,6);
-  g.strokeStyle='rgba(255,255,255,0.35)'; g.lineWidth=1.2; g.stroke();
-  g.fillStyle='#ffffff'; g.font='bold 9px '+FONT;
-  g.textAlign = narrow?'right':'left';
-  // 狭い画面では数値をバーの中に重ねる。下地の色が変わっても読めるよう影を敷く
-  if(narrow){ g.shadowColor='rgba(0,0,0,0.9)'; g.shadowBlur=3; }
-  g.fillText('HP '+Math.ceil(p.hp)+'/'+p.maxHp, narrow?barX+barW-6:barX+barW+8, barY+5.5);
-  g.shadowBlur=0;
-  // スタミナバー
-  rr(g,barX,barY+14,barW,8,4);
-  g.fillStyle='rgba(20,24,50,0.78)'; g.fill();
-  const sr=clamp(p.stamina/p.staminaMax,0,1);
-  if(sr>0){
-    rr(g,barX,barY+14,barW*sr,8,4);
-    g.fillStyle=sr>0.3?'#ffd76a':'#ff7a4a'; g.fill();
-  }
-  rr(g,barX,barY+14,barW,8,4);
-  g.strokeStyle='rgba(255,255,255,0.28)'; g.lineWidth=1; g.stroke();
-  g.fillStyle= narrow?'#ffffff':'#ffe9b0'; g.font='bold 8px '+FONT;
-  g.textAlign = narrow?'right':'left';
-  if(narrow){ g.shadowColor='rgba(0,0,0,0.9)'; g.shadowBlur=3; }
-  g.fillText('スタミナ '+Math.ceil(p.stamina), narrow?barX+barW-6:barX+barW+8, barY+18.5);
-  g.shadowBlur=0;
-  // 護り
-  g.fillStyle='#8fd3ff'; g.font='bold 10px '+FONT;
-  g.textAlign = narrow?'right':'left';
-  g.shadowColor='rgba(0,0,0,0.85)'; g.shadowBlur=3;
-  g.fillText('護り '+Math.max(0,p.armor-attachCount(p)), narrow?W-10:330, barY+5.5);
-  g.shadowBlur=0;
-
+  const rowH = narrow ? 30 : 26;
+  B.heroes.forEach((hh,i)=>{
+    const by=barY0+i*rowH, HD=HEROES[hh.id]||HEROES.lumina;
+    rr(g,barX,by,barW,11,6); g.fillStyle='rgba(20,24,50,0.78)'; g.fill();
+    const hr=clamp(hh.hp/hh.maxHp,0,1);
+    if(hr>0){ rr(g,barX,by,barW*hr,11,6); g.fillStyle=hh.out?'#7a4a8a':(hr>0.35?'#ff5d7a':'#ff9c2e'); g.fill(); }
+    rr(g,barX,by,barW,11,6); g.strokeStyle=B.heroes.length>1?HD.col:'rgba(255,255,255,0.35)'; g.lineWidth=1.2; g.stroke();
+    g.fillStyle='#ffffff'; g.font='bold 9px '+FONT; g.textAlign=narrow?'right':'left';
+    if(narrow){ g.shadowColor='rgba(0,0,0,0.9)'; g.shadowBlur=3; }
+    g.fillText((B.heroes.length>1?HD.name+' ':'')+(hh.out?'捕まっている':'HP '+Math.ceil(hh.hp)+'/'+hh.maxHp), narrow?barX+barW-6:barX+barW+8, by+5.5);
+    g.shadowBlur=0;
+    rr(g,barX,by+14,barW,8,4); g.fillStyle='rgba(20,24,50,0.78)'; g.fill();
+    const sr=clamp(hh.stamina/hh.staminaMax,0,1);
+    if(sr>0){ rr(g,barX,by+14,barW*sr,8,4); g.fillStyle=sr>0.3?'#ffd76a':'#ff7a4a'; g.fill(); }
+    rr(g,barX,by+14,barW,8,4); g.strokeStyle='rgba(255,255,255,0.28)'; g.lineWidth=1; g.stroke();
+    g.fillStyle=narrow?'#ffffff':'#ffe9b0'; g.font='bold 8px '+FONT; g.textAlign=narrow?'right':'left';
+    if(narrow){ g.shadowColor='rgba(0,0,0,0.9)'; g.shadowBlur=3; }
+    g.fillText('スタミナ '+Math.ceil(hh.stamina)+'  護り '+Math.max(0,hh.armor-attachCount(hh)), narrow?barX+barW-6:barX+barW+8, by+18.5);
+    g.shadowBlur=0;
+  });
+  const barY=barY0;   // 以降の配置の基準(1人目の段)
   // タイマー
   g.textAlign='center';
   g.font='bold '+(narrow?20:24)+'px '+FONT;
@@ -2531,7 +2531,8 @@ function drawHUD(g){
     const F=B.floor||curFloor();
     const nS=B.enemies.filter(e=>e.id==='sentinel'&&!e.dead).length;
     const st=F.final?'魔核を討てば目的達成':(B.exitLocked?'封印石 '+Object.keys(B.seals||{}).length+'/3 で降り口が開く':(nS>0?'降り口は石の番兵が守る(残り'+nS+')':'降り口に着けば次の階層へ'))+(B.wantExit?' — 彼女は降りたがっている':(F.final?'':' — 彼女は見るものを見てから降りる'));   // v2.1
-    g.fillText('第'+F.depth+'層 '+F.name+' — '+st, W/2, 42);
+    if(B.heroes.length>1){ let txt='第'+F.depth+'層 '+F.name+' — '+st; const x0=barX+barW+180, maxW=Math.max(120,(W-RM-140)-x0); g.textAlign='left'; while(txt.length>8 && g.measureText(txt).width>maxW) txt=txt.slice(0,-2)+'…'; g.fillText(txt, x0, 42); g.textAlign='center'; }   // v3.0 二人分の段と重ならない位置に
+    else g.fillText('第'+F.depth+'層 '+F.name+' — '+st, W/2, 42);
   }
   // 右上
   g.textAlign='right'; g.font='bold '+(narrow?12:13)+'px '+FONT; g.fillStyle='#ffd76a';
@@ -2602,7 +2603,9 @@ function drawHUD(g){
       rr(g,px0,py0,pw,20,10); g.fillStyle='rgba(50,25,80,0.82)'; g.fill(); g.strokeStyle='rgba(201,140,255,0.7)'; g.lineWidth=1.2; g.stroke(); g.fillStyle='#e8dcff'; g.textAlign='left'; g.textBaseline='middle'; g.fillText(txt,px0+11,py0+10.5); }
   }
   // 状態チップ
-  let sx=10, sy=narrow?chipY+50:76;
+  let sx=10, sy=(narrow?chipY+50:76)+Math.max(0,B.heroes.length-2)*26;   // v3.0 3人以上なら段を下げる
+  for(const hh of B.heroes){ const p=hh;   // v3.0 ヒロインごとに一段(チップがある時だけ名前を添える)
+  const sxName=sx, syName=sy;
   const chips=[];
   const atk=attachCount(p);
   if(p.climaxT>0) chips.push(['climax','絶頂!!']);
@@ -2634,7 +2637,7 @@ function drawHUD(g){
   if(p.hypnoLv>0) chips.push(['hypnolv','催眠'+ROMANS[p.hypnoLv]+(p.hypnoLv<3&&p.hypnoG>0?' '+Math.round(p.hypnoG)+'%':'')]);
   else if((p.hypnoG||0)>=10) chips.push(['hypnolv','催眠 '+Math.round(p.hypnoG)+'%']);
   if(p.guardT>0) chips.push(['heal','聖光の壁 '+Math.ceil(p.guardT)+'s']);
-  { const un=Object.keys(SKILLS).filter(k=>p.level>=SKILLS[k].lv); if(un.length) chips.push(['skill','奥義 '+un.map(k=>SKILLS[k].icon+((p.skillCd[k]||0)>0?Math.ceil(p.skillCd[k]):'')).join(' ')]); }   // v2.3 解放済みの奥義とCD
+  { const SK=heroSkills(p); const un=Object.keys(SK).filter(k=>p.level>=SK[k].lv); if(un.length) chips.push(['skill','奥義 '+un.map(k=>SK[k].icon+((p.skillCd[k]||0)>0?Math.ceil(p.skillCd[k]):'')).join(' ')]); }   // v2.3 解放済みの奥義とCD(v3.0 ヒロインごと)
   if(BAL.SMART_AI && (p.aiMode==='kite'||p.aiMode==='flee')) chips.push(['flee',p.aiMode==='flee'?'逃げに徹する':'引き撃ち']);
   if(p.selfT>0) chips.push(['self','自慰……']);
   if(p.inMusk) chips.push(['musk','雄臭'+((META.traits.musk||0)>0?ROMANS[META.traits.musk]:'')]);
@@ -2651,12 +2654,14 @@ function drawHUD(g){
     sx+=w2+6;
     if(sx>W-160){ sx=10; sy+=24; }
   }
+  if(B.heroes.length>1 && chips.length){ const HD=HEROES[hh.id]||HEROES.lumina; g.font='bold 9px '+FONT; g.fillStyle=HD.col; g.textAlign='left'; g.textBaseline='middle'; g.shadowColor='rgba(0,0,0,0.8)'; g.shadowBlur=3; g.fillText(HD.name, sxName+2, syName-6); g.shadowBlur=0; }
+  if(chips.length){ sx=10; sy+=24; } else { sx=10; } }
   // デバッグ
   g.font='9px '+FONT; g.fillStyle='rgba(130,140,180,0.55)'; g.textAlign='left';
   drawMinimap(g);
   g.fillText('enemies:'+B.enemies.length+' fps:'+Math.round(G.fps)+(TS>1?' x'+TS:''), 12, H-6);
   g.textAlign='right'; g.fillStyle='rgba(255,255,255,0.3)'; g.font='bold 10px '+FONT;
-  g.fillText('v2.4 深淵', W-12, H-6);
+  g.fillText('v3.0 深淵 — 二人', W-12, H-6);
 }
 function drawCards(g){
   const B=G.B, c=B.lvCards; if(!c) return;
@@ -2664,7 +2669,7 @@ function drawCards(g){
   g.textAlign='center'; g.textBaseline='middle';
   g.font='bold 20px '+FONT; g.fillStyle='#ffd76a';
   g.shadowColor='rgba(0,0,0,0.7)'; g.shadowBlur=6;
-  g.fillText('LEVEL UP! — ルミナのAIが選んでいます…', W/2, 92);
+  g.fillText('LEVEL UP! — '+((B.heroes&&B.heroes.length>1)?'二人が選んでいます(強化できるのは一人)…':'ルミナのAIが選んでいます…'), W/2, 92);
   g.shadowBlur=0;
   const cw=168, ch=186;
   const vert = W < cw*3+56;   // 縦長の画面では3枚を横に並べきれないので縦に積む
@@ -2686,6 +2691,8 @@ function drawCards(g){
     g.textAlign='center';
     g.fillStyle='#ffffff'; g.font='bold 13px '+FONT;
     g.fillText(def.name,px+cw/2,py+92);
+    { const base=isEvo?EVOS[k.slice(4)].base:k; const ow=(UPG[base]&&UPG[base].kind==='wp')?(HEROES[UPG[base].owner||'lumina']):null;   // v3.0 誰の強化か
+      g.font='bold 10px '+FONT; g.fillStyle=ow?ow.col:'rgba(200,210,255,0.85)'; g.fillText(ow?'▶ '+ow.name:'▶ 全員(パッシブ)',px+cw/2,py+16); }
     if(isEvo){
       g.fillStyle='#e8b0ff'; g.font='bold 11px '+FONT;
       g.fillText('★ 融合進化',px+cw/2,py+112);
@@ -2933,6 +2940,7 @@ function draw(){
       if(e.night && !e.dead) drawNightMark(g,e.x,e.y-e.r-18,e.id==='web'?'🕸':'📡');   // v2.2 設置の印
     }
 
+    for(const hh of B.heroes){ const p=hh; B.ci=hh.hi;   // v3.0 ヒロインごとの武器の光と姿
     // せいいき(聖域): 彼女を中心にした光の輪。脈動の瞬間に明滅
     if(p.wp.sanct>0 && p.sanctR){
       const evo=p.evo.gsanct>0;
@@ -2958,12 +2966,20 @@ function draw(){
       g.globalAlpha=0.12; g.fillStyle=evo?'#fff3c4':'#8fd3ff'; g.beginPath(); g.moveTo(p.x,p.y-10); g.arc(p.x,p.y-10,p.shieldR,a0,a1); g.closePath(); g.fill();
       g.restore();
     }
-    // ノヴァ
+    // v3.0 火の輪(フレイラ)
+    if(p.wp.fring>0 && p.fringR>0){
+      g.save(); g.lineCap='round'; g.shadowColor='#ff7a3a'; g.shadowBlur=10;
+      const seg=p.evo.corona>0?8:5; for(let i=0;i<seg;i++){ const a0=p.fringAng+i*TAU/seg; g.globalAlpha=0.55+0.25*Math.sin(p.anim*9+i); g.strokeStyle=i%2?'#ffd76a':'#ff7a3a'; g.lineWidth=p.evo.corona>0?5:3.5; g.beginPath(); g.ellipse(p.x,p.y-10,p.fringR,p.fringR*0.9,0,a0,a0+TAU/seg*0.62); g.stroke(); }
+      g.restore();
+    }
+    // v3.0 焔の翼の残像
+    if(p.fwingAnim>0){ g.save(); g.globalAlpha=Math.min(1,p.fwingAnim/0.25)*0.8; g.strokeStyle='#ff9a4a'; g.lineWidth=8; g.lineCap='round'; g.shadowColor='#ff7a3a'; g.shadowBlur=14; g.beginPath(); g.moveTo(p.fwingX,p.fwingY-14); g.lineTo(p.x,p.y-14); g.stroke(); g.restore(); }
+    // ノヴァ(フレイラの爆炎は炎の色)
     if(p.novaAnim>0){
       const pr2=(1-p.novaAnim/0.5);
       g.globalAlpha=(1-pr2)*0.8;
-      g.strokeStyle='#fff3c4'; g.lineWidth=5;
-      g.shadowColor='#ffd76a'; g.shadowBlur=14;
+      g.strokeStyle=p.novaFire?'#ff9a4a':'#fff3c4'; g.lineWidth=5;
+      g.shadowColor=p.novaFire?'#ff5a1a':'#ffd76a'; g.shadowBlur=14;
       g.beginPath(); g.arc(p.x,p.y-10,p.novaR*pr2,0,TAU); g.stroke();
       g.shadowBlur=0; g.globalAlpha=1;
     }
@@ -2990,10 +3006,11 @@ function draw(){
                : (G.hurtFlash>0.15?'hurt':'normal');
     const blinking = p.ifr>0 && G.mode==='battle' && (Math.floor(p.ifr*14)%2===0);
     if(blinking) g.globalAlpha=0.45;
-    drawGirl(g,p.x,p.y,{t:p.anim,face:p.face,moving:p.moving&&G.mode==='battle',mood,heat:heatVis});
+    drawGirl(g,p.x,p.y,{t:p.anim,face:p.face,moving:p.moving&&G.mode==='battle',mood,heat:heatVis,id:p.id});
     g.globalAlpha=1;
     drawAttachments(g,p);
     drawSuckers(g,p);
+    if(p.out && p.captive) drawCaptiveMark(g,p);
     drawStateFx(g,p);
     if(G.mode==='battle'){
       if(p.pinned) drawPinGauge(g,p);
@@ -3018,6 +3035,8 @@ function draw(){
       g.setLineDash([]);
       g.restore();
     }
+    }   // v3.0 ヒロインごとの描画ここまで
+    B.ci=leaderIdx();
 
     // ヒロインの弾
     for(const b of B.bullets){
@@ -3071,13 +3090,14 @@ function draw(){
     for(const f of B.fx) drawFx(g,f);
     // アイテム設置カーソル(選択中)
     if(G.armItem && G.mouse && G.mode==='battle') drawPlaceCursor(g,G.armItem,G.mouse.x,G.mouse.y);
-    // プリズムウィップの薙ぎ(残像)
+    // プリズムウィップ/炎の剣の薙ぎ(残像)
+    for(const hh of B.heroes){ const p=hh;
     if(p.whipAnim>0){
       const pr2=clamp(p.whipAnim/0.16,0,1);
       g.save();
       g.globalAlpha=pr2*0.75;
-      g.strokeStyle='#ffe3f0'; g.lineWidth=5; g.lineCap='round';
-      g.shadowColor='#ff9ec2'; g.shadowBlur=12;
+      g.strokeStyle=p.whipFire?'#ffb060':'#ffe3f0'; g.lineWidth=5; g.lineCap='round';
+      g.shadowColor=p.whipFire?'#ff6a1a':'#ff9ec2'; g.shadowBlur=12;
       if(p.whipDir===0){
         g.beginPath(); g.arc(p.x,p.y-10,p.whipR*(1.05-pr2*0.25),0,TAU); g.stroke();
       }else{
@@ -3087,6 +3107,7 @@ function draw(){
         g.stroke();
       }
       g.restore();
+    }
     }
   }else{
     // ロビー
@@ -3116,9 +3137,11 @@ function draw(){
   }
   g.globalAlpha=1;
   if(inBattle){
-    const p=G.B.hero;
+    for(const p of G.B.heroes){   // v3.0 全員の吹き出しと守りの光
     if(p.guardT>0){ glow(g,p.x,p.y-14,62,'255,215,106',0.3+0.15*Math.sin(G.B.time*8)); g.save(); g.strokeStyle='rgba(255,230,150,0.8)'; g.lineWidth=2; g.beginPath(); g.ellipse(p.x,p.y-12,30,38,0,0,TAU); g.stroke(); g.restore(); }   // v2.3 聖光の壁
+    if(p.emberT>0){ glow(g,p.x,p.y-14,70,'255,120,60',0.3+0.15*Math.sin(G.B.time*10)); }   // v3.0 熾火の壁
     drawBubbleAt(g,p.x,p.y,p.bubble,p.bubbleT);
+    }
   }
   g.restore();
 

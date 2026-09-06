@@ -202,18 +202,21 @@ const UI={
       $('advSkip').addEventListener('click',e=>{ e.stopPropagation(); this.hideStory(); });
       $('advAuto').addEventListener('click',e=>{ e.stopPropagation(); META.settings.advAuto=!(META.settings.advAuto!==false); saveMeta(); this.advSyncAuto(); });
       document.addEventListener('keydown',e=>{ if(!this.adv.open) return; if(e.code==='Space'||e.code==='Enter'||e.code==='ArrowRight'){ e.preventDefault(); this.advNext(); } else if(e.code==='Escape'){ this.hideStory(); } });
-      const img=$('advImg'); img.addEventListener('error',()=>{ if(img.dataset.fb!=='1'){ img.dataset.fb='1'; img.src='assets/cg/defeat.png'; } else img.style.visibility='hidden'; }); img.src='assets/ref/lumina_novelai.png';
+      const img=$('advImg'); img.addEventListener('error',()=>{ if(img.dataset.fb!=='1'){ img.dataset.fb='1'; img.src=(img.dataset.who==='freila')?'assets/ref/freila_stand.png':'assets/cg/defeat.png'; } else img.style.visibility='hidden'; }); img.dataset.who='lumina'; img.src='assets/ref/lumina_novelai.png';
     }
     this.advSyncAuto(); box.hidden=false; this.advRender();
   },
   advSyncAuto(){ const b=$('advAuto'); if(b) b.textContent='自動送り: '+((META.settings.advAuto!==false)?'ON':'OFF'); },
   advRender(){
     const A=this.adv, ln=A.lines[A.idx]; if(!ln) return;
-    const NAMES={lumina:'ルミナ', town:'街の人', voice:'声', n:''};
+    const NAMES={lumina:'ルミナ', freila:'フレイラ', town:'街の人', voice:'声', n:''};
     const nm=$('advName'); nm.textContent=(NAMES[ln.s]!==undefined)?NAMES[ln.s]:ln.s; nm.className=ln.s;
-    const st=$('advStand'); st.className=(ln.s==='lumina'?'speak':'dim')+(ln.f?' f-'+ln.f:'');
+    // v3.0 立ち絵は話しているヒロインに切り替える(地の文は直前の話者のまま暗く)
+    { const img=$('advImg'); const who=(ln.s==='lumina'||ln.s==='freila')?ln.s:(A.lastWho||'lumina'); A.lastWho=who;
+      if(img && img.dataset.who!==who){ img.dataset.who=who; img.dataset.fb='0'; img.style.visibility=''; img.src=who==='freila'?'assets/ref/freila.png':'assets/ref/lumina_novelai.png'; } }
+    const st=$('advStand'); st.className=((ln.s==='lumina'||ln.s==='freila')?'speak':'dim')+(ln.f?' f-'+ln.f:'');
     const tx=$('advText'); tx.className=ln.s; tx.textContent='';
-    A.typeT=0; A.shown=0; A.dwell=0; A.full=(ln.s==='lumina'||ln.s==='town'||ln.s==='voice')?'「'+ln.t+'」':ln.t;
+    A.typeT=0; A.shown=0; A.dwell=0; A.full=(ln.s==='lumina'||ln.s==='freila'||ln.s==='town'||ln.s==='voice')?'「'+ln.t+'」':ln.t;
     $('advHint').textContent=(A.idx>=A.lines.length-1)?'▼ タップで閉じる':'▼ タップで次へ';
   },
   tickAdv(rdt){
@@ -276,7 +279,7 @@ const UI={
     const wipeArmed=this._wipeArm && performance.now()-this._wipeArm<3000;
     return `
       <h1>ルミナ・サバイバーズ</h1>
-      <div class="sub">v2.4 深淵 — MONSTER DECK × AUTO BATTLE</div>
+      <div class="sub">v3.0 深淵 — 二人の天使 × MONSTER DECK</div>
       <p>あなたは<b>夜側の指揮者</b>。デッキから魔物を差し向け、AIで戦う光の少女<b>「ルミナ」</b>を追い詰める。<br>
       彼女に魔物が倒されるほどあなたのエネルギーとエッセンスは増え、彼女もまた強くなる。</p>
       <div style="text-align:center;color:var(--gold);font-size:12px;margin-bottom:8px">${esc(best)} ・ 通算${META.runs}戦 / 捕獲${META.captures}回</div>
@@ -633,10 +636,10 @@ const UI={
       :(sum.runNote==='clear'?`<div class="newbadge">✦ 深淵は組み替わる。次より第${genNum(META.gen.idx)}世代——彼女はまた入口に立つ</div>`:'')));
     const by=cap&&sum.capturedBy&&MONSTERS[sum.capturedBy]?MONSTERS[sum.capturedBy].name:null;
     const causeTxt=cap?({stamina:'スタミナが尽き、組み伏せられた', charm:'魅了に蕩けたまま、力尽きた', hp:'体力が尽きた'}[sum.cause]||'体力が尽きた'):null;
-    const scene=cap?sceneFor('capture',sum.capturedBy):null;
-    const sceneHtml=cap?(scene
-      ? `<div id="sceneBox"><b>${esc(scene.title||'')}</b>\n${scene.beats.map(esc).join('\n\n')}</div>`
-      : `<div class="note">敗北シーン: テキスト未実装(js/scenes.js のフックへ別途追加)</div>`):'';
+    // v3.0 捕まったヒロインごとの敗北本文(二人なら二本)。ヒロインの声の表(SCENES / SCENES_F)で引く
+    const caps=cap?((sum.captures&&sum.captures.length)?sum.captures:[{id:'lumina',by:sum.capturedBy,cause:sum.cause}]):[];
+    const sceneHtml=cap?caps.map(c=>{ const sc=(typeof sceneForHero==='function')?sceneForHero({id:c.id},'capture',c.by):sceneFor('capture',c.by); const nm=(typeof HEROES!=='undefined'&&HEROES[c.id])?HEROES[c.id].name:'';
+      return sc?`<div id="sceneBox"><b>${esc((caps.length>1&&nm?nm+' — ':'')+(sc.title||''))}</b>\n${sc.beats.map(esc).join('\n\n')}</div>`:`<div class="note">敗北シーン(${esc(nm)}): テキスト未実装</div>`; }).join(''):'';
     const cgHtml=cap?`<div id="cgWrap"></div>`:'';
     this.hideStory();
     const storyHtml=(sum.storyLines&&sum.storyLines.length)?`<details style="text-align:left;margin:8px 0"><summary style="cursor:pointer;color:var(--vio);font-size:12px">物語を読み返す</summary><div class="note storytext">${sum.storyLines.map(storyLineHtml).join('')}</div></details>`:'';   // v2.1 本文は ADV で流れる
@@ -658,7 +661,7 @@ const UI={
       ${sum.decay&&sum.decay.length?`<div class="note" style="color:var(--vio);margin:6px 0">——世代の夜明け。彼女の加護が${sum.decay.length}段薄れた——<br>${sum.decay.map(esc).join(' ・ ')}</div>`:''}
       ${cgHtml}
       <div class="breakdown">
-        経過時間 <b>${fmt(sum.time)}</b> ・ ルミナ Lv<b>${sum.heroLv}</b><br>
+        経過時間 <b>${fmt(sum.time)}</b> ・ パーティ Lv<b>${sum.heroLv}</b>${sum.leftBehind&&sum.leftBehind.length?` ・ <span style="color:#ff86b3">${esc(sum.leftBehind.join('・'))}を置いてきた</span>`:''}<br>
         討たれた魔物 <b>${sum.kills}</b>体 ・ 与ダメージ <b>${sum.dmg}</b> ・ 異常付与 <b>${sum.ail}</b>回${sum.climax?` ・ <span style="color:var(--pink)">絶頂 <b>${sum.climax}</b>回</span>`:''}<br>
         ✦ エッセンス <b>+${sum.essGain}</b> ・ <span class="o">◉ オーブ <b>+${sum.orbGain}</b></span><br>
         <span style="color:var(--gold)">🪙 ルミナのコイン +${sum.coins||0}</span>

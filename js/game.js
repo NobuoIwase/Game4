@@ -5,7 +5,8 @@
 ============================================================ */
 
 /* ================= ヒロイン生成 ================= */
-function newHero(){
+function newHero(id){
+  const HD=HEROES[id]||HEROES.lumina; id=HEROES[id]?id:'lumina';   // v3.0 ヒロインの素性
   const gb=Math.min(3,META.gen.battle||0);   // 潜行の日数(0..3 で頭打ち。v2.0 で日数は増え続けるため)
   const aArmor=altarLv('armor'), aRegen=altarLv('regen'), aSpeed=altarLv('speed');
   const aSense=altarLv('sense'), aHeat=altarLv('heat'), aFocus=altarLv('focus');
@@ -16,26 +17,28 @@ function newHero(){
   const gsc=1+BAL.GEN_SCALE*Math.min(10,Math.max(0,(META.gen.idx||1)-1));
   const h={
     x:0, y:0, vx:0, vy:0, r:10,
-    maxHp:Math.round(175*(1+0.18*gb)*(1+0.08*(LU.vital||0))*(1+0.03*will)*gsc), hp:0,
-    armor:Math.max(0, 7 + gb - aArmor + Math.floor((LU.guard||0)*0.5)),
+    maxHp:Math.round(175*(1+0.18*gb)*(1+0.08*(LU.vital||0))*(1+0.03*will)*gsc*HD.hpMul), hp:0,
+    armor:Math.max(0, 7 + gb - aArmor + Math.floor((LU.guard||0)*0.5) + HD.armor),
     regen:(0.9+0.15*gb+0.08*(LU.bless||0))*(1-0.3*aRegen),
-    baseSpeed:154*(1-0.06*aSpeed)*(1+0.02*(LU.swift||0)),
+    baseSpeed:154*(1-0.06*aSpeed)*(1+0.02*(LU.swift||0))*HD.spdMul,
     dmgMult:(1+0.06*(LU.zeal||0))*(1+0.02*will)*gsc,
     will, curse:null, curseAmp:0, curseAche:false,     // v1.6 抵抗の意志 / ボス敗北の呪い
     hypnoG:0, hypnoFloor:0, heatG:0, inMusk:false,     // v1.6 催眠ゲージ(呪いの下限) / 発情ゲージ(雲から) / 雄臭の雲の中
+    id, name:HD.name, hi:0, out:false, captive:null, assist:null, thanksT:0, seenT:0, lineT:0, lowSaid:false,   // v3.0 素性 / 離脱(捕獲) / 救援 / 個別の台詞タイマー
     zone:'moss', bathT:0, springCd:0, dest:null, destUntil:0, explore:null, exploreUntil:0,   // v1.6 地形マップ
     poolT:0, readT:0, poolKey:null, readKey:null, goal:null, goalT:0, farmT:0, walkT:0,        // v1.8 清水/石碑/目当て
     tgtKey:null, tgtBest:0, tgtT:0,                                                              // v2.1 諦めの見張り
-    skillCd:{blink:0,purge:0,bulwark:0}, guardT:0, aiMode:'fight', modeUntil:0, escape:null, dpsEst:20, hesitN:{},   // v2.3 奥義 / 戦闘モード / 地形ごとの迷った回数
+    skillCd:(()=>{ const o={}; for(const k in HD.skills) o[k]=0; return o; })(), guardT:0, emberT:0, aiMode:'fight', modeUntil:0, escape:null, dpsEst:20, hesitN:{},   // v2.3 奥義 / 戦闘モード / 地形ごとの迷った回数
     stuckT:0, unstickT:0, path:null, zoneLast:undefined,                                       // v1.7 壁・経路
     level:1, xp:0, xpNeed:need(1),
-    wp:{bolt:2, orb:1, nova:0, whip:0, rain:0, cross:0, sanct:0, blade:0, thunder:0, holy:0, chain:0, spirit:0, shield:0},
+    wp:(()=>{ const o={}; for(const k in UPG) if(UPG[k].kind==='wp') o[k]=0; for(const k in HD.start) o[k]=HD.start[k]; return o; })(),   // v3.0 全武器の枠を持ち、自分の武器だけ育つ
     ps:{speed:0, vital:0, magnet:0, haste:0, ward:0, growth:0, area:0, dup:0, luck:0, endure:0, reach:0, pierce:0, regen:0},
-    evo:{sstar:0, sring:0, sburst:0, srush:0, scomet:0, sjudge:0, gsanct:0, kblade:0, judgment:0, spring:0, hchain:0, twinspirit:0, aegis:0},
+    evo:(()=>{ const o={}; for(const k in EVOS) o[k]=0; return o; })(),
     boltT:0.6, novaT:2.5, orbAng:0, novaAnim:0, novaR:0,
     chainT:1.0, spiritT:1.2, shieldPulse:0, shieldR:0, shieldArc:0, shieldAng:0,   // v2.0 新武器
     whipT:1.1, whipAnim:0, whipDir:1, whipSide:1, whipR:0, rainT:2.2, crossT:1.6,
     sanctT:0, sanctPulse:0, bladeT:1.0, thunderT:2.0, holyT:2.4,
+    fswordT:1.0, fswordSide:1, fringT:0, fringAng:0, fburstT:3.0, fpillarT:2.2, fwingT:4.5, fwingAnim:0, fwingX:0, fwingY:0,   // v3.0 フレイラの武器
     dazeT:0, hypno:null,                 // 催眠電波(v1.1)
     denyT:0, denySrc:null, deepClimax:false, acheCd:2, numbT:0, watchedT:0, gazeCd:6,
     crestLv:0, freezeT:0, frozenAcc:0, suitT:0, suitPulse:0, begT:0, begCd:6, possessCd:0,   // v1.2 状態異常拡張
@@ -46,7 +49,7 @@ function newHero(){
        噛み合わない好みを引いた夜は、シナジー不足でDPSが枯れる */
     taste:(()=>{
       const t={}; for(const k in UPG) t[k]=rand(0.55,1.65);
-      t.bolt=Math.max(t.bolt,1.15);   // 初期武器には最低限の愛着(1戦目のDPS床)
+      for(const k in HD.start) t[k]=Math.max(t[k]||1,1.15);   // 初期武器には最低限の愛着(1戦目のDPS床)
       return t;
     })(),
     ifr:0, face:1, moving:false, anim:rand(10),
@@ -86,8 +89,7 @@ function newHero(){
     bubblePrio:0,
   };
   // 戦闘経験の継承(世代内で強くなる)
-  if(gb>=1) h.wp.bolt=3;
-  if(gb>=2){ h.wp.orb=2; h.wp.nova=1; }
+  { const gw=HD.grow; if(gb>=1) h.wp[gw[0]]=Math.max(h.wp[gw[0]],3); if(gb>=2){ h.wp[gw[1]]=Math.max(h.wp[gw[1]],2); h.wp[gw[2]]=Math.max(h.wp[gw[2]],1); } }
   if(gb>=3){ h.ps.speed=1; h.ps.haste=1; }
   h.hp=h.maxHp;
   h.stamina=h.staminaMax;
@@ -107,7 +109,7 @@ function newHero(){
    降りた日・捕まった日の終わりに Lv/経験値/武器/パッシブ/進化/今夜の好み を META.run.hero に写す。二連敗か魔核討伐(runReset)で消える。
    夜側もこれに連動する: 夜の深まり(彼女のLv連動の魔物強化・頭数)と EN上限(Lv連動)が階層を経るごとに積み上がる */
 function applyRunHero(h){
-  const R=META.run&&META.run.hero; if(!R||!R.level) return;
+  const R=META.run&&((META.run.heroes&&META.run.heroes[h.id])||(h.id==='lumina'?META.run.hero:null)); if(!R||!R.level) return;   // v3.0 ヒロインごと
   for(const k in h.wp) h.wp[k]=0; for(const k in h.ps) h.ps[k]=0;
   h.level=R.level; h.xp=R.xp||0; h.xpNeed=need(h.level);
   if(R.taste) Object.assign(h.taste,R.taste);
@@ -115,12 +117,13 @@ function applyRunHero(h){
   for(const k in R.ps){ if(h.ps[k]!==undefined) for(let i=0;i<(R.ps[k]|0);i++) applyUpgStat(h,k); }
   for(const k in R.evo){ if(h.evo[k]!==undefined && R.evo[k]) h.evo[k]=1; }
   for(let i=0;i<Math.min(BAL.PRAY_MAX,R.pray|0);i++) applyPrayStat(h);   // 祈りの積み上げも残る
-  if(!Object.values(h.wp).some(v=>v>0)) h.wp.bolt=1;   // 念のため: 武器ゼロにはしない
+  if(!Object.values(h.wp).some(v=>v>0)) h.wp[(HEROES[h.id]||HEROES.lumina).grow[0]]=1;   // 念のため: 武器ゼロにはしない
   h.hp=h.maxHp; h.stamina=h.staminaMax;
 }
 function snapRunHero(p){
   if(!META.run) return;
-  META.run.hero={ level:p.level, xp:p.xp, pray:p.pray||0, wp:Object.assign({},p.wp), ps:Object.assign({},p.ps), evo:Object.assign({},p.evo), taste:Object.assign({},p.taste) };
+  const snap={ level:p.level, xp:p.xp, pray:p.pray||0, wp:Object.assign({},p.wp), ps:Object.assign({},p.ps), evo:Object.assign({},p.evo), taste:Object.assign({},p.taste) };
+  META.run.heroes=META.run.heroes||{}; META.run.heroes[p.id]=snap; if(p.id==='lumina') META.run.hero=snap;   // v3.0 ヒロインごとに写す(hero は互換用)
 }
 /* 強化の数値だけを積む(演出なし。applyUpg と引き継ぎの復元で共用) */
 function applyUpgStat(p,k){
@@ -181,7 +184,7 @@ function heroStat(h){
   if(h.suitT>0) spd*=0.85;        // 触手服
   return { speed:spd, magnet:90+45*h.ps.magnet };
 }
-const curLv=k=>UPG[k].kind==='wp' ? G.B.hero.wp[k] : G.B.hero.ps[k];
+const curLv=k=>UPG[k].kind==='wp' ? heroOf(k).wp[k] : G.B.heroes[0].ps[k];   // v3.0 武器は持ち主のヒロイン、パッシブは共通
 const areaMult=h=>1+0.10*(h.ps.area||0);      // ひろがるろうそく
 const dupN=h=>(h.ps.dup||0);                   // ふたごの鏡(投射+1)
 
@@ -202,10 +205,13 @@ function buildDeck(mode){
 function applyDeckMode(){ const mode=(META.settings&&META.settings.deckMode)||'manual'; if(mode==='manual') return null; META.deck=buildDeck(mode); saveMeta(); return mode; }
 /* ================= 戦闘開始/終了 ================= */
 function startBattle(){
-  const hero=newHero();
+  const heroes=PARTY_ORDER.filter(id=>HEROES[id]).map((id,i)=>{ const h=newHero(id); h.hi=i; return h; }); const hero=heroes[0];
+  { const top=heroes.reduce((a,h)=>h.level>a.level?h:a,heroes[0]); for(const h of heroes){ if(h!==top){ h.level=top.level; h.xp=top.xp; h.xpNeed=top.xpNeed; } } }   // v3.0 Lv はパーティ共通(片方だけ引き継ぎが残っていても揃える)
   G.B={
     time:0, over:false,
-    hero, enemies:[], bullets:[], gems:[], hearts:[], trails:[], clouds:[], props:[], chests:[],
+    heroes, ci:0, get hero(){ return this.heroes[this.ci]; },   // v3.0 パーティ。B.hero は「いま処理しているヒロイン」(文脈 B.ci)
+    party:{goal:null, turn:1, talkUntil:0, leader:0, lastLoser:-1, decidedT:-99}, captures:[],
+    enemies:[], bullets:[], gems:[], hearts:[], trails:[], clouds:[], props:[], chests:[],
     en:BAL.EN_START*curFloor().en.start, spawnFx:[],
     floor:curFloor(), seals:{}, exitLocked:false, exitT:0, cleared:false, descending:false,   // v2.0 階層
     hand:META.deck.map(id=>({id, cdT:0, cdMax:1})),
@@ -231,6 +237,7 @@ function startBattle(){
   };
   genMap();               // 地形(世代×階層で変わる)
   initSeen();             // v2.4 見た範囲の記憶(同じ階層への再挑戦は覚えている)
+  for(let i=1;i<heroes.length;i++){ const q=snapFloor(44*i,8*i,false,4)||{x:44*i,y:8*i}; heroes[i].x=q.x; heroes[i].y=q.y; }   // v3.0 二人目以降は横に並ぶ
   { const F=G.B.floor; G.B.exitLocked=(F.puzzle==='seals');
     if(F.final){ const q=G.map.pois.find(o=>o.kind==='core'); if(q){ spawnUnit('core',q.x,q.y,{}); } }   // v2.0 最終階層: 魔核が待つ
     else spawnSentinels(); }   // v2.1 降り口は石の番兵が守る
@@ -246,19 +253,27 @@ function startBattle(){
   G.cam.x=0; G.cam.y=0;
   { const F=G.B.floor; setBanner('第'+F.depth+'層 '+F.name+(META.run.fails>0?'(再挑戦)':'')+(hero.level>1?' — Lv'+hero.level+'を引き継ぎ':''), F.sub, F.col); }
   heroBubble(hero,'今日も、まもりぬくよ!',true);
+  if(heroes[1]) heroBubble(heroes[1],'……行く。付いてきなさい',true);
+  if(META.run.leftBehind && typeof STORY_V30!=='undefined' && STORY_V30.party && STORY_V30.party.reunion){ META.run.leftBehind=false; const L0=STORY_V30.party.reunion; setTimeout(()=>{ if(G.B===G.B) UI.showStory(L0,{dur:5}); },50); }   // v3.0 置いていかれた子が戻った朝
   UI.enterBattle();
   bgmStart('battle');
   // v2.0 物語: 初めての出撃は序章、階層に降り立った導入(潜行ごとに1度)、敗北の翌朝は再挑戦の文
   { const F=G.B.floor, sf=storyFloor(F.depth); let lines=null;
-    if(!META.run.storySeen.prologue && STORY.prologue.length){ lines=STORY.prologue.concat(sf.intro.length?['']:[]).concat(sf.intro); META.run.storySeen.prologue=1; META.run.storySeen['f'+F.depth]=1; saveMeta(); }
+    const V30=(typeof STORY_V30!=='undefined')?STORY_V30:null, PRO=(V30&&V30.prologue&&V30.prologue.length&&G.B.heroes.length>1)?V30.prologue:STORY.prologue;   // v3.0 二人の序章
+    const fIntro=(!META.run.storySeen['f'+F.depth]&&sf.intro.length)?['' ].concat(sf.intro):[];
+    if(!META.run.storySeen.prologue && PRO.length){ lines=PRO.concat(fIntro); META.run.storySeen.prologue=1; META.run.storySeen.join=1; META.run.storySeen['f'+F.depth]=1; saveMeta(); }
+    else if(!META.run.storySeen.join && G.B.heroes.length>1 && V30 && V30.party && V30.party.join && V30.party.join.length){ lines=V30.party.join.concat(fIntro); META.run.storySeen.join=1; META.run.storySeen['f'+F.depth]=1; saveMeta(); }   // 旧セーブ: フレイラの合流
+    else if((META.era|0)>0 && !META.run.storySeen['loop'+META.era] && V30 && V30.era && V30.era.loopIntro && V30.era.loopIntro.length){ lines=V30.era.loopIntro.concat(fIntro); META.run.storySeen['loop'+META.era]=1; META.run.storySeen['f'+F.depth]=1; saveMeta(); }   // v3.0 組み替わった後の朝
     else if(META.run.fails>0 && STORY.retry.length){ lines=storyRetry(); }
     else if(sf.intro.length && !META.run.storySeen['f'+F.depth]){ lines=sf.intro; META.run.storySeen['f'+F.depth]=1; saveMeta(); }
     if(lines&&lines.length) UI.showStory(lines,{dur:8+lines.length*1.3});
     G.B.storyLineT=22+rand(10); }
 }
-function enMax(){ const F=(G.B&&G.B.floor)||curFloor(); return Math.round(Math.min(BAL.EN_MAX*F.en.max, BAL.EN_BASE*F.en.base + 6*altarLv('encap') + BAL.EN_PER_LV*(G.B?G.B.hero.level:1))*(1+BAL.PRESS_EN_MAX*pressure())); }   // v2.0 深いほど多い / v2.1 長居するほど多い
+function enMax(){ const F=(G.B&&G.B.floor)||curFloor(); return Math.round(Math.min(BAL.EN_MAX*F.en.max*eraMul(), BAL.EN_BASE*F.en.base + 6*altarLv('encap') + BAL.EN_PER_LV*(G.B?G.B.hero.level:1))*(1+BAL.PRESS_EN_MAX*pressure())); }   // v3.0 世代で天井が上がる   // v2.0 深いほど多い / v2.1 長居するほど多い
 /* v2.1 深淵の圧: 同じ階層に長く居るほど夜側が強くなる(EN上限・EN回復・召喚頭数・場の上限)。階層を跨ぐと時間は戻る */
-function pressure(){ const B=G.B; if(!B) return 0; return Math.min(BAL.PRESS_MAX, Math.max(0,B.time-BAL.PRESS_T0)/BAL.PRESS_T1); }
+const pressMax=()=>Math.min(BAL.PRESS_MAX+0.6, 1.2+0.2*eraNow());   // v3.0 圧の上限は世代で上がる(1.2→2.6)
+const coreDef=()=>Math.max(BAL.CORE_DEF, 0.7-BAL.CORE_ERA_DEF_K*eraNow());
+function pressure(){ const B=G.B; if(!B) return 0; return Math.min(pressMax(), Math.max(0,B.time-BAL.PRESS_T0)/BAL.PRESS_T1); }
 function fieldCap(){ return Math.round(BAL.FIELD_CAP*(1+BAL.PRESS_CAP*pressure())); }
 
 function endBattle(outcome){
@@ -309,7 +324,7 @@ function endBattle(outcome){
   }
   META.gen.battle++;   // 潜行の日数
   META.run.day=(META.run.day||1)+1;
-  snapRunHero(B.hero);   // v2.1 引き継ぎ(下のリセットで消えることがある)
+  for(const h of B.heroes) snapRunHero(h);   // v2.1 引き継ぎ(下のリセットで消えることがある) / v3.0 全員
   // v2.0 潜行の進み: 捕まれば同じ階層に再挑戦、二連敗で入口へ(世代が変わる)。降りれば次の階層。魔核を討てば目的達成→組み替わる
   let rotReset=false, decay=null, runNote='';
   const floorBefore=META.run.floor||1;
@@ -318,9 +333,10 @@ function endBattle(outcome){
     if(META.run.fails>=BAL.RUN_FAILS_RESET){ runReset(); rotReset=true; decay=luminaDecay(); runNote='reset'; }
     else runNote='retry';
   }else if(outcome==='descend'){
-    META.run.fails=0; META.run.floor=Math.min(FLOORS.length,floorBefore+1); META.run.deepest=Math.max(META.run.deepest||1,META.run.floor); runNote='descend';
+    META.run.fails=0; META.run.floor=Math.min(openFloors(),floorBefore+1); META.run.deepest=Math.max(META.run.deepest||1,META.run.floor); runNote='descend';
+    if(B.heroes.some(h=>h.out)) META.run.leftBehind=true;   // v3.0 一人を置いて降りた
   }else if(outcome==='clear'){
-    META.run.clears=(META.run.clears||0)+1; runReset(); rotReset=true; decay=luminaDecay(); runNote='clear';
+    META.run.clears=(META.run.clears||0)+1; META.era=(META.era|0)+1; runReset(); rotReset=true; decay=luminaDecay(); runNote='clear';   // v3.0 深淵が組み替わる(世代+1: 階層が増え、魔核が太る)
   }
   saveMeta();
   bgmStop();
@@ -331,14 +347,16 @@ function endBattle(outcome){
     coins:coinGain, shop:shopped, decay,
     will:META.lumina.will||0, willUp:outcome==='capture', shrines:B.shrineGot, gateT:B.gateT, used:B.used, eventsN:B.eventsN, eventsDone:B.eventsDone,
     floor:B.floor, floorBefore, runNote, fails:META.run.fails, nextFloor:META.run.floor, seals:Object.keys(B.seals).length,
-    storyLines: outcome==='clear'?STORY.ending:(runNote==='reset'?STORY.reset:null), newCurse:newCurse?BOSS_CURSES[newCurse.id]:null,
+    storyLines: outcome==='clear'?((typeof STORY_V30!=='undefined'&&STORY_V30.era&&STORY_V30.era.coreDown&&STORY_V30.era.coreDown.length)?STORY_V30.era.coreDown[Math.min(STORY_V30.era.coreDown.length-1,Math.max(0,(META.era|0)-1))].concat(STORY.ending):STORY.ending)
+      :(runNote==='reset'?STORY.reset:(outcome==='capture'&&B.captures&&B.captures.length>1&&typeof STORY_V30!=='undefined'&&STORY_V30.party&&STORY_V30.party.bothCaptured?STORY_V30.party.bothCaptured:(outcome==='descend'&&B.heroes.some(h=>h.out)&&typeof STORY_V30!=='undefined'&&STORY_V30.party&&STORY_V30.party.leftBehind?STORY_V30.party.leftBehind:null))), newCurse:newCurse?BOSS_CURSES[newCurse.id]:null,
+    captures:B.captures, leftBehind:B.heroes.filter(h=>h.out).map(h=>h.name),
     carryLv:(META.run.hero&&META.run.hero.level)||0,
     curseGone:(oldCurse&&!META.curse&&!newCurse)?BOSS_CURSES[oldCurse.id]:null});
 }
 
 /* v2.0 潜行のリセット: 入口へ戻り、世代が変わる(経験・知識を失う。手記と永続強化は残る) */
 function runReset(){
-  META.run.floor=1; META.run.fails=0; META.run.day=1; META.run.hero=null; META.run.seen={}; META.run.bossSeen=false;   // v2.1 引き継ぎも消える / v2.4 見た範囲とボスの記憶も
+  META.run.floor=1; META.run.fails=0; META.run.day=1; META.run.hero=null; META.run.heroes={}; META.run.seen={}; META.run.bossSeen=false;   // v2.1 引き継ぎも消える / v2.4 見た範囲とボスの記憶も
   META.gen.battle=0; META.gen.idx++;
   META.rot={dmg:0, ail:0, captures:0, battles:0};
   META.gen.know={}; META.gen.zoneKnow={}; META.gen.trapKnow={};   // 世代が変わると、覚えたことも忘れる(手記に書いた分だけ残る)
@@ -379,10 +397,12 @@ function codexMet(id){
    エロ状態が乗っている間は平常の台詞(prio<=1)は出さない(台詞の主導権はエロ側) */
 function sayLine(path,prio,cd,fallback){
   const B=G.B; if(!B) return false; const p=B.hero; prio=prio||0; cd=(cd===undefined)?6:cd;
-  B.lineCd=B.lineCd||{}; const last=B.lineCd[path]; if(last!==undefined && B.time-last<cd) return false;
-  const txt=lineOf(path)||fallback; if(!txt) return false;
+  B.lineCd=B.lineCd||{}; const ck=p.id+':'+path; const last=B.lineCd[ck]; if(last!==undefined && B.time-last<cd) return false;
+  // v3.0 話者の声の表: フレイラは LINES_F(無いキーは fallback)。ルミナは LINES
+  const T=(p.id==='freila'&&typeof LINES_F!=='undefined')?LINES_F:null;
+  const txt=(T?lineOf(path,T):lineOf(path))||fallback; if(!txt) return false;
   if(prio<=1){ const ero=p.heatLv>0||p.aphro>=45||restraintCount(p)>0||p.climaxT>0||p.pinned||!!p.charmBind||p.charms.some(c=>c.lv>0); if(ero) return false; }
-  B.lineCd[path]=B.time; heroBubble(p,txt,prio>=2,prio); return true;
+  B.lineCd[ck]=B.time; heroBubble(p,txt,prio>=2,prio); return true;
 }
 /* v2.1 諦め: 目標(品・箱・ハート・ジェム・場所・資源。目当ての ref か、その物自体)を GIVEUP_CD 秒のあいだ候補から外す */
 const giveUpKey=t=>(t&&typeof t==='object')?(t.ref||t):t;
@@ -573,7 +593,7 @@ function enterClimax(){
   heroBubble(h,'や、だめ、いま……きちゃ……あ、ぁあああっ——!',true,3);
   if(B.climaxN===1) setBanner('絶頂','ルミナは立っていられない','#ff5d9e');
   if(!h.pinned && !h.charmBind){
-    B.pinScene=sceneFor('climax','default');
+    B.pinScene=sceneForHero(B.hero,'climax','default'); B.pinSceneHi=B.ci;
     B.pinSceneIdx=0; B.pinSceneT=0;
   }
   parts(h.x,h.y-18,20,['#ff9ec2','#ff5d9e','#fff'],150,0.8);
@@ -657,7 +677,7 @@ function attachMonster(mon, kind, opt){
   const needBase=(kind==='tether'?BAL.RIP_NEED_TETHER:BAL.RIP_NEED_CLING)*(opt.needMul||1);
   const need=needBase/(1+0.12*(h.resist.bound||0));
   h.limbs[slot]={mon, kind, need, r:opt.r||0, t:B.time};
-  mon.state='attached'; mon.limb=slot; mon.stun=0;
+  mon.state='attached'; mon.ti=G.B.ci; mon.limb=slot; mon.stun=0;
   codexMet(mon.id);
   h.resist.bound=(h.resist.bound||0)+1;
   heroBubble(h, pickRand(['からみついてる…っ!','はなれてっ…!','やだ、脚に…っ!']), true, 2);
@@ -716,7 +736,7 @@ function attachSucker(mon){
   if(!free.length) return false;
   const slot=free[(Math.random()*free.length)|0];
   h.suckers[slot]={mon, t:B.time, need:BAL.RIP_NEED_SUCK/(1+0.1*(h.resist.bound||0))};
-  mon.state='attached'; mon.suck=slot; mon.stun=0;
+  mon.state='attached'; mon.ti=G.B.ci; mon.suck=slot; mon.stun=0;
   codexMet(mon.id);
   heroBubble(h, pickRand(['ひゃんっ!? す、吸わないでっ…!','やっ、そんなとこ…っ!','はねおと…どこ——ひゃうっ!?']), true, 2);
   S.bind();
@@ -811,10 +831,10 @@ function enterPin(mon){
   let sid=mon?mon.id:'default';
   { const lh=h.lastHypno;   // 催眠Ⅱ以上で押し倒された時は、催眠の源(ゲイザー)の場面——抵抗しなかった理由はそこにある
     if(h.hypnoLv>=2 && lh && B.time-lh.t<25 && SCENES.pin[lh.id] && !(mon&&mon.boss)) sid=lh.id; }
-  B.pinScene=sceneFor('pin', sid);
+  B.pinScene=sceneForHero(h,'pin', sid); B.pinSceneHi=B.ci;   // v3.0 押し倒された子の声で
   B.pinSceneIdx=0; B.pinSceneT=0;
-  setBanner('押し倒された!','もがいて逃れろ——スタミナかHPが尽きれば敗北','#ff5d7a');
-  heroBubble(h,'はなれて……っ!',true,2);
+  setBanner(h.name+'が押し倒された!','もがいて逃れろ——スタミナかHPが尽きれば敗北','#ff5d7a');
+  heroBubble(h,h.id==='freila'?'……っ、どけ!':'はなれて……っ!',true,2);
   S.capture();
   G.shake=Math.min(9,G.shake+5);
   awardAil('pinned');
@@ -842,7 +862,7 @@ function pinTick(dt){
       for(const sl of attachedSlots(h)) detachLimb(sl,{fling:true});
       h.ifr=1.2;
       heroBubble(h,'まだ……まけないっ!',true,2);
-      setBanner('振りほどいた!','ルミナは立ち上がった','#8fd3ff');
+      setBanner('振りほどいた!',h.name+'は立ち上がった','#8fd3ff');
       B.pinScene=null;
     }
   }
@@ -857,7 +877,7 @@ function enterCharmBind(mon){
   h.charmDrift=null;
   h.vx=0; h.vy=0;
   mon.stun=0;
-  B.pinScene=sceneFor('charmbind', mon.id);
+  B.pinScene=sceneForHero(B.hero,'charmbind', mon.id); B.pinSceneHi=B.ci;
   B.pinSceneIdx=0; B.pinSceneT=0;
   setBanner('魅了拘束!','ルミナは自分から縋りついた——正気に戻れば振りほどける','#ff86b3');
   heroBubble(h,'あったかい……ちがう、これ、ちがうのに……',true,3);
@@ -1328,14 +1348,14 @@ function aiUpdate(dt){
     charmwalk:'ふらふらと、ちかづいていく…', heatwalk:'熱にまけて、よろめき寄る…',
     hypno:'……電波に、あしが……', item:'おちてる品へ!', beg:'……おねだり、なんて……してない……',
     g_event:'光の柱へ!', g_chest:'たからばこへ!', g_boss:'おうさまの箱へ!', g_item:'おちてる品へ!', g_shrine:'祠へ', g_spring:'泉で休みに', g_pool:'清水であらいに',
-    g_stele:'石碑をよみに', g_stairs:'降り口へ', g_seal:'封印石を灯しに', g_core:'魔核へ——', g_shroom:'光茸をとりに', g_nectar:'蜜の花へ', g_treasure:'沈んだ宝へ', g_explore:'たんさく中', g_gems:'ジェムをあつめる', hesitate:'まよっている……', think:'かんがえ中……', abort:'にげだす!', retreat:'逃げに徹する!', kite2:'引き撃ち'};
+    g_stele:'石碑をよみに', g_stairs:'降り口へ', g_seal:'封印石を灯しに', g_core:'魔核へ——', g_shroom:'光茸をとりに', g_nectar:'蜜の花へ', g_treasure:'沈んだ宝へ', g_explore:'たんさく中', g_gems:'ジェムをあつめる', hesitate:'まよっている……', think:'かんがえ中……', abort:'にげだす!', retreat:'逃げに徹する!', kite2:'引き撃ち', talk:'相談中……', assist:'仲間を助ける!', rescue:'救出する!', g_rescue:'仲間を救いに'};
   const BBL={flee:'にげなきゃ〜!', boss:'おっきいのこわい!!', dodge:'あれは…だめ、よけなきゃ!', gem:'キラキラかいしゅう♪', poi:'あそこまで、いってみる', explore:'こっちは、まだ見てない',
     heart:'ハートみっけ!', prop:'燭台こわして回復しなきゃ', chest:'たからばこだ〜!',
     kite:'このきょりキープ…', wait:'つぎはどこから…?', struggle:'はなれてよ〜っ!',
     charmwalk:'…なんで、あしが…', heatwalk:'…あつくて、なにも…',
     hypno:'……あっち、いかなきゃ……', item:'なにか、おちてる!', beg:'……ちがう……',
     g_event:'あのひかり、いってみる', g_chest:'たからばこだ〜!', g_boss:'おうさまの、たからばこ……!', g_item:'なにか、おちてる!', g_shrine:'ほこら、いこう', g_spring:'ちょっと、やすみたい……',
-    g_pool:'あらいたい……べたべた', g_stele:'なにか、かいてある', g_stairs:'……おりる。つぎへ', g_seal:'あれ、ともさなきゃ', g_core:'……あれが、しんぞう', g_shroom:'あのひかり、とろう', g_nectar:'はな……あまいにおい', g_treasure:'みずのなかに、なにか……', g_explore:'こっちは、まだ見てない', g_gems:'キラキラ、ぜんぶひろう♪', hesitate:'……どうしよ', think:'……うーん', abort:'やっぱ、むり!', retreat:'ぜんぶ、にげるっ!', kite2:'さがりながら、うつ!'};
+    g_pool:'あらいたい……べたべた', g_stele:'なにか、かいてある', g_stairs:'……おりる。つぎへ', g_seal:'あれ、ともさなきゃ', g_core:'……あれが、しんぞう', g_shroom:'あのひかり、とろう', g_nectar:'はな……あまいにおい', g_treasure:'みずのなかに、なにか……', g_explore:'こっちは、まだ見てない', g_gems:'キラキラ、ぜんぶひろう♪', hesitate:'……どうしよ', think:'……うーん', abort:'やっぱ、むり!', retreat:'ぜんぶ、にげるっ!', kite2:'さがりながら、うつ!', talk:'どっち、いく?', assist:'いま、たすける!', rescue:'まって、いくから!', g_rescue:'いま、いく!'};
   if(p.dodging>0){ p.dodging-=dt; }
   p.aiLabel=LBL[state]||LBL.wait;
   if(state!==p.aiState){
@@ -1471,6 +1491,8 @@ function aiDecide(foc){
     const want=(ttk>BAL.FLEE_TTK*lvK||nNear>=BAL.FLEE_N)?'flee':((ttk>BAL.KITE_TTK*lvK||nNear>=BAL.KITE_N)?'kite':'fight');
     if(want!==p.aiMode){ p.aiMode=want; p.modeUntil=B.time+BAL.MODE_HOLD; p.escape=null; if(want==='flee') sayLine('retreat',1,8,'むり、にげる!'); else if(want==='kite') sayLine('kite',0,12); }
   }
+  // v3.0 仲間のカバー: 掴まれている/押し倒されている相手へ寄り、その魔物を優先して撃つ(自分が自由な時)
+  { const o=partnerOf(p); const need=!!(o && (attachCount(o)>0 || o.pinned || o.charmBind) && attachCount(p)===0 && !p.pinned && !p.charmBind); if(need && !p.assist) sayPartyAs(B.ci, o.pinned?'assist.pin':'assist.grab',2,8); p.assist=need?o:null; }
   let dx=0, dy=0, state='wait';
   // v2.1 降りる気になったら: 知っている降り口(開いていて、番兵が居ない)へ向かう力が、逃げ・牽制に混ざる。そばまで来たら踏みとどまって降りる
   const exitQ=(B.wantExit&&G.map&&!B.exitLocked)?G.map.pois.find(q=>q.kind==='stairs'&&META.map.known[q.key]):null;
@@ -1543,6 +1565,8 @@ function aiDecide(foc){
       if(p.hp<p.maxHp*0.7){ for(const h2 of B.hearts){ if(G.map && (!passAt(h2.x,h2.y,false) || !reachableAt(h2.x,h2.y,false))) continue; if(gaveUp(h2)) continue; const hx=h2.x-p.x, hy=h2.y-p.y, d=Math.hypot(hx,hy)||1; if(d<260 && (hx*ux+hy*uy)/d>-0.2 && d<pd){ pd=d; pick=h2; pk='heart'; } } }
       if(!pick){ const mag=heroStat(p).magnet; for(const gm of B.gems){ const gx=gm.x-p.x, gy=gm.y-p.y, d=Math.hypot(gx,gy)||1; if(d<mag*0.9 || d>BAL.KITE_GEM_R) continue; if((gx*ux+gy*uy)/d<-0.25) continue; if(G.map && !passAt(gm.x,gm.y,false)) continue; if(d<pd){ pd=d; pick=gm; pk='gem'; } } }
       if(pick){ const sv=steerTo(p,pick.x,pick.y), wgt=pk==='heart'?0.75:0.65; dx=sv.x*wgt+ux*(1-wgt); dy=sv.y*wgt+uy*(1-wgt); if(pk==='heart') state='heart'; } }
+  }else if(p.assist && Math.hypot(p.assist.x-p.x,p.assist.y-p.y)>BAL.ASSIST_R && threat<1.4){
+    const sv=steerTo(p,p.assist.x,p.assist.y); dx=sv.x+ax*0.6; dy=sv.y+ay*0.6; state='assist';   // v3.0 仲間のそばへ
   }else if(threat>0.9){
     const m=Math.hypot(ax,ay)||1;
     dx=ax/m - (ay/m)*0.35*p.strafeDir;
@@ -1754,6 +1778,11 @@ function aiDecide(foc){
       state='heatwalk';
     }
   }
+  // v3.0 パーティ: 相手から離れすぎない(PARTY_LEASH を超えるほど強く寄る)。重なりすぎたら少し離れる。相談の間は足を止める
+  { const o=partnerOf(p); if(o){ const ddx=o.x-p.x, ddy=o.y-p.y, dd=Math.hypot(ddx,ddy)||1;
+      if(dd>BAL.PARTY_LEASH){ const w=Math.min(1.4,(dd-BAL.PARTY_LEASH)/200); dx+=ddx/dd*w; dy+=ddy/dd*w; }
+      else if(dd<BAL.PARTY_SEP && attachCount(p)===0){ dx-=ddx/dd*0.45; dy-=ddy/dd*0.45; } } }
+  if(B.party && B.time<B.party.talkUntil && attachCount(p)===0 && threat<0.6){ dx*=0.05; dy*=0.05; state='talk'; }
   p.steerX=dx; p.steerY=dy; p.steerState=state;
 }
 
@@ -1776,9 +1805,10 @@ function nearestEnemies(n,maxD){
   const B=G.B, p=B.hero;
   const arr=[];
   for(const e of B.enemies){
-    if(e.dead||e.dormant||e.state==='attached') continue;
+    const grabber=!!(p.assist && ((e.state==='attached' && e.ti===p.assist.hi) || p.assist.pinBy===e));   // v3.0 仲間を掴んでいる魔物
+    if(e.dead||e.dormant||(e.state==='attached'&&!grabber)) continue;
     if(!inSight(e,p)) continue;                       // 見えていない敵は撃てない
-    const d=Math.hypot(e.x-p.x,e.y-p.y);
+    let d=Math.hypot(e.x-p.x,e.y-p.y); if(grabber) d*=0.25;
     // 魅了された相手は狙いが後回し(距離に下駄)。理解した脅威は優先討伐(距離を差し引く)
     const prio=knowLv(e.id)>=2?(SPEC_THREAT[e.id]||0)*90:0;
     arr.push({e, d:d+charmLvFor(p,e)*140-prio});
@@ -1796,6 +1826,7 @@ function weaponsUpdate(dt){
     *(p.numbT>0?0.5:1)                                                      // 痺れ: 指が動かない
     *(1+0.08*p.ps.haste);                                                   // クイックリボン
   if(atkMult<=0) return;
+  if(p.id==='freila') freilaWeapons(p,dt,atkMult);   // v3.0 火の武器
   if(p.wp.bolt>0){
     p.boltT-=dt*atkMult;
     if(p.boltT<=0){
@@ -2074,6 +2105,71 @@ function weaponsUpdate(dt){
     }
   }
 }
+/* ================= v3.0 フレイラの武器(火・近接) =================
+   炎の剣=前方の弧(進化 煉獄の剣=全方位+燃焼) / 火の輪=周回する火の帯(進化 太陽環=大きく、触れた魔物が止まる) /
+   爆炎=自分中心の爆発と押し返し(進化 大噴火) / 火柱=近い魔物の足元に炎の領域 / 焔の翼=近くの群れへの短い突進 */
+function nearEnemiesR(p,n,r){ const B=G.B, arr=[]; for(const e of B.enemies){ if(e.dead||e.dormant||e.state==='attached'||e.item) continue; const d=Math.hypot(e.x-p.x,e.y-p.y); if(d<r) arr.push({e,d}); } arr.sort((a,b)=>a.d-b.d); return arr.slice(0,n).map(o=>o.e); }
+function freilaWeapons(p,dt,atkMult){
+  const B=G.B;
+  if(p.wp.fsword>0){
+    p.fswordT-=dt*atkMult;
+    if(p.fswordT<=0){
+      const evo=p.evo.inferno>0, lvR=p.wp.fsword, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      p.fswordT=(evo?0.6:0.85)*Math.pow(0.91,lv-1)*ov.cd;
+      p.fswordSide*=-1;
+      const range=(evo?150:90+10*lv)*areaMult(p)*ov.area, half=(evo?150:50+5*lv)*areaMult(p)*ov.area, dmg=(evo?26:12+5*(lv-1))*ov.dmg;
+      p.whipAnim=0.16; p.whipDir=evo?0:(p.fswordSide>0?p.face:-p.face); p.whipR=range; p.whipFire=true;
+      let hit=false;
+      for(const e of B.enemies){ if(e.dead||e.dormant) continue; const ex=e.x-p.x, ey=e.y-(p.y-10); const inArc=evo?Math.hypot(ex,ey)<range+e.r:(ex*p.whipDir>0 && Math.abs(ex)<range+e.r && Math.abs(ey)<half+e.r); if(inArc){ damageEnemy(e,dmg); hit=true; if(evo) e.burnT=Math.max(e.burnT||0,2.5); } }
+      for(const pr of B.props){ const ex=pr.x-p.x, ey=pr.y-(p.y-10); const inArc=evo?Math.hypot(ex,ey)<range:(ex*p.whipDir>0&&Math.abs(ex)<range&&Math.abs(ey)<half); if(inArc) damageProp(pr,dmg); }
+      if(hit){ sfx(200,90,0.1,'sawtooth',0.05); parts(p.x+(p.whipDir||1)*range*0.5,p.y-10,6,['#ff7a3a','#ffd76a'],120,0.4); if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN); }
+    }
+  }
+  if(p.wp.fring>0){
+    const evo=p.evo.corona>0, lvR=p.wp.fring, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+    p.fringAng+=dt*(evo?2.6:2.2);
+    const R=(evo?96:52+7*lv)*areaMult(p)*ov.area, band=(evo?22:14)+2*lv, dmg=(evo?9:4+1.5*(lv-1))*ov.dmg;
+    p.fringR=R; p.fringT-=dt*atkMult;
+    if(p.fringT<=0){ p.fringT=0.3*ov.cd; for(const e of B.enemies){ if(e.dead||e.dormant) continue; const d=Math.hypot(e.x-p.x,e.y-(p.y-10)); if(Math.abs(d-R)<band+e.r*0.5){ damageEnemy(e,dmg); if(evo) e.stun=Math.max(e.stun||0,0.35); } } }
+  } else p.fringR=0;
+  if(p.wp.fburst>0){
+    p.fburstT-=dt*atkMult;
+    if(p.fburstT<=0){
+      const evo=p.evo.eruption>0, lvR=p.wp.fburst, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      p.fburstT=((evo?3.4:3.8)-0.3*(lv-1))*ov.cd;
+      const R=(evo?170:90+16*(lv-1))*areaMult(p)*ov.area, dmg=(evo?36:14+6*(lv-1))*ov.dmg;
+      p.novaAnim=0.5; p.novaR=R; p.novaFire=true; G.shake=Math.min(7,G.shake+3); sfx(160,40,0.25,'sawtooth',0.08);
+      for(const e of B.enemies){ if(e.dead||e.dormant) continue; const dx=e.x-p.x, dy=e.y-p.y, d=Math.hypot(dx,dy); if(d<R+e.r){ damageEnemy(e,dmg); if(d>0.01 && !e.boss && e.state!=='attached' && MONSTERS[e.id].spd>0){ e.x+=dx/d*(evo?46:34); e.y+=dy/d*(evo?46:34); e.stun=Math.max(e.stun,evo?0.7:0.4); } } }
+      for(const pr of B.props){ if(Math.hypot(pr.x-p.x,pr.y-p.y)<R+12) damageProp(pr,dmg); }
+      parts(p.x,p.y-10,evo?30:16,['#ff7a3a','#ffd76a','#fff'],evo?220:150,0.5);
+      if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN);
+    }
+  }
+  if(p.wp.fpillar>0){
+    p.fpillarT-=dt*atkMult;
+    if(p.fpillarT<=0){
+      const lvR=p.wp.fpillar, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      p.fpillarT=(2.6-0.2*(lv-1))*ov.cd;
+      const n=1+(p.ps.dup||0)+(lv>=4?1:0), ts=nearEnemiesR(p,n,(170+12*lv)*(1+0.12*(p.ps.reach||0)));
+      for(const e of ts){ if(B.zones.length>24) B.zones.shift(); B.zones.push({x:e.x, y:e.y, r:(30+4*lv)*areaMult(p)*ov.area, t:0, life:2.2, dmg:(6+2.5*(lv-1))*ov.dmg, tick:0, fire:true}); parts(e.x,e.y-10,10,['#ff7a3a','#ffd76a','#fff'],140,0.5); }
+      if(ts.length) sfx(300,120,0.2,'square',0.04);
+    }
+  }
+  if(p.wp.fwing>0){
+    p.fwingT-=dt*atkMult;
+    if(p.fwingT<=0 && attachCount(p)===0 && !p.pinned){
+      const lvR=p.wp.fwing, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      const ts=nearEnemiesR(p,1,150+15*lv);
+      if(ts.length){ p.fwingT=(4.5-0.35*(lv-1))*ov.cd; const e0=ts[0]; const dxv=e0.x-p.x, dyv=e0.y-p.y, L=Math.hypot(dxv,dyv)||1; const len=Math.min(L+40,120+10*lv); const q=snapFloor(clampMapX(p.x+dxv/L*len,30),clampMapY(p.y+dyv/L*len,30),false,3);
+        if(q && reachableAt(q.x,q.y,false)){ const x0=p.x, y0=p.y, vx=q.x-x0, vy=q.y-y0, LL=Math.hypot(vx,vy)||1, dmg=(10+4*(lv-1))*ov.dmg;
+          for(const e of B.enemies){ if(e.dead||e.dormant) continue; const t=Math.max(0,Math.min(1,((e.x-x0)*vx+(e.y-y0)*vy)/(LL*LL))); const px=x0+vx*t, py=y0+vy*t; if(Math.hypot(e.x-px,e.y-py)<(30+3*lv)*areaMult(p)+e.r*0.5){ damageEnemy(e,dmg); e.stun=Math.max(e.stun||0,0.3); } }
+          for(let k=0;k<8;k++) parts(x0+vx*k/8,y0+vy*k/8-14,2,['#ff7a3a','#ffd76a'],100,0.4);
+          p.fwingAnim=0.25; p.fwingX=x0; p.fwingY=y0; p.x=q.x; p.y=q.y; p.vx=0; p.vy=0; p.path=null; p.ifr=Math.max(p.ifr,0.25); p.face=vx>=0?1:-1; sfx(500,200,0.15,'sawtooth',0.05);
+          if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN); }
+      } else p.fwingT=0.5;
+    }
+  }
+}
 function orbPos(i,n){
   const p=G.B.hero;
   const evo=p.evo.sring>0;
@@ -2087,30 +2183,34 @@ function readyEvos(){
   const p=G.B.hero, out=[];
   for(const k in EVOS){
     const e=EVOS[k];
-    if(!p.evo[k] && p.wp[e.base]>=BAL.WP_EVO_LV && p.ps[e.pair]>=2) out.push(k);   // 進化は Lv5 で解禁(上限 8 でも待たせない)
+    const h=heroOf(e.base); if(!h||!G.B.heroes.includes(h)) continue;   // v3.0 その武器の持ち主が居る時だけ
+    if(!h.evo[k] && h.wp[e.base]>=BAL.WP_EVO_LV && h.ps[e.pair]>=2) out.push(k);   // 進化は Lv5 で解禁(上限 8 でも待たせない)
   }
   return out;
 }
 function maybeLevelup(){
-  const B=G.B, p=B.hero;
+  const B=G.B, p=B.heroes[0];
   if(G.mode!=='battle') return;
   if(p.xp>=p.xpNeed){
-    p.xp-=p.xpNeed; p.level++; p.xpNeed=need(p.level);
+    for(const h of B.heroes){ h.xp-=h.xpNeed; h.level++; h.xpNeed=need(h.level); }   // v3.0 Lv と経験値はパーティ共通
     offerLevelup();
   }
 }
 function offerLevelup(){
   const B=G.B, p=B.hero;
-  const wpCount=Object.values(p.wp).filter(v=>v>0).length;
-  const psCount=Object.values(p.ps).filter(v=>v>0).length;
+  const inParty=id=>B.heroes.some(h=>h.id===id);
+  const wpCountOf=h=>Object.keys(h.wp).filter(k=>h.wp[k]>0).length;
+  const psCount=Object.values(B.heroes[0].ps).filter(v=>v>0).length;
   const avail=Object.keys(UPG).filter(k=>{
+    if(UPG[k].kind==='wp'){ const own=UPG[k].owner||'lumina'; if(!inParty(own)) return false; const h=heroOf(k); if(h.wp[k]>=UPG[k].max) return false; if(h.wp[k]===0 && wpCountOf(h)>=4) return false; return true; }   // v3.0 武器はそのヒロインの枠(4つ)
     if(curLv(k)>=UPG[k].max) return false;
-    if(UPG[k].kind==='wp' && curLv(k)===0 && wpCount>=4) return false;   // 武器枠は4つまで
-    if(UPG[k].kind==='ps' && curLv(k)===0 && psCount>=4) return false;   // パッシブ枠も4つ
+    if(UPG[k].kind==='ps' && curLv(k)===0 && psCount>=4) return false;   // パッシブ枠も4つ(共通)
     return true;
   });
   const evos=readyEvos();
   const pool=avail.concat(evos.map(k=>'EVO:'+k));
+  // v3.0 持ち主ごとの候補数で重みを正規化(武器の数が多いルミナばかり選ばれない)
+  const ownCnt={}; for(const k of avail){ if(UPG[k].kind==='wp'){ const o=UPG[k].owner||'lumina'; ownCnt[o]=(ownCnt[o]||0)+1; } } const ownN=Object.keys(ownCnt).length||1, wpAvail=Object.values(ownCnt).reduce((a,b)=>a+b,0);
   if(!pool.length){ applyPray(); return; }   // v1.9 全部が上限: レベルを無駄にしない
   const opts=shuffle(pool.slice()).slice(0,3);
   const bossy=BAL.BOSS_PICK && bossExpected();   // v2.4 ボスが居る/居た・最終階層: 単体火力・貫通・手数を選び、広範囲は後回し
@@ -2124,6 +2224,8 @@ function offerLevelup(){
       if(k==='vital' && p.hp<p.maxHp*0.5) w=4;
       w*=p.taste[k]||1;   // 今夜の好み: 噛み合わない夜はビルドが散る
       if(bossy) w*=UPG[k].bossW||1;
+      if(UPG[k].kind==='wp' && ownN>1){ const o=UPG[k].owner||'lumina'; w*=(wpAvail/ownCnt[o])/ownN; }
+      if(UPG[k].kind==='wp' && B.heroes.length>1){ const h=heroOf(k); const tot=B.heroes.map(x=>Object.values(x.wp).reduce((a,b)=>a+b,0)); const mine=Object.values(h.wp).reduce((a,b)=>a+b,0), avg=tot.reduce((a,b)=>a+b,0)/tot.length; if(mine<avg-1) w*=1.3; else if(mine>avg+1) w*=0.75; }   // v3.0 二人の武器の育ちを揃える(どちらか一人しか強化できない)
     }
     w*=rand(0.9,1.1);
     if(w>bw){ bw=w; pick=i; }
@@ -2137,27 +2239,34 @@ function offerLevelup(){
 const xpSoft=p=>1/(1+BAL.XP_SOFT_K*Math.max(0,(p.level||1)-BAL.XP_SOFT_LV));   // v2.1 成長の飽和
 function applyPrayStat(p){ p.pray=(p.pray||0)+1; p.dmgMult=(p.dmgMult||1)*(1+BAL.PRAY_DMG); const addHp=Math.round(p.maxHp*BAL.PRAY_HP); p.maxHp+=addHp; p.baseSpeed*=1+BAL.PRAY_SPD; return addHp; }
 function applyPray(){
-  const B=G.B, p=B.hero;
-  if((p.pray||0)>=BAL.PRAY_MAX){ p.hp=Math.min(p.maxHp,p.hp+BAL.PRAY_HEAL*2); floatTxt(p.x,p.y-64,'ルミナの祈り — 回復','#ffd76a',12,1.4); parts(p.x,p.y-16,12,['#fff','#ffd76a'],120,0.5); return; }   // v2.1 祈りの上限: それ以上は回復だけ
-  const addHp=applyPrayStat(p); p.hp=Math.min(p.maxHp,p.hp+addHp+BAL.PRAY_HEAL);
-  floatTxt(p.x,p.y-64,'ルミナの祈り '+p.pray+' — 火力+'+Math.round(BAL.PRAY_DMG*100)+'%・HP+'+Math.round(BAL.PRAY_HP*100)+'%','#ffd76a',12,1.6);
-  heroBubble(p,pickRand(['……まだ、つよくなれる','ひかり、こたえて']),true,1);
-  parts(p.x,p.y-16,18,['#fff','#ffd76a'],160,0.6); S.lvup();
+  const B=G.B; let shown=false;
+  for(const p of B.heroes){   // v3.0 祈りは全員に
+    if((p.pray||0)>=BAL.PRAY_MAX){ p.hp=Math.min(p.maxHp,p.hp+BAL.PRAY_HEAL*2); if(!shown){ floatTxt(p.x,p.y-64,'祈り — 回復','#ffd76a',12,1.4); shown=true; } parts(p.x,p.y-16,12,['#fff','#ffd76a'],120,0.5); continue; }   // v2.1 祈りも上限: 以後は回復だけ
+    const addHp=applyPrayStat(p); p.hp=Math.min(p.maxHp,p.hp+addHp+BAL.PRAY_HEAL);
+    if(!shown){ floatTxt(p.x,p.y-64,'祈り '+p.pray+' — 火力+'+Math.round(BAL.PRAY_DMG*100)+'%・HP+'+Math.round(BAL.PRAY_HP*100)+'%','#ffd76a',12,1.6); heroBubble(p,pickRand(['……まだ、つよくなれる','ひかり、こたえて']),true,1); shown=true; }
+    parts(p.x,p.y-16,18,['#fff','#ffd76a'],160,0.6);
+  }
+  S.lvup();
 }
 function applyUpg(k){
-  const B=G.B, p=B.hero;
+  const B=G.B;
   if(k.startsWith('EVO:')){
-    const id=k.slice(4);
+    const id=k.slice(4); const p=heroOf(EVOS[id].base);
     p.evo[id]=1;
-    setBanner('★ 武器融合!', EVOS[id].name, '#ffd76a');
-    heroBubble(p,'ちからが、あふれてくる…!',true);
+    setBanner('★ 武器融合!', p.name+' — '+EVOS[id].name, '#ffd76a');
+    heroBubble(p,p.id==='freila'?'……熱い。いい火':'ちからが、あふれてくる…!',true);
     parts(p.x,p.y-16,30,['#fff','#ffd76a','#8fd3ff'],220,0.8);
     return;
   }
-  applyUpgStat(p,k);
-  if(k==='vital'){ p.hp=Math.min(p.maxHp,p.hp+25); }
-  floatTxt(p.x,p.y-64,UPG[k].name+' Lv'+curLv(k)+(UPG[k].kind==='wp'&&curLv(k)>BAL.WP_EVO_LV?' 覚醒!':'!'),'#ffd76a',13,1.5);
-  heroBubble(p,'つよくなった♪',true);
+  if(UPG[k].kind==='wp'){   // v3.0 武器は持ち主だけ
+    const p=heroOf(k); applyUpgStat(p,k);
+    floatTxt(p.x,p.y-64,UPG[k].name+' Lv'+curLv(k)+(curLv(k)>BAL.WP_EVO_LV?' 覚醒!':'!'),'#ffd76a',13,1.5);
+    heroBubble(p,p.id==='freila'?'……よし':'つよくなった♪',true);
+  } else {                  // パッシブは全員に効く
+    for(const h of B.heroes){ applyUpgStat(h,k); if(k==='vital'){ h.hp=Math.min(h.maxHp,h.hp+25); } }
+    const p=B.heroes[leaderIdx()]; floatTxt(p.x,p.y-64,UPG[k].name+' Lv'+curLv(k)+'!','#ffd76a',13,1.5);
+    heroBubble(p,p.id==='freila'?'……全員、少し強くなった':'みんな、つよくなった♪',true);
+  }
 }
 function lvTick(dt){
   const B=G.B, c=B.lvCards;
@@ -2193,7 +2302,7 @@ function spawnUnit(id, x, y, o){
   const pm=(o.mult||1)*night;
   const bossm=(MONSTERS[id].boss&&!MONSTERS[id].guardian)?(1+Math.min(BAL.BOSS_HP_LV_CAP,BAL.BOSS_HP_LV*Math.max(0,(B.hero?B.hero.level:1)-1))):1;   // v2.4 ボス級は彼女の Lv で厚くなる(魔核・番兵は各自)
   const F=B.floor||curFloor();   // v2.0 階層: 深いほど硬い。得意種はさらに硬い
-  const fhp=MONSTERS[id].guardian?1:F.mon.hp*(F.affinity.includes(id)?BAL.FLOOR_AFFINITY:1), fdm=MONSTERS[id].guardian?1:F.mon.dmg;
+  const fhp=MONSTERS[id].guardian?1:F.mon.hp*(F.affinity.includes(id)?BAL.FLOOR_AFFINITY:1)*eraMul(), fdm=MONSTERS[id].guardian?1:F.mon.dmg*eraMul();   // v3.0 世代の深さ倍率
   const u={
     id, x, y,
     hp:d.hp*elite*pm*flesh*fhp*bossm, maxHp:d.hp*elite*pm*flesh*fhp*bossm, spd:MONSTERS[id].spd, r:MONSTERS[id].r*(elite>1?1.2:1),
@@ -2238,7 +2347,7 @@ function spawnUnit(id, x, y, o){
   if(id==='suiyou'){ u.sub=false; u.grabCd=0; }
   if(id==='mouth'){ u.grabCd=1.5; u.lickT=0; }
   if(id==='guardian'){ u.castCd=3; u.aimT=0; u.lookA=0; }
-  if(id==='core'){ u.whipCd=2; u.whipT=0; u.pulseCd=5; u.pulseT=0; u.spawnCd=4; u.lookA=0; u.hp=u.maxHp=Math.round(BAL.CORE_HP*(1+0.08*Math.max(0,(META.gen.idx||1)-1))*(1+Math.min(BAL.CORE_HP_LV_CAP,BAL.CORE_HP_LV*Math.max(0,heroLv-1)))); }   // v2.2 引き継いだLvが高いほど厚い(最大×4.5)
+  if(id==='core'){ u.whipCd=2; u.whipT=0; u.pulseCd=5; u.pulseT=0; u.spawnCd=4; u.lookA=0; u.hp=u.maxHp=Math.round(BAL.CORE_HP*(BAL.CORE_ERA_HP0+BAL.CORE_ERA_HP_K*eraNow())*(1+0.08*Math.max(0,(META.gen.idx||1)-1))*(1+Math.min(BAL.CORE_HP_LV_CAP,BAL.CORE_HP_LV*Math.max(0,heroLv-1)))); u.era=eraNow(); u.r=Math.round(MONSTERS.core.r*(0.68+0.08*Math.min(4,u.era))); }   // v3.0 世代0は薄く小さく(見た目も弱く)、討たれるごとに厚く大きく   // v2.2 引き継いだLvが高いほど厚い(最大×4.5)
   // 地形の恩恵: 湿地で粘る種のHP、巣の魔物のHP。速度は毎フレーム今いる地形で決まる(spd0 が素の速度)
   u.spd0=u.spd; u.zone=zoneAt(x,y); u.item=!!MONSTERS[id].item;   // 設置物は押し合いで動かない
   if(id==='suiyou') u.sub=(u.zone==='water'||u.zone==='damp');   // v2.0 水妖は水の中で待つ
@@ -2254,7 +2363,7 @@ function damageEnemy(e,dmg){
   if(G.B&&G.B.hero.dmgMult) dmg*=G.B.hero.dmgMult;   // せいなる火力(自己強化)
   if(e.id==='flower') dmg*=(e.state==='bud'?0.5:1.3);
   if(e.id==='tower') dmg*=0.3;                        // 催眠電波の塔: 骨の骨組みは光を通しにくい
-  if(e.id==='core') dmg*=BAL.CORE_DEF;                // 魔核: 厚い肉(v2.2 0.45)
+  if(e.id==='core') dmg*=coreDef();                   // 魔核: 厚い肉(v3.0 世代0は薄く 0.7、世代ごとに 0.05 ずつ厚く、下限 CORE_DEF)
   if(e.id==='sentinel') dmg*=BAL.SENTINEL_DEF;        // v2.1 石の番兵: 光が通りにくい
   else if(e.boss && !MONSTERS[e.id].guardian) dmg*=BAL.BOSS_DEF;   // v2.4 ボス級: 被ダメ 80%
   // 魅了: その個体への攻撃は無意識に鈍る(Lvごとに与ダメ減)
@@ -2272,23 +2381,16 @@ function killEnemy(e){
   const B=G.B, h=B.hero;
   e.dead=true; B.kills++;
   if(!MONSTERS[e.id].item) codexOf(e.id).kills++;
-  // 四肢に付いていたら解放
-  if(e.limb && h.limbs[e.limb] && h.limbs[e.limb].mon===e){
-    h.limbs[e.limb]=null;
-    heroBubble(h,'とれたっ!');
-  }
-  // 繋留の主が死んだら該当繋留も解除
-  for(const sl of attachedSlots(h)){
-    if(h.limbs[sl].mon===e) h.limbs[sl]=null;
-  }
-  for(const sl of suckSlots(h)){
-    if(h.suckers[sl].mon===e) h.suckers[sl]=null;
-  }
-  if(h.pinBy===e) h.pinBy=null;
-  // 縋りついていた個体が消えれば拘束は解ける(種族への魅了そのものは残る)
-  if(h.charmBind && h.charmBind.mon===e) releaseCharmBind(false);
+  // v3.0 誰かの四肢に付いていたら解放(全員を見る)
+  for(let i=0;i<B.heroes.length;i++){ const hh=B.heroes[i];
+    if(e.limb && hh.limbs[e.limb] && hh.limbs[e.limb].mon===e){ hh.limbs[e.limb]=null; heroBubble(hh,hh.id==='freila'?'……離れた':'とれたっ!'); }
+    for(const sl of attachedSlots(hh)){ if(hh.limbs[sl].mon===e) hh.limbs[sl]=null; }
+    for(const sl of suckSlots(hh)){ if(hh.suckers[sl].mon===e) hh.suckers[sl]=null; }
+    if(hh.pinBy===e) hh.pinBy=null;
+    if(hh.charmBind && hh.charmBind.mon===e){ const ci0=B.ci; B.ci=i; releaseCharmBind(false); B.ci=ci0; } }   // 縋りついていた個体が消えれば拘束は解ける
   const col=EN_COLORS[e.id]||['#fff','#aaa'];
   parts(e.x,e.y-e.r,e.boss?42:8,col,e.boss?220:110,0.55);
+  if(e.boss && e.id!=='core') partyExchange('bossDown');   // v3.0 ボスを倒した二人のやりとり
   S.hit();
   if(e.id==='gas'){ // 断末魔の大放出
     spawnCloud(e.x,e.y,70,7,BAL.SENSIT_GAS*1.2,'gas');
@@ -2352,16 +2454,20 @@ function spawnCloud(x,y,r,life,rate,src){
 }
 
 function enemiesUpdate(dt){
-  const B=G.B, p=B.hero;
+  const B=G.B; let p=B.hero;
   for(const e of B.enemies){
     if(e.dead) continue;
     e.t+=dt;
+    // v3.0 標的のヒロイン: 掴んでいる/押し倒している/縋りつかれている相手は固定。それ以外はときどき最も近い(離脱していない)子へ
+    { const th=(e.ti!==undefined)?B.heroes[e.ti]:null; const locked=e.state==='attached' || (th && !th.out && (th.pinBy===e || (th.charmBind&&th.charmBind.mon===e)));
+      if(!locked){ e.retgT=(e.retgT||0)-dt; if(e.ti===undefined || e.retgT<=0 || !th || th.out){ e.ti=nearestHeroIdx(e.x,e.y); e.retgT=0.5+Math.random()*0.4; } } }
+    B.ci=e.ti; p=B.hero;
     if(e.hitFlash>0) e.hitFlash-=dt;
     if(e.orbCd>0) e.orbCd-=dt;
     if(e.crossCd>0) e.crossCd-=dt;
     if(e.nuzzleCd>0) e.nuzzleCd-=dt;
     e.seenT=inSight(e,p)?e.seenT+dt:0;   // 彼女の視界に入っている時間(反応遅れの基準)
-    if(e.seenT>0.45 && !e.dormant && !B.metLine[e.id]){ B.metLine[e.id]=1; sayLine('mon.'+e.id+'.'+(knowLv(e.id)>=2?'know':'see'),1,2.5); }   // v2.1 初めて目にした種族への一言
+    if(e.seenT>0.45 && !e.dormant && !B.metLine[e.id]){ B.metLine[e.id]=1; sayLine('mon.'+e.id+'.'+(knowLv(e.id)>=2?'know':'see'),1,2.5); if(e.boss) partyShare(p,'boss',e.x,e.y,true); }   // v2.1 初めて目にした種族への一言 / v3.0 ボスは相手に伝える
 
     // 四肢に絡みつき/吸い付き中: ヒロインに追従するだけ
     if(e.state==='attached'){
@@ -2404,6 +2510,7 @@ function enemiesUpdate(dt){
       continue;
     }
     e.zone=zoneAt(e.x,e.y); if(e.spd0!==undefined) e.spd=e.spd0*zoneMonSpd(e.zone,e.id)*((e.hasteT||0)>0?1.35:1); if((e.hasteT||0)>0) e.hasteT-=dt;   // v2.4 王の号令で一時的に速い
+    if((e.burnT||0)>0){ e.burnT-=dt; e.burnTick=(e.burnTick||0)-dt; if(e.burnTick<=0){ e.burnTick=0.4; damageEnemy(e,3+0.08*p.level); if(Math.random()<0.5) parts(e.x,e.y-e.r*0.5,1,['#ff7a3a','#ffd76a'],40,0.4); } }   // v3.0 煉獄の剣の燃焼
     e.x=clampMapX(e.x,e.r); e.y=clampMapY(e.y,e.r);
     if(e.stun>0){ e.stun-=dt; }
     else if(e.id==='inyoku'){
@@ -2543,6 +2650,7 @@ function enemiesUpdate(dt){
   }
   separateEnemies(dt); separateEnemies(dt);   // 魔物同士の押し合い(v1.7): 2回緩和して、重ならずぎゅうぎゅうに詰まる
   for(const e of B.enemies){ if(!e.dead&&!e.dormant&&e.state!=='attached'&&!e.item) collideMap(e,e.r*0.75,canFly(e.id)); }   // 押し合いで壁に入らない
+  B.ci=leaderIdx();
   B.enemies=B.enemies.filter(e=>!e.dead);
 }
 /* ================= 魔物同士の当たり判定(v1.7) =================
@@ -2552,7 +2660,7 @@ const SEP_CELL=48;
 function separateEnemies(dt){
   const B=G.B, p=B.hero;
   const list=[]; for(const e of B.enemies){ if(e.dead||e.dormant||e.state==='attached') continue; list.push(e); }
-  if(list.length<2) { heroSeparate(list,p); return; }
+  if(list.length<2) { for(const h of B.heroes) if(!h.out) heroSeparate(list,h); return; }
   const grid=new Map();
   const key=(cx,cy)=>cx*100003+cy;
   for(const e of list){ const cx=Math.floor(e.x/SEP_CELL), cy=Math.floor(e.y/SEP_CELL); const k=key(cx,cy); let a=grid.get(k); if(!a){ a=[]; grid.set(k,a); } a.push(e); }
@@ -2576,7 +2684,7 @@ function separateEnemies(dt){
     e.sepTag=null;
   }
   // 次フレーム用の印はここでは不要(毎フレーム作り直す)。彼女の周りは輪になって詰まる
-  heroSeparate(list,p);
+  for(const h of B.heroes) if(!h.out) heroSeparate(list,h);   // v3.0 全員
 }
 function heroSeparate(list,p){
   for(const e of list){
@@ -3016,6 +3124,7 @@ function gateAllowed(){ return true; }   // (v2.0: 門は降り口に置き換�
    価値÷(1+距離/600) で採点し、GOAL_RETHINK 秒ごと、または目当てが無くなった時に見直す。必要(HP・スタミナ・汚れ)で価値が変わる */
 function goalValid(p,g){
   const B=G.B, M=META.map; if(!g) return false;
+  if(g.kind==='rescue') return !!(g.ref && g.ref.out);   // v3.0 まだ捕まっている間
   if(g.kind==='event') return B.event===g.ref;
   if(g.kind==='chest') return B.chests.includes(g.ref) && !g.ref.taken;
   if(g.kind==='item') return B.items.includes(g.ref);
@@ -3033,12 +3142,73 @@ function goalValid(p,g){
   if(g.kind==='gems'){ let n=0; for(const gm of B.gems){ if(Math.abs(gm.x-g.x)<BAL.GEM_CLUSTER_R && Math.abs(gm.y-g.y)<BAL.GEM_CLUSTER_R) n++; } return n>=2; }   // v2.1 ジェムの群れが残っている
   return false;
 }
+/* ================= v3.0 パーティAI: 相談して決める・カバーし合う・伝え合う =================
+   目当ては共有(B.party.goal)。決め直しの時は全員が自分の案(個人の好み goalPref 込み)を出し、
+   同じなら即決、割れたら優先権(P.turn)の子の案に従う(負けた子が次の優先)。ただし救出や大差なら価値の高い案。
+   決めた直後は TALK_T 秒、脅威が薄ければ足を止めて言い合う(aiDecide の talk) */
+function goalPref(p,kind,sub){ const HD=HEROES[p.id]; if(!HD||!HD.pref) return 1; return HD.pref[sub]||HD.pref[kind]||1; }
+function goalKindKey(g){ if(!g) return 'explore'; if(g.kind==='poi'||g.kind==='pick') return g.sub; if(g.kind==='chest') return g.sub==='boss'?'boss':'chest'; return g.kind; }
+function pendingLine(hi,path,delay,prio){ const P=G.B&&G.B.party; if(!P) return; P.pending=P.pending||[]; P.pending.push({hi,path,at:G.B.time+(delay||0.9),prio:prio||1}); }
+function partyShare(p,kind,x,y,force){
+  const B=G.B, o=partnerOf(p); if(!o) return false;
+  const far=Math.abs(x-o.x)>W/2 || Math.abs(y-o.y)>H/2;   // 相手の画面外の物だけ伝える(ボスは必ず)
+  if(!far && !force) return false;
+  if(sayPartyAs(p.hi,'share.'+kind,kind==='boss'?2:1,10)){ pendingLine(o.hi,'share.ack',0.9,1); return true; } return false;
+}
+function partyExchange(key,sub){
+  const B=G.B, P=B.party; if(!P||typeof LINES_P==='undefined'||!LINES_P.banter) return false;
+  let pool=LINES_P.banter[key]; if(sub!==undefined && pool && !Array.isArray(pool)) pool=pool[sub]; if(!Array.isArray(pool)||!pool.length) return false;
+  const ex=pool[(Math.random()*pool.length)|0]; if(!Array.isArray(ex)) return false; let t=0; P.pending=P.pending||[];
+  for(const ln of ex){ const h=B.heroes.find(x=>x.id===ln.s); if(!h||h.out) continue; if(t===0) heroBubble(h,ln.t,true,1); else P.pending.push({hi:h.hi,txt:ln.t,at:B.time+t,prio:1}); t+=1.3; }
+  return true;
+}
+function partyTick(dt){
+  const B=G.B, P=B.party; if(!P) return;
+  if(P.pending&&P.pending.length){ const keep=[]; for(const q of P.pending){ if(B.time>=q.at){ const h=B.heroes[q.hi]; if(h&&!h.out){ if(q.path) sayPartyAs(q.hi,q.path,q.prio||1,0); else heroBubble(h,q.txt,true,q.prio||1); } } else keep.push(q); } P.pending=keep; }
+  P.tickT=(P.tickT||0)-dt; if(P.tickT>0) return; P.tickT=0.5;
+  const active=B.heroes.filter(h=>!h.out); if(active.length<2) return;
+  if(!P.floorSaid && B.time>3){ P.floorSaid=true; partyExchange('floor',String(B.floor.depth)); }
+  if(!P.pressSaid && pressure()>=0.35){ P.pressSaid=true; partyExchange('pressure'); }
+  let near=0; for(const e of B.enemies){ if(!e.dead&&!e.dormant&&active.some(h=>inSight(e,h))) near++; }
+  P.calm=near===0?(P.calm||0)+0.5:0;
+  if(P.calm>=6 && B.time-(P.lastBanter||-99)>28){ P.lastBanter=B.time; P.calm=0; partyExchange('idle'); }
+}
 function updateGoal(p){
+  const B=G.B, P=B.party, active=B.heroes.filter(h=>!h.out);
+  if(!P || active.length<2) return updateGoalSolo(p);
+  if(P.goal && P.owner && !P.owner.out && goalValid(P.owner,P.goal) && B.time<P.until){
+    if(p.goal!==P.goal){ p.goal=P.goal; p.goalT=B.time+BAL.GOAL_RETHINK; }
+    else if(P.goal.ref && P.goal.kind!=='explore' && P.goal.kind!=='event'){ P.goal.x=P.goal.ref.x; P.goal.y=P.goal.ref.y; }
+    return p.goal;
+  }
+  const ci0=B.ci, props=[];
+  for(const h of active){ B.ci=h.hi; const g=updateGoalSolo(h); if(g) props.push({h,g}); }
+  B.ci=ci0;
+  if(!props.length){ P.goal=null; P.owner=null; return null; }
+  const g0=props[0].g;
+  const same=props.every(x=>x.g.kind===g0.kind && x.g.ref===g0.ref && Math.hypot(x.g.x-g0.x,x.g.y-g0.y)<60);
+  let win=props[0];
+  if(!same){
+    win=props.find(x=>x.h.hi===P.turn)||props[0];
+    const best=props.reduce((a,b)=>b.g.score>a.g.score?b:a);
+    if(best!==win && (best.g.kind==='rescue' || best.g.score>win.g.score*1.8)) win=best;   // 救出と大差は優先権より先
+    const losers=props.filter(x=>x!==win); if(losers.length){ P.turn=losers[0].h.hi; P.lastLoser=losers[0].h.hi; }
+  }
+  P.goal=win.g; P.owner=win.h; P.until=B.time+(same?BAL.GOAL_RETHINK:BAL.PARTY_HOLD);
+  for(const x of props){ x.h.goal=P.goal; x.h.goalT=B.time+BAL.GOAL_RETHINK; }
+  B.nDecide=(B.nDecide||0)+1; if(!same) B.nSplit=(B.nSplit||0)+1;
+  if(B.time-P.decidedT>BAL.PARTY_TALK_CD && P.goal.kind!=='explore'){
+    P.decidedT=B.time; const kind=goalKindKey(P.goal);
+    if(sayPartyAs(win.h.hi,'propose.'+kind,1,0)){ for(const x of props){ if(x===win) continue; pendingLine(x.h.hi, same?'same':(x.g.score>win.g.score?'yield':'agree'), 0.9, 1); } if(!same) P.talkUntil=B.time+BAL.TALK_T; }
+  }
+  return p.goal;
+}
+function updateGoalSolo(p){
   const B=G.B, M=META.map; if(!G.map||!M) return null;
   if(p.goal && goalValid(p,p.goal) && B.time<p.goalT){ if(p.goal.ref && p.goal.kind!=='explore' && p.goal.kind!=='event'){ p.goal.x=p.goal.ref.x; p.goal.y=p.goal.ref.y; } return p.goal; }
   p.goalT=B.time+BAL.GOAL_RETHINK;
   const cands=[];
-  const add=(kind,sub,x,y,worth,ref,key)=>{ if(worth<=0 || !passAt(x,y,false) || nearKnownTrap(x,y)) return; if(ref && gaveUp(ref)) return; /* v2.1 諦めた目標は外す */ if(crestKnow()>=1 && B.traps.some(tr=>tr.armed && Math.hypot(tr.x-x,tr.y-y)<tr.r+40)) return; /* 知っている紋の罠の上は目当てにしない */ const d=Math.hypot(x-p.x,y-p.y); const fz=zoneFear(zoneAt(x,y)), fm=fz>=3?0.5:(fz>=2?0.7:(fz>=1?0.9:1)); cands.push({kind,sub,x,y,ref,key,d,worth,score:worth*fm/(1+d/600)}); };   // v2.2 嫌な地形の中の目当ては割り引く(価値そのものは入る判断に使うので残す)
+  const add=(kind,sub,x,y,worth,ref,key)=>{ worth*=goalPref(p,kind,sub); if(worth<=0 || !passAt(x,y,false) || nearKnownTrap(x,y)) return; if(ref && gaveUp(ref)) return; /* v2.1 諦めた目標は外す */ if(crestKnow()>=1 && B.traps.some(tr=>tr.armed && Math.hypot(tr.x-x,tr.y-y)<tr.r+40)) return; /* 知っている紋の罠の上は目当てにしない */ const d=Math.hypot(x-p.x,y-p.y); const fz=zoneFear(zoneAt(x,y)), fm=fz>=3?0.5:(fz>=2?0.7:(fz>=1?0.9:1)); cands.push({kind,sub,x,y,ref,key,d,worth,score:worth*fm/(1+d/600)}); };   // v2.2 嫌な地形の中の目当ては割り引く(価値そのものは入る判断に使うので残す)
   const hpR=p.hp/p.maxHp, stR=p.stamina/p.staminaMax;
   const leaving=!!B.wantExit;   // v2.1 降りる気(最終階層では魔核へ向かう気)になったら、寄り道の価値は薄く(拾うのは道すがらだけ)
   let unknownN=0; for(const q of G.map.pois) if(!M.known[q.key]) unknownN++;
@@ -3049,6 +3219,7 @@ function updateGoal(p){
     if(ev.kind==='shroom' && ev.refs){ let nd=1e9; for(const pk of ev.refs){ if(pk.dead) continue; const dd=Math.hypot(pk.x-p.x,pk.y-p.y); if(dd<nd){ nd=dd; ex=pk.x; ey=pk.y; } } }   // 群生は残っている光茸そのものへ
     add('event',ev.kind,ex,ey,w*(leaving?0.5:1),ev,ev.key); }
   for(const it of B.items){ if(it.known) add('item',it.kind,it.x,it.y,3.0,it); }
+  for(const c of B.heroes){ if(c.out && c.captive && c!==p) add('rescue','rescue',c.x,c.y,3.4,c,'rescue'+c.hi); }   // v3.0 捕まった仲間の救出は最優先の目当て
   for(const c of B.chests){ if(c.known && !c.taken) add('chest',c.bossChest?'boss':'chest',c.x,c.y,(c.bossChest?3.0:2.6)*(leaving?0.3:1),c); }   // v2.1 降りると決めたら箱は後回し
   for(const q of G.map.pois){
     if(!M.known[q.key]) continue; let w=0;
@@ -3127,7 +3298,7 @@ function saveSeen(){ const M=G.map; if(!M||!M.seen||!META.run) return; META.run.
 function seenFrac(){ const M=G.map; return (M&&M.passN)?M.seenN/M.passN:1; }
 function seenTick(dt){
   const B=G.B, p=B.hero, M=G.map; if(!M||!M.seen) return;
-  B.seenT-=dt; if(B.seenT>0) return; B.seenT=BAL.SEEN_T;
+  p.seenT=(p.seenT||0)-dt; if(p.seenT>0) return; p.seenT=BAL.SEEN_T;   // v3.0 ヒロインごとの視界
   const rx=BAL.SEEN_R, ry=BAL.SEEN_RY, i0=Math.max(0,tileI(p.x-rx)), i1=Math.min(MAP_W-1,tileI(p.x+rx)), j0=Math.max(0,tileJ(p.y-ry)), j1=Math.min(MAP_H-1,tileJ(p.y+ry));
   for(let j=j0;j<=j1;j++){ const yy=(tileCY(j)-p.y)/ry; for(let i=i0;i<=i1;i++){ const k=j*MAP_W+i; if(M.seen[k]) continue; const xx=(tileCX(i)-p.x)/rx; if(xx*xx+yy*yy>1) continue; M.seen[k]=1; if(M.solid[k]===0) M.seenN++; } }
   M.fogT=-9;   // ミニマップの霧を作り直す
@@ -3197,6 +3368,7 @@ function poiTick(dt){
       M.known[q.key]=1; M.seen=(M.seen||0)+1;
       floatTxt(q.x,q.y-40,'みつけた: '+POI_DEF[q.kind].name,'#8fd3ff',12,1.8);
       sayLine('poi.'+q.kind,1,0,q.kind==='stairs'?'おりぐち、みっけ! でも、まだ見てないとこあるし':pickRand(['あそこ、なにかある……','あれ、なんだろ','おぼえておこう']));   // v2.1 場所ごとの台詞
+      partyShare(p,'poi',q.x,q.y);   // v3.0 相手に伝える
       if(q.kind==='stairs') setBanner('降り口を見つけた',exitGuarded()?'石の番兵が守っている。彼女は他を見てから降りる':'彼女は見るものを見てから降りる','#8fd3ff');
       if(q.kind==='core'){ setBanner('魔核の間','深淵の心臓。彼女は挑むだろう','#ff6b81'); if(STORY.finalEncounter.length && !B.storyCoreSeen){ B.storyCoreSeen=true; UI.showStory(STORY.finalEncounter,{dur:11}); } }
       if(q.kind==='seal') setBanner('封印石','3つ全て灯すと降り口が開く','#c98cff');
@@ -3269,7 +3441,7 @@ function startDescend(){
    SENTINEL_STEP_CD ごとに一斉に踏み込む。触れれば石の腕で抱え込む(繋留・据わる)。残っている間は降り口が使えない。穴から SENTINEL_LEASH 以上は出ない */
 function spawnSentinels(){
   const B=G.B, st=G.map&&G.map.pois.find(o=>o.kind==='stairs'); if(!st) return;
-  const F=B.floor, n=BAL.SENTINEL_N[Math.min(BAL.SENTINEL_N.length-1,Math.max(0,F.depth-1))];
+  const F=B.floor, n=Math.min(BAL.SENTINEL_N[Math.min(BAL.SENTINEL_N.length-1,Math.max(0,F.depth-1))], BAL.SENT_ERA[Math.min(BAL.SENT_ERA.length-1,eraNow())]);   // v3.0 世代が浅いうちは番兵が少ない
   B.sentRing={x:st.x,y:st.y,key:st.key,phase:rand(TAU),stepCd:BAL.SENTINEL_STEP_CD,stepT:0,alert:false,n};
   for(let i=0;i<n;i++){
     const a=B.sentRing.phase+i*TAU/n;
@@ -3316,8 +3488,8 @@ function sentinelTick(e,dt,d,dx,dy){
 }
 /* ================= v2.3 奥義(彼女の後半の強化) =================
    Lvで解放され、AIが状況で使う。跳躍=囲まれた時に空いている方へ、浄化=拘束を千切って弾く、壁=瀕死で被ダメ-70% */
-function skillReady(p,id){ return p.level>=SKILLS[id].lv && (p.skillCd[id]||0)<=0; }
-function useSkill(p,id){ const B=G.B; p.skillCd[id]=SKILLS[id].cd; B.nSkill=B.nSkill||{}; B.nSkill[id]=(B.nSkill[id]||0)+1; setBanner('奥義 '+SKILLS[id].name,SKILLS[id].desc.split('。')[0],'#ffd76a'); sayLine('skill.'+id,2,0,SKILLS[id].name+'!'); S.lvup(); }
+function skillReady(p,id){ const s=heroSkills(p)[id]; return !!s && p.level>=s.lv && (p.skillCd[id]||0)<=0; }   // v3.0 ヒロインごとの奥義
+function useSkill(p,id){ const B=G.B, s=heroSkills(p)[id]; p.skillCd[id]=s.cd; B.nSkill=B.nSkill||{}; B.nSkill[id]=(B.nSkill[id]||0)+1; setBanner('奥義 '+s.name,s.desc.split('。')[0],'#ffd76a'); sayLine('skill.'+id,2,0,s.name+'!'); S.lvup(); }
 function nearEnemyCount(x,y,r,all){ let n=0; for(const e of G.B.enemies){ if(e.dead||e.dormant||e.item||e.state==='attached'||e.id==='imp') continue; if(e.id==='flower' && !e.revealed) continue; if(!all && MONSTERS[e.id].spd<=0) continue; if(Math.hypot(e.x-x,e.y-y)<r) n++; } return n; }   // all=true で据わった個体も数える(逃げ先・跳び先の採点)
 function skillTick(dt){
   const B=G.B, p=B.hero;
@@ -3336,6 +3508,31 @@ function skillTick(dt){
     for(const e of B.enemies){ if(e.dead||e.dormant||e.item) continue; const dx=e.x-p.x, dy=e.y-p.y, d=Math.hypot(dx,dy)||0.001; if(d<120){ if(MONSTERS[e.id].spd>0 && !MONSTERS[e.id].guardian){ e.x+=dx/d*90; e.y+=dy/d*90; collideMap(e,e.r*0.75,canFly(e.id)); } e.stun=Math.max(e.stun||0,e.boss?0.6:1.2); } }
     p.ifr=Math.max(p.ifr,1.0); p.stamina=Math.min(p.staminaMax,p.stamina+20); useSkill(p,'purge'); parts(p.x,p.y-14,40,['#fff','#8fd3ff','#ffd76a'],260,0.9); G.shake=Math.min(8,G.shake+5);
   }
+  if(p.id==='freila'){
+    // 不死鳥: 瀕死で炎とともに立ち上がる(回復・無敵・周りを焼く)
+    if(skillReady(p,'phoenix') && p.hp<p.maxHp*0.30){ p.hp=Math.min(p.maxHp,p.hp+Math.round(p.maxHp*0.35)); p.ifr=Math.max(p.ifr,2.0);
+      for(const e of B.enemies){ if(e.dead||e.dormant||e.item) continue; const d=Math.hypot(e.x-p.x,e.y-p.y); if(d<200){ damageEnemy(e,40*(1+0.06*p.level)); e.stun=Math.max(e.stun||0,e.boss?0.5:1.0); } }
+      useSkill(p,'phoenix'); parts(p.x,p.y-14,50,['#ff7a3a','#ffd76a','#fff'],260,0.9); G.shake=Math.min(8,G.shake+5); }
+    // 熾火の壁: 拘束を焼き切り、4秒間 近づく魔物を焦がす
+    if(skillReady(p,'ember') && (attachCount(p)>=2 || p.pinned) && !p.charmBind && p.hypnoLv<2){
+      for(const sl of attachedSlots(p)) detachLimb(sl,{fling:true});
+      for(const sl of suckSlots(p)) detachSucker(sl,{fling:true});
+      if(p.pinned){ p.pinned=false; p.pinBy=null; p.pinEscape=0; p.struggle=0; if(B.pinSceneHi===B.ci) B.pinScene=null; }
+      for(const e of B.enemies){ if(e.dead||e.dormant||e.item) continue; const dx=e.x-p.x, dy=e.y-p.y, d=Math.hypot(dx,dy)||0.001; if(d<120){ if(MONSTERS[e.id].spd>0 && !MONSTERS[e.id].guardian){ e.x+=dx/d*90; e.y+=dy/d*90; collideMap(e,e.r*0.75,canFly(e.id)); } e.stun=Math.max(e.stun||0,e.boss?0.6:1.2); damageEnemy(e,18*(1+0.05*p.level)); } }
+      p.ifr=Math.max(p.ifr,1.0); p.stamina=Math.min(p.staminaMax,p.stamina+20); p.emberT=4; useSkill(p,'ember'); parts(p.x,p.y-14,40,['#ff7a3a','#ffd76a','#fff'],260,0.9); G.shake=Math.min(8,G.shake+5);
+    }
+    if(p.emberT>0){ p.emberT-=dt; if(Math.random()<dt*14) parts(p.x+rand(-30,30),p.y-rand(0,30),1,['#ff7a3a','#ffd76a'],40,0.5);
+      for(const e of B.enemies){ if(e.dead||e.dormant||e.item||e.state==='attached') continue; const dx=e.x-p.x, dy=e.y-p.y, d=Math.hypot(dx,dy)||0.001; if(d<80){ damageEnemy(e,14*dt*(1+0.05*p.level)); if(MONSTERS[e.id].spd>0 && !MONSTERS[e.id].guardian){ e.x+=dx/d*40*dt; e.y+=dy/d*40*dt; } } } }
+    // 焔の突進: 囲まれたら空いている方へ突き抜け、通り道を焼く
+    if(skillReady(p,'blaze') && B.time>=(p.blinkRetry||0) && attachCount(p)===0 && !p.pinned && !p.charmBind && p.climaxT<=0 && (nearEnemyCount(p.x,p.y,130)>=6 || (p.press||0)>=1.4)){
+      let best=null, bs=1e9; for(let k=0;k<12;k++){ const a=k*TAU/12; const q=snapFloor(clampMapX(p.x+Math.cos(a)*180,40),clampMapY(p.y+Math.sin(a)*180,40),false,3); if(!q||!reachableAt(q.x,q.y,false)) continue; const sc=nearEnemyCount(q.x,q.y,150,true)+nearEnemyCount(q.x,q.y,60,true)*2; if(sc<bs){ bs=sc; best=q; } }
+      p.blinkRetry=B.time+0.5;
+      if(best && bs<nearEnemyCount(p.x,p.y,150,true)){ const x0=p.x, y0=p.y, vx=best.x-x0, vy=best.y-y0, L=Math.hypot(vx,vy)||1;
+        for(const e of B.enemies){ if(e.dead||e.dormant||e.item) continue; const t=Math.max(0,Math.min(1,((e.x-x0)*vx+(e.y-y0)*vy)/(L*L))); const px=x0+vx*t, py=y0+vy*t; if(Math.hypot(e.x-px,e.y-py)<44+e.r*0.5){ damageEnemy(e,30*(1+0.06*p.level)); e.stun=Math.max(e.stun||0,e.boss?0.4:0.8); } }
+        for(let k=0;k<10;k++) parts(x0+vx*k/10,y0+vy*k/10-14,3,['#ff7a3a','#ffd76a'],120,0.5);
+        p.x=best.x; p.y=best.y; p.vx=p.vy=0; p.path=null; p.ifr=Math.max(p.ifr,0.6); p.fwingAnim=0.3; p.fwingX=x0; p.fwingY=y0; useSkill(p,'blaze'); }
+    }
+  }
   // 光の跳躍: 囲まれた
   if(skillReady(p,'blink') && B.time>=(p.blinkRetry||0) && attachCount(p)===0 && !p.pinned && !p.charmBind && p.climaxT<=0 && (nearEnemyCount(p.x,p.y,130)>=6 || (p.press||0)>=1.4)){
     let best=null, bs=1e9; for(let k=0;k<12;k++){ const a=k*TAU/12; const q=snapFloor(clampMapX(p.x+Math.cos(a)*180,40),clampMapY(p.y+Math.sin(a)*180,40),false,3); if(!q||!reachableAt(q.x,q.y,false)) continue; const sc=nearEnemyCount(q.x,q.y,150,true)+nearEnemyCount(q.x,q.y,60,true)*2; if(sc<bs){ bs=sc; best=q; } }
@@ -3345,7 +3542,7 @@ function skillTick(dt){
 }
 /* v2.3 いまの武器から見た、おおまかな秒間火力(戦う/引き撃ち/逃げるの判断に使う) */
 function heroDpsEst(p){
-  const BASE={bolt:14,orb:10,nova:16,whip:14,rain:13,cross:13,sanct:15,blade:14,thunder:14,holy:9,chain:13,spirit:12,shield:9};
+  const BASE={bolt:14,orb:10,nova:16,whip:14,rain:13,cross:13,sanct:15,blade:14,thunder:14,holy:9,chain:13,spirit:12,shield:9, fsword:17,fring:12,fburst:15,fpillar:14,fwing:13};
   let d=0; for(const k in BASE){ const lv=p.wp[k]||0; if(lv<=0) continue; const ov=wpOver(lv); const evo=Object.keys(EVOS).some(e=>EVOS[e].base===k && p.evo[e]>0); d+=BASE[k]*(1+0.35*(Math.min(BAL.WP_EVO_LV,lv)-1))*ov.dmg/ov.cd*(evo?1.8:1); }
   return Math.max(8, d*(p.dmgMult||1)*(1+0.08*(p.ps.haste||0))*(1+0.4*(p.ps.dup||0)));
 }
@@ -3356,7 +3553,7 @@ function exitTick(dt){
   const B=G.B, p=B.hero; if(B.wantExit||!G.map) return;   // v2.2 最終階層では「魔核へ向かう気」になる
   const g=p.goal; let unknownN=0; for(const q of G.map.pois) if(!META.map.known[q.key]) unknownN++;
   if((!g || g.kind==='explore') && unknownN===0) B.idleGoalT=(B.idleGoalT||0)+dt; else B.idleGoalT=Math.max(0,(B.idleGoalT||0)-dt*0.5);   // v2.2 まだ知らない場所があるうちは「探索し尽くした」にならない
-  const pr=pressure(), hpR=p.hp/p.maxHp; let why=null;
+  const pr=pressure(), hpR=Math.min(...B.heroes.filter(h=>!h.out).map(h=>h.hp/h.maxHp)); let why=null;   // v3.0 いちばん薄い子の体力で判断
   if(pr>=BAL.EXIT_PRESS) why='press';
   else if(hpR<BAL.EXIT_HP && B.time>40) why='hp';
   else if(B.idleGoalT>=BAL.EXIT_IDLE_T && B.time>90) why='done';
@@ -3371,12 +3568,12 @@ function exitTick(dt){
 /* v2.1 場面に合わせた台詞: 地形に入った / 圧が高まった / 体力が薄い / 一息 */
 function linesTick(dt){
   const B=G.B, p=B.hero;
-  B.lineT=(B.lineT||0)-dt; if(B.lineT>0) return; B.lineT=0.5;
+  p.lineT=(p.lineT||0)-dt; if(p.lineT>0) return; p.lineT=0.5;   // v3.0 ヒロインごと
   if(G.map&&G.map.feats){ for(let i=0;i<G.map.feats.length;i++){ const f=G.map.feats[i]; if(B.featSaid[i]) continue; if(Math.hypot(f.x-p.x,f.y-p.y)<f.r){ B.featSaid[i]=1; sayLine('feat.'+f.kind,0,4); } } }
   const pr=pressure();
   if(pr>=0.35 && B.pressSaid<1){ B.pressSaid=1; setBanner('深淵の圧が高まる','魔物が増え、夜側のENが伸びる','#ff86b3'); sayLine('pressure.mid',0,0,'なんか、ふえてきた……?'); }
   if(pr>=0.9 && B.pressSaid<2){ B.pressSaid=2; setBanner('深淵の圧','ここに長く居すぎた','#ff5d7a'); sayLine('pressure.high',1,0,'ここ、ながくいたらまずい……!'); }
-  if(p.hp<p.maxHp*0.5 && !B.lowSaid){ B.lowSaid=true; sayLine('hurtLow',1,0); } else if(p.hp>p.maxHp*0.72) B.lowSaid=false;
+  if(p.hp<p.maxHp*0.5 && !p.lowSaid){ p.lowSaid=true; sayLine('hurtLow',1,0); const o=partnerOf(p); if(o) sayPartyAs(o.hi,'assist.low',2,10); } else if(p.hp>p.maxHp*0.72) p.lowSaid=false;
   let near=0; for(const e of B.enemies){ if(!e.dead&&!e.dormant&&inSight(e,p)){ near++; if(e.boss) B.bossSeen=true; } }   // v2.4 ボスを見た(以後の武器選びはボスを想定)
   B.calmT=near===0?(B.calmT||0)+0.5:0; if(B.calmT>=4 && B.time>30){ B.calmT=0; sayLine('calm',0,45); }
 }
@@ -3857,31 +4054,48 @@ function hurtHero(dmg,src,opt){
   if(p.hp<=0){ p.hp=0; beginCapture(src,'hp'); }
 }
 function beginCapture(src,cause){
-  const B=G.B;
+  const B=G.B, h=B.hero;
   if(G.mode!=='battle'&&G.mode!=='levelup') return;
-  G.mode='captured';
-  B.captureT=2.8;
-  B.capturedBy=src?src.id:'default';
+  if(h.out) return;
+  let by=src?src.id:'default';
   // 帰属: 直前6秒の強制絶頂、または催眠Ⅱ以上での敗北は、その源(照射触手/ゲイザー)の仕業として記録する(ボス個体に倒された時は除く)
-  { const h=B.hero, lb=h.lastBeam, lh=h.lastHypno;
+  { const lb=h.lastBeam, lh=h.lastHypno;
     if(!(src&&src.boss)){
-      if(lb && B.time-lb.t<6 && MONSTERS[lb.id]) B.capturedBy=lb.id;
-      else if(h.hypnoLv>=2 && lh && B.time-lh.t<25 && MONSTERS[lh.id]) B.capturedBy=lh.id;
+      if(lb && B.time-lb.t<6 && MONSTERS[lb.id]) by=lb.id;
+      else if(h.hypnoLv>=2 && lh && B.time-lh.t<25 && MONSTERS[lh.id]) by=lh.id;
     } }
-  B.captureCause=cause||'hp';
-  B.hero.pinned=true;
-  const bub={stamina:'ちから、が……はいらな……', charm:'だって……はなれたく、な……', hp:'そんな……っ'};
-  const sub={stamina:'ルミナは力尽き、組み伏せられた', charm:'ルミナは魅了に蕩けたまま、力尽きた', hp:'ルミナは魔物たちに捕らえられた'};
-  heroBubble(B.hero, bub[cause]||bub.hp, true, 3);
-  setBanner('敗北 — 観測終了', sub[cause]||sub.hp,'#c98cff');
-  S.capture();
-  G.shake=Math.min(10,G.shake+6);
+  cause=cause||'hp';
+  B.captures=B.captures||[]; B.captures.push({hi:B.ci, id:h.id, by, cause, t:B.time});
+  B.capturedBy=by; B.captureCause=cause;
+  const bubL={stamina:'ちから、が……はいらな……', charm:'だって……はなれたく、な……', hp:'そんな……っ'};
+  const bubF={stamina:'……っ、火が、出な……い……', charm:'……離れ、られ……ない', hp:'こんな、の……っ'};
+  const bub=h.id==='freila'?bubF:bubL;
+  heroBubble(h, bub[cause]||bub.hp, true, 3);
+  S.capture(); G.shake=Math.min(10,G.shake+6);
+  const others=B.heroes.filter(x=>x!==h && !x.out);
+  if(others.length){
+    // v3.0 一人が捕まっても日は終わらない: その場に捕まったまま残る(そばに立てば救出できる)。魔物は残った子へ向かう
+    for(const sl of attachedSlots(h)) detachLimb(sl,{});
+    for(const sl of suckSlots(h)) detachSucker(sl,{});
+    if(h.charmBind) releaseCharmBind(false);
+    h.out=true; h.pinned=true; h.pinBy=null; h.climaxT=0; h.vx=0; h.vy=0; h.captive={x:h.x,y:h.y,by,cause,t:B.time,rescue:0};
+    if(B.pinScene && B.pinSceneHi===B.ci) B.pinScene=null;
+    B.bullets=B.bullets.filter(b=>b.hi!==B.ci);
+    setBanner(h.name+'、捕まった!', others[0].name+'は救い出すか、置いて降りるか','#c98cff');
+    for(const o of others) sayPartyAs(o.hi,'captured.watch',3,0);
+    B.party.goal=null;
+    return;
+  }
+  G.mode='captured'; B.captureT=2.8; h.pinned=true;
+  const sub={stamina:h.name+'は力尽き、組み伏せられた', charm:h.name+'は魅了に蕩けたまま、力尽きた', hp:h.name+'は魔物たちに捕らえられた'};
+  setBanner(B.captures.length>1?'全員捕獲 — 観測終了':'敗北 — 観測終了', sub[cause]||sub.hp,'#c98cff');
 }
 
 /* ================= 弾/回収物/燭台 ================= */
 function bulletsUpdate(dt){
-  const B=G.B, p=B.hero;
+  const B=G.B; let p=B.hero;
   for(const b of B.bullets){
+    if(b.hi!==undefined && B.heroes[b.hi]){ B.ci=b.hi; p=B.hero; }   // v3.0 弾の持ち主の文脈
     /* --- スターレイン: 落下→着弾で小範囲 --- */
     if(b.kind==='rain'){
       b.y+=b.vy*dt; b.life-=dt;
@@ -3964,6 +4178,7 @@ function bulletsUpdate(dt){
     }
   }
   B.bullets=B.bullets.filter(b=>b.life>0);
+  B.ci=leaderIdx();
 }
 function spawnInitialProps(){
   const B=G.B;
@@ -4105,7 +4320,7 @@ function picksTick(dt){
 function applyPick(pk){
   const B=G.B, p=B.hero; pk.dead=true; B.used[pk.kind]++;
   if(pk.kind==='shroom'){
-    p.xp+=p.xpNeed*BAL.SHROOM_XP;
+    gainXpAll(p.xpNeed*BAL.SHROOM_XP);
     const n=revealAround(pk.x,pk.y,BAL.SHROOM_REVEAL);
     parts(pk.x,pk.y-10,16,['#9fe8c8','#fff','#cfffe8'],140,0.8); sfx(700,1100,0.3,'sine',0.05);
     floatTxt(p.x,p.y-58,'光茸'+(n?' — '+n+'か所 見えた':''),'#9fe8c8',12,1.4);
@@ -4118,7 +4333,7 @@ function applyPick(pk){
     floatTxt(p.x,p.y-58,'蜜の花 スタミナ+45','#ffb3cf',12,1.4);
     heroBubble(p,pickRand(['あまい……げんき、でてきた','はな、いいにおい……くしゅん']),false,1);
   }else if(pk.kind==='treasure'){
-    p.xp+=p.xpNeed*BAL.TREASURE_XP; B.heroCoins+=25;
+    gainXpAll(p.xpNeed*BAL.TREASURE_XP); B.heroCoins+=25;
     parts(pk.x,pk.y-10,24,['#ffd76a','#8fd3ff','#fff'],180,0.9); S.chest();
     floatTxt(p.x,p.y-58,'沈んだ宝!','#ffd76a',13,1.5);
     heroBubble(p,pickRand(['とれた……! つめたい……','みずのなか、おもかった……']),false,1);
@@ -4200,22 +4415,21 @@ function startEvent(){
   B.event=ev; B.eventsN++;
   setBanner('イベント: '+EVENT_DEF[kind].name, EVENT_DEF[kind].sub, EVENT_DEF[kind].col);
   sayLine('event.'+kind,1,0,pickRand(['……ひかりの、はしら? いってみる','あっち、なにかおきてる']));   // v2.1 イベントごとの台詞
+  if(B.event) partyShare(B.hero,'event',B.event.x,B.event.y);
   sfx(520,1040,0.6,'sine',0.05);
 }
 function pickupsUpdate(dt){
-  const B=G.B, p=B.hero, st=heroStat(p);
+  const B=G.B, hs=B.heroes.filter(h=>!h.out); if(!hs.length) return;
   for(const gm of B.gems){
     gm.t+=dt;
-    const dx=p.x-gm.x, dy=(p.y-10)-gm.y;
-    const d=Math.hypot(dx,dy)||0.001;
+    // v3.0 ジェムはいちばん近いヒロインへ寄る。経験値はパーティ共通
+    let p=hs[0], bd=1e9; for(const h of hs){ const d=Math.hypot(h.x-gm.x,(h.y-10)-gm.y); if(d<bd){ bd=d; p=h; } }
+    const st=heroStat(p), dx=p.x-gm.x, dy=(p.y-10)-gm.y, d=bd||0.001;
     if(d<st.magnet) gm.sp+=1400*dt;
-    if(gm.sp>0){
-      const mv=Math.min(gm.sp*dt,d);
-      gm.x+=dx/d*mv; gm.y+=dy/d*mv;
-    }
+    if(gm.sp>0){ const mv=Math.min(gm.sp*dt,d); gm.x+=dx/d*mv; gm.y+=dy/d*mv; }
     if(d<16){
-      gm.dead=true;
-      p.xp+=gm.v*(1+0.12*p.ps.growth)*xpSoft(p);   // ラーニングピアス / v2.1 高Lvほどジェムの経験値が薄い(引き継ぎの飽和)
+      gm.dead=true; B.ci=p.hi;
+      gainXpAll(gm.v*(1+0.12*p.ps.growth)*xpSoft(p));   // ラーニングピアス / v2.1 高Lvほどジェムの経験値が薄い(引き継ぎの飽和)
       B.heroCoins+=gm.v*0.5;             // 彼女はコインも貯えている(夜明けの自己強化)
       S.gem();
       parts(p.x,p.y-14,3,['#8fd3ff','#fff'],70,0.3);
@@ -4223,41 +4437,41 @@ function pickupsUpdate(dt){
       if(G.mode!=='battle') break;
     }
   }
+  B.ci=leaderIdx();
   B.gems=B.gems.filter(g=>!g.dead);
-  for(const h of B.hearts){
-    h.t+=dt;
-    if(Math.hypot(h.x-p.x,h.y-(p.y-10))<20){
-      h.dead=true;
-      p.hp=Math.min(p.maxHp,p.hp+30);
-      floatTxt(p.x,p.y-58,'+30','#7ee89a',13,1);
-      heroBubble(p,'かいふく♪');
-      S.heart();
-    }
+  for(const h2 of B.hearts){
+    h2.t+=dt;
+    // v3.0 ハートは触れた子が取る。ただし相手の体力がずっと薄いなら譲る(HEART_YIELD)
+    for(const p of hs){ if(Math.hypot(h2.x-p.x,h2.y-(p.y-10))<20){ const o=partnerOf(p); if(o && p.hp/p.maxHp>o.hp/o.maxHp+BAL.HEART_YIELD && p.hp/p.maxHp>0.6 && Math.hypot(o.x-h2.x,o.y-h2.y)<260){ sayPartyAs(p.hi,'heartYield',1,12); continue; }
+      h2.dead=true; p.hp=Math.min(p.maxHp,p.hp+30); floatTxt(p.x,p.y-58,'+30','#7ee89a',13,1); heroBubble(p,p.id==='freila'?'……助かる':'かいふく♪'); S.heart(); break; } }
   }
   B.hearts=B.hearts.filter(h=>!h.dead);
   for(const pk of B.picks){   // v1.8 地形の資源: 触れれば拾う
     pk.t+=dt;
-    if(!pk.dead && Math.hypot(pk.x-p.x,pk.y-(p.y-6))<22){ applyPick(pk); if(G.mode!=='battle') break; }
+    for(const p of hs){ if(!pk.dead && Math.hypot(pk.x-p.x,pk.y-(p.y-6))<22){ B.ci=p.hi; applyPick(pk); break; } }
+    if(G.mode!=='battle') break;
   }
+  B.ci=leaderIdx();
   B.picks=B.picks.filter(pk=>!pk.dead);
   for(const it of B.items){
     it.t+=dt;
-    const dx=p.x-it.x, dy=(p.y-10)-it.y, d=Math.hypot(dx,dy)||0.001;
+    let p=hs[0], bd=1e9; for(const h of hs){ const d=Math.hypot(h.x-it.x,(h.y-10)-it.y); if(d<bd){ bd=d; p=h; } }
+    const st=heroStat(p), dx=p.x-it.x, dy=(p.y-10)-it.y, d=bd||0.001;
     if(d<st.magnet*1.2){ const mv=Math.min(d,420*dt); it.x+=dx/d*mv; it.y+=dy/d*mv; }
-    if(d<18){ it.dead=true; applyItem(it.kind); if(G.mode!=='battle') break; }
+    if(d<18){ it.dead=true; B.ci=p.hi; applyItem(it.kind); if(G.mode!=='battle') break; }
   }
+  B.ci=leaderIdx();
   B.items=B.items.filter(it=>!it.dead);
   for(const c of B.chests){
     c.t+=dt;
-    if(!c.taken && Math.hypot(c.x-p.x,c.y-(p.y-6))<22){
-      c.taken=true;
-      if(c.fake) fakeChestTrap(c); else openChest(!!c.bossChest);
-    }
+    if(c.taken) continue;
+    for(const p of hs){ if(Math.hypot(c.x-p.x,c.y-(p.y-6))<22){ c.taken=true; B.ci=p.hi; if(c.fake) fakeChestTrap(c); else openChest(!!c.bossChest); break; } }
   }
+  B.ci=leaderIdx();
   B.chests=B.chests.filter(c=>!c.taken);
   for(const tr of B.trails){
     tr.t+=dt;
-    if(Math.hypot(tr.x-p.x,tr.y-p.y)<tr.r+p.r-2) p.slow=Math.max(p.slow,0.3);
+    for(const p of hs){ if(Math.hypot(tr.x-p.x,tr.y-p.y)<tr.r+p.r-2) p.slow=Math.max(p.slow,0.3); }
   }
   B.trails=B.trails.filter(tr=>tr.t<tr.life);
   for(const c of B.clouds){ c.t+=dt; }
@@ -4269,7 +4483,7 @@ function openChest(boss){
   parts(p.x,p.y-10,boss?40:20,['#ffd76a','#fff','#8fd3ff'],boss?220:180,0.9);
   if(boss){
     // 王の宝箱: 全回復・経験値・強化2つ(進化が揃っていれば進化を優先)
-    p.hp=p.maxHp; p.xp+=p.xpNeed*0.9; maybeLevelup();
+    p.hp=p.maxHp; gainXpAll(p.xpNeed*0.9); maybeLevelup();
     heroBubble(p,'おうさまの、たからばこ……!',false,2);
     const evos=readyEvos();
     if(evos.length){ applyUpg('EVO:'+evos[0]); }
@@ -4648,24 +4862,71 @@ function autoDirector(dt){
 }
 
 /* ================= 戦闘tick ================= */
+/* ================= v3.0 パーティ(多ヒロイン)の基盤 =================
+   B.heroes[] に全員、B.hero は文脈(B.ci)のヒロイン。ヒロインごとの処理は eachHero で文脈を切り替えながら回す。
+   魔物は e.ti(標的)の文脈で動く。離脱(out=捕まってその場に残っている)中の子は処理も標的からも外れる */
+function leaderIdx(){ const B=G.B; if(!B||!B.heroes) return 0; const i=B.heroes.findIndex(h=>!h.out); return i<0?0:i; }
+function eachHero(fn){ const B=G.B; for(let i=0;i<B.heroes.length;i++){ const h=B.heroes[i]; if(h.out) continue; B.ci=i; fn(h,i); if(G.mode!=='battle'&&G.mode!=='levelup') break; } B.ci=leaderIdx(); }
+function nearestHeroIdx(x,y){ const B=G.B; let bi=-1, bd=1e9; B.heroes.forEach((h,i)=>{ if(h.out) return; const d=Math.hypot(h.x-x,h.y-y); if(d<bd){ bd=d; bi=i; } }); return bi<0?leaderIdx():bi; }
+function partnerOf(p){ const B=G.B; let best=null, bd=1e9; for(const h of B.heroes){ if(h===p||h.out) continue; const d=Math.hypot(h.x-p.x,h.y-p.y); if(d<bd){ bd=d; best=h; } } return best; }
+function heroOf(k){ const B=G.B; const own=(UPG[k]&&UPG[k].owner)||'lumina'; return (B&&B.heroes&&B.heroes.find(h=>h.id===own))||(B&&B.hero); }
+function heroSkills(p){ return (HEROES[p.id]||HEROES.lumina).skills; }
+function sceneForHero(h,kind,id){ if(h&&h.id==='freila'&&typeof SCENES_F!=='undefined'){ const t=SCENES_F[kind]||{}; const r=t[id]||t.default; if(r) return r; } return sceneFor(kind,id); }
+function gainXpAll(v){ const B=G.B; for(const h of B.heroes) h.xp+=v; }
+/* パーティの台詞(js/lines_party.js の LINES_P)。path の先が {lumina:[..],freila:[..]} なら話者の声で、配列ならそのまま */
+function sayPartyAs(hi,path,prio,cd){
+  const B=G.B; if(!B||typeof LINES_P==='undefined') return false; const h=B.heroes[hi]; if(!h) return false;
+  let o=LINES_P; for(const k of path.split('.')){ if(o==null) return false; o=o[k]; }
+  const arr=o&&(Array.isArray(o)?o:o[h.id]); if(!Array.isArray(arr)||!arr.length) return false;
+  cd=(cd===undefined)?6:cd; const key='P'+hi+':'+path; B.lineCd=B.lineCd||{}; if(B.lineCd[key]!==undefined && B.time-B.lineCd[key]<cd) return false;
+  B.lineCd[key]=B.time; heroBubble(h,arr[(Math.random()*arr.length)|0],(prio||0)>=2,prio||0); return true;
+}
+/* 二人が画面に収まる距離に保つ(離れすぎた分を寄せる。拘束されている子は動かさない) */
+function partyClamp(){
+  const B=G.B, hs=B.heroes.filter(h=>!h.out); if(hs.length<2) return;
+  for(let i=0;i<hs.length;i++) for(let j=i+1;j<hs.length;j++){ const a=hs[i], b=hs[j]; const fa=!(a.pinned||attachCount(a)>0||a.charmBind), fb=!(b.pinned||attachCount(b)>0||b.charmBind);
+    const dx=b.x-a.x, dy=b.y-a.y;
+    if(Math.abs(dx)>BAL.PARTY_MAXDX){ const ex=(Math.abs(dx)-BAL.PARTY_MAXDX)*Math.sign(dx); if(fa&&fb){ a.x+=ex/2; b.x-=ex/2; } else if(fa) a.x+=ex; else if(fb) b.x-=ex; }
+    if(Math.abs(dy)>BAL.PARTY_MAXDY){ const ey=(Math.abs(dy)-BAL.PARTY_MAXDY)*Math.sign(dy); if(fa&&fb){ a.y+=ey/2; b.y-=ey/2; } else if(fa) a.y+=ey; else if(fb) b.y-=ey; } }
+  for(const h of hs) collideMap(h,h.r+2,false);
+}
+/* 救出: 捕まってその場に残っている子のそばに RESCUE_T 秒立つ */
+function rescueTick(dt){
+  const B=G.B, p=B.hero; if(p.out) return;
+  if(p.thanksT>0){ p.thanksT-=dt; if(p.thanksT<=0) sayPartyAs(B.ci,'rescue.thanks',3,0); }
+  for(const c of B.heroes){ if(!c.out||!c.captive) continue; const d=Math.hypot(c.x-p.x,c.y-p.y);
+    if(d<BAL.RESCUE_R && attachCount(p)===0 && !p.pinned && !p.charmBind && p.climaxT<=0){ if(c.captive.rescue<=0) sayPartyAs(B.ci,'rescue.start',2,15); c.captive.rescue+=dt; if(c.captive.rescue>=BAL.RESCUE_T) rescueHero(c,p); }
+    else c.captive.rescue=Math.max(0,c.captive.rescue-dt*0.7); }
+}
+function rescueHero(c,by){
+  const B=G.B; c.out=false; c.pinned=false; c.pinBy=null; c.pinEscape=0; c.struggle=0; c.captive=null; c.hp=Math.max(c.hp,Math.round(c.maxHp*0.5)); c.stamina=Math.max(c.stamina,Math.round(c.staminaMax*0.6)); c.ifr=1.5; c.aiMode='fight'; c.goal=null; c.path=null; c.exhausted=false; c.thanksT=1.3;
+  B.rescues=(B.rescues||0)+1; setBanner(c.name+'を救い出した!', by.name+'が縛めを解いた','#8fd3ff'); parts(c.x,c.y-14,30,['#fff','#8fd3ff','#ffd76a'],200,0.8); S.lvup();
+  sayPartyAs(by.hi,'rescue.done',3,0); B.party.goal=null;
+  if(typeof STORY_V30!=='undefined' && STORY_V30.party && STORY_V30.party.rescue && !B.rescueStorySeen){ B.rescueStorySeen=true; UI.showStory(STORY_V30.party.rescue,{dur:5}); }
+}
 function battleTick(dt){
-  const B=G.B, p=B.hero;
+  const B=G.B;
   B.time+=dt;
 
   // v2.0 時間制限は無い。その日は「降り口に着く」「魔核を討つ」「捕まる」で終わる
+  // v3.0 ヒロインごとの更新(文脈 B.ci を切り替えながら)。捕まってその場に残っている子は飛ばす
+  for(let i=0;i<B.heroes.length;i++){
+    B.ci=i; const p=B.hero; if(p.out){ p.anim+=dt; continue; }
+    p.anim+=dt;
+    if(p.ifr>0) p.ifr-=dt;
+    if(p.bubbleT>0) p.bubbleT-=dt;
+    if(p.bubbleCd>0) p.bubbleCd-=dt;
+    if(p.novaAnim>0) p.novaAnim-=dt;
+    if(p.whipAnim>0) p.whipAnim-=dt;
+    if(p.fwingAnim>0) p.fwingAnim-=dt;
+    p.hp=Math.min(p.maxHp,p.hp+p.regen*(p.guardT>0?4:1)*dt);   // 清廉のご加護 / v2.3 聖光の壁で×4
 
-  p.anim+=dt;
-  if(p.ifr>0) p.ifr-=dt;
-  if(p.bubbleT>0) p.bubbleT-=dt;
-  if(p.bubbleCd>0) p.bubbleCd-=dt;
-  if(p.novaAnim>0) p.novaAnim-=dt;
-  if(p.whipAnim>0) p.whipAnim-=dt;
-  p.hp=Math.min(p.maxHp,p.hp+p.regen*(p.guardT>0?4:1)*dt);   // 清廉のご加護 / v2.3 聖光の壁で×4
-
-  condTick(p,dt);
-  if(p.climaxT>0){ climaxTick(dt); }
-  if(p.pinned){ pinTick(dt); if(G.mode!=='battle') return; }
-  else if(p.charmBind){ charmBindTick(dt); if(G.mode!=='battle') return; }
+    condTick(p,dt);
+    if(p.climaxT>0){ climaxTick(dt); }
+    if(p.pinned){ pinTick(dt); if(G.mode!=='battle') return; }
+    else if(p.charmBind){ charmBindTick(dt); if(G.mode!=='battle') return; }
+  }
+  B.ci=leaderIdx(); const p=B.hero;
   for(const st of B.stains) st.t+=dt;
   B.stains=B.stains.filter(st=>st.t<st.life);
   // きよめの泉(聖水の領域)・演出FX・閃光・まさぐりの全体ゲート
@@ -4689,30 +4950,29 @@ function battleTick(dt){
   // 敵弾(刻印師の呪弾): 直進し、彼女に当たれば淫紋
   for(const b of B.ebullets){
     b.t+=dt; b.x+=b.vx*dt; b.y+=b.vy*dt;
-    if(!b.dead && Math.hypot(b.x-p.x,b.y-(p.y-14))<b.r+p.r*0.8 && p.freezeT<=0){ b.dead=true; runeHit(b); }
+    for(let i=0;i<B.heroes.length;i++){ const h=B.heroes[i]; if(h.out||b.dead) continue; if(Math.hypot(b.x-h.x,b.y-(h.y-14))<b.r+h.r*0.8 && h.freezeT<=0){ B.ci=i; b.dead=true; runeHit(b); } }   // v3.0 誰に当たったか
   }
+  B.ci=leaderIdx();
   if(B.ebullets.length) B.ebullets=B.ebullets.filter(b=>!b.dead&&b.t<b.life);
-  poiTick(dt);   // 祠・泉・門
+  eachHero(()=>poiTick(dt));   // 祠・泉・門(v3.0 ヒロインごと)
   for(const k in B.itemCd){ if(B.itemCd[k]>0) B.itemCd[k]-=dt; }
-  trapsTick(dt);
+  eachHero(()=>trapsTick(dt));
   // 小淫魔: 近くの数を数える(集中低下)。快感は煽りアクション時のみ(バーストCD持ち)
   if(B.impBurstCd>0) B.impBurstCd-=dt;
-  p.teaseN=0;
-  for(const e of B.enemies){
-    if(!e.dead&&e.id==='imp'&&Math.hypot(e.x-p.x,e.y-p.y)<120) p.teaseN++;
-  }
-  aiUpdate(dt);
-  weaponsUpdate(dt);
+  for(const h of B.heroes){ h.teaseN=0; if(h.out) continue; for(const e of B.enemies){ if(!e.dead&&e.id==='imp'&&Math.hypot(e.x-h.x,e.y-h.y)<120) h.teaseN++; } }
+  eachHero(()=>{ aiUpdate(dt); const n0=B.bullets.length; weaponsUpdate(dt); for(let k=n0;k<B.bullets.length;k++) B.bullets[k].hi=B.ci; rescueTick(dt); });   // v3.0 一人ずつ考えて撃つ。撃った弾は持ち主を覚える
+  partyClamp();   // v3.0 二人が画面に収まる距離に保つ
   bulletsUpdate(dt);
   enemiesUpdate(dt);
   if(G.mode!=='battle') return;
   pickupsUpdate(dt);
   if(G.mode!=='battle') return;
-  picksTick(dt); eventTick(dt);   // v1.8 地形の資源とイベント
+  eachHero(()=>picksTick(dt)); eventTick(dt);   // v1.8 地形の資源とイベント
   storyTick(dt);                   // v2.0 階層の独り言
-  exitTick(dt); linesTick(dt);     // v2.1 降りる判断 / 場面に合わせた台詞
-  skillTick(dt);                   // v2.3 奥義
-  seenTick(dt);                    // v2.4 見た範囲を覚える
+  exitTick(dt); eachHero(()=>linesTick(dt));     // v2.1 降りる判断 / 場面に合わせた台詞
+  partyTick(dt);                   // v3.0 二人のやりとり(相談の台詞・共有・雑談)
+  eachHero(()=>skillTick(dt));     // v2.3 奥義
+  eachHero(()=>seenTick(dt));      // v2.4 見た範囲を覚える(二人ぶんの視界)
 
   // EN回復
   B.en=Math.min(enMax(), B.en+(BAL.EN_REGEN+0.12*altarLv('enregen')+BAL.EN_REGEN_LV*p.level)*B.floor.en.regen*(1+BAL.PRESS_EN_REGEN*pressure())*dt);   // v2.0 深いほど速く溜まる / v2.1 長居するほど速い

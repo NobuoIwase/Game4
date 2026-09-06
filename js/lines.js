@@ -646,4 +646,4 @@ const LINES={
   "だれもいない……いまだ!"
  ]
 };
-function lineOf(path){ let o=LINES; for(const k of path.split('.')){ if(o==null) return null; o=o[k]; } return (Array.isArray(o)&&o.length)?o[(Math.random()*o.length)|0]:null; }
+function lineOf(path,T){ let o=T||LINES; for(const k of path.split('.')){ if(o==null) return null; o=o[k]; } return (Array.isArray(o)&&o.length)?o[(Math.random()*o.length)|0]:null; }

@@ -41,9 +41,11 @@ function frame(now){
     if(!G.B && speedy) break;
   }
   if(G.B){
-    const p=G.B.hero;
+    // v3.0 カメラは(離脱していない)ヒロインたちの重心を追う
+    const hs=(G.B.heroes||[G.B.hero]).filter(h=>!h.out); const p=G.B.hero;
+    const cx=hs.length?hs.reduce((a,h)=>a+h.x,0)/hs.length:p.x, cy=hs.length?hs.reduce((a,h)=>a+h.y,0)/hs.length:p.y;
     const k2=Math.min(1,dt*5*steps);
-    G.cam.x+=(p.x-G.cam.x)*k2; G.cam.y+=(p.y-G.cam.y)*k2;
+    G.cam.x+=(cx-G.cam.x)*k2; G.cam.y+=(cy-G.cam.y)*k2;
     if(typeof MAP_HW!=='undefined'){ G.cam.x=clamp(G.cam.x,-MAP_HW+W/2,MAP_HW-W/2); G.cam.y=clamp(G.cam.y,-MAP_HH+H/2,MAP_HH-H/2); }   // マップの外を見せない
   }
   UI.tickBattleBar();

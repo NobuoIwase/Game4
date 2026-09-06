@@ -36,7 +36,7 @@ function clampMapY(y,m){ m=m===undefined?24:m; return clamp(y,-MAP_HH+m,MAP_HH-m
 
 /* ================= 生成 ================= */
 function genMap(){
-  const gi=mapGen(), F=curFloor(), fl=F.depth, seed=1000+gi*7919+fl*104729;   // v2.0 世代×階層で地形が決まる(同じ階層への再挑戦は同じ地形)
+  const gi=mapGen(), F=curFloor(), fl=F.depth, seed=1000+gi*7919+fl*104729+(typeof eraNow==='function'?eraNow()*31337:0);   // v2.0 世代×階層で地形が決まる(同じ階層への再挑戦は同じ地形) / v3.0 世代(era)で最終階層が動くので種にも入れる
   if(G.map && G.map.seed===seed && META.map && META.map.gen===gi && META.map.floor===fl){ G.map.flowT=-9; G.map.heroTile=null; return; }   // 同じ世代・同じ階層: 流れ場だけ次の出撃で作り直す
   let sd=seed; const rnd=()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; };
   const N=MAP_W*MAP_H;
@@ -754,7 +754,7 @@ function drawMinimap(g){
   if(p.goal){ const gl=p.goal; g.strokeStyle='rgba(255,233,176,0.55)'; g.lineWidth=1; g.setLineDash([2,2]); g.beginPath(); g.moveTo(tx(p.x),ty(p.y)); g.lineTo(tx(gl.x),ty(gl.y)); g.stroke(); g.setLineDash([]);
     g.strokeStyle='#ffe9b0'; g.beginPath(); g.arc(tx(gl.x),ty(gl.y),3.5+Math.sin(performance.now()*0.006),0,TAU); g.stroke(); }   // v1.8 目当て
   if(B.event){ const c=(EVENT_DEF[B.event.kind]&&EVENT_DEF[B.event.kind].col)||'#fff'; g.fillStyle=c; g.globalAlpha=0.6+0.4*Math.sin(performance.now()*0.008); g.beginPath(); g.arc(tx(B.event.x),ty(B.event.y),3,0,TAU); g.fill(); g.globalAlpha=0.9; }   // v1.8 光の柱
-  g.fillStyle='#fff'; g.beginPath(); g.arc(tx(p.x),ty(p.y),2.2,0,TAU); g.fill();
+  for(const hh of (B.heroes||[p])){ g.fillStyle=hh.out?'#c98cff':((typeof HEROES!=='undefined'&&HEROES[hh.id])?HEROES[hh.id].col:'#fff'); g.beginPath(); g.arc(tx(hh.x),ty(hh.y),2.2,0,TAU); g.fill(); }   // v3.0 全員の位置
   g.strokeStyle='rgba(255,255,255,0.35)'; g.lineWidth=1; g.strokeRect(tx(G.cam.x-W/2),ty(G.cam.y-H/2),W/MAP_T*sc,H/MAP_T*sc);
   g.strokeStyle='rgba(201,140,255,0.6)'; g.strokeRect(x0-3,y0-3,mw+6,mh+6);
   if(G.map.seen && G.map.passN){ g.font='bold 9px '+FONT; g.fillStyle='rgba(220,225,255,0.85)'; g.textAlign='right'; g.textBaseline='bottom'; g.fillText('探索 '+Math.round(100*G.map.seenN/G.map.passN)+'%', x0+mw, y0-4); }   // v2.4 探索率

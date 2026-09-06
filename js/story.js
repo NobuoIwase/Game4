@@ -533,7 +533,10 @@ const STORY={
   }
  ]
 };
-function storyFloor(depth){ const f=STORY.floors[Math.max(0,Math.min(STORY.floors.length-1,(depth||1)-1))]; return f?Object.assign({intro:[],enter:[],descend:[]},f):{intro:[],enter:[],descend:[]}; }
+function storyFloor(depth){ depth=depth||1; let f=null;
+  if(depth>STORY.floors.length && typeof STORY_V30!=='undefined' && STORY_V30.floors && STORY_V30.floors[String(depth)]) f=STORY_V30.floors[String(depth)];   // v3.0 第6層以降
+  else f=STORY.floors[Math.max(0,Math.min(STORY.floors.length-1,depth-1))];
+  return f?Object.assign({intro:[],enter:[],descend:[]},f):{intro:[],enter:[],descend:[]}; }
 /* v2.1 ADV行の正規化: 文字列でも {s,t,f} でも受け、{s,t,f} に揃える。文字列は「」で始まればルミナの台詞、（）は独白、それ以外は地の文 */
 function storyNorm(lines){
   const out=[]; if(!lines) return out;
@@ -552,6 +555,7 @@ function storyLineHtml(l){
   const x=storyNorm([l])[0]; if(!x) return '';
   const e=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   if(x.s==='lumina') return `<div class="sl"><b class="who">ルミナ</b>「${e(x.t)}」</div>`;
+  if(x.s==='freila') return `<div class="sl"><b class="who f">フレイラ</b>「${e(x.t)}」</div>`;   // v3.0
   if(x.s==='town') return `<div class="sl"><b class="who t">街の人</b>「${e(x.t)}」</div>`;
   if(x.s==='voice') return `<div class="sl"><b class="who v">声</b>「${e(x.t)}」</div>`;
   return `<div class="sn">${e(x.t)}</div>`;

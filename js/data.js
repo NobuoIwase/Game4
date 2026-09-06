@@ -173,6 +173,10 @@ const BAL={
   FEAR3_WORTH:2.4, FEAR_COST:[0,0.5,1.5,3.0],
   /* v2.3 迷いの積み上げ: 同じ地形で「やめとく」を選ぶたびに次に入る確率が HESIT_ESC ずつ上がる(入ったら戻る)。SCARED_T 秒はその地形へ寄らない */
   HESIT_ESC:0.22, SCARED_T:40,
+  /* v3.0 深淵のループ: 初期の開放階層 ERA_FLOORS0、世代ごとの深さ倍率(+K0/世代、階層が増えなくなった後はさらに +K/世代)。魔核は世代0で薄い(CORE_ERA_HP0 倍)、世代ごとに厚く */
+  /* v3.0 パーティ: 二人の距離が PARTY_LEASH を超えると寄る力、PARTY_MAXDX/DY を超えると引き戻す(画面外に出ない)。救出は RESCUE_R 内に RESCUE_T 秒。相談の間 TALK_T 秒は足を止める */
+  PARTY_LEASH:380, PARTY_MAXDX:740, PARTY_MAXDY:360, PARTY_SEP:34, RESCUE_R:60, RESCUE_T:3.0, TALK_T:1.3, ASSIST_R:120, HEART_YIELD:0.15, PARTY_HOLD:7, PARTY_TALK_CD:10,
+  ERA_FLOORS0:2, ERA_DEPTH_K0:0.06, ERA_DEPTH_K:0.10, CORE_ERA_HP0:0.45, CORE_ERA_HP_K:0.28, CORE_ERA_DEF_K:0.05, SENT_ERA:[2,3,3,4,4,5,6],
   /* v2.4 視界の記憶: SEEN_T 秒ごとに半径 SEEN_R×SEEN_RY の楕円を「見た」にする。探索点は未探索率×EXPLORE_UNSEEN_W − 距離×EXPLORE_DIST_W で選ぶ(SEEN_EXPLORE=0 で旧挙動)。BOSS_PICK=1 でボスを想定した武器選び */
   SEEN_T:0.25, SEEN_R:560, SEEN_RY:400, SEEN_EXPLORE:1, EXPLORE_UNSEEN_W:2.5, EXPLORE_DIST_W:0.4, EXPLORE_DONE:0.96, BOSS_PICK:1, BOSS_MEMORY_T:60,
   /* v2.4 ボス級(カードのボス)は彼女の Lv で厚くなり(+5%/Lv、上限 +250%)、光が通りにくい(被ダメ 80%)。魔核・番兵は各自の値 */
@@ -476,10 +480,19 @@ const FLOORS=[
   { id:'f2', name:'水鏡の洞',   sub:'浅瀬と湿った洞。足を取られる',          depth:2, zoneW:{damp:4,water:4,moss:2,hotspring:1},        wall:'rock',  en:{start:1.1,base:1.15,regen:1.15,max:1.15}, mon:{hp:1.15,dmg:1.05}, affinity:['slime','mistslime','leech','slimeking','worm','suiyou'], col:'#7fe0ff', lewd:{name:'湯けむりの隠れ湯', sub:'湯気の濃い隠れ湯。火照りが止まらない。奥に王の宝箱'} },
   { id:'f3', name:'蜜の花園',   sub:'花と温泉。甘い匂いが濃い',              depth:3, zoneW:{flower:5,moss:2,hotspring:2,damp:1},        wall:'rock',  en:{start:1.2,base:1.3,regen:1.3,max:1.3},     mon:{hp:1.3,dmg:1.1},   affinity:['flower','moth','gas','imp','succubus','dreamtree','inyoku'], col:'#ffb3cf', lewd:{name:'花の褥', sub:'花びらが敷き詰められた褥。花粉が濃い。奥に王の宝箱'} },
   { id:'f4', name:'沈んだ回廊', sub:'石畳の遺跡。封印石を灯さねば降り口は開かない', depth:4, zoneW:{ruin:6,damp:2,water:1,moss:1},          wall:'brick', en:{start:1.3,base:1.5,regen:1.5,max:1.5},     mon:{hp:1.5,dmg:1.15},  affinity:['gazer','beamer','eye','runemage','tower','bossgazer','guardian'], puzzle:'seals', col:'#cbd5ff', lewd:{name:'淫紋の間', sub:'床いちめんに紋が刻まれた間。踏むほど身体が疼く。奥に王の宝箱'} },
-  { id:'f5', name:'肉の巣',     sub:'最深部。壁も床も脈打つ。魔核が待つ',    depth:5, zoneW:{flesh:5,nest:3,flower:1,damp:1},           wall:'flesh', en:{start:1.5,base:1.75,regen:1.75,max:1.75}, mon:{hp:1.75,dmg:1.25}, affinity:['gtent','hand','pot','worm','slugqueen','succuqueen','gobking','vampi','mouth'], final:true, col:'#ff6b81', lewd:{name:'肉の褥', sub:'脈打つ肉の褥。横になれば、もう起きられない。奥に王の宝箱'} },
+  { id:'f5', name:'肉の巣',     sub:'壁も床も脈打つ。深淵の心臓に近い',    depth:5, zoneW:{flesh:5,nest:3,flower:1,damp:1},           wall:'flesh', en:{start:1.5,base:1.75,regen:1.75,max:1.75}, mon:{hp:1.75,dmg:1.25}, affinity:['gtent','hand','pot','worm','slugqueen','succuqueen','gobking','vampi','mouth'], col:'#ff6b81', lewd:{name:'肉の褥', sub:'脈打つ肉の褥。横になれば、もう起きられない。奥に王の宝箱'} },
+  /* v3.0 追加の階層(世代=魔核の討伐回数で開く) */
+  { id:'f6', name:'骸の回廊',   sub:'骨を積んだ煉瓦の回廊。番人が多い',      depth:6, zoneW:{ruin:5,flesh:2,damp:2,nest:1},           wall:'brick', en:{start:1.6,base:2.0,regen:2.0,max:2.0},     mon:{hp:2.0,dmg:1.35},  affinity:['guardian','sentinel','gazer','beamer','ghost','ghosthand','eye','runemage'], col:'#d9d2ff', lewd:{name:'骸の寝台', sub:'骨で組んだ寝台。横たえられた者の形に凹んでいる。奥に王の宝箱'} },
+  { id:'f7', name:'星の湖底',   sub:'星明かりの湖。浅瀬と水妖',              depth:7, zoneW:{water:5,damp:3,moss:1,hotspring:1},         wall:'rock',  en:{start:1.7,base:2.3,regen:2.3,max:2.3},     mon:{hp:2.3,dmg:1.45},  affinity:['suiyou','slime','mistslime','leech','slimeking','inyoku','moth','succubus'], col:'#9fd8ff', lewd:{name:'星の浅瀬', sub:'星が映る浅瀬。水が腕の形になって待っている。奥に王の宝箱'} },
+  { id:'f8', name:'深淵の底',   sub:'肉と紋。もっとも深い所',                depth:8, zoneW:{flesh:5,nest:2,ruin:2,flower:1},           wall:'flesh', en:{start:1.9,base:2.6,regen:2.6,max:2.6},     mon:{hp:2.6,dmg:1.55},  affinity:['gtent','hand','pot','mouth','succuqueen','gobking','vampi','core','runemage'], col:'#ff5d9a', lewd:{name:'底の褥', sub:'紋の刻まれた肉の褥。深淵の底で、二人ぶんの窪みが待つ。奥に王の宝箱'} },
 ];
-const curFloorIdx=()=>Math.min(FLOORS.length-1,Math.max(0,((META.run&&META.run.floor)||1)-1));
-const curFloor=()=>FLOORS[curFloorIdx()];
+/* v3.0 深淵のループ: era=魔核を討たれた回数。開いている階層 = ERA_FLOORS0 + era(上限 FLOORS.length)。最深の開いた階層が最終階層(魔核)。
+   era が階層数の上限を超えても深さ倍率(eraMul)は伸び続ける */
+const eraNow=()=>((META&&META.era)|0);
+const openFloors=()=>Math.min(FLOORS.length, BAL.ERA_FLOORS0+eraNow());
+const eraMul=()=>1+BAL.ERA_DEPTH_K*Math.max(0,eraNow()-Math.max(0,FLOORS.length-BAL.ERA_FLOORS0))+BAL.ERA_DEPTH_K0*eraNow();   // 毎世代 +K0、階層が増えなくなった後は +K も
+const curFloorIdx=()=>Math.min(openFloors()-1,Math.max(0,((META.run&&META.run.floor)||1)-1));
+const curFloor=()=>{ const F=FLOORS[curFloorIdx()]; return Object.assign({}, F, {final: F.depth>=openFloors()}); };   // v3.0 最終階層は世代で動く
 /* v1.8 地形の資源(拾い物): 地形帯ごとに生える/沈んでいる。彼女は必要に応じて目当てにする */
 const PICK_DEF={
   shroom:  { name:'光茸',     zone:'moss',   desc:'拾うと経験値。光で 900px 内の場所を知る' },
@@ -621,6 +634,24 @@ const SKILLS={
   purge:  { name:'浄化の脈', icon:'❂', lv:38, cd:35, desc:'二肢以上を掴まれるか押し倒された時、光を破裂させて全ての拘束を千切り、半径120の魔物を弾いて止める(ボスは短く)' },
   bulwark:{ name:'聖光の壁', icon:'◈', lv:52, cd:45, desc:'HPが35%を切った時、4秒間 被ダメ-70%・自然回復×4' },
 };
+/* v3.0 ヒロイン定義。パーティは HEROES の並びで最大4人まで(現在は2人)。武器はヒロインごと、パッシブは共通、Lv・経験値はパーティ共通 */
+const HEROES={
+  lumina:{ name:'ルミナ',   col:'#8fd3ff', hair:'#f2e8d8', sprite:'lumina', wps:['bolt','orb','nova','whip','rain','cross','sanct','blade','thunder','holy','chain','spirit','shield'],
+           start:{bolt:2,orb:1}, grow:['bolt','orb','nova'], hpMul:1.0, spdMul:1.0, armor:0, fearMul:1.0, braveAdd:0, kiteMul:1.0,
+           skills:{ blink:{ name:'光の跳躍', icon:'✦', lv:22, cd:20, desc:'囲まれた時、光になって最も空いている方へ180px跳ぶ。0.6秒無敵' },
+                    purge:{ name:'浄化の脈', icon:'❂', lv:38, cd:35, desc:'二肢以上を掴まれるか押し倒された時、光を破裂させて全ての拘束を千切り、半径120の魔物を弾いて止める' },
+                    bulwark:{ name:'聖光の壁', icon:'◈', lv:52, cd:45, desc:'HPが35%を切った時、4秒間 被ダメ-70%・自然回復×4' } },
+           pref:{shrine:1.2, stele:1.25, pool:1.1, spring:1.1, shroom:1.15, nectar:1.1, gems:1.1, explore:1.0, chest:1.0, boss:0.95, core:0.85, stairs:0.95},
+           desc:'光の投射で戦う見習いの天使。元気で、少し怖がり' },
+  freila:{ name:'フレイラ', col:'#ff7a5a', hair:'#c8434a', sprite:'freila', wps:['fsword','fring','fburst','fpillar','fwing'],
+           start:{fsword:2,fring:1}, grow:['fsword','fring','fburst'], hpMul:1.12, spdMul:1.02, armor:1, fearMul:0.6, braveAdd:0.2, kiteMul:1.35,
+           skills:{ blaze:{ name:'焔の突進', icon:'➶', lv:22, cd:20, desc:'囲まれた時、炎になって最も空いている方へ突き抜け、通り道の魔物を焼いて止める。0.6秒無敵' },
+                    ember:{ name:'熾火の壁', icon:'◎', lv:38, cd:35, desc:'二肢以上を掴まれるか押し倒された時、炎を噴いて全ての拘束を焼き切り、半径120の魔物を弾いて4秒間 近づく魔物を焦がす' },
+                    phoenix:{ name:'不死鳥', icon:'✺', lv:52, cd:60, desc:'HPが30%を切った時、炎とともに立ち上がりHP35%回復・2秒無敵・周囲を焼く' } },
+           pref:{chest:1.1, boss:1.3, treasure:1.15, item:1.1, stairs:1.15, core:1.3, explore:1.1, event:1.05, shrine:0.8, stele:0.7, pool:0.85, spring:0.9, gems:0.9, shroom:0.85},
+           desc:'火を操る近接主体の天使。気が強く、前に出る' },
+};
+const PARTY_ORDER=['lumina','freila'];   // 出撃するヒロインの並び(先頭が代表)
 const luminaUpCost=(id,rank)=>Math.round(LUMINA_UPG[id].base*Math.pow(1.5,rank));
 const luminaRank=id=>((META.lumina&&META.lumina.upg)||{})[id]||0;
 const shaveCost=rank=>Math.round(6+3*rank);   // 自己強化を1段削ぐオーブ費用
@@ -640,6 +671,12 @@ const UPG={
   chain: {name:'せいさ',           d1:'ひかりの鎖が',    d2:'なぎ、しばる',    max:8, kind:'wp', bossW:1.3},
   spirit:{name:'みちびきの精霊',   d1:'ちいさな光が',    d2:'追いかけてはぜる', max:8, kind:'wp', bossW:1.3},
   shield:{name:'ひかりの盾',       d1:'まえに盾が',      d2:'やいて、はじく',  max:8, kind:'wp', bossW:0.9},
+  /* v3.0 フレイラの武器(火・近接)。owner が無い武器はルミナのもの */
+  fsword: {name:'炎の剣',           d1:'まえを薙ぐ',      d2:'炎の刃',          max:8, kind:'wp', bossW:1.3,  owner:'freila'},
+  fring:  {name:'火の輪',           d1:'まわりを回る',    d2:'火の輪',          max:8, kind:'wp', bossW:0.9,  owner:'freila'},
+  fburst: {name:'爆炎',             d1:'じぶんの周りで',  d2:'炎がはぜる',      max:8, kind:'wp', bossW:0.7,  owner:'freila'},
+  fpillar:{name:'火柱',             d1:'ちかい敵の足元に', d2:'火柱がたつ',      max:8, kind:'wp', bossW:1.25, owner:'freila'},
+  fwing:  {name:'焔の翼',           d1:'とびこんで',      d2:'やきはらう',      max:8, kind:'wp', bossW:1.15, owner:'freila'},
   speed: {name:'スピードシューズ', d1:'いどう速度',      d2:'+10%',            max:5, kind:'ps'},
   vital: {name:'マックスハート',   d1:'さいだいHP+25',   d2:'いまも回復する',   max:5, kind:'ps'},
   magnet:{name:'ジェムマグネット', d1:'ジェムの回収',    d2:'はんいUP',        max:5, kind:'ps', bossW:0.8},
@@ -682,6 +719,13 @@ const EVOS={
     d1:'雷の柱が', d2:'いっせいにおちる' },
   spring:{ name:'きよめの泉', base:'holy', pair:'area',
     d1:'ひろい聖なる泉が', d2:'ながく残る' },
+  /* v3.0 フレイラの進化 */
+  inferno:{ name:'煉獄の剣', base:'fsword', pair:'haste',
+    d1:'炎の刃が全方位を', d2:'なぎ、燃やし続ける' },
+  corona:{ name:'太陽環', base:'fring', pair:'vital',
+    d1:'大きな火の輪が', d2:'触れた敵を焼き止める' },
+  eruption:{ name:'大噴火', base:'fburst', pair:'area',
+    d1:'噴き上がる炎が', d2:'すべてを弾き飛ばす' },
 };
 /* v2.1 引き継ぎで Lv が階層を跨いで積み上がるため、Lv20 を超えると必要量が更に増える(飽和させる) */
 const need=l=>Math.floor((6 + l*3.2 + l*l*0.18)*(1+BAL.NEED_SOFT_K*Math.max(0,l-BAL.NEED_SOFT_LV)));
