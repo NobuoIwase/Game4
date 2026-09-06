@@ -2828,7 +2828,7 @@ function dreamtreeTick(e,dt,d){
   if(e.rootCd>0) e.rootCd-=dt;
   e.spawnCd-=dt;
   const holding=attachedSlots(p).some(sl=>p.limbs[sl].mon===e);
-  // 幹の洞からワームを産み続ける(自前の子は8体まで。無償なのでロージェムしか落とさない)
+  // 幹の洞からワームを産み続ける(自前の子は10体まで。無償なのでロージェムしか落とさない)
   if(e.spawnCd<=0){
     e.spawnCd=5;
     const kids=B.enemies.filter(k=>!k.dead&&k.parent===e).length;
@@ -3562,7 +3562,7 @@ function succuqueenTick(e,dt,d,dx,dy){
   if(e.spawnCd<=0){
     e.spawnCd=15;
     if(aliveOf('imp')<8 && B.enemies.length<fieldCap()-3){
-      for(let i=0;i<3;i++){ const a=rand(TAU); spawnUnit('imp', e.x+Math.cos(a)*30, e.y+Math.sin(a)*30, {parent:e, enVal:0, gemMul:0}); }   // v2.4 3体ずつ・8体まで
+      for(let i=0;i<3 && aliveOf('imp')<8;i++){ const a=rand(TAU); spawnUnit('imp', e.x+Math.cos(a)*30, e.y+Math.sin(a)*30, {parent:e, enVal:0, gemMul:0}); }   // v2.4 3体ずつ・8体まで(超えない)
       setBanner('女王の呼び声','小淫魔が集う','#ff9ec2');
     }
   }
@@ -3577,7 +3577,7 @@ function gobkingTick(e,dt,d,dx,dy){
     e.hornCd=8; let n=0, hasted=0;
     for(let i=0;i<3;i++){ if(aliveOf('goblin')>=12||B.enemies.length>=fieldCap()) break; const a=rand(TAU); spawnUnit('goblin', e.x+Math.cos(a)*40, e.y+Math.sin(a)*40, {parent:e, enVal:0, gemMul:0}); n++; }
     for(const g2 of B.enemies){ if(!g2.dead && g2.id==='goblin' && Math.hypot(g2.x-e.x,g2.y-e.y)<320){ g2.hasteT=4; hasted++; } }   // v2.4 号令: 近くの手下が4秒間速くなる
-    if(n||hasted){ setBanner('呼び笛と号令','ゴブリンの王が手下を呼び、駆り立てた','#8fd36a'); sfx(180,420,0.4,'square',0.06); }
+    if(n){ setBanner('呼び笛と号令','ゴブリンの王が手下を呼び、駆り立てた','#8fd36a'); sfx(180,420,0.4,'square',0.06); } else if(hasted && Math.random()<0.5){ floatTxt(e.x,e.y-e.r-16,'号令!','#8fd36a',11,1.0); }   // 手下が上限でも号令は掛かる(帯は呼んだ時だけ)
   }
 }
 
