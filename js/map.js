@@ -364,6 +364,8 @@ function genMap(){
   if(F.puzzle==='seals'){ for(const q of feat.seals) place('seal',null,0,q); for(let k=feat.seals.length;k<3;k++) place('seal',null,500); }
   if(feat.denPool) place('pool',null,0,feat.denPool);   // v3.2 巣窟の口の外に湧く清水(入る前に整え、出てから流す)
   if(feat.lewd) place('shrine',null,0,{x:feat.lewd.x,y:feat.lewd.y});   // v2.2 えちえちエリアの祠は真ん中(岩の輪を崩さない位置。既存の場所の鍵を変えないよう最後に置く)
+  { const nl=(BAL.LANTERN_N&&BAL.LANTERN_N[Math.min(BAL.LANTERN_N.length-1,fl-1)])||2;   // v4.0 催淫灯篭: 暗がりに点々と灯る。遠くからでも見えるが、そばに居ると発情が溜まる
+    for(let k=0;k<nl;k++) place('lantern',null,560); }
   // v1.8 地形帯ごとの「届く床」の索引(資源の出現・イベントの位置に使う)
   const zoneTiles={}; for(const z of ZONE_IDS) zoneTiles[z]=[];
   for(let k=0;k<N;k++){ if(!solid[k] && reachF[k]) zoneTiles[ZONE_IDS[zone[k]]].push(k); }
@@ -868,8 +870,20 @@ function drawPoi(g,q){
     const rc=read?'rgba(170,170,200,0.45)':'rgba(203,213,255,'+(0.7+0.3*Math.sin(t*3))+')';
     g.strokeStyle=rc; g.lineWidth=1.4; for(let i=0;i<4;i++){ const y=-26+i*6; g.beginPath(); g.moveTo(-6,y); g.lineTo(-6+([7,10,5,9][i]),y); g.stroke(); }
     if(!read) glow(g,0,-18,ev?40:16,'203,213,255',ev?0.45+0.2*Math.sin(t*4):0.3);
+  }else if(q.kind==='lantern'){
+    // v4.0 催淫灯篭: 桃色の火が入った石灯篭。遠くからでも見える——寄れば甘い熱が纏わりつく
+    const fl=0.75+0.25*Math.sin(t*2.6+q.x*0.01), hz=Math.sin(t*1.4+q.y*0.02)*2;
+    g.fillStyle='rgba(8,8,26,0.4)'; g.beginPath(); g.ellipse(0,4,17,7,0,0,TAU); g.fill();
+    g.fillStyle='#4a4258'; g.fillRect(-11,-3,22,6);                       // 台座
+    g.fillStyle='#575068'; g.fillRect(-4,-26,8,23);                        // 竿
+    g.fillStyle='#3e3850'; g.fillRect(-13,-40,26,5);                       // 笠
+    g.fillStyle='rgba(255,160,210,'+(0.30*fl).toFixed(2)+')'; g.fillRect(-9,-35,18,10);   // 火袋
+    g.fillStyle='#6a6078'; g.fillRect(-10,-36,2,12); g.fillRect(8,-36,2,12);
+    glow(g,0,-30,30+6*fl,'255,150,205',0.42*fl);
+    g.fillStyle='rgba(255,206,235,'+(0.75*fl).toFixed(2)+')'; g.beginPath(); g.ellipse(0,-30+hz*0.3,3.4,5,0,0,TAU); g.fill();
+    for(let i=0;i<3;i++){ const ph=(t*0.35+i*0.33)%1; g.fillStyle='rgba(255,170,215,'+((1-ph)*0.30).toFixed(2)+')'; g.beginPath(); g.arc(hz+Math.sin(i*2.1+t)*7,-34-ph*40,2.2+ph*4,0,TAU); g.fill(); }   // 立ちのぼる甘い気
   }
-  if(known){ g.fillStyle='rgba(143,211,255,0.9)'; g.font='bold 10px sans-serif'; g.textAlign='center'; g.fillText(POI_DEF[q.kind].name, 0, ({stairs:-22,core:-70,seal:-56,spring:-30,pool:-28,stele:-50})[q.kind]||-50); }
+  if(known){ g.fillStyle='rgba(143,211,255,0.9)'; g.font='bold 10px sans-serif'; g.textAlign='center'; g.fillText(POI_DEF[q.kind].name, 0, ({stairs:-22,core:-70,seal:-56,spring:-30,pool:-28,stele:-50,lantern:-52})[q.kind]||-50); }
   g.restore();
 }
 /* ミニマップ(左下): 地形色・壁・知っている場所・彼女・ボス */
@@ -897,7 +911,7 @@ function drawMinimap(g){
   }
   g.imageSmoothingEnabled=true;
   const tx=(x)=>x0+(x+MAP_HW)/MAP_T*sc, ty=(y)=>y0+(y+MAP_HH)/MAP_T*sc;
-  for(const q of G.map.pois){ if(!M.known[q.key]) continue; g.fillStyle=q.kind==='shrine'?(M.visited[q.key]?'#9a9ab0':'#ffd76a'):(q.kind==='spring'?'#8fd3ff':(q.kind==='pool'?'#7fe0ff':(q.kind==='stele'?'#cbd5ff':(q.kind==='stairs'?'#ffffff':(q.kind==='seal'?((B.seals&&B.seals[q.key])?'#ffe9b0':'#c98cff'):'#ff6b81'))))); g.fillRect(tx(q.x)-2,ty(q.y)-2,4,4); }
+  for(const q of G.map.pois){ if(!M.known[q.key]) continue; g.fillStyle=q.kind==='shrine'?(M.visited[q.key]?'#9a9ab0':'#ffd76a'):(q.kind==='spring'?'#8fd3ff':(q.kind==='pool'?'#7fe0ff':(q.kind==='stele'?'#cbd5ff':(q.kind==='stairs'?'#ffffff':(q.kind==='lantern'?'#ff9ed2':(q.kind==='seal'?((B.seals&&B.seals[q.key])?'#ffe9b0':'#c98cff'):'#ff6b81')))))); g.fillRect(tx(q.x)-2,ty(q.y)-2,4,4); }
   for(const c of B.chests){ g.fillStyle='#ffe9b0'; g.fillRect(tx(c.x)-1,ty(c.y)-1,3,3); }
   for(const e of B.enemies){ if(e.boss&&!e.dead){ g.fillStyle='#ff5d7a'; g.fillRect(tx(e.x)-2,ty(e.y)-2,4,4); } }
   for(const pk of B.picks){ if(pk.dead||!pk.known) continue; g.fillStyle=pk.kind==='shroom'?'#9fe8c8':(pk.kind==='nectar'?'#ffb3cf':'#ffd76a'); g.fillRect(tx(pk.x)-1,ty(pk.y)-1,2,2); }   // v1.8 知っている資源

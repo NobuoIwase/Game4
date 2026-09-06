@@ -234,8 +234,10 @@ function startBattle(){
     giveUp:new Map(),                                                                              // v2.1 諦めた目標(ref → いつまで外すか)
     placed:[], itemT:9, ringCd:0, lewdSeen:false,                                                  // v2.2 夜側の設置物 / 包囲円陣の間隔 / えちえちエリアの初見
     seenT:0, bossSeen:!!(META.run&&META.run.bossSeen), exploreSaid:false,                          // v2.4 視界の記憶 / この run でボスを見た(武器選びに使う)
+    lights:[], lanterns:[], floorLight:0,                                                          // v4.0 暗闇: 残る灯り / 催淫灯篭 / その階で得た灯り
   };
   genMap();               // 地形(世代×階層で変わる)
+  G.B.lanterns=G.map.pois.filter(q=>q.kind==='lantern').map(q=>({x:q.x,y:q.y,key:q.key,said:false}));   // v4.0 催淫灯篭(光源であり罠でもある)
   initSeen();             // v2.4 見た範囲の記憶(同じ階層への再挑戦は覚えている)
   for(let i=1;i<heroes.length;i++){ const q=snapFloor(44*i,8*i,false,4)||{x:44*i,y:8*i}; heroes[i].x=q.x; heroes[i].y=q.y; }   // v3.0 二人目以降は横に並ぶ
   { const F=G.B.floor; G.B.exitLocked=(F.puzzle==='seals');
@@ -1432,14 +1434,14 @@ function aiUpdate(dt){
     charmwalk:'ふらふらと、ちかづいていく…', heatwalk:'熱にまけて、よろめき寄る…',
     hypno:'……電波に、あしが……', item:'おちてる品へ!', beg:'……おねだり、なんて……してない……',
     g_event:'光の柱へ!', g_chest:'たからばこへ!', g_boss:'おうさまの箱へ!', g_item:'おちてる品へ!', g_shrine:'祠へ', g_spring:'泉で休みに', g_pool:'清水であらいに',
-    g_stele:'石碑をよみに', g_stairs:'降り口へ', g_seal:'封印石を灯しに', g_core:'魔核へ——', g_shroom:'光茸をとりに', g_nectar:'蜜の花へ', g_treasure:'沈んだ宝へ', g_explore:'たんさく中', g_gems:'ジェムをあつめる', hesitate:'まよっている……', think:'かんがえ中……', abort:'にげだす!', retreat:'逃げに徹する!', kite2:'引き撃ち', talk:'相談中……', assist:'仲間を助ける!', rescue:'救出する!', g_rescue:'仲間を救いに'};
+    g_stele:'石碑をよみに', g_stairs:'降り口へ', g_seal:'封印石を灯しに', g_core:'魔核へ——', g_lantern:'あかりへ', g_shroom:'光茸をとりに', g_nectar:'蜜の花へ', g_treasure:'沈んだ宝へ', g_explore:'たんさく中', g_gems:'ジェムをあつめる', hesitate:'まよっている……', think:'かんがえ中……', abort:'にげだす!', retreat:'逃げに徹する!', kite2:'引き撃ち', talk:'相談中……', assist:'仲間を助ける!', rescue:'救出する!', g_rescue:'仲間を救いに'};
   const BBL={flee:'にげなきゃ〜!', boss:'おっきいのこわい!!', dodge:'あれは…だめ、よけなきゃ!', gem:'キラキラかいしゅう♪', poi:'あそこまで、いってみる', explore:'こっちは、まだ見てない',
     heart:'ハートみっけ!', prop:'燭台こわして回復しなきゃ', chest:'たからばこだ〜!',
     kite:'このきょりキープ…', wait:'つぎはどこから…?', struggle:'はなれてよ〜っ!',
     charmwalk:'…なんで、あしが…', heatwalk:'…あつくて、なにも…',
     hypno:'……あっち、いかなきゃ……', item:'なにか、おちてる!', beg:'……ちがう……',
     g_event:'あのひかり、いってみる', g_chest:'たからばこだ〜!', g_boss:'おうさまの、たからばこ……!', g_item:'なにか、おちてる!', g_shrine:'ほこら、いこう', g_spring:'ちょっと、やすみたい……',
-    g_pool:'あらいたい……べたべた', g_stele:'なにか、かいてある', g_stairs:'……おりる。つぎへ', g_seal:'あれ、ともさなきゃ', g_core:'……あれが、しんぞう', g_shroom:'あのひかり、とろう', g_nectar:'はな……あまいにおい', g_treasure:'みずのなかに、なにか……', g_explore:'こっちは、まだ見てない', g_gems:'キラキラ、ぜんぶひろう♪', hesitate:'……どうしよ', think:'……うーん', abort:'やっぱ、むり!', retreat:'ぜんぶ、にげるっ!', kite2:'さがりながら、うつ!', talk:'どっち、いく?', assist:'いま、たすける!', rescue:'まって、いくから!', g_rescue:'いま、いく!'};
+    g_pool:'あらいたい……べたべた', g_stele:'なにか、かいてある', g_stairs:'……おりる。つぎへ', g_seal:'あれ、ともさなきゃ', g_core:'……あれが、しんぞう', g_lantern:'あかり、あったかそう……', g_shroom:'あのひかり、とろう', g_nectar:'はな……あまいにおい', g_treasure:'みずのなかに、なにか……', g_explore:'こっちは、まだ見てない', g_gems:'キラキラ、ぜんぶひろう♪', hesitate:'……どうしよ', think:'……うーん', abort:'やっぱ、むり!', retreat:'ぜんぶ、にげるっ!', kite2:'さがりながら、うつ!', talk:'どっち、いく?', assist:'いま、たすける!', rescue:'まって、いくから!', g_rescue:'いま、いく!'};
   if(p.dodging>0){ p.dodging-=dt; }
   p.aiLabel=LBL[state]||LBL.wait;
   if(state!==p.aiState){
@@ -1505,13 +1507,14 @@ function aiDecide(foc){
     if(d<40){ ax+=dx/d*0.35; ay+=dy/d*0.35; }
   }
   if(p.diveT<=0){
+    const ds=darkSense(p.x,p.y);   // v4.0 暗いと雲の縁に気づくのが遅れる(踏み込んでから避ける)
     for(const c of B.clouds){
       const dx=p.x-c.x, dy=p.y-c.y, d=Math.hypot(dx,dy)||0.001;
-      if(d<c.r+30){ ax+=dx/d*0.35*foc; ay+=dy/d*0.35*foc; }
+      if(d<c.r+30*ds){ ax+=dx/d*0.35*foc; ay+=dy/d*0.35*foc; }
     }
   }
   // v2.0 淫紋の罠(見える): 知っていれば踏まない(認識で避け、熟知で強く避ける)
-  { const ck=crestKnow(); if(ck>=1){ for(const tr of B.traps){ if(!tr.armed) continue; const tdx=p.x-tr.x, tdy=p.y-tr.y, td=Math.hypot(tdx,tdy)||0.001; if(td<tr.r+46){ const w=(ck>=3?0.9:0.55)*foc; ax+=tdx/td*w; ay+=tdy/td*w; } } } }
+  { const ck=crestKnow(), ds=darkSense(p.x,p.y); if(ck>=1){ for(const tr of B.traps){ if(!tr.armed) continue; const tdx=p.x-tr.x, tdy=p.y-tr.y, td=Math.hypot(tdx,tdy)||0.001; if(td<tr.r+46*ds){ const w=(ck>=3?0.9:0.55)*foc; ax+=tdx/td*w; ay+=tdy/td*w; } } } }   // v4.0 暗いと紋の光にも遅れて気づく
   // ゲイザーの視界(紫に照らされた扇)と照射触手の照準線は見えるので避ける——
   // ただし「それが危ない」と知っていなければ避けない(学習: 未知0 / 認識0.5 / 理解以上1)。催眠が深いほど避けられない。
   // 理解以上の脅威3の相手には、周りの敵に殴られるのを覚悟で避ける(周囲への警戒を4割に落とす)
@@ -1792,7 +1795,7 @@ function aiDecide(foc){
             p.hesit=null;
           }
         }else{
-          const nz=zoneAt(p.x+dx*44,p.y+dy*44);
+          const nz=zoneAt(p.x+dx*44*darkSense(p.x,p.y),p.y+dy*44*darkSense(p.x,p.y));   // v4.0 暗いと地形の境に気づくのが遅い
           if(nz!==p.zone && p.scared && p.scared[nz]>B.time){ giveUpOn(target); if(p.goal && (giveUpKey(p.goal)===giveUpKey(target)||p.goal===target)){ if(p.goal.kind==='explore'){ p.explore=null; p.exploreUntil=0; } p.goal=null; p.goalT=0; } dx=-dx*0.5; dy=-dy*0.5; state='hesitate'; }   // 諦めた地形へは、しばらく入らない(探索点なら捨てて別の点を選ぶ)
           const nf=(nz!==p.zone)?zoneFear(nz):0;   // v2.2 嫌い方の段: <2 は気にせず入る / 2 は短く迷う / 3 は価値が無ければ入らず、あれば長く迷う
           const scary=nf>=2 && !(p.brave&&p.brave[nz]>B.time) && !(p.scared&&p.scared[nz]>B.time);
@@ -1883,11 +1886,11 @@ function aiDecide(foc){
 function crestKnow(){ const k=((META.gen.trapKnow||{}).rune)||0; return Math.max(knowLv('runemage'), knowLv('guardian'), k>=6?3:(k>=3?2:(k>=1?1:0))); }
 function learnTrap(kind){ META.gen.trapKnow=META.gen.trapKnow||{}; META.gen.trapKnow[kind]=(META.gen.trapKnow[kind]||0)+1; }
 function nearKnownTrap(x,y){
-  const B=G.B;
+  const B=G.B, ds=(typeof darkSense==='function')?darkSense(x,y):1;   // v4.0 暗いと気づくのが遅れる
   for(const e of B.enemies){
     if(e.dead||!TRAP_SPECIES.has(e.id)) continue;
     if(knowLv(e.id)<2) continue;
-    if(Math.hypot(e.x-x,e.y-y)<95) return true;
+    if(Math.hypot(e.x-x,e.y-y)<95*ds) return true;
   }
   return false;
 }
@@ -2243,7 +2246,7 @@ function freilaWeapons(p,dt,atkMult){
       const lvR=p.wp.fpillar, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
       p.fpillarT=(2.6-0.2*(lv-1))*ov.cd;
       const n=1+(p.ps.dup||0)+(lv>=4?1:0), ts=nearEnemiesR(p,n,(170+12*lv)*(1+0.12*(p.ps.reach||0)));
-      for(const e of ts){ if(B.zones.length>24) B.zones.shift(); B.zones.push({x:e.x, y:e.y, r:(30+4*lv)*areaMult(p)*ov.area, t:0, life:2.2, dmg:(6+2.5*(lv-1))*ov.dmg, tick:0, fire:true}); parts(e.x,e.y-10,10,['#ff7a3a','#ffd76a','#fff'],140,0.5); }
+      for(const e of ts){ if(B.zones.length>24) B.zones.shift(); B.zones.push({x:e.x, y:e.y, r:(30+4*lv)*areaMult(p)*ov.area, t:0, life:2.2, dmg:(6+2.5*(lv-1))*ov.dmg, tick:0, fire:true}); parts(e.x,e.y-10,10,['#ff7a3a','#ffd76a','#fff'],140,0.5); pushLight(e.x,e.y,170,BAL.DARK_MEM_T*0.8,0.95); }   // v4.0 炎が通った所はしばらく見えている
       if(ts.length) sfx(300,120,0.2,'square',0.04);
     }
   }
@@ -2452,6 +2455,7 @@ function spawnUnit(id, x, y, o){
 }
 function damageEnemy(e,dmg){
   if(e.dead||e.dormant) return;
+  { const B=G.B; if(B&&B.lights&&darkLevel()>0.05 && Math.random()<0.18) pushLight(e.x,e.y,150,BAL.DARK_MEM_T,0.85); }   // v4.0 光と炎が通った所は、しばらく見えている
   if(G.B&&G.B.hero.dmgMult) dmg*=G.B.hero.dmgMult;   // せいなる火力(自己強化)
   if(e.id==='flower') dmg*=(e.state==='bud'?0.5:1.3);
   if(e.id==='tower') dmg*=0.3;                        // 催眠電波の塔: 骨の骨組みは光を通しにくい
@@ -3232,6 +3236,7 @@ function goalValid(p,g){
     if(q.kind==='stairs') return !B.exitLocked && B.wantExit;   // v2.1 降りる気になってから
     if(q.kind==='seal') return !B.seals[q.key];
     if(q.kind==='core') return true;
+    if(q.kind==='lantern') return lanternWant(p);   // v4.0 火照ったら離れる
     return true; }
   if(g.kind==='explore') return B.time<g.until && Math.hypot(g.x-p.x,g.y-p.y)>70;
   if(g.kind==='gems'){ let n=0; for(const gm of B.gems){ if(Math.abs(gm.x-g.x)<BAL.GEM_CLUSTER_R && Math.abs(gm.y-g.y)<BAL.GEM_CLUSTER_R) n++; } return n>=2; }   // v2.1 ジェムの群れが残っている
@@ -3334,7 +3339,9 @@ function updateGoalSolo(p){
   const cands=[];
   if(B.dbgCands) B.lastCands=null;   // 検証用: 目当ての候補を覗く(B.dbgCands=true の時だけ)
   const anyCaptive=B.heroes.some(c=>c.out&&c.captive&&c!==p);   // v3.2 仲間が捕まっている間は、寄り道の価値を落とす(木の実を拾いに行かない)
-  const add=(kind,sub,x,y,worth,ref,key)=>{ worth*=goalPref(p,kind,sub); if(anyCaptive && kind!=='rescue') worth*=BAL.RESCUE_FOCUS; if(worth<=0 || !passAt(x,y,false) || nearKnownTrap(x,y)) return; if(ref && gaveUp(ref)) return; /* v2.1 諦めた目標は外す */ if(crestKnow()>=1 && B.traps.some(tr=>tr.armed && Math.hypot(tr.x-x,tr.y-y)<tr.r+40)) return; /* 知っている紋の罠の上は目当てにしない */ const d=Math.hypot(x-p.x,y-p.y); const fz=zoneFear(zoneAt(x,y)), fm=fz>=3?0.5:(fz>=2?0.7:(fz>=1?0.9:1)); cands.push({kind,sub,x,y,ref,key,d,worth,score:worth*fm/(1+d/600)}); };   // v2.2 嫌な地形の中の目当ては割り引く(価値そのものは入る判断に使うので残す)
+  const add=(kind,sub,x,y,worth,ref,key)=>{ worth*=goalPref(p,kind,sub); if(anyCaptive && kind!=='rescue') worth*=BAL.RESCUE_FOCUS; if(worth<=0 || !passAt(x,y,false) || nearKnownTrap(x,y)) return; if(ref && gaveUp(ref)) return; /* v2.1 諦めた目標は外す */ if(crestKnow()>=1 && B.traps.some(tr=>tr.armed && Math.hypot(tr.x-x,tr.y-y)<tr.r+40)) return; /* 知っている紋の罠の上は目当てにしない */ const d=Math.hypot(x-p.x,y-p.y); const fz=zoneFear(zoneAt(x,y)), fm=fz>=3?0.5:(fz>=2?0.7:(fz>=1?0.9:1));
+    const lm=(darkLevel()>0.05 && kind!=='rescue' && kind!=='wait')?(BAL.DARK_GOAL_K+(1-BAL.DARK_GOAL_K)*lightAt(x,y)):1;   // v4.0 暗い所は気が進まない(行かないわけではない)
+    cands.push({kind,sub,x,y,ref,key,d,worth,score:worth*fm*lm/(1+d/600)}); };   // v2.2 嫌な地形の中の目当ては割り引く(価値そのものは入る判断に使うので残す)
   const hpR=p.hp/p.maxHp, stR=p.stamina/p.staminaMax;
   const leaving=!!B.wantExit;   // v2.1 降りる気(最終階層では魔核へ向かう気)になったら、寄り道の価値は薄く(拾うのは道すがらだけ)
   let unknownN=0; for(const q of G.map.pois) if(!M.known[q.key]) unknownN++;
@@ -3356,6 +3363,7 @@ function updateGoalSolo(p){
     else if(q.kind==='stairs') w=(B.exitLocked||!B.wantExit)?0:BAL.EXIT_WORTH_WANT;   // v2.1 「降りよう」と決めてから(exitTick)。それまでは他を見て回る
     else if(q.kind==='seal') w=B.seals[q.key]?0:2.4;
     else if(q.kind==='core') w=B.wantExit?BAL.EXIT_WORTH_WANT:2.6;   // v2.2 向かう気になったら最優先
+    else if(q.kind==='lantern') w=lanternWant(p)?BAL.LANTERN_WANT*darkLevel():0;   // v4.0 暗いほど灯りに寄りたい(そばに居ると発情が溜まると知っていても)
     if(leaving && q.kind!=='stairs' && q.kind!=='seal' && q.kind!=='core' && q.kind!=='spring') w*=0.3;
     add('poi',q.kind,q.x,q.y,w,q,q.key);
   }
@@ -3427,7 +3435,10 @@ function seenTick(dt){
   const B=G.B, p=B.hero, M=G.map; if(!M||!M.seen) return;
   p.seenT=(p.seenT||0)-dt; if(p.seenT>0) return; p.seenT=BAL.SEEN_T;   // v3.0 ヒロインごとの視界
   const rx=BAL.SEEN_R, ry=BAL.SEEN_RY, i0=Math.max(0,tileI(p.x-rx)), i1=Math.min(MAP_W-1,tileI(p.x+rx)), j0=Math.max(0,tileJ(p.y-ry)), j1=Math.min(MAP_H-1,tileJ(p.y+ry));
-  for(let j=j0;j<=j1;j++){ const yy=(tileCY(j)-p.y)/ry; for(let i=i0;i<=i1;i++){ const k=j*MAP_W+i; if(M.seen[k]) continue; const xx=(tileCX(i)-p.x)/rx; if(xx*xx+yy*yy>1) continue; M.seen[k]=1; if(M.solid[k]===0) M.seenN++; } }
+  const darkOn=darkLevel()>0.05;
+  for(let j=j0;j<=j1;j++){ const yy=(tileCY(j)-p.y)/ry; for(let i=i0;i<=i1;i++){ const k=j*MAP_W+i; if(M.seen[k]) continue; const xx=(tileCX(i)-p.x)/rx; if(xx*xx+yy*yy>1) continue;
+    if(darkOn && lightAt(tileCX(i),tileCY(j))<BAL.DARK_SEEN) continue;   // v4.0 暗い所は地図に残らない(灯りが届いた所だけ覚える)
+    M.seen[k]=1; if(M.solid[k]===0) M.seenN++; } }
   M.fogT=-9;   // ミニマップの霧を作り直す
   if(!B.exploreSaid && seenFrac()>=BAL.EXPLORE_DONE && B.time>30){ B.exploreSaid=true; sayLine('exploreDone',0,0,'ここ、だいたい みたかも'); }
 }
@@ -3491,7 +3502,7 @@ function poiTick(dt){
   }
   B.poiCd-=dt;
   for(const q of G.map.pois){
-    if(!M.known[q.key] && inSight(q,p)){
+    if(!M.known[q.key] && (inSight(q,p) || ((q.kind==='lantern'||q.kind==='shrine') && Math.hypot(q.x-p.x,q.y-p.y)<BAL.DARK_FAR_SEE))){   // v4.0 灯りものは遠くからでも見える
       M.known[q.key]=1; M.seen=(M.seen||0)+1;
       floatTxt(q.x,q.y-40,'みつけた: '+POI_DEF[q.kind].name,'#8fd3ff',12,1.8);
       sayLine('poi.'+q.kind,1,0,q.kind==='stairs'?'おりぐち、みっけ! でも、まだ見てないとこあるし':pickRand(['あそこ、なにかある……','あれ、なんだろ','おぼえておこう']));   // v2.1 場所ごとの台詞
@@ -3504,6 +3515,7 @@ function poiTick(dt){
     const d=Math.hypot(q.x-p.x,q.y-p.y);
     if(q.kind==='shrine' && d<34 && !M.visited[q.key]){
       M.visited[q.key]=1;
+      gainFloorLight('shrine',q.x,q.y);   // v4.0 祠の火を分けてもらう(この階のあいだ二人が明るい)
       const ids=Object.keys(LUMINA_UPG).filter(id=>luminaRank(id)<LUMINA_UPG[id].max);
       let got='';
       if(ids.length){ const id=pickRand(ids); META.lumina.upg[id]=(META.lumina.upg[id]||0)+1; got=LUMINA_UPG[id].name; }
@@ -4316,6 +4328,84 @@ function spawnInitialProps(){
     B.props.push({x:q.x, y:q.y, hp:BAL.PROP_HP, max:BAL.PROP_HP, t:rand(10)});
   }
 }
+/* ================= v4.0 暗闇 =================
+   深淵は基本的に暗い。見えているのは、二人が纏う淡い光と、光・炎が通ったあとに残る灯り、
+   そして催淫灯篭や光の柱のような置かれた光だけ。祠・燭台・光茸を得ると、その階のあいだ二人の光が増す。
+   魔物のまわりは薄く光っているので、暗くても居場所は分かる(察知の距離は変えない)。
+   彼女たちは暗い方へは行きたがらないが、行かないわけではない。暗い所では罠や雲や地形の境に気づくのが遅れる */
+function darkLevel(){ const B=G.B; if(!B||!B.floor) return 0; return Math.max(0, Math.min(1, B.floor.dark||0)); }
+/* その階で拾い集めた灯り(祠・燭台・光茸)。ヒロインの光の半径に掛かる */
+function floorLight(){ const B=G.B; return 1+Math.min(BAL.DARK_FLOOR_MAX, B?(B.floorLight||0):0); }
+/* ヒロインの光: 素性の半径 × 階の灯り × (相方が近ければ増光) */
+function heroLightR(h){
+  const B=G.B, HD=HEROES[h.id]||{}; let r=(HD.lightR||260)*floorLight();
+  if(B&&B.heroes.length>1){ const o=B.heroes.find(x=>x!==h&&!x.out); if(o && Math.hypot(o.x-h.x,o.y-h.y)<BAL.DARK_PAIR_R) r*=1+BAL.DARK_PAIR_K; }
+  if(h.climaxT>0||h.hypnoLv>=2) r*=0.85;   // 光が弱る
+  return r;
+}
+/* 残す灯り: 光や炎が通った所は DARK_MEM_T 秒ほど見えている */
+function pushLight(x,y,r,life,k){
+  const B=G.B; if(!B||!B.lights) return;
+  if(B.lights.length>BAL.DARK_MEM_MAX) B.lights.shift();
+  B.lights.push({x,y,r:r||120,t:0,life:life||BAL.DARK_MEM_T,k:k||1});
+}
+function lightsTick(dt){
+  const B=G.B, L=B.lights; if(!L) return;
+  for(let i=L.length-1;i>=0;i--){ L[i].t+=dt; if(L[i].t>=L[i].life) L.splice(i,1); }
+  if(darkLevel()<0.35) return;
+  for(const h of B.heroes){   // 光の届かない所に居続けたら、こぼす
+    if(h.out){ h.darkT=0; continue; }
+    if(lightAt(h.x,h.y)<0.3){ h.darkT=(h.darkT||0)+dt; if(h.darkT>3.2){ h.darkT=0; const c0=B.ci; B.ci=h.hi; sayLine('feat.dark',0,24,'……なんも、みえない'); B.ci=c0; } }
+    else h.darkT=0;
+  }
+}
+/* 明るさ 0..1。1=昼のように見える */
+function lightAt(x,y){
+  const B=G.B; if(!B) return 1;
+  let v=1-darkLevel();
+  for(const h of B.heroes){ if(h.out) continue; const r=heroLightR(h)*(HEROES[h.id]&&HEROES[h.id].lightK||1); const d=Math.hypot(x-h.x,y-h.y); if(d<r) v=Math.max(v,1-d/r); }
+  if(B.lanterns) for(const q of B.lanterns){ const d=Math.hypot(x-q.x,y-q.y); if(d<BAL.LANTERN_R) v=Math.max(v,(1-d/BAL.LANTERN_R)*0.95); }
+  if(B.lights) for(const q of B.lights){ const d=Math.hypot(x-q.x,y-q.y); if(d<q.r){ const fade=1-q.t/q.life; v=Math.max(v,(1-d/q.r)*q.k*fade); } }
+  if(B.event){ const d=Math.hypot(x-B.event.x,y-B.event.y); if(d<260) v=Math.max(v,(1-d/260)*0.9); }
+  for(const z of B.zones){ if(!z.fire) continue; const d=Math.hypot(x-z.x,y-z.y); if(d<z.r*1.3) v=Math.max(v,(1-d/(z.r*1.3))*0.8); }
+  return Math.min(1,v);
+}
+/* 暗さで鈍る: 罠や雲や地形の境に気づく距離の係数(0.5〜1) */
+function darkSense(x,y){ const l=lightAt(x,y); return BAL.DARK_LAG+(1-BAL.DARK_LAG)*Math.min(1,l*1.35); }
+/* 催淫灯篭: 明るいが、そばに居ると発情と敏感化が進む */
+function lanternTick(dt){
+  const B=G.B; if(!B.lanterns||!B.lanterns.length) return;
+  for(const h of B.heroes){
+    if(h.out){ h.lantT=0; continue; }
+    let near=null, nd=1e9;
+    for(const q of B.lanterns){ const d=Math.hypot(q.x-h.x,q.y-h.y); if(d<nd){ nd=d; near=q; } }
+    if(!near||nd>BAL.LANTERN_R*0.62){ h.lantT=Math.max(0,(h.lantT||0)-dt*0.5); continue; }
+    const k=1-nd/(BAL.LANTERN_R*0.62), ci0=B.ci; B.ci=h.hi;
+    addHeatG(BAL.LANTERN_HEAT*k*dt); applySensit(BAL.LANTERN_SENS*k*dt);
+    if(!near.said && nd<70){ near.said=true; sayLine('feat.lantern',1,0,'あかるい……けど、なんか、あつくなる'); }
+    h.lantT=(h.lantT||0)+dt;
+    if(h.lantT>=BAL.LANTERN_STAY){   // 温もっていたら切り上げる(離れないと発情が止まらない)
+      h.lantT=0; h.lantCd=B.time+BAL.LANTERN_CD;
+      if(h.goal&&h.goal.kind==='poi'&&h.goal.sub==='lantern'){ h.goal=null; h.goalT=0; }
+      sayLine('feat.lanternLeave',0,26,'……ここ、ながく居たら だめなやつだ');
+    }
+    B.ci=ci0;
+  }
+}
+/* 灯篭へ寄りたいか: 暗い階で、まだ火照っていなくて、直前に離れたばかりでないとき */
+function lanternWant(p){ const B=G.B; return darkLevel()>0.3 && p.heatLv<1 && (p.aphro||0)<BAL.LANTERN_HEAT_MAX && !(B.time<(p.lantCd||0)); }
+/* 灯りを得た(祠・燭台・光茸): その階のあいだ二人の光が増える */
+function gainFloorLight(kind,x,y){
+  const B=G.B; if(!B) return;
+  const add=kind==='shrine'?BAL.DARK_SHRINE:(kind==='candle'?BAL.DARK_CANDLE:BAL.DARK_SHROOM);
+  B.floorLight=Math.min(BAL.DARK_FLOOR_MAX,(B.floorLight||0)+add);
+  if(kind==='shroom' && B.heroes.length>1){   // 光茸は二人の間を照らす
+    const a=B.heroes[0], b=B.heroes.find(h=>h!==a&&!h.out);
+    if(b&&!a.out){ for(let t=0;t<=4;t++) pushLight(a.x+(b.x-a.x)*t/4, a.y+(b.y-a.y)*t/4, 190, BAL.DARK_MEM_T*2.2, 0.9); }
+  }
+  if(x!==undefined) pushLight(x,y,260,BAL.DARK_MEM_T*2,1);
+  if(darkLevel()>0.25){ floatTxt(x!==undefined?x:B.hero.x, (y!==undefined?y:B.hero.y)-96, '灯りが増えた','#ffe9a8',12,1.6); sayLine('feat.lightUp',0,14,'あかるく、なった……! これで、みえる'); }
+}
 /* ================= v3.2 甘い褥の巣窟 =================
    壁際に食い込んだ大きな窪地。入口は喉道ひとつで、いちばん奥に王の宝箱がある。
    前室→沼→最奥と進むほど発情と敏感化の効きが強く、床から伸びる手も早くなる。
@@ -4516,6 +4606,7 @@ function damageProp(pr,dmg){
     parts(pr.x,pr.y-10,14,['#ffd76a','#fff','#c9a06a'],160,0.6);
     sfx(320,120,0.2,'square',0.07);
     B.props=B.props.filter(q=>q!==pr);
+    gainFloorLight('candle',pr.x,pr.y);   // v4.0 燭台の火が散る(この階のあいだ少し明るい)
     // 品が出るのは30%(+よつばのクローバー4%/Lv)。内訳: 回復20 / 全消去5 / 全回収3 / ボーナス攻撃2。外れは小ジェム
     const itemP=BAL.PROP_ITEM+0.04*(p.ps.luck||0);
     if(Math.random()<itemP){
@@ -4619,6 +4710,7 @@ function applyPick(pk){
     parts(pk.x,pk.y-10,16,['#9fe8c8','#fff','#cfffe8'],140,0.8); sfx(700,1100,0.3,'sine',0.05);
     floatTxt(p.x,p.y-58,'光茸'+(n?' — '+n+'か所 見えた':''),'#9fe8c8',12,1.4);
     heroBubble(p,n?'……ひかりで、みえた。あっちに、なにかある':'ひかってる……きれい',false,1);
+    gainFloorLight('shroom',pk.x,pk.y);   // v4.0 光茸: この階のあいだ明るく、二人の間の道も照らす
     maybeLevelup();
   }else if(pk.kind==='nectar'){
     p.stamina=Math.min(p.staminaMax,p.stamina+45); p.hp=Math.min(p.maxHp,p.hp+p.maxHp*0.10); applySensit(8);
@@ -5250,6 +5342,7 @@ function battleTick(dt){
   if(B.ebullets.length) B.ebullets=B.ebullets.filter(b=>!b.dead&&b.t<b.life);
   eachHero(()=>poiTick(dt));   // 祠・泉・門(v3.0 ヒロインごと)
   denTick(dt);                 // v3.2 巣窟の魔法陣・媚薬の花・壁の光線・番人(1フレームに1度)
+  lightsTick(dt); lanternTick(dt);   // v4.0 灯りの寿命と催淫灯篭
   for(const k in B.itemCd){ if(B.itemCd[k]>0) B.itemCd[k]-=dt; }
   eachHero(()=>trapsTick(dt));
   // 小淫魔: 近くの数を数える(集中低下)。快感は煽りアクション時のみ(バーストCD持ち)

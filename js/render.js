@@ -2723,7 +2723,7 @@ function drawHUD(g){
   drawMinimap(g);
   g.fillText('enemies:'+B.enemies.length+' fps:'+Math.round(G.fps)+(TS>1?' x'+TS:''), 12, H-6);
   g.textAlign='right'; g.fillStyle='rgba(255,255,255,0.3)'; g.font='bold 10px '+FONT;
-  g.fillText('v3.2 深淵 — 巣窟', W-12, H-6);
+  g.fillText('v4.0 深淵 — 暗闇', W-12, H-6);
 }
 function drawCards(g){
   const B=G.B, c=B.lvCards; if(!c) return;
@@ -2947,6 +2947,53 @@ function drawUpgIcon(g,k,x,y){
 }
 
 /* ---------------- メイン描画 ---------------- */
+/* ================= v4.0 暗闇のレイヤ =================
+   深淵の上に一枚の闇を落とし、光っている所だけを抜く。抜けるのは
+   二人の淡い光・催淫灯篭・光や炎が通った跡・光の柱・炎の帯、そして魔物のまわりの薄明かり。
+   プレイヤーには DARK_CAP のぶんだけ薄く透けて見える(彼女たちよりは少しだけ多く見えている) */
+let darkCv=null, darkCg=null, darkMk=null, darkMg=null, darkSpr=null;
+function darkSprite(){
+  if(darkSpr) return darkSpr;
+  const c=document.createElement('canvas'); c.width=c.height=128; const d=c.getContext('2d');
+  const gr=d.createRadialGradient(64,64,0,64,64,64);
+  gr.addColorStop(0,'rgba(255,255,255,1)'); gr.addColorStop(0.42,'rgba(255,255,255,0.86)');
+  gr.addColorStop(0.72,'rgba(255,255,255,0.42)'); gr.addColorStop(1,'rgba(255,255,255,0)');
+  d.fillStyle=gr; d.fillRect(0,0,128,128);
+  darkSpr=c; return c;
+}
+const DARK_SC=3;   // 暗幕は 1/3 の大きさで作って引き伸ばす(光のふちは元々ぼやけているので粗さは出ない)
+function drawDark(g,ox,oy){
+  const B=G.B; if(!B||typeof darkLevel!=='function') return;
+  const lv=darkLevel(); if(lv<=0.02) return;
+  const lo=gfxLv()<=1, sc=lo?DARK_SC+2:DARK_SC;   // 描画を落としている端末では、もっと粗い暗幕で軽くする
+  const DW=Math.ceil(W/sc), DH=Math.ceil(H/sc);
+  if(!darkCv){ darkCv=document.createElement('canvas'); darkCg=darkCv.getContext('2d'); darkMk=document.createElement('canvas'); darkMg=darkMk.getContext('2d'); }
+  if(darkCv.width!==DW||darkCv.height!==DH){ darkCv.width=darkMk.width=DW; darkCv.height=darkMk.height=DH; }
+  const d=darkCg, m=darkMg, spr=darkSprite(), S=1/sc;
+  // 1) 光の地図を足し合わせる(白いほど明るい)
+  m.setTransform(1,0,0,1,0,0); m.globalCompositeOperation='source-over'; m.globalAlpha=1;
+  m.clearRect(0,0,DW,DH); m.globalCompositeOperation='lighter';
+  const hole=(wx,wy,r,k)=>{
+    if(r<=0||k<=0.01) return;
+    const x=(wx+ox)*S, y=(wy+oy)*S, rr=r*S;
+    if(x<-rr||y<-rr||x>DW+rr||y>DH+rr) return;
+    m.globalAlpha=k<1?k:1; m.drawImage(spr,x-rr,y-rr,rr*2,rr*2);
+  };
+  for(const h of B.heroes){ if(h.out) continue; const HD=HEROES[h.id]||{}; hole(h.x,h.y-10,heroLightR(h)*(HD.lightK||1),1); }
+  if(B.lanterns) for(const q of B.lanterns) hole(q.x,q.y-28,BAL.LANTERN_R,0.95);
+  if(B.lights) for(const q of B.lights){ const fade=1-q.t/q.life; hole(q.x,q.y,q.r,q.k*fade); }
+  if(B.event) hole(B.event.x,B.event.y,300,0.95);
+  for(const z of B.zones){ if(z.fire) hole(z.x,z.y,z.r*1.6,0.85); }
+  for(const e of B.enemies){ if(e.dead) continue; if(lo&&!e.boss&&!e.night) continue; hole(e.x,e.y-8,BAL.DARK_ENEMY_R*(e.boss?1.9:1),0.5); }   // 魔物のまわりも薄く光る(察知の距離は変わらない)
+  m.globalAlpha=1; m.globalCompositeOperation='source-over';
+  // 2) 暗幕から、その光の地図のぶんだけ抜く(抜き合成は一度だけ)
+  d.setTransform(1,0,0,1,0,0); d.globalCompositeOperation='source-over'; d.globalAlpha=1;
+  d.fillStyle='rgba(5,4,14,'+(BAL.DARK_CAP*lv).toFixed(3)+')';
+  d.clearRect(0,0,DW,DH); d.fillRect(0,0,DW,DH);
+  d.globalCompositeOperation='destination-out'; d.drawImage(darkMk,0,0);
+  d.globalCompositeOperation='source-over';
+  g.drawImage(darkCv,0,0,DW,DH,0,0,W,H);
+}
 let vignette=null;
 function makeVignette(){
   vignette=document.createElement('canvas');
@@ -3208,6 +3255,7 @@ function draw(){
   }
   g.restore();
 
+  if(inBattle) drawDark(g, W/2-G.cam.x+sx, H/2-G.cam.y+sy);   // v4.0 暗闇は世界の上、UIの下に落とす
   g.drawImage(vignette,0,0,W,H);
   if(inBattle && G.B.whiteFlash>0){
     // 聖光の閃き(画面全消去)

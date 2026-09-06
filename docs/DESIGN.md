@@ -315,6 +315,20 @@ idは汎用カタログ準拠。効果はすべて数値・挙動レベルで表
   `storyTick`: 落ち着いている時(拘束・発情・魔物30体超でない)に 38〜58 秒ごと、その階層の独り言を吹き出しで。降り口で `descend`、魔核の間を見つけた時に `finalEncounter`(1戦1度)。結果画面: clear=`ending`、reset=`reset`。
 - 表示: `#storybox`(盤面の上、タップか時間で閉じる)。ホームの「物語」画面は序章と到達済みの階層の導入、魔核討伐後は結末を載せる。
 
+### 3-28. v4.0 (A) 暗闇
+
+- **暗さ**: `FLOORS[].dark` (f1 0.34 → f8 0.88)。`darkLevel()` がそれを返し、`lightAt(x,y)` が「その点の明るさ 0..1」を返す。素の明るさは `1 - darkLevel()`。
+- **光源** (`lightAt` が max を取る): ヒロイン(`heroLightR`)/催淫灯篭(`BAL.LANTERN_R` 210)/残る灯り(`B.lights`、寿命で減衰)/光の柱(300)/炎の帯(`z.fire` の 1.3倍)。
+- **ヒロインの光**: `HEROES[].lightR`(ルミナ330・フレイラ215)× `floorLight()`(その階で集めた灯り 1.0〜1.75)。相方が `DARK_PAIR_R`(230)以内なら `×1.3`。絶頂中・`hypnoLv>=2` で `×0.85`。`lightK` は光の質(フレイラ0.85)。
+- **残る灯り** (`pushLight/lightsTick`): `{x,y,r,t,life,k}` を最大 `DARK_MEM_MAX`(44)。`damageEnemy` が18%の確率で、フレイラの炎の帯が生成時に積む。寿命で線形に褪せる。
+- **その階の灯り** (`gainFloorLight`): 祠に着いた時 `+DARK_SHRINE`(0.30)/燭台を壊した時 `+DARK_CANDLE`(0.035)/光茸を取った時 `+DARK_SHROOM`(0.16)、上限 `DARK_FLOOR_MAX`(0.75)。光茸はさらに**二人の間を5点に分けて照らす**(寿命2.2倍)。取った場所にも灯りを積む。
+- **催淫灯篭**: `POI_DEF.lantern`。`map.js` の `place('lantern',null,560)` を `BAL.LANTERN_N[depth-1]`(2〜4)基。`startBattle` で `B.lanterns` に写す。`lanternTick` が `LANTERN_R*0.62`(130px)以内で近さに比例して `addHeatG(3.4)` / `applySensit(0.9)`。`LANTERN_STAY`(5.5秒)温もると自分で切り上げ、`LANTERN_CD`(26秒)は `lanternWant` が false。`lanternWant` は「暗さ>0.3 かつ `heatLv<1` かつ `aphro<50` かつ冷却中でない」。目当ての価値は `LANTERN_WANT × darkLevel()`。
+- **遠くから見える**: `M.known` の判定に「灯篭と祠は `DARK_FAR_SEE`(900px)以内なら画面外でも気づく」を足した。
+- **暗い方へ行きたがらない**: 目当ての採点 `add()` に `lm = DARK_GOAL_K + (1-DARK_GOAL_K)*lightAt(x,y)` を掛ける(救出・待機は除く)。
+- **対処が遅れる**: `darkSense(x,y) = DARK_LAG + (1-DARK_LAG)*min(1, lightAt*1.35)`(0.5〜1)。`nearKnownTrap` の半径・地形の先読み距離・雲の回避距離・淫紋の罠の回避距離に掛かる。
+- **地図の記憶**: `seenTick` は `lightAt < DARK_SEEN`(0.3)のタイルを覚えない。暗い階ほど探索率が伸びない。
+- **描画** (`drawDark`): 画面の 1/3 の裏画布に、① 光の地図を `lighter` で足し合わせ ② 暗幕(`DARK_CAP × darkLevel()`)から `destination-out` で一度だけ抜き ③ 引き伸ばして重ねる。抜き合成は1回だけなので約2ms。`gfxLv()<=1` の端末では 1/5 の粗さにし、雑魚の微光を省く。世界の上・UIの下に落とすので、HUD とミニマップは常に読める。
+
 ### 3-27. v3.2 洞の外形・意味のある壁・甘い褥の巣窟・入るか待つか
 
 - **外周(genMap)**: `edgeProf(n)` が三つの正弦を重ねた厚み(2.2〜6.2タイル)を四辺ぶん作り、`coveAt` が6か所の入り江(最大 +7.5)を足す。合計は `BORD_MAX`(12)で頭打ち。最外周2タイルは必ず岩なので外へは抜けられない。`bordT/bordB/bordL/bordR(i|j)` は後続(袋小路・巣窟の位置決め)からも呼ぶ。
