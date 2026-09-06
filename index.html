@@ -256,6 +256,10 @@ canvas#cv.arm{ cursor:crosshair; }
 .notebook .shaky{ display:inline-block; transform:rotate(-1.2deg) skewX(-6deg); letter-spacing:.06em; color:#6a2a3a; }
 .notebook .margin{ font-family:"Yomogi","Klee One","Yu Kyokasho",cursive; font-size:11.5px; color:#7a3a4a; margin:0 0 4px 22px; padding-left:8px; border-left:2px solid rgba(138,74,90,.45); transform:rotate(-1.8deg); line-height:1.5; }
 .notebook .locked{ color:#9a8a7a; font-size:11.5px; font-style:italic; }
+.notebook .mnote{ display:block; margin:5px 0 0 auto; max-width:86%; padding:3px 8px 3px 10px; border-left:2px solid rgba(168,50,58,.55);
+  font-family:"Yomogi","Klee One","Yu Kyokasho",cursive; font-size:12px; line-height:1.5; color:#a8323a; transform:rotate(-.5deg); text-shadow:0 0 .4px rgba(168,50,58,.5); }
+.notebook .mnote::before{ content:"— "; opacity:.7; }
+.notebook .after .mnote{ font-family:inherit; font-size:11.5px; color:#7a4a52; transform:none; border-left-color:rgba(122,74,82,.4); }   /* 末尾は「余白の様子」の描写。手書きではなく地の文の調子で */
 .notebook .after{ margin-top:10px; padding-top:8px; border-top:1px dashed rgba(90,60,40,.45); color:#4a3a4a; font-size:12px; font-family:"Hiragino Maru Gothic ProN","Yu Gothic UI","Meiryo",sans-serif; }
 .notebook .cut{ color:#7a3a3a; }
 .tcard{ border-left:3px solid var(--gold); padding:4px 10px; margin:6px 0; text-align:left; }
@@ -423,6 +427,7 @@ body.portrait #battlebar .side button{ font-size:9.5px; padding:4px 8px; white-s
 <script src="js/scenes.js"></script>
 <script src="js/codex.js"></script>
 <script src="js/codex_v20.js"></script>
+<script src="js/codex_freila.js"></script>
 <script src="js/scenes_v20.js"></script>
 <script src="js/scenes_freila.js"></script>
 <script src="js/story.js"></script>

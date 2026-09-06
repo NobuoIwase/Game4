@@ -213,7 +213,7 @@ const UI={
     const nm=$('advName'); nm.textContent=(NAMES[ln.s]!==undefined)?NAMES[ln.s]:ln.s; nm.className=ln.s;
     // v3.0 立ち絵は話しているヒロインに切り替える(地の文は直前の話者のまま暗く)
     { const img=$('advImg'); const who=(ln.s==='lumina'||ln.s==='freila')?ln.s:(A.lastWho||'lumina'); A.lastWho=who;
-      if(img && img.dataset.who!==who){ img.dataset.who=who; img.dataset.fb='0'; img.style.visibility=''; img.src=who==='freila'?'assets/ref/freila_stand.png':'assets/ref/lumina_novelai.png'; } }
+      if(img && img.dataset.who!==who){ img.dataset.who=who; img.dataset.fb='0'; img.style.visibility=''; img.src=who==='freila'?'assets/ref/freila.png':'assets/ref/lumina_novelai.png'; } }
     const st=$('advStand'); st.className=((ln.s==='lumina'||ln.s==='freila')?'speak':'dim')+(ln.f?' f-'+ln.f:'');
     const tx=$('advText'); tx.className=ln.s; tx.textContent='';
     A.typeT=0; A.shown=0; A.dwell=0; A.full=(ln.s==='lumina'||ln.s==='freila'||ln.s==='town'||ln.s==='voice')?'「'+ln.t+'」':ln.t;
@@ -587,14 +587,16 @@ const UI={
     if(sel && MONSTERS[sel] && codexStage(sel)>=0){
       const m=MONSTERS[sel], cx=CODEX[sel], stg=codexStage(sel), rec=(META.codex||{})[sel]||{};
       const note=cx?cx.note:null;
+      const fx=(typeof CODEX_F!=='undefined')?CODEX_F[sel]:null;   // v3.0 フレイラの欄外書き込み(赤ペン)
+      const mg=t=>t?`<div class="mnote">${esc(t)}</div>`:'';
       const entries=[];
       if(note){
-        entries.push(`<div class="entry"><span class="lbl">特徴</span>${noteHtml(note.base)}</div>`);
+        entries.push(`<div class="entry"><span class="lbl">特徴</span>${noteHtml(note.base)}${mg(fx&&fx.base)}</div>`);
         for(let i=0;i<3;i++){
-          if(stg>=i+1) entries.push(`<div class="entry"><span class="lbl">追記${['一','二','三'][i]}</span>${noteHtml(note.add[i], i===2)}</div>`);
+          if(stg>=i+1) entries.push(`<div class="entry"><span class="lbl">追記${['一','二','三'][i]}</span>${noteHtml(note.add[i], i===2)}${mg(fx&&fx.add&&fx.add[i])}</div>`);
           else{ entries.push(`<div class="entry locked">（追記${['一','二','三'][i]}は、まだ書かれていない——${['この種族に何かされた夜','この種族が絡んだ絶頂','この種族への敗北'][i]}の後に増える）</div>`); break; }
         }
-        if(stg>=3 && note.after) entries.push(`<div class="after">${esc(note.after)}</div>`);
+        if(stg>=3 && note.after) entries.push(`<div class="after">${esc(note.after)}${mg(fx&&fx.after)}</div>`);   // v3.0 末尾に、赤ペンの余白の様子
       }
       detail=`<div class="stcard" style="text-align:left">
         <div style="display:flex;gap:12px;align-items:center">

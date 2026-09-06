@@ -562,6 +562,8 @@ function storyLineHtml(l){
 }
 /* retry: 変奏の配列(v2.1: 配列の配列)か、「§」区切りの1本の配列(旧形式)。1つを選んで返す */
 function storyRetry(){
+  const two=!!(G.B&&G.B.heroes&&G.B.heroes.length>1);   // v3.0 二人で潜っているなら二人版の朝
+  if(two && typeof STORY_V30!=='undefined' && STORY_V30.retry && STORY_V30.retry.length) return STORY_V30.retry[(Math.random()*STORY_V30.retry.length)|0]||[];
   if(STORY.retry.length && Array.isArray(STORY.retry[0])) return STORY.retry[(Math.random()*STORY.retry.length)|0]||[];
   const groups=[]; let cur=[];
   for(const l of STORY.retry){ if(l.startsWith('§')){ if(cur.length) groups.push(cur); cur=[]; const rest=l.slice(1).trim(); if(rest) cur.push(rest); } else cur.push(l); }

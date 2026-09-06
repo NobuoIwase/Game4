@@ -327,6 +327,7 @@ function endBattle(outcome){
   for(const h of B.heroes) snapRunHero(h);   // v2.1 引き継ぎ(下のリセットで消えることがある) / v3.0 全員
   // v2.0 潜行の進み: 捕まれば同じ階層に再挑戦、二連敗で入口へ(世代が変わる)。降りれば次の階層。魔核を討てば目的達成→組み替わる
   let rotReset=false, decay=null, runNote='';
+  const twoP=B.heroes.length>1, V30E=(typeof STORY_V30!=='undefined')?STORY_V30:{};   // v3.0 二人版の結末・リセット
   const floorBefore=META.run.floor||1;
   if(outcome==='capture'){
     META.run.fails=(META.run.fails||0)+1;
@@ -347,8 +348,8 @@ function endBattle(outcome){
     coins:coinGain, shop:shopped, decay,
     will:META.lumina.will||0, willUp:outcome==='capture', shrines:B.shrineGot, gateT:B.gateT, used:B.used, eventsN:B.eventsN, eventsDone:B.eventsDone,
     floor:B.floor, floorBefore, runNote, fails:META.run.fails, nextFloor:META.run.floor, seals:Object.keys(B.seals).length,
-    storyLines: outcome==='clear'?((typeof STORY_V30!=='undefined'&&STORY_V30.era&&STORY_V30.era.coreDown&&STORY_V30.era.coreDown.length)?STORY_V30.era.coreDown[Math.min(STORY_V30.era.coreDown.length-1,Math.max(0,(META.era|0)-1))].concat(STORY.ending):STORY.ending)
-      :(runNote==='reset'?STORY.reset:(outcome==='capture'&&B.captures&&B.captures.length>1&&typeof STORY_V30!=='undefined'&&STORY_V30.party&&STORY_V30.party.bothCaptured?STORY_V30.party.bothCaptured:(outcome==='descend'&&B.heroes.some(h=>h.out)&&typeof STORY_V30!=='undefined'&&STORY_V30.party&&STORY_V30.party.leftBehind?STORY_V30.party.leftBehind:null))), newCurse:newCurse?BOSS_CURSES[newCurse.id]:null,
+    storyLines: outcome==='clear'?((typeof STORY_V30!=='undefined'&&STORY_V30.era&&STORY_V30.era.coreDown&&STORY_V30.era.coreDown.length)?STORY_V30.era.coreDown[Math.min(STORY_V30.era.coreDown.length-1,Math.max(0,(META.era|0)-1))].concat(twoP&&V30E.ending?V30E.ending:STORY.ending):(twoP&&V30E.ending?V30E.ending:STORY.ending))
+      :(runNote==='reset'?((twoP&&V30E.reset)?V30E.reset:STORY.reset):(outcome==='capture'&&B.captures&&B.captures.length>1&&typeof STORY_V30!=='undefined'&&STORY_V30.party&&STORY_V30.party.bothCaptured?STORY_V30.party.bothCaptured:(outcome==='descend'&&B.heroes.some(h=>h.out)&&typeof STORY_V30!=='undefined'&&STORY_V30.party&&STORY_V30.party.leftBehind?STORY_V30.party.leftBehind:null))), newCurse:newCurse?BOSS_CURSES[newCurse.id]:null,
     captures:B.captures, leftBehind:B.heroes.filter(h=>h.out).map(h=>h.name),
     carryLv:(META.run.hero&&META.run.hero.level)||0,
     curseGone:(oldCurse&&!META.curse&&!newCurse)?BOSS_CURSES[oldCurse.id]:null});
@@ -3371,7 +3372,8 @@ function poiTick(dt){
       sayLine('poi.'+q.kind,1,0,q.kind==='stairs'?'おりぐち、みっけ! でも、まだ見てないとこあるし':pickRand(['あそこ、なにかある……','あれ、なんだろ','おぼえておこう']));   // v2.1 場所ごとの台詞
       partyShare(p,'poi',q.x,q.y);   // v3.0 相手に伝える
       if(q.kind==='stairs') setBanner('降り口を見つけた',exitGuarded()?'石の番兵が守っている。彼女は他を見てから降りる':'彼女は見るものを見てから降りる','#8fd3ff');
-      if(q.kind==='core'){ setBanner('魔核の間','深淵の心臓。彼女は挑むだろう','#ff6b81'); if(STORY.finalEncounter.length && !B.storyCoreSeen){ B.storyCoreSeen=true; UI.showStory(STORY.finalEncounter,{dur:11}); } }
+      if(q.kind==='core'){ setBanner('魔核の間','深淵の心臓。彼女は挑むだろう','#ff6b81'); { const two=B.heroes.length>1, V=(typeof STORY_V30!=='undefined')?STORY_V30:null; const fe=(two&&V&&V.finalEncounter&&V.finalEncounter.length)?V.finalEncounter:STORY.finalEncounter;   // v3.0 二人で魔核を見る
+        if(fe.length && !B.storyCoreSeen){ B.storyCoreSeen=true; UI.showStory(fe,{dur:11}); } } }
       if(q.kind==='seal') setBanner('封印石','3つ全て灯すと降り口が開く','#c98cff');
     }
     const d=Math.hypot(q.x-p.x,q.y-p.y);
