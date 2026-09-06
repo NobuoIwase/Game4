@@ -244,7 +244,7 @@ function startBattle(){
   prewarmChunks(0,0);     // 出発点の周りのマップチップを先に焼く
   spawnInitialProps();
   spawnInitialPicks();    // v1.8 地形の資源(光茸・蜜の花・沈んだ宝)
-  spawnLewdRewards();     // v2.2 えちえちエリアの報酬
+  spawnDen();             // v3.2 巣窟の報酬と仕掛け
   // 描き込みスプライトの事前焼き(デッキの種族×位相を最初の数十フレームで焼いておく)
   G.gfxLv=2; G.kCap=2; G.prebake=[];
   if(typeof resetSpriteCache==='function') resetSpriteCache();   // 前の戦闘の焼き絵(別デッキ・別倍率)は捨てる
@@ -448,7 +448,9 @@ function sayLine(path,prio,cd,fallback){
 /* v2.1 諦め: 目標(品・箱・ハート・ジェム・場所・資源。目当ての ref か、その物自体)を GIVEUP_CD 秒のあいだ候補から外す */
 const giveUpKey=t=>(t&&typeof t==='object')?(t.ref||t):t;
 function gaveUp(t){ const B=G.B; if(!B||!B.giveUp||!t) return false; const u=B.giveUp.get(giveUpKey(t)); return u!==undefined && B.time<u; }
-function giveUpOn(t){ const B=G.B; if(!B||!B.giveUp||!t) return; B.giveUp.set(giveUpKey(t),B.time+BAL.GIVEUP_CD); }
+function giveUpOn(t){ const B=G.B; if(!B||!B.giveUp||!t) return;
+  if(t.kind==='rescue' || t.kind==='wait' || (t.out && t.captive)) return;   // v3.2 捕まった仲間だけは諦めない(嫌な地形で足がすくんでも、目当てからは外さない)
+  B.giveUp.set(giveUpKey(t),B.time+BAL.GIVEUP_CD); }
 /* ================= 学習(世代内の知識) =================
    何かされた回数(met)と敗北(cap)で 未知→認識→理解→熟知。世代リセットで忘れる。
    手記を二度書いた種族(図鑑の追記二以上)は、次の世代でも一段だけ覚えている */
@@ -1052,6 +1054,8 @@ function statesTick(h,dt){
     const zname=(h.zone==='lewd'&&G.B.floor&&G.B.floor.lewd)?G.B.floor.lewd.name:ZONES[h.zone].name;   // v2.2 えちえちエリアは階層ごとの名前
     if(h.zoneLast!==undefined && G.B.time-(h.zoneToastT||-9)>4){ const tag=fearTag(zoneFear(h.zone)); floatTxt(h.x,h.y-100,'— '+zname+' —'+(tag?'('+tag+')':''),h.zone==='lewd'?'#ff9ec2':'#cbd5ff',13,2.4); floatTxt(h.x,h.y-86,ZONES[h.zone].her,'#9fb4d8',9,2.4); h.zoneToastT=G.B.time; }   // v1.8 地形の意味も一行 / v2.2 嫌い方
     if(h.zone==='lewd' && !G.B.lewdSeen && G.B.floor&&G.B.floor.lewd){ G.B.lewdSeen=true; setBanner(G.B.floor.lewd.name,G.B.floor.lewd.sub,'#ff86b3'); sayLine('feat.lewd',1,0,'ここ……あまいにおいが、すごい'); }
+    if(h.zone==='lewd' && h.zoneLast!=='lewd') denEnterBurst(h);   // v3.2 敷居をまたいだ瞬間
+    if(h.zone==='haze' && h.zoneLast!=='haze' && h.zoneLast!=='lewd') sayLine('feat.haze',1,25,'このにおい……おくに、なにかある');
     if(zoneFear(h.zone)>=2){ h.zoneEnter={x:h.x,y:h.y}; h.zoneHeat0=h.heatG||0; h.zoneSens0=h.sensit||0; h.zoneAbortTried=false; } else h.zoneEnter=null;   // v2.2 嫌な地形に入った位置と、入った時の火照り
     h.zoneLast=h.zone;
   }
@@ -1061,7 +1065,13 @@ function statesTick(h,dt){
   if(h.zone==='flower') applySensit(0.6*dt);
   if(h.zone==='hotspring'){ applySensit(1.2*dt); addHeatG(2*dt); h.hp=Math.min(h.maxHp,h.hp+h.regen*0.5*dt); }
   if(h.zone==='flesh') addHeatG(BAL.FLESH_HEAT*dt);   // v2.0 肉の床: 脈がうつる
-  if(h.zone==='lewd'){ learnZone('lewd',dt*0.45); addHeatG(2.4*dt); applySensit(1.6*dt); h.lewdT=(h.lewdT||0)+dt; if(h.lewdT>=5){ h.lewdT=rand(-2,0); floorGrope(h); if(Math.random()<0.5) zoneAbort(h); } } else h.lewdT=0;   // v2.2 甘い褥: 火照りと敏感化、床から手(手が出た時、半分は「やっぱ無理」)
+  if(h.zone==='lewd'){   // v3.2 巣窟: 前室→沼→最奥と、奥ほど効きが強い。奥まで来たら引き返さない(前室でだけ「やっぱ無理」が出る)
+    const dst=Math.max(0,Math.min(2,denStage(h.x,h.y)));
+    learnZone('lewd',dt*0.45); addHeatG(BAL.DEN_HEAT[dst]*dt); applySensit(BAL.DEN_SENS[dst]*dt);
+    h.lewdT=(h.lewdT||0)+dt;
+    if(h.lewdT>=BAL.DEN_GROPE[dst]){ h.lewdT=rand(-1.5,0); floorGrope(h); if(dst===0 && Math.random()<BAL.DEN_ABORT) zoneAbort(h); }
+  }else if(h.zone==='haze'){ learnZone('haze',dt*0.3); addHeatG(BAL.HAZE_HEAT*dt); applySensit(BAL.HAZE_SENS*dt); h.lewdT=0; }   // v3.2 口の外の澱み
+  else h.lewdT=0;
   if(h.zoneEnter && !h.zoneAbortTried && zoneFear(h.zone)>=2 && ((h.heatG||0)-(h.zoneHeat0||0)>=15 || (h.sensit||0)-(h.zoneSens0||0)>=10)){ if(Math.random()<0.45) zoneAbort(h); else h.zoneAbortTried=true; }   // 火照りが急に進んだら、半分弱は逃げ出す
   const B=G.B;
   // ---- v1.3 催眠Lv: 時間で薄れる。Ⅲでは、その場で自分を慰めはじめる
@@ -1383,7 +1393,7 @@ function aiUpdate(dt){
   if(Math.abs(p.vx)>12 && p.steerState!=='talk') p.face=p.vx>0?1:-1;   // v3.1 話している間は相手の方を向いたまま
   p.moving=Math.hypot(p.vx,p.vy)>30;
 
-  const LBL={g_gather:'集まって相談', flee:'かいひ行動!', boss:'ボスかいひ!!', dodge:'よける!(おぼえてる)', gem:'ジェム回収', poi:'めざす場所へ', explore:'たんさく中', heart:'ハートへ!',
+  const LBL={g_gather:'集まって相談', g_wait:'外で待つ', flee:'かいひ行動!', boss:'ボスかいひ!!', dodge:'よける!(おぼえてる)', gem:'ジェム回収', poi:'めざす場所へ', explore:'たんさく中', heart:'ハートへ!',
     prop:'燭台をこわして回復!', chest:'たからばこへ!', kite:'まちうけ・けん制', wait:'けいかい中',
     struggle:'ふりほどこうともがいている!',
     charmwalk:'ふらふらと、ちかづいていく…', heatwalk:'熱にまけて、よろめき寄る…',
@@ -1709,9 +1719,12 @@ function aiDecide(foc){
     if(!target && goalOk){ target=goal; kind='g_'+(goal.kind==='event'?'event':(goal.kind==='item'?'item':goal.sub)); }
     if(target && kind==='g_stairs' && exitGuard) target={x:exX,y:exY};   // v2.1 番兵が居るうちは輪の外側から撃つ
     // v2.1 諦めの見張り: 同じ目標へ向かって GIVEUP_T 秒近づけなければ(壁の向こう・入口で弾かれる・押し合い)、その目標を外して他へ。燭台(撃つ間は止まる)と降り口の上は除く
-    if(target && kind!=='prop' && !(kind==='g_stairs' && (exitGuard || exitD<90))){
+    if(target && kind!=='prop' && !(kind==='g_stairs' && exitGuard)){
       const key=giveUpKey(target), d0=Math.hypot(target.x-p.x,target.y-p.y);
-      if(p.tgtKey===key){
+      // v3.2 着いてしまえば見張らない: 救出・封印石・清水・祠・降り口のように「その場に立つ」のが仕事の目当ては、
+      //      近づかない時間が続いても諦めではない(以前は仲間を救っている3秒の間に、その仲間を目当てから外していた)
+      if(d0<90){ p.tgtKey=key; p.tgtBest=d0; p.tgtT=B.time; }
+      else if(p.tgtKey===key){
         if(d0<p.tgtBest-14){ p.tgtBest=d0; p.tgtT=B.time; }
         else if(B.time-p.tgtT>BAL.GIVEUP_T){
           giveUpOn(target); B.nGiveUp=(B.nGiveUp||0)+1;
@@ -1820,7 +1833,8 @@ function aiDecide(foc){
     }
   }
   // v3.0 パーティ: 相手から離れすぎない(PARTY_LEASH を超えるほど強く寄る)。重なりすぎたら少し離れる。相談の間は足を止める
-  { const o=partnerOf(p); if(o){ const ddx=o.x-p.x, ddy=o.y-p.y, dd=Math.hypot(ddx,ddy)||1;
+  { const waiting=!!(B.party&&B.party.denRole&&B.party.denRole.wait===p.hi);   // v3.2 外で待つ役は引っぱられない(自分で口の前を歩いて間合いを取る)
+    const o=waiting?null:partnerOf(p); if(o){ const ddx=o.x-p.x, ddy=o.y-p.y, dd=Math.hypot(ddx,ddy)||1;
       if(dd>BAL.PARTY_LEASH){ const w=Math.min(1.4,(dd-BAL.PARTY_LEASH)/200); dx+=ddx/dd*w; dy+=ddy/dd*w; }
       else if(dd<BAL.PARTY_SEP && attachCount(p)===0){ dx-=ddx/dd*0.45; dy-=ddy/dd*0.45; } } }
   if(B.party && B.time<B.party.talkUntil && attachCount(p)===0 && threat<0.6){ dx*=0.05; dy*=0.05; state='talk'; const o=partnerOf(p); if(o && Math.abs(o.x-p.x)>6) p.face=o.x>p.x?1:-1; }   // v3.1 話す間は相手の方を向く
@@ -3168,6 +3182,7 @@ function goalValid(p,g){
   const B=G.B, M=META.map; if(!g) return false;
   if(g.kind==='rescue') return !!(g.ref && g.ref.out);   // v3.0 まだ捕まっている間
   if(g.kind==='gather'){ const P=B.party; return !!(P && P.gather && B.time<P.gather.until && !partyGathered() && !partyDanger()); }   // v3.1 集合の途中
+  if(g.kind==='wait') return !!(B.party && B.party.denRole);   // v3.2 外で待っている間
   if(g.kind==='event') return B.event===g.ref;
   if(g.kind==='chest') return B.chests.includes(g.ref) && !g.ref.taken;
   if(g.kind==='item') return B.items.includes(g.ref);
@@ -3208,6 +3223,7 @@ function partyExchange(key,sub){
 function partyTick(dt){
   const B=G.B, P=B.party; if(!P) return;
   if(P.pending&&P.pending.length){ const keep=[]; for(const q of P.pending){ if(B.time>=q.at){ const h=B.heroes[q.hi]; if(h&&!h.out){ if(q.path) sayPartyAs(q.hi,q.path,q.prio||1,0); else heroBubble(h,q.txt,true,q.prio||1); } } else keep.push(q); } P.pending=keep; }
+  denRoleTick();   // v3.2 待つ/踏み込むの見張り
   P.tickT=(P.tickT||0)-dt; if(P.tickT>0) return; P.tickT=0.5;
   const active=B.heroes.filter(h=>!h.out); if(active.length<2) return;
   if(!P.floorSaid && B.time>3){ P.floorSaid=true; partyExchange('floor',String(B.floor.depth)); }
@@ -3225,6 +3241,7 @@ function updateGoal(p){
   const B=G.B, P=B.party, active=B.heroes.filter(h=>!h.out);
   if(P && P.gather && (active.length<2 || B.time>P.gather.until+1)){ P.gather=null; P.gatherDone=0; }   // v3.1 流れた集合(誰かが捕まった・戦いが長引いた)は、後で「いま集まった」と数えない
   if(!P || active.length<2) return updateGoalSolo(p);
+  if(P.denRole && p.hi===P.denRole.wait && denOf()) return denWaitGoal(p);   // v3.2 外で待つ役は、自分の立ち位置を持つ
   if(P.goal && P.owner && !P.owner.out && goalValid(P.owner,P.goal) && B.time<P.until){
     if(p.goal!==P.goal){ p.goal=P.goal; p.goalT=B.time+BAL.GOAL_RETHINK; }
     else if(P.goal.ref && P.goal.kind!=='explore' && P.goal.kind!=='event'){ P.goal.x=P.goal.ref.x; P.goal.y=P.goal.ref.y; }
@@ -3259,7 +3276,8 @@ function updateGoal(p){
     const losers=props.filter(x=>x!==win); if(losers.length){ P.turn=losers[0].h.hi; P.lastLoser=losers[0].h.hi; }
   }
   P.goal=win.g; P.owner=win.h; P.until=B.time+(same?BAL.GOAL_RETHINK:BAL.PARTY_HOLD);
-  for(const x of props){ x.h.goal=P.goal; x.h.goalT=B.time+BAL.GOAL_RETHINK; }
+  denAssignRole(win,active);   // v3.2 巣窟が目当てなら、入る役と待つ役を決める
+  for(const x of props){ if(P.denRole && x.h.hi===P.denRole.wait) continue; x.h.goal=P.goal; x.h.goalT=B.time+BAL.GOAL_RETHINK; }
   B.nDecide=(B.nDecide||0)+1; if(!same) B.nSplit=(B.nSplit||0)+1;
   if((B.time-P.decidedT>BAL.PARTY_TALK_CD && P.goal.kind!=='explore') || gathered){   // 集まったのなら(探索でも)必ず一言交わす
     P.decidedT=B.time; const kind=goalKindKey(P.goal);
@@ -3277,7 +3295,9 @@ function updateGoalSolo(p){
   if(p.goal && goalValid(p,p.goal) && B.time<p.goalT){ if(p.goal.ref && p.goal.kind!=='explore' && p.goal.kind!=='event'){ p.goal.x=p.goal.ref.x; p.goal.y=p.goal.ref.y; } return p.goal; }
   p.goalT=B.time+BAL.GOAL_RETHINK;
   const cands=[];
-  const add=(kind,sub,x,y,worth,ref,key)=>{ worth*=goalPref(p,kind,sub); if(worth<=0 || !passAt(x,y,false) || nearKnownTrap(x,y)) return; if(ref && gaveUp(ref)) return; /* v2.1 諦めた目標は外す */ if(crestKnow()>=1 && B.traps.some(tr=>tr.armed && Math.hypot(tr.x-x,tr.y-y)<tr.r+40)) return; /* 知っている紋の罠の上は目当てにしない */ const d=Math.hypot(x-p.x,y-p.y); const fz=zoneFear(zoneAt(x,y)), fm=fz>=3?0.5:(fz>=2?0.7:(fz>=1?0.9:1)); cands.push({kind,sub,x,y,ref,key,d,worth,score:worth*fm/(1+d/600)}); };   // v2.2 嫌な地形の中の目当ては割り引く(価値そのものは入る判断に使うので残す)
+  if(B.dbgCands) B.lastCands=null;   // 検証用: 目当ての候補を覗く(B.dbgCands=true の時だけ)
+  const anyCaptive=B.heroes.some(c=>c.out&&c.captive&&c!==p);   // v3.2 仲間が捕まっている間は、寄り道の価値を落とす(木の実を拾いに行かない)
+  const add=(kind,sub,x,y,worth,ref,key)=>{ worth*=goalPref(p,kind,sub); if(anyCaptive && kind!=='rescue') worth*=BAL.RESCUE_FOCUS; if(worth<=0 || !passAt(x,y,false) || nearKnownTrap(x,y)) return; if(ref && gaveUp(ref)) return; /* v2.1 諦めた目標は外す */ if(crestKnow()>=1 && B.traps.some(tr=>tr.armed && Math.hypot(tr.x-x,tr.y-y)<tr.r+40)) return; /* 知っている紋の罠の上は目当てにしない */ const d=Math.hypot(x-p.x,y-p.y); const fz=zoneFear(zoneAt(x,y)), fm=fz>=3?0.5:(fz>=2?0.7:(fz>=1?0.9:1)); cands.push({kind,sub,x,y,ref,key,d,worth,score:worth*fm/(1+d/600)}); };   // v2.2 嫌な地形の中の目当ては割り引く(価値そのものは入る判断に使うので残す)
   const hpR=p.hp/p.maxHp, stR=p.stamina/p.staminaMax;
   const leaving=!!B.wantExit;   // v2.1 降りる気(最終階層では魔核へ向かう気)になったら、寄り道の価値は薄く(拾うのは道すがらだけ)
   let unknownN=0; for(const q of G.map.pois) if(!M.known[q.key]) unknownN++;
@@ -3288,7 +3308,7 @@ function updateGoalSolo(p){
     if(ev.kind==='shroom' && ev.refs){ let nd=1e9; for(const pk of ev.refs){ if(pk.dead) continue; const dd=Math.hypot(pk.x-p.x,pk.y-p.y); if(dd<nd){ nd=dd; ex=pk.x; ey=pk.y; } } }   // 群生は残っている光茸そのものへ
     add('event',ev.kind,ex,ey,w*(leaving?0.5:1),ev,ev.key); }
   for(const it of B.items){ if(it.known) add('item',it.kind,it.x,it.y,3.0,it); }
-  for(const c of B.heroes){ if(c.out && c.captive && c!==p) add('rescue','rescue',c.x,c.y,3.4,c,'rescue'+c.hi); }   // v3.0 捕まった仲間の救出は最優先の目当て
+  for(const c of B.heroes){ if(c.out && c.captive && c!==p) add('rescue','rescue',c.x,c.y,BAL.RESCUE_WORTH,c,'rescue'+c.hi); }   // v3.0 捕まった仲間の救出は最優先の目当て(v3.2 価値を上げ、他を割り引く)
   for(const c of B.chests){ if(c.known && !c.taken) add('chest',c.bossChest?'boss':'chest',c.x,c.y,(c.bossChest?3.0:2.6)*(leaving?0.3:1),c); }   // v2.1 降りると決めたら箱は後回し
   for(const q of G.map.pois){
     if(!M.known[q.key]) continue; let w=0;
@@ -3322,6 +3342,7 @@ function updateGoalSolo(p){
     if(p.explore) add('explore','explore',p.explore.x,p.explore.y,0.6,null);
   }
   let best=null; for(const c of cands){ if(!best||c.score>best.score) best=c; }
+  if(B.dbgCands) B.lastCands=cands.slice().sort((a,b)=>b.score-a.score).slice(0,6).map(c=>c.kind+'/'+(c.sub||'')+':'+c.score.toFixed(2)+'@'+Math.round(c.d));   // 検証用: 目当ての候補
   // v2.1 ふらつき防止: いまの目当てが有効なら、はっきり良い(GOAL_KEEP倍)候補が出るまで乗り換えない
   if(best && p.goal && p.goal.kind!=='explore' && goalValid(p,p.goal) && !(best.ref&&best.ref===p.goal.ref&&best.kind===p.goal.kind)){
     const same=p.goal.ref?cands.find(c=>c.ref===p.goal.ref&&c.kind===p.goal.kind):null;   // 価値は今の評価で(降りると決めた後に箱の価値が下がる等)。候補から外れていれば乗り換える
@@ -4153,7 +4174,7 @@ function beginCapture(src,cause){
     B.bullets=B.bullets.filter(b=>b.hi!==B.ci);
     setBanner(h.name+'、捕まった!', others[0].name+'は救い出すか、置いて降りるか','#c98cff');
     for(const o of others) sayPartyAs(o.hi,'captured.watch',3,0);
-    B.party.goal=null; B.party.pending=[]; B.party.talkUntil=0; B.party.gather=null; B.party.gatherDone=0;   // v3.1 相談は中断(言いかけの台詞と足止めを捨てる)
+    B.party.goal=null; B.party.pending=[]; B.party.talkUntil=0; B.party.gather=null; B.party.gatherDone=0; B.party.denRole=null;   // v3.1 相談は中断(言いかけの台詞と足止めを捨てる) / v3.2 待つ役も解く
     return;
   }
   G.mode='captured'; B.captureT=2.8; h.pinned=true;
@@ -4258,14 +4279,170 @@ function spawnInitialProps(){
     B.props.push({x:q.x, y:q.y, hp:BAL.PROP_HP, max:BAL.PROP_HP, t:rand(10)});
   }
 }
-/* v2.2 えちえちエリアの報酬: 王の宝箱1・宝箱1・沈んだ宝1・蜜の花2(祠は genMap が置く)。見つけるまで known は false */
-function spawnLewdRewards(){
-  const B=G.B, L=G.map&&G.map.lewd; if(!L) return;
-  const at=(dx,dy)=>snapFloor(L.x+dx,L.y+dy,false,3)||{x:L.x,y:L.y};
-  { const q=at(-MAP_T*2.0,MAP_T*0.8); B.chests.push({x:q.x,y:q.y,t:0,taken:false,bossChest:true,known:false,lewd:true}); }
-  { const q=at(MAP_T*1.8,MAP_T*1.4); B.chests.push({x:q.x,y:q.y,t:0,taken:false,known:false,lewd:true}); }
-  { const q=at(MAP_T*0.6,-MAP_T*2.2); spawnPick('treasure',q.x,q.y,false); }
-  { const q=at(-MAP_T*2.2,-MAP_T*0.4); spawnPick('nectar',q.x,q.y,false); const q2=at(MAP_T*2.4,-MAP_T*0.2); spawnPick('nectar',q2.x,q2.y,false); }
+/* ================= v3.2 甘い褥の巣窟 =================
+   壁際に食い込んだ大きな窪地。入口は喉道ひとつで、いちばん奥に王の宝箱がある。
+   前室→沼→最奥と進むほど発情と敏感化の効きが強く、床から伸びる手も早くなる。
+   中には魔法陣(踏むと紋が灯る)・媚薬の花(甘いガスを吐く)・壁に埋まった光線(催眠/絶頂)・番人(奥へ踏み込むと起きる)。
+   入口の外には媚薬の澱み(haze)が漂い、その手前に清水が湧く——覚悟を決める場所 */
+function denOf(){ return (G.map&&G.map.lewd)||null; }
+/* 段: -1=外 / 0=前室 / 1=沼 / 2=最奥。喉道(zone lewd だが楕円の外)は前室と同じ */
+function denStage(x,y){
+  const L=denOf(); if(!L) return -1;
+  const u=(x-L.x)/L.rx, w=(y-L.y)/L.ry, q=u*u+w*w;
+  if(q>1.04) return (zoneAt(x,y)==='lewd')?0:-1;
+  return q<0.34?2:(q<0.70?1:0);
+}
+/* 敷居をまたいだ瞬間: 匂いに殴られる */
+function denEnterBurst(h){
+  const B=G.B, ci0=B.ci; B.ci=h.hi;
+  addHeatG(BAL.DEN_ENTER_HEAT); applySensit(BAL.DEN_ENTER_SENS);
+  h.stumbleDur=Math.max(h.stumbleDur,0.5);
+  B.ci=ci0;
+  floatTxt(h.x,h.y-72,'——むわっ','#ff9ec2',14,1.4);
+  parts(h.x,h.y-10,14,['#ff9ec2','#c98cff','#ffd0e4'],90,0.9); sfx(180,120,0.3,'sine',0.05);
+  sayPartyOrLine(h,'feat.denEnter','……っ、いきなり、あつ……!');
+}
+/* ヒロインの声の表から一行(パーティ台詞と同じ流儀で、話者ごとに) */
+function sayPartyOrLine(h,path,fallback){
+  const B=G.B, ci0=B.ci; B.ci=h.hi; const r=sayLine(path,2,8,fallback); B.ci=ci0; return r;
+}
+/* 巣窟の中身を仕込む(startBattle から)。報酬はいちばん奥 */
+function spawnDen(){
+  const B=G.B, L=denOf(); if(!L) return;
+  const F=B.floor, at=(x,y,m)=>snapFloor(x,y,false,m||3)||{x,y};
+  const deep=at(L.deep.x,L.deep.y,4);
+  { B.chests.push({x:deep.x,y:deep.y,t:0,taken:false,bossChest:true,known:false,lewd:true}); }                        // 王の宝箱は最奥
+  { const q=at(L.x+(L.deep.x-L.x)*0.35, L.y+L.ry*0.45); B.chests.push({x:q.x,y:q.y,t:0,taken:false,known:false,lewd:true}); }   // 宝箱は沼のあたり
+  { const q=at(L.x-(L.deep.x-L.x)*0.2, L.y-L.ry*0.5); spawnPick('treasure',q.x,q.y,false); }
+  { const q=at(L.x+L.rx*0.1, L.y+L.ry*0.72); spawnPick('nectar',q.x,q.y,false); const q2=at(L.x-L.rx*0.15,L.y-L.ry*0.75); spawnPick('nectar',q2.x,q2.y,false); }
+  const beamKind=(F.lewd&&F.lewd.beam)||'hypno', other=beamKind==='hypno'?'climax':'hypno';
+  B.den={
+    runes:L.runes.map(q=>{ const s=at(q.x,q.y,3); return {x:s.x,y:s.y,cd:rand(0,3),glow:0}; }),
+    flowers:L.flowers.map(q=>{ const s=at(q.x,q.y,3); return {x:s.x,y:s.y,cd:rand(1,4),bloom:0}; }),
+    beams:L.beams.map((q,k)=>({x:q.x,y:q.y,ox:q.ox,oy:q.oy,ang:q.ang,type:(k%2===0)?beamKind:other,cd:rand(2,6),state:'idle',t:0,aimA:q.ang})),
+    guardUp:false, seen:false, deepSaid:false, rewardSaid:false,
+  };
+}
+/* 魔法陣: 踏んだところに紋が灯る(淫紋Lv+1・快感・よろめき) */
+function denRuneHit(h,r){
+  const B=G.B, ci0=B.ci; B.ci=h.hi;
+  learnTrap('rune');
+  if(crestKnow()>=3 && Math.random()<0.4){ floatTxt(h.x,h.y-70,'紋を、はらった','#8fd3ff',12,1.2); B.ci=ci0; return; }
+  applyPleasure(14); applySensit(8); addHeatG(8);
+  h.crestLv=Math.min(BAL.CREST_MAX,(h.crestLv||0)+1);
+  h.stumbleDur=Math.max(h.stumbleDur,0.9);
+  B.ci=ci0;
+  parts(r.x,r.y,18,['#c98cff','#ff86b3','#fff'],150,0.8); sfx(300,900,0.35,'sawtooth',0.07);
+  sayPartyOrLine(h,'feat.denRune','ゆかの、もよう……ひかって……っ');
+  setBanner('淫紋 '+ROMANS[h.crestLv],'褥に敷かれた紋が、彼女に灯った','#ff86b3');
+  awardAil('rune'); awardAil('crest');
+}
+/* 壁の光線: 狙いをつけてから、線で撃つ */
+function denBeamFire(bm){
+  const B=G.B, len=BAL.DEN_BEAM_LEN, dx=Math.cos(bm.aimA), dy=Math.sin(bm.aimA);
+  B.fx.push({kind:'denbeam', x:bm.x, y:bm.y, ang:bm.aimA, len, t:0, life:0.32, col:bm.type==='hypno'?'#b46cff':'#ff86b3'});
+  for(const h of B.heroes){
+    if(h.out) continue;
+    const rx=h.x-bm.ox, ry=(h.y-12)-bm.oy, along=rx*dx+ry*dy;
+    if(along<0||along>len) continue;
+    if(Math.abs(rx*dy-ry*dx)>BAL.DEN_BEAM_W) continue;
+    if(!losClear(bm.ox,bm.oy,h.x,h.y-12,true)) continue;
+    const ci0=B.ci; B.ci=h.hi;
+    if(bm.type==='hypno'){ applyHypno(null); floatTxt(h.x,h.y-64,'催眠光線','#b46cff',12,1.2); }
+    else { applyPleasure(26); applySensit(6); h.stumbleDur=Math.max(h.stumbleDur,0.5); floatTxt(h.x,h.y-64,'絶頂光線','#ff86b3',12,1.2); sayPartyOrLine(h,'feat.denBeam','ひかりが、あたって……からだ、が……っ'); }
+    B.ci=ci0;
+    parts(h.x,h.y-12,10,[bm.type==='hypno'?'#b46cff':'#ff86b3','#fff'],110,0.6);
+  }
+  sfx(bm.type==='hypno'?1200:420, bm.type==='hypno'?600:900, 0.28,'sine',0.05);
+}
+/* 番人: 最奥へ踏み込むと起きる。その階層の顔ぶれから一体、太らせて据える */
+function spawnDenGuard(){
+  const B=G.B, L=denOf(), F=B.floor; if(!B.den||B.den.guardUp||!L) return;
+  B.den.guardUp=true;
+  const id=(F.lewd&&F.lewd.guard)||'slugqueen'; if(!MONSTERS[id]) return;
+  const q=snapFloor(L.guard.x,L.guard.y,false,5)||{x:L.guard.x,y:L.guard.y};
+  const u=spawnUnit(id,q.x,q.y,{enVal:0,gemMul:2.2});
+  if(!u) return;
+  u.denGuard=true;
+  u.maxHp=u.hp=Math.round(Math.max(u.maxHp*BAL.DEN_GUARD_HP, BAL.DEN_GUARD_MIN*F.mon.hp*(typeof eraMul==='function'?eraMul():1)));
+  u.dmg=(u.dmg||0)*BAL.DEN_GUARD_DMG; u.xp=(u.xp||0)*2.2;
+  setBanner('褥の番人 — '+MONSTERS[id].name, (F.lewd&&F.lewd.guardSub)||'奥の主が、身を起こした','#ff6b81');
+  const near=B.heroes.filter(h=>!h.out).sort((a,b)=>Math.hypot(a.x-q.x,a.y-q.y)-Math.hypot(b.x-q.x,b.y-q.y))[0];
+  if(near) sayPartyOrLine(near,'feat.denGuard','おく、なにか……いる……!');
+  parts(q.x,q.y,26,['#ff6b81','#c98cff','#fff'],180,1.0); G.shake=Math.min(9,G.shake+5);
+}
+/* ================= v3.2 巣窟の前で: 入るか、待つか =================
+   片方が巣窟へ入る時、もう片方は性格と状況で「一緒に入る」か「外で待つ」かを決める。
+   待つ側は口の外に立ち、中の子が画面から出ないように口の内側(澱み)まで出入りして距離を詰める——
+   カメラは二人の重心を追い、離れすぎた分は引き戻されるので、待つ役がこの幅を吸収する。
+   中の子が掴まれた/押し倒された/体力が薄い/熱が上がりきったら、待つのをやめて踏み込む */
+function denGoalIn(g){ return !!g && denStage(g.x,g.y)>=0; }
+function denPeril(h){ return !!(h && (h.out||h.pinned||attachCount(h)>0||h.charmBind||h.hp<h.maxHp*0.55||h.heatLv>=2)); }
+function denRoleTick(){
+  const B=G.B, P=B.party; if(!P||!P.denRole) return;
+  const R=P.denRole, ex=B.heroes[R.in], wt=B.heroes[R.wait];
+  if(!ex||!wt||ex.out||wt.out){ P.denRole=null; return; }
+  if(!denGoalIn(P.goal) && B.time-R.since>3){ P.denRole=null; return; }              // 目当てが巣窟から離れた
+  if(denStage(ex.x,ex.y)<0 && B.time-R.since>5){ P.denRole=null; return; }           // 中の子が出てきた
+  if(denPeril(ex)){ sayPartyAs(wt.hi,'den.rush',2,0); P.denRole=null; }               // 危ない: 待つのをやめる
+}
+/* 待つ側の立ち位置: 口の外。中の子が画面の端に近づいた分だけ、口の内側へ踏み込んで詰める */
+function denWaitGoal(p){
+  const B=G.B, P=B.party, L=denOf(), R=P.denRole, ex=B.heroes[R.in];
+  let x=L.apron.x, y=L.apron.y;
+  if(ex){
+    const bx=BAL.PARTY_MAXDX*0.68, by=BAL.PARTY_MAXDY*0.68, dx=ex.x-x, dy=ex.y-y;
+    const t=Math.max(Math.abs(dx)/bx, Math.abs(dy)/by);
+    if(t>1){ x+=dx*(1-1/t)*1.08; y+=dy*(1-1/t)*1.08; const q=snapFloor(x,y,false,4); if(q){ x=q.x; y=q.y; } }
+  }
+  const g={kind:'wait', sub:'wait', x, y, ref:null, key:'denwait', d:0, worth:1.6, score:1.6};
+  p.goal=g; p.goalT=B.time+0.35;
+  return g;
+}
+/* 役割を決める: 目当てが巣窟の中で、二人以上いる時。臆病な方が外に残り、気の強い方は付いていく */
+function denAssignRole(win,active){
+  const B=G.B, P=B.party;
+  if(P.denRole || active.length<2 || !denGoalIn(P.goal)) return;
+  const other=active.find(h=>h!==win.h); if(!other) return;
+  const HD=HEROES[other.id]||{}, brave=(HD.braveAdd||0)>0.1;
+  const together = brave || win.h.hp<win.h.maxHp*0.6 || (B.den&&B.den.guardUp) || denPeril(win.h);
+  if(together){ sayPartyAs(other.hi,'den.together',1,0); return; }
+  P.denRole={in:win.h.hi, wait:other.hi, since:B.time};
+  B.nDenWait=(B.nDenWait||0)+1;
+  if(sayPartyAs(other.hi,'den.wait',1,0)) pendingLine(win.h.hi,'den.goIn',1.1,1);
+}
+/* 巣窟の毎フレーム(代表の文脈で1回だけ呼ぶ。効果はヒロインごとに当てる) */
+function denTick(dt){
+  const B=G.B, D=B.den; if(!D) return;
+  const act=B.heroes.filter(h=>!h.out); if(!act.length) return;
+  for(const r of D.runes){
+    r.cd-=dt; r.glow=Math.max(0,(r.glow||0)-dt*1.6);
+    if(r.cd>0) continue;
+    for(const h of act){ if(h.pinned||h.freezeT>0) continue; if(Math.hypot(h.x-r.x,h.y-r.y)<BAL.DEN_RUNE_R){ r.cd=BAL.DEN_RUNE_CD; r.glow=1; denRuneHit(h,r); break; } }
+  }
+  for(const f of D.flowers){
+    f.bloom=Math.max(0,(f.bloom||0)-dt*1.2); f.cd-=dt;
+    if(f.cd>0) continue;
+    f.cd=BAL.DEN_FLOWER_CD*rand(0.8,1.3);
+    if(!act.some(h=>Math.hypot(h.x-f.x,h.y-f.y)<560)) continue;   // 誰も居ない所では咲かない(雲の無駄打ちを避ける)
+    f.bloom=1; spawnCloud(f.x,f.y,BAL.DEN_FLOWER_R,BAL.DEN_FLOWER_LIFE,BAL.DEN_FLOWER_RATE,'gas');
+  }
+  for(const bm of D.beams){
+    bm.t+=dt;
+    if(bm.state==='idle'){
+      bm.cd-=dt; if(bm.cd>0) continue;
+      const tgt=act.find(h=>denStage(h.x,h.y)>=0 && Math.hypot(h.x-bm.ox,h.y-bm.oy)<BAL.DEN_BEAM_LEN && losClear(bm.ox,bm.oy,h.x,h.y-12,true));
+      if(!tgt) continue;
+      bm.state='aim'; bm.t=0; bm.aimA=Math.atan2((tgt.y-12)-bm.oy, tgt.x-bm.ox);
+      sfx(900,1300,0.12,'sine',0.03);
+    }else if(bm.state==='aim'){
+      if(bm.t>=BAL.DEN_BEAM_AIM){ bm.state='fire'; bm.t=0; denBeamFire(bm); }
+    }else{
+      if(bm.t>=BAL.DEN_BEAM_FIRE){ bm.state='idle'; bm.t=0; bm.cd=BAL.DEN_BEAM_CD*rand(0.85,1.2); }
+    }
+  }
+  if(!D.guardUp && act.some(h=>denStage(h.x,h.y)>=2)) spawnDenGuard();
+  if(!D.deepSaid && act.some(h=>denStage(h.x,h.y)>=1)){ D.deepSaid=true; const h=act.find(x=>denStage(x.x,x.y)>=1); sayPartyOrLine(h,'feat.denDeep','おくに、いくほど……あたま、ぼうっと……'); }
 }
 /* v2.2 床から手: 甘い褥に居続けると、床から手が伸びて撫でる(快感と一瞬のよろめき) */
 function floorGrope(h){
@@ -5031,6 +5208,7 @@ function battleTick(dt){
   B.ci=leaderIdx();
   if(B.ebullets.length) B.ebullets=B.ebullets.filter(b=>!b.dead&&b.t<b.life);
   eachHero(()=>poiTick(dt));   // 祠・泉・門(v3.0 ヒロインごと)
+  denTick(dt);                 // v3.2 巣窟の魔法陣・媚薬の花・壁の光線・番人(1フレームに1度)
   for(const k in B.itemCd){ if(B.itemCd[k]>0) B.itemCd[k]-=dt; }
   eachHero(()=>trapsTick(dt));
   // 小淫魔: 近くの数を数える(集中低下)。快感は煽りアクション時のみ(バーストCD持ち)

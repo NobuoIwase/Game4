@@ -249,6 +249,14 @@ function drawFx(g,f){
     const L=Math.hypot(f.x2-f.x,f.y2-f.y)||1, ux=(f.x2-f.x)/L, uy=(f.y2-f.y)/L, n=Math.max(2,Math.floor(L/9));
     g.beginPath(); g.moveTo(f.x,f.y); g.lineTo(f.x2,f.y2); g.stroke();
     for(let i=0;i<=n;i++){ const x=f.x+ux*L*i/n, y=f.y+uy*L*i/n; g.beginPath(); g.ellipse(x,y,3.2,2,Math.atan2(uy,ux)+(i%2?0.5:-0.5),0,TAU); g.stroke(); }
+  }else if(f.kind==='denbeam'){   // v3.2 撃たれた光線: 太い芯と広がる残光
+    const pr=f.t/f.life, a=1-pr;
+    g.save(); g.globalAlpha=a*0.9; g.strokeStyle=f.col; g.lineCap='round';
+    g.lineWidth=BAL.DEN_BEAM_W*0.7*(1-pr*0.5); g.globalAlpha=a*0.35;
+    g.beginPath(); g.moveTo(f.x,f.y); g.lineTo(f.x+Math.cos(f.ang)*f.len, f.y+Math.sin(f.ang)*f.len); g.stroke();
+    g.lineWidth=4*(1-pr*0.4); g.globalAlpha=a; g.strokeStyle='#fff';
+    g.beginPath(); g.moveTo(f.x,f.y); g.lineTo(f.x+Math.cos(f.ang)*f.len, f.y+Math.sin(f.ang)*f.len); g.stroke();
+    g.restore();
   }else if(f.kind==='pulse'){
     // 女王の甘い脈動: 広がる桃色の輪
     g.globalAlpha=(1-pr)*0.8;
@@ -362,6 +370,7 @@ function goalName(gl){
   if(gl.kind==='pick') return (PICK_DEF[gl.sub]&&PICK_DEF[gl.sub].name)||gl.sub;
   if(gl.kind==='gems') return 'ジェムの群れ';
   if(gl.kind==='gather') return '集まって相談';   // v3.1
+  if(gl.kind==='wait') return '入口で待つ';       // v3.2
   if(gl.kind==='rescue') return '救出';
   return '探索';
 }
@@ -859,6 +868,13 @@ function drawEnemy(g,e){
   g.fillStyle='rgba(8,8,26,0.3)';
   g.beginPath(); g.ellipse(0,e.boss?6:2,e.r*0.9,e.r*0.28,0,0,TAU); g.fill();
 
+  if(e.denGuard){   // v3.2 褥の番人: 桃色の輪を二重に敷いて「ここの主」だと分かるように
+    const t=(G.B?G.B.time:0);
+    g.save(); g.globalAlpha=0.5+0.2*Math.sin(t*2.2); g.strokeStyle='rgba(255,110,170,0.75)'; g.lineWidth=2.4;
+    g.beginPath(); g.ellipse(0,4,e.r*1.5,e.r*0.55,0,0,TAU); g.stroke();
+    g.globalAlpha=0.28; g.lineWidth=1.4; g.beginPath(); g.ellipse(0,4,e.r*1.85,e.r*0.7,0,0,TAU); g.stroke(); g.restore();
+    glow(g,0,0,e.r*2.2,'255,110,170',0.16);
+  }
   if(e.elite){
     g.strokeStyle='rgba(255,90,110,0.5)'; g.lineWidth=2;
     g.beginPath(); g.ellipse(0,2,e.r*1.25,e.r*0.45,0,0,TAU); g.stroke();
@@ -2181,6 +2197,49 @@ function drawTower(g,e){
   g.restore();
 }
 /* 淫紋の罠: プレイヤーにだけ見える淡い紋(彼女のAIは気づかない) */
+/* ================= v3.2 巣窟の仕掛け ================= */
+/* 床の魔法陣: 灯る直前は薄く脈打ち、踏まれた瞬間に強く灯る */
+function drawDenRune(g,r){
+  const t=(G.B?G.B.time:0), pulse=0.5+0.5*Math.sin(t*1.8+r.x*0.01), a=0.22+0.16*pulse+0.55*(r.glow||0);
+  g.save(); g.translate(r.x,r.y); g.globalAlpha=a;
+  g.strokeStyle='#c98cff'; g.lineWidth=2; g.beginPath(); g.ellipse(0,0,30,13,0,0,TAU); g.stroke();
+  g.lineWidth=1.2; g.beginPath(); g.ellipse(0,0,20,9,0,0,TAU); g.stroke();
+  for(let k=0;k<6;k++){ const ang=k*TAU/6+t*0.25; g.beginPath(); g.moveTo(Math.cos(ang)*20,Math.sin(ang)*9); g.lineTo(Math.cos(ang)*30,Math.sin(ang)*13); g.stroke(); }
+  if(r.glow>0){ g.globalAlpha=r.glow*0.5; g.fillStyle='#ff86b3'; g.beginPath(); g.ellipse(0,0,30,13,0,0,TAU); g.fill(); }
+  g.restore();
+}
+/* 媚薬の花: 息をするように開いて、甘いものを吐く */
+function drawDenFlower(g,f){
+  const t=(G.B?G.B.time:0), open=0.35+0.65*(f.bloom||0);
+  g.save(); g.translate(f.x,f.y);
+  g.globalAlpha=0.5; g.strokeStyle='#6a9a5a'; g.lineWidth=2; g.beginPath(); g.moveTo(0,0); g.quadraticCurveTo(2,-8,0,-15); g.stroke();
+  g.globalAlpha=0.9;
+  for(let k=0;k<5;k++){ const ang=k*TAU/5+Math.sin(t*0.6)*0.15;
+    g.fillStyle=k%2?'#ff9ec2':'#ffc2d8';
+    g.beginPath(); g.ellipse(Math.cos(ang)*7*open, -15+Math.sin(ang)*4*open, 6.5*open, 3.4*open, ang, 0, TAU); g.fill(); }
+  g.fillStyle='#ffe9a8'; g.beginPath(); g.arc(0,-15,2.6,0,TAU); g.fill();
+  if(f.bloom>0){ g.globalAlpha=f.bloom*0.35; glow(g,0,-15,42,'255,158,194',0.5); }
+  g.restore();
+}
+/* 壁に埋まった光線の口: 狙っている間は細い線、撃つ瞬間に太く光る */
+function drawDenBeam(g,bm){
+  const t=(G.B?G.B.time:0), col=bm.type==='hypno'?'#b46cff':'#ff86b3';
+  g.save(); g.translate(bm.x,bm.y);
+  g.globalAlpha=0.85; g.fillStyle='#1a1220'; g.beginPath(); g.ellipse(0,0,11,8,bm.ang,0,TAU); g.fill();
+  g.globalAlpha=bm.state==='idle'?(0.35+0.2*Math.sin(t*2)):0.95;
+  g.fillStyle=col; g.beginPath(); g.ellipse(0,0,6,4.4,bm.ang,0,TAU); g.fill();
+  g.restore();
+  if(bm.state==='aim'){   // 狙い: 細い線が伸びる
+    g.save(); g.globalAlpha=0.30+0.25*Math.sin(t*22); g.strokeStyle=col; g.lineWidth=1.6;
+    g.beginPath(); g.moveTo(bm.ox,bm.oy); g.lineTo(bm.ox+Math.cos(bm.aimA)*BAL.DEN_BEAM_LEN, bm.oy+Math.sin(bm.aimA)*BAL.DEN_BEAM_LEN); g.stroke(); g.restore();
+  }
+}
+function drawDen(g){
+  const B=G.B, D=B&&B.den; if(!D) return;
+  for(const r of D.runes) drawDenRune(g,r);
+  for(const f of D.flowers) drawDenFlower(g,f);
+  for(const bm of D.beams) drawDenBeam(g,bm);
+}
 function drawTrap(g,tr){
   g.save();
   g.translate(tr.x,tr.y);
@@ -2663,7 +2722,7 @@ function drawHUD(g){
   drawMinimap(g);
   g.fillText('enemies:'+B.enemies.length+' fps:'+Math.round(G.fps)+(TS>1?' x'+TS:''), 12, H-6);
   g.textAlign='right'; g.fillStyle='rgba(255,255,255,0.3)'; g.font='bold 10px '+FONT;
-  g.fillText('v3.1 深淵 — 合流', W-12, H-6);
+  g.fillText('v3.2 深淵 — 巣窟', W-12, H-6);
 }
 function drawCards(g){
   const B=G.B, c=B.lvCards; if(!c) return;
@@ -2925,6 +2984,7 @@ function draw(){
     for(const pr of B.props) drawProp(g,pr);
     for(const gm of B.gems) drawGem(g,gm);
     for(const h of B.hearts) drawHeartDrop(g,h);
+    drawDen(g);                                            // v3.2 巣窟の魔法陣・媚薬の花・壁の光線
     for(const tr of B.traps) drawTrap(g,tr);
     for(const c of B.chests){ if(c.bossChest){ glow(g,c.x,c.y-6,34,'255,215,106',0.35+0.15*Math.sin(c.t*4)); } drawChest(g,c); if(c.fake){ g.save(); g.globalAlpha=0.35; g.fillStyle='#c98cff'; g.beginPath(); g.ellipse(c.x,c.y+2,14,5,0,0,TAU); g.fill(); g.restore(); } }
     for(const it of B.items) drawItem(g,it);
