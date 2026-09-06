@@ -663,7 +663,7 @@ const PARTY_MAX=4;                        // v3.1 パーティの上限(作り�
 function partyIds(){ const r=(typeof META!=='undefined'&&META&&META.party&&Array.isArray(META.party.roster))?META.party.roster:['lumina']; const out=[]; for(const id of r){ if(HEROES[id]&&!out.includes(id)) out.push(id); if(out.length>=PARTY_MAX) break; } return out.length?out:['lumina']; }
 /* v3.1 参戦の規則(合流の順に並ぶ)。minEra: 深淵が組み替わった後(世代≥minEra)に二連敗で入口へ戻された朝に来る。
    resets: 保険——前の合流からのリセット回数がこれに達したら世代を問わず来る。lateEra: 保険——一人(いまの人数)で世代がここまで進んだら、その組み替わりの朝に来る */
-const PARTY_JOIN=[ { id:'freila', minEra:1, resets:3, lateEra:4 } ];
+const PARTY_JOIN=[ { id:'freila', minEra:1, resets:3, lateEra:5 } ];   // lateEra は joinLate の文(石段の線が四本・五本目を彫ろうとして)に合わせる: 線は組み替わりの朝ごとに増えるので、5回目の討伐の朝に四本
 const luminaUpCost=(id,rank)=>Math.round(LUMINA_UPG[id].base*Math.pow(1.5,rank));
 const luminaRank=id=>((META.lumina&&META.lumina.upg)||{})[id]||0;
 const shaveCost=rank=>Math.round(6+3*rank);   // 自己強化を1段削ぐオーブ費用

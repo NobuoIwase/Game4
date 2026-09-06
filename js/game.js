@@ -393,7 +393,7 @@ function storyClearLines(twoP){
   const V=(typeof STORY_V30!=='undefined')?STORY_V30:null, k=Math.max(0,(META.era|0)-1);   // era はもう +1 されている
   if(twoP){ const cd=(V&&V.era&&V.era.coreDown&&V.era.coreDown.length)?V.era.coreDown[Math.min(V.era.coreDown.length-1,k)]:[]; return cd.concat((V&&V.ending)?V.ending:STORY.ending); }
   const solo=V&&V.era&&V.era.coreDownSolo; const cs=solo?(k===0?solo.first:(solo.again||solo.first)):null;
-  if(cs&&cs.length) return cs.concat(STORY.ending.slice(1));   // 一人版は結末の1行目(光が届いた…)を置き換える
+  if(cs&&cs.length){ const tail=(k>0 && V.era.endingSoloAgain && V.era.endingSoloAgain.length)?V.era.endingSoloAgain:STORY.ending.slice(1); return cs.concat(tail); }   // 一人版は結末の1行目(光が届いた…)を置き換える。二度目以降は短い結び(街の朝の場面は一度きり)
   return STORY.ending;
 }
 /* v3.1 組み替わった後の朝: 二人版 loopIntro / 一人版 loopIntroSolo(初回/再び)。無ければ null */

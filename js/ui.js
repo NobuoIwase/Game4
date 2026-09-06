@@ -587,7 +587,8 @@ const UI={
     if(sel && MONSTERS[sel] && codexStage(sel)>=0){
       const m=MONSTERS[sel], cx=CODEX[sel], stg=codexStage(sel), rec=(META.codex||{})[sel]||{};
       const note=cx?cx.note:null;
-      const fx=(typeof CODEX_F!=='undefined')?CODEX_F[sel]:null;   // v3.0 フレイラの欄外書き込み(赤ペン)
+      const fjoin=(typeof partyIds==='function')?partyIds().includes('freila'):true;   // v3.1 合流するまで、手記はルミナ一人のもの
+      const fx=(typeof CODEX_F!=='undefined' && fjoin)?CODEX_F[sel]:null;   // v3.0 フレイラの欄外書き込み(赤ペン)
       const mg=t=>t?`<div class="mnote">${esc(t)}</div>`:'';
       const entries=[];
       if(note){
