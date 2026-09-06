@@ -4961,9 +4961,9 @@ function battleTick(dt){
   if(B.impBurstCd>0) B.impBurstCd-=dt;
   for(const h of B.heroes){ h.teaseN=0; if(h.out) continue; for(const e of B.enemies){ if(!e.dead&&e.id==='imp'&&Math.hypot(e.x-h.x,e.y-h.y)<120) h.teaseN++; } }
   eachHero(()=>{ aiUpdate(dt); const n0=B.bullets.length; weaponsUpdate(dt); for(let k=n0;k<B.bullets.length;k++) B.bullets[k].hi=B.ci; rescueTick(dt); });   // v3.0 一人ずつ考えて撃つ。撃った弾は持ち主を覚える
-  partyClamp();   // v3.0 二人が画面に収まる距離に保つ
   bulletsUpdate(dt);
   enemiesUpdate(dt);
+  partyClamp();   // v3.0 二人が画面に収まる距離に保つ(魔物の押し合い・跳躍の後に)
   if(G.mode!=='battle') return;
   pickupsUpdate(dt);
   if(G.mode!=='battle') return;
