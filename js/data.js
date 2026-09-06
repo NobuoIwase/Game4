@@ -85,6 +85,16 @@ const BAL={
   COVER_FOCUS_D:420,       // 相方に群がっている魔物を先に撃つ(距離から差し引く)
   /* --- v4.0 見えた物を伝えて、近寄って相談 --- */
   SHARE_T:14, SHARE_CD:24,   // 伝えた物が「新しい報せ」でいられる秒数 / 続けて集合を呼ばない間隔
+  /* --- v4.0 フレイラの火属性と水弱点 --- */
+  WET_ATK:0.78, WET_DEF:1.22,        // 濡れきった地形での、フレイラの与ダメと被ダメ
+  DRY_ATK:1.15, DRY_DEF:0.90,        // 乾ききった地形(自分で焼いた床を含む)
+  DRY_STAM:0.25,                     // 乾かすのに使うスタミナの割合
+  DRY_R0:120, DRY_R_K:340,           // 乾かす半径(使ったスタミナに比例して伸びる)
+  DRY_CD:24, DRY_STAM_MIN:0.45,      // 使う間隔と、これだけスタミナが無いと使わない
+  DRY_WANT_WET:0.45,                 // 周りがこれだけ濡れていたら使う気になる
+  DRY_SLIME_HP:0.85, DRY_SLIME_SPD:0.85,   // 乾いた床の上では、ヌルヌル系が弱る
+  DRY_EVAP_R:560, DRY_EVAP_N:6, DRY_EVAP_RATE:1.75, DRY_EVAP_LIFE:15,   // 巣窟で焼いた時: 蒸発した媚薬が外まで広がる
+  DRY_EVAP_HEAT:26,                  // 蒸発の瞬間、その場の二人に乗る発情
 
   /* --- v3.2 甘い褥の巣窟(えちえちエリア) --- */
   DEN_ENTER_HEAT:22, DEN_ENTER_SENS:14,       // 敷居をまたいだ瞬間、匂いに殴られる
@@ -531,6 +541,12 @@ const ZONES={
 };
 /* fear: 彼女がその地形をどれだけ嫌うか(0 気にしない / 1 ちょっと嫌 / 2 できれば避けたい / 3 入りたくない)。innate: 見ただけで分かる分(0〜1)。残りは踏んで学ぶ(zoneKnow) */
 const ZONE_IDS=Object.keys(ZONES);
+/* v4.0 地形の湿り気(0 乾いている 〜 1 濡れきっている)。フレイラの火はここで強くも弱くもなる */
+const ZONE_WET={ water:1.0, damp:0.65, hotspring:0.85, moss:0.3, flesh:0.35, lewd:0.4, haze:0.25, flower:0.15, nest:0.1, ruin:0 };
+/* v4.0 種族の質: 1 に近いほどヌルヌル(火が通りにくい) / -1 に近いほどカラカラ・薄っぺら(よく燃える) */
+const MON_WET={ slime:1, mistslime:1, slimeking:1, slug:0.9, leech:0.9, worm:0.8, suiyou:1, pot:0.6, gtent:0.5, hand:0.4, mouth:0.5, slugqueen:0.8, ghosthand:0.3,
+  moth:-1, spore:-0.9, web:-1, flower:-0.7, imp:-0.6, gas:-0.5, ghost:-0.4, dreamtree:-0.7, tower:-0.6, goblin:-0.2, gobking:-0.2, succubus:-0.3, inyoku:-0.4, vampi:-0.3 };
+const FREILA_WET_K=0.30, FREILA_DRY_K=0.55;   // その質が与ダメに効く強さ(ヌルヌルには弱く、カラカラにはめっぽう強い)
 const ZONE_HP_MON={ damp:{slug:1.25,leech:1.25,worm:1.25,slimeking:1.25}, nest:{'*':1.15}, flesh:{gtent:1.2,hand:1.2,pot:1.2,worm:1.2,ghosthand:1.2,slugqueen:1.2}, lewd:{'*':1.1} };
 const ZONE_SPD_MON={ water:{slime:1.3,mistslime:1.3,slimeking:1.3}, ruin:{'*':1.06}, nest:{'*':1.1}, flesh:{gtent:1.1,hand:1.1,worm:1.1,ghosthand:1.1}, lewd:{'*':1.08} };
 const POI_DEF={

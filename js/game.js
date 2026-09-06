@@ -236,9 +236,11 @@ function startBattle(){
     seenT:0, bossSeen:!!(META.run&&META.run.bossSeen), exploreSaid:false,                          // v2.4 視界の記憶 / この run でボスを見た(武器選びに使う)
     lights:[], lanterns:[], floorLight:0,                                                          // v4.0 暗闇: 残る灯り / 催淫灯篭 / その階で得た灯り
     coreWar:false, core:null,                                                                      // v4.0 魔核戦に入ったか / その個体
+    dry:[], evapT:-99,                                                                             // v4.0 フレイラが焼いた床(日を跨いで残る) / 媚薬が蒸発した時刻
   };
   genMap();               // 地形(世代×階層で変わる)
   G.B.lanterns=G.map.pois.filter(q=>q.kind==='lantern').map(q=>({x:q.x,y:q.y,key:q.key,said:false}));   // v4.0 催淫灯篭(光源であり罠でもある)
+  G.B.dry=dryList().map(d=>({x:d.x,y:d.y,r:d.r,t:-99}));   // v4.0 前の日にフレイラが焼いた床(世代が組み替わるまで残る)
   initSeen();             // v2.4 見た範囲の記憶(同じ階層への再挑戦は覚えている)
   for(let i=1;i<heroes.length;i++){ const q=snapFloor(44*i,8*i,false,4)||{x:44*i,y:8*i}; heroes[i].x=q.x; heroes[i].y=q.y; }   // v3.0 二人目以降は横に並ぶ
   { const F=G.B.floor; G.B.exitLocked=(F.puzzle==='seals');
@@ -370,7 +372,8 @@ function runReset(){
   META.run.floor=1; META.run.fails=0; META.run.day=1; META.run.hero=null; META.run.heroes={}; META.run.seen={}; META.run.bossSeen=false;   // v2.1 引き継ぎも消える / v2.4 見た範囲とボスの記憶も
   META.gen.battle=0; META.gen.idx++;
   META.rot={dmg:0, ail:0, captures:0, battles:0};
-  META.gen.know={}; META.gen.zoneKnow={}; META.gen.trapKnow={};   // 世代が変わると、覚えたことも忘れる(手記に書いた分だけ残る)
+  META.gen.know={}; META.gen.zoneKnow={}; META.gen.trapKnow={}; META.gen.dryLesson=0;   // 世代が変わると、覚えたことも忘れる(手記に書いた分だけ残る)
+  dryClearAll();   // v4.0 フレイラが焼いた床も、組み替わりで元の湿った洞へ戻る
   { const o=META.run.storySeen||{}; const n={prologue:o.prologue, join:o.join}; for(const k in o) if(k.startsWith('loop')) n[k]=o[k]; META.run.storySeen=n; }   // 階層の導入はまた出る(序章・合流・世代の朝は出ない)
 }
 /* v3.1 一日のエッセンスの逓減: 素の合計 x → SOFT·ln(1+x/SOFT)。少ない日はほぼそのまま、多い日は頭打ち気味 */
@@ -2474,6 +2477,8 @@ function damageEnemy(e,dmg){
   if(e.dead||e.dormant) return;
   { const B=G.B; if(B&&B.lights&&darkLevel()>0.05 && Math.random()<0.18) pushLight(e.x,e.y,150,BAL.DARK_MEM_T,0.85); }   // v4.0 光と炎が通った所は、しばらく見えている
   if(G.B&&G.B.hero.dmgMult) dmg*=G.B.hero.dmgMult;   // せいなる火力(自己強化)
+  if(G.B&&G.B.hero.id==='freila') dmg*=freilaDmgMul(e);   // v4.0 火属性: 足元の湿り気と、相手の質
+  { const dm=dryMonMul(e); if(dm) dmg/=dm.hp; }            // v4.0 焼いた床の上のヌルヌル系は、乾いて脆い
   if(e.id==='flower') dmg*=(e.state==='bud'?0.5:1.3);
   if(e.id==='tower') dmg*=0.3;                        // 催眠電波の塔: 骨の骨組みは光を通しにくい
   if(e.id==='core') dmg*=coreDef();                   // 魔核: 厚い肉(v3.0 世代0は薄く 0.7、世代ごとに 0.05 ずつ厚く、下限 CORE_DEF)
@@ -2622,7 +2627,7 @@ function enemiesUpdate(dt){
       if(e.boss){ floatTxt(e.x,e.y-e.r-20,'まわりこんできた!','#ff6b81',11,1.2); }
       continue;
     }
-    e.zone=zoneAt(e.x,e.y); if(e.spd0!==undefined) e.spd=e.spd0*zoneMonSpd(e.zone,e.id)*((e.hasteT||0)>0?1.35:1); if((e.hasteT||0)>0) e.hasteT-=dt;   // v2.4 王の号令で一時的に速い
+    e.zone=zoneAt(e.x,e.y); if(e.spd0!==undefined){ const dm=dryMonMul(e); e.spd=e.spd0*zoneMonSpd(e.zone,e.id)*((e.hasteT||0)>0?1.35:1)*(dm?dm.spd:1); }   // v4.0 焼いた床のヌルヌル系は鈍る if((e.hasteT||0)>0) e.hasteT-=dt;   // v2.4 王の号令で一時的に速い
     if((e.burnT||0)>0){ e.burnT-=dt; e.burnTick=(e.burnTick||0)-dt; if(e.burnTick<=0){ e.burnTick=0.4; damageEnemy(e,3+0.08*p.level); if(Math.random()<0.5) parts(e.x,e.y-e.r*0.5,1,['#ff7a3a','#ffd76a'],40,0.4); } }   // v3.0 煉獄の剣の燃焼
     if(e.dead) continue;   // 燃え尽きた個体はこのフレームの行動をしない
     e.x=clampMapX(e.x,e.r); e.y=clampMapY(e.y,e.r);
@@ -4235,6 +4240,7 @@ function hurtHero(dmg,src,opt){
   const atk=attachCount(p);
   const mult=p.pinned?BAL.PIN_DMG_MULT:((atk>0||p.charmBind)?BAL.ATTACH_DMG_MULT:1);
   const armor=opt.pierce?0:Math.max(0,p.armor-atk);
+  if(p.id==='freila') dmg*=freilaDefMul(p);   // v4.0 水弱点: 濡れていると火の護りが薄い
   const net=Math.max(0, dmg*mult-armor)*(p.guardT>0?0.3:1);   // v2.3 聖光の壁: 護りを引いた後の被ダメ-70%(小さな当たりまで無効にはしない)
   if(net<=0){
     if(!opt.quiet){
@@ -4582,6 +4588,114 @@ function corelingTick(e,dt,d,dx,dy){
     e.grabCd=1.1;
     if(attachMonster(e,'cling',{r:0,needMul:0.75})){ codexMet('coreling'); }
   }
+}
+
+/* ================= v4.0 フレイラの火属性と水弱点 =================
+   湿った所では火が立たず、乾いた所ではよく通る。ヌルヌルした相手には弱く、
+   カラカラで薄っぺらい相手にはめっぽう強い。
+   スタミナを 25% 使って周りを焼き、地形を「乾いた床」に反転できる。
+   焼いた床は日を跨いでも残り、世代が組み替わる(ループ)まで消えない。
+   ただし巣窟や澱みで焼くと、媚薬が蒸発して外まで広がる——通常より強い。彼女はそれを学ぶ */
+function dryKey(){ return 'g'+((META.gen&&META.gen.idx)||1)+'f'+((META.run&&META.run.floor)||1); }
+function dryList(){ META.dry=META.dry||{}; const k=dryKey(); return (META.dry[k]=META.dry[k]||[]); }
+function dryClearAll(){ META.dry={}; }   // ループ(世代の組み替え)で焼き跡も消える
+/* 乾かした所か(0..1)。焼いた円の中ほど強い */
+function dryAt(x,y){
+  const B=G.B; if(!B||!B.dry||!B.dry.length) return 0;
+  let v=0;
+  for(const d of B.dry){ const dd=Math.hypot(x-d.x,y-d.y); if(dd<d.r) v=Math.max(v, 1-dd/d.r*0.55); }
+  return Math.min(1,v);
+}
+/* その場の湿り気(0 乾いている 〜 1 濡れきっている)。焼いた床は湿り気を消す */
+function wetAt(x,y){
+  const z=zoneAt(x,y), w=(typeof ZONE_WET!=='undefined'&&ZONE_WET[z]!==undefined)?ZONE_WET[z]:0.2;
+  return Math.max(0, w*(1-dryAt(x,y)));
+}
+/* フレイラの与ダメ倍率: 足元の湿り気 × 相手の質 */
+function freilaDmgMul(e){
+  const B=G.B, p=B.hero; if(!p||p.id!=='freila') return 1;
+  const w=wetAt(p.x,p.y), dry=dryAt(p.x,p.y);
+  let m=1+(BAL.WET_ATK-1)*w+(BAL.DRY_ATK-1)*dry*(1-w);
+  const q=(typeof MON_WET!=='undefined'&&e&&MON_WET[e.id])||0;
+  m*= q>0 ? (1-FREILA_WET_K*q) : (1+FREILA_DRY_K*(-q));   // ヌルヌルには弱く、カラカラにはめっぽう強い
+  const ew=wetAt(e?e.x:p.x, e?e.y:p.y); if(ew>0.7) m*=0.94;   // 相手が水に浸かっていれば、もう少し通らない
+  return m;
+}
+/* フレイラの被ダメ倍率: 濡れていると火の護りが薄い */
+function freilaDefMul(p){
+  if(!p||p.id!=='freila') return 1;
+  const w=wetAt(p.x,p.y), dry=dryAt(p.x,p.y);
+  return 1+(BAL.WET_DEF-1)*w+(BAL.DRY_DEF-1)*dry*(1-w);
+}
+/* 焼いた床の上のヌルヌル系は弱る(HPと速度) */
+function dryMonMul(e){
+  if(!e) return null; const q=(typeof MON_WET!=='undefined'&&MON_WET[e.id])||0; if(q<=0.3) return null;
+  const d=dryAt(e.x,e.y); if(d<=0.05) return null;
+  return {hp:1-(1-BAL.DRY_SLIME_HP)*d*q, spd:1-(1-BAL.DRY_SLIME_SPD)*d*q};
+}
+/* 周りの濡れ具合(乾かす気になるか) */
+function wetAround(p){
+  let s=0, n=0;
+  for(let i=0;i<8;i++){ const a=i*TAU/8; for(const r of [70,170]){ s+=wetAt(p.x+Math.cos(a)*r,p.y+Math.sin(a)*r); n++; } }
+  return n?s/n:0;
+}
+/* 焼く: スタミナを 25% 使い、使った量に応じた半径の床を乾かす。日を跨いでも残る */
+function freilaDry(p){
+  const B=G.B, use=p.staminaMax*BAL.DRY_STAM;
+  if(p.stamina<use) return false;
+  p.stamina-=use; p.dryCd=B.time+BAL.DRY_CD;
+  const r=BAL.DRY_R0+BAL.DRY_R_K*(use/p.staminaMax)/BAL.DRY_STAM;
+  const d={x:p.x, y:p.y, r, t:B.time};
+  B.dry.push(d); dryList().push({x:d.x, y:d.y, r:d.r}); saveMeta();
+  B.fx.push({kind:'dryburst', x:p.x, y:p.y, r, t:0, life:0.9});
+  for(let i=0;i<26;i++){ const a=rand(TAU), rr=rand(r); parts(p.x+Math.cos(a)*rr, p.y+Math.sin(a)*rr, 1, ['#ff7a3a','#ffd76a','#ffb060'], 120, 0.7); }
+  G.shake=Math.min(9,G.shake+4); sfx(220,700,0.5,'sawtooth',0.07);
+  floatTxt(p.x,p.y-56,'——乾かした','#ffb060',13,1.5);
+  const ci0=B.ci; B.ci=p.hi; sayLine('feat.dry',2,0,'……この床、乾かす'); B.ci=ci0;
+  B.nDry=(B.nDry||0)+1;
+  dryEvapCheck(p,d);   // 巣窟や澱みで焼いた: 媚薬が蒸発して外まで広がる
+  return true;
+}
+/* 焼いた円が巣窟か澱みに掛かっていたら、媚薬が蒸発して外へ噴き出す(通常より強い) */
+function dryEvapCheck(p,d){
+  const B=G.B;
+  let hit=false;
+  for(let i=0;i<12&&!hit;i++){ const a=i*TAU/12; for(const rr of [0, d.r*0.5, d.r*0.9]){ const z=zoneAt(d.x+Math.cos(a)*rr, d.y+Math.sin(a)*rr); if(z==='lewd'||z==='haze'){ hit=true; break; } } }
+  if(!hit) return;
+  B.evapT=B.time;
+  setBanner('媚薬が蒸発した','熱で膨らんだ甘い霧が、褥の外まで噴き出す','#ff5d9a');
+  B.fx.push({kind:'evap', x:d.x, y:d.y, r:BAL.DRY_EVAP_R, t:0, life:1.4});
+  G.shake=Math.min(12,G.shake+6); sfx(300,120,0.9,'sine',0.09);
+  for(let i=0;i<BAL.DRY_EVAP_N;i++){
+    const a=i*TAU/BAL.DRY_EVAP_N+rand(0.4), rr=BAL.DRY_EVAP_R*(0.35+0.6*(i%2?0.6:1));
+    const q=snapFloor(d.x+Math.cos(a)*rr, d.y+Math.sin(a)*rr, false, 3)||{x:d.x+Math.cos(a)*rr, y:d.y+Math.sin(a)*rr};
+    spawnCloud(q.x, q.y, 190, BAL.DRY_EVAP_LIFE, BAL.SENSIT_GAS*BAL.DRY_EVAP_RATE, 'gas');
+  }
+  spawnCloud(d.x, d.y, 240, BAL.DRY_EVAP_LIFE, BAL.SENSIT_GAS*BAL.DRY_EVAP_RATE, 'gas');
+  for(const h of B.heroes){
+    if(h.out) continue;
+    if(Math.hypot(h.x-d.x,h.y-d.y)>BAL.DRY_EVAP_R) continue;
+    const ci0=B.ci; B.ci=h.hi; addHeatG(BAL.DRY_EVAP_HEAT); applySensit(7); B.ci=ci0;
+    sayPartyOrLine(h,'feat.evap','しまった……! こんなに、ひろがって……!');
+  }
+  // これも学習する: 次からは巣窟や澱みの近くで焼かない
+  META.gen.dryLesson=(META.gen.dryLesson|0)+1; saveMeta();
+}
+/* 焼く判断(フレイラのAI): 濡れた所で戦っていて、スタミナに余裕があり、巣窟の近くでなければ */
+function dryTick(p,dt){
+  const B=G.B;
+  if(p.id!=='freila'||p.out) return;
+  if(B.time<(p.dryCd||0)) return;
+  if(p.stamina<p.staminaMax*BAL.DRY_STAM_MIN||p.exhausted) return;
+  if(attachCount(p)>0||p.pinned||p.charmBind||p.climaxT>0||p.hypnoLv>=2) return;
+  if(dryAt(p.x,p.y)>0.35) return;                       // もう乾かした所
+  if(wetAround(p)<BAL.DRY_WANT_WET) return;             // 乾いているなら要らない
+  const lesson=(META.gen.dryLesson|0)>0;                // 一度こぼしたら、褥のそばでは焼かない
+  const L=denOf();
+  if(L && lesson && Math.hypot(p.x-L.x,p.y-L.y)<Math.max(L.rx,L.ry)+BAL.DRY_EVAP_R*0.5) return;
+  const z=zoneAt(p.x,p.y); if(lesson && (z==='lewd'||z==='haze')) return;
+  if(nearEnemyCount(p.x,p.y,300,false)<2 && p.hp>p.maxHp*0.8) return;   // 戦う理由がある時に使う
+  freilaDry(p);
 }
 /* ================= v4.0 カバーAI =================
    「発情しきって囲まれている相方を無視して探索する」をやめさせる。
@@ -5582,6 +5696,7 @@ function battleTick(dt){
   denTick(dt);                 // v3.2 巣窟の魔法陣・媚薬の花・壁の光線・番人(1フレームに1度)
   lightsTick(dt); lanternTick(dt);   // v4.0 灯りの寿命と催淫灯篭
   coreWarTick(dt);                   // v4.0 魔核戦に入ったか
+  { const ci0=B.ci; for(const h of B.heroes){ if(h.id!=='freila'||h.out) continue; B.ci=h.hi; dryTick(h,dt); } B.ci=ci0; }   // v4.0 フレイラが床を焼くか
   for(const k in B.itemCd){ if(B.itemCd[k]>0) B.itemCd[k]-=dt; }
   eachHero(()=>trapsTick(dt));
   // 小淫魔: 近くの数を数える(集中低下)。快感は煽りアクション時のみ(バーストCD持ち)

@@ -119,6 +119,30 @@ function drawProp(g,pr){
   }
   g.restore();
 }
+/* v4.0 フレイラが焼いた床: 乾いてひび割れ、うっすら焦げた輪。日を跨いでも残る */
+function drawDry(g,d){
+  const t=(G.B?G.B.time:0), r=d.r;
+  if(Math.abs(d.x-G.cam.x)>W/2+r || Math.abs(d.y-G.cam.y)>H/2+r) return;
+  g.save(); g.translate(d.x,d.y);
+  const gr=g.createRadialGradient(0,0,r*0.15,0,0,r);
+  gr.addColorStop(0,'rgba(120,72,40,0.34)'); gr.addColorStop(0.62,'rgba(96,58,34,0.20)'); gr.addColorStop(1,'rgba(80,48,28,0)');
+  g.fillStyle=gr; g.beginPath(); g.ellipse(0,0,r,r*0.78,0,0,TAU); g.fill();
+  // ひび割れ(位置は円の中心から決まるので毎フレーム同じ)
+  const n=9, sd=(d.x*0.013+d.y*0.017);
+  g.strokeStyle='rgba(58,34,20,0.42)'; g.lineWidth=1.6;
+  for(let i=0;i<n;i++){ const a=i*TAU/n+Math.sin(sd+i)*0.5, L=r*(0.35+0.5*Math.abs(Math.sin(sd*3+i*2.1)));
+    g.beginPath(); g.moveTo(Math.cos(a)*r*0.12,Math.sin(a)*r*0.09);
+    g.lineTo(Math.cos(a+0.18)*L*0.6,Math.sin(a+0.18)*L*0.45);
+    g.lineTo(Math.cos(a-0.1)*L,Math.sin(a-0.1)*L*0.78); g.stroke(); }
+  // 焼いた直後は、まだ熾がちらつく
+  if(d.t!==undefined && t-d.t<8){ const k=1-(t-d.t)/8;
+    g.globalAlpha=k*0.45; g.strokeStyle='#ff8a44'; g.lineWidth=2;
+    g.beginPath(); g.ellipse(0,0,r*0.95,r*0.74,0,0,TAU); g.stroke();
+    g.globalAlpha=1;
+    for(let i=0;i<4;i++){ const a=t*0.7+i*1.6, rr=r*(0.3+0.5*((t*0.2+i*0.25)%1));
+      g.fillStyle='rgba(255,150,70,'+(k*0.5).toFixed(2)+')'; g.beginPath(); g.arc(Math.cos(a)*rr,Math.sin(a)*rr*0.78,1.8,0,TAU); g.fill(); } }
+  g.restore();
+}
 function drawStain(g,st){
   // 潮の染み: 濡れて光る水たまり。ゆっくり乾く
   const fade=st.t>st.life*0.7 ? 1-(st.t-st.life*0.7)/(st.life*0.3) : 1;
@@ -257,6 +281,19 @@ function drawFx(g,f){
     g.lineWidth=4*(1-pr*0.4); g.globalAlpha=a; g.strokeStyle='#fff';
     g.beginPath(); g.moveTo(f.x,f.y); g.lineTo(f.x+Math.cos(f.ang)*f.len, f.y+Math.sin(f.ang)*f.len); g.stroke();
     g.restore();
+  }else if(f.kind==='dryburst'){   // v4.0 フレイラが床を焼いた: 熱の輪が外へ抜ける
+    const a=1-pr;
+    g.globalAlpha=a*0.7; g.strokeStyle='#ffb060'; g.lineWidth=7*(1-pr*0.6); g.shadowColor='#ff7a3a'; g.shadowBlur=18;
+    g.beginPath(); g.ellipse(f.x,f.y,f.r*(0.15+0.9*pr),f.r*(0.15+0.9*pr)*0.7,0,0,TAU); g.stroke();
+    g.globalAlpha=a*0.22; g.fillStyle='#ff7a3a';
+    g.beginPath(); g.ellipse(f.x,f.y,f.r*(0.15+0.9*pr),f.r*(0.15+0.9*pr)*0.7,0,0,TAU); g.fill();
+  }else if(f.kind==='evap'){   // v4.0 媚薬が蒸発した: 桃色の霧が外へ噴き出す
+    const a=1-pr;
+    for(let k=0;k<3;k++){ const ph=Math.min(1,pr*1.15+k*0.12);
+      g.globalAlpha=a*(0.42-k*0.1); g.strokeStyle='#ff5d9a'; g.lineWidth=10-k*2.5; g.shadowColor='#ff5d9a'; g.shadowBlur=20;
+      g.beginPath(); g.ellipse(f.x,f.y,f.r*ph,f.r*ph*0.72,0,0,TAU); g.stroke(); }
+    g.globalAlpha=a*0.16; g.fillStyle='#ff86b3';
+    g.beginPath(); g.ellipse(f.x,f.y,f.r*Math.min(1,pr*1.15),f.r*Math.min(1,pr*1.15)*0.72,0,0,TAU); g.fill();
   }else if(f.kind==='corebeam'){   // v4.0 魔核の広範囲絶頂光線: 太い桃色の柱
     const pr=f.t/f.life, a=1-pr, ex=f.x+Math.cos(f.ang)*f.len, ey=f.y+Math.sin(f.ang)*f.len;
     g.save(); g.lineCap='round';
@@ -3090,6 +3127,7 @@ function draw(){
   if(inBattle){
     const B=G.B, p=B.hero;
     drawLight(g,p.x,p.y);
+    if(B.dry) for(const d of B.dry) drawDry(g,d);   // v4.0 フレイラが焼いた床(日を跨いで残る)
     for(const st of B.stains) drawStain(g,st);
     for(const tr of B.trails) drawTrail(g,tr);
     for(const c of B.clouds) drawCloud(g,c);
