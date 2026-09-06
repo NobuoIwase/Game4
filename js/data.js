@@ -93,7 +93,7 @@ const BAL={
   MUSK_CLOUD_CD:2.0, MUSK_CLOUD_R:56, MUSK_CLOUD_LIFE:5.5, MUSK_HEAT:8, MUSK_COND:1.7,   // 雄臭の雲(ゴブリンが歩きながら残す)
   HYPNO_GAIN:[100,55,34],  // 閃光1回の催眠ゲージ: Ⅰは一発、Ⅱは2回、Ⅲは3回
   HYPNO_DECAY:4,           // 催眠ゲージの減衰 /s
-  WILL_CAP:20, WILL_CAP_GAIN:2, WILL_FAST_GAIN:1, WILL_SURVIVE_LOSS:1, GEN_SCALE:0.03,   // 抵抗の意志(敗北で固くなる)・世代ごとの素の成長
+  WILL_CAP:20, WILL_CAP_GAIN:2, WILL_FAST_GAIN:1, WILL_SURVIVE_LOSS:1, GEN_SCALE:0.05,   // 抵抗の意志(敗北で固くなる)・世代ごとの素の成長
   BOSS_CD:60, CURSE_DAYS:2,   // ボス: 出撃間隔と、ボス敗北の呪いが跨ぐ日数
   PLEAS_BINDER:0.5,        // 絡みつき1体あたり /s(練度でスケール)
   PLEAS_PIN:4,             // 押し倒し1拍あたり
@@ -168,7 +168,7 @@ const BAL={
   // v2.0 階層
   EXIT_STAND:2.5, EXIT_WORTH:0.5, EXIT_WORTH_PER_MIN:0.5, EXIT_HP_MIN:0.45,   // 降り口: そばに立つ秒数 / 目当ての価値(時間で増す) / HPがこれ未満なら降りない
   RUN_FAILS_RESET:2, DESCEND_ESS:40, DESCEND_ESS_DEPTH:15, CLEAR_ESS:120, CLEAR_ESS_ERA:60,   // 二連敗でリセット / 降りられた日(+深さ)・魔核を討たれた日(+世代)の夜側エッセンス(v3.1 調整)
-  CORE_HP:28000, CORE_HP_LV:0.04, CORE_HP_LV_CAP:3.0, CORE_WHIP_CD:2.2, CORE_PULSE_CD:5.5, CORE_SPAWN_CD:7, CORE_DEF:0.4, CORE_AURA_R:140, CORE_FLING:0.025, CORE_TWO_PH:0.4,   // 魔核(v2.2 強化: HP↑・被ダメ↓・間隔↓・脈の圏内は熱と敏感化)
+  CORE_HP:28000, CORE_HP_LV:0.025, CORE_HP_LV_CAP:1.8, CORE_WHIP_CD:2.2, CORE_PULSE_CD:5.5, CORE_SPAWN_CD:7, CORE_DEF:0.4, CORE_AURA_R:140, CORE_FLING:0.025, CORE_TWO_PH:0.4,   // 魔核(v2.2 強化: HP↑・被ダメ↓・間隔↓・脈の圏内は熱と敏感化)
   RING_CD:25, RING_R:470, RING_STUN:0.9,                                         // v2.2 包囲円陣: オート指揮の間隔 / 輪の半径 / 出現直後の硬直
   FLOOR_AFFINITY:1.2, FLESH_HEAT:1.6,                                         // 階層の得意種 HP倍率 / 肉の床の発情ゲージ(毎秒)
   /* v2.1 深淵の圧(時間経過): PRESS_T0 秒までは静か、その後 PRESS_T1 秒で 1.0 に、PRESS_MAX で頭打ち。EN上限/EN回復/召喚頭数/場の上限に掛かる。階層を跨ぐと時間は戻る */
@@ -198,7 +198,7 @@ const BAL={
   PARTY_LEASH:380, PARTY_MAXDX:740, PARTY_MAXDY:360, PARTY_SEP:34, RESCUE_R:60, RESCUE_T:3.0, TALK_T:1.3, ASSIST_R:120, HEART_YIELD:0.15, PARTY_HOLD:7, PARTY_TALK_CD:10,
   /* v3.1 相談は近寄ってから: 決め直しの時、皆が重心から GATHER_R 以内に居なければ、脅威が薄い限り GATHER_T 秒を上限に歩み寄ってから話す。GATHER_DANGER_R 内に魔物が居れば集合は飛ばして即決。集合の間隔 GATHER_CD */
   GATHER_R:48, GATHER_T:3.2, GATHER_DANGER_R:150, GATHER_DANGER_THREAT:0.5, GATHER_CD:8, GATHER_TALK_T:2.6,
-  ERA_FLOORS0:2, ERA_DEPTH_K0:0.075, ERA_DEPTH_K:0.10, CORE_ERA_HP0:0.30, CORE_ERA_HP_K:0.28, CORE_ERA_DEF0:0.75, CORE_ERA_DEF_K:0.05, CORE_ERA0_LV_K:0.5, CORE_ERA0_LV_CAP:0.5, SENT_ERA:[2,3,3,4,4,5,6],   // v3.1 世代0の魔核はさらに薄く(HP×0.30・被ダメ0.75・Lv補正は半分で上限+50%): 一人のルミナが討てる。魔物の深さ倍率は毎世代+10%(討たれるごとに魔物も強く)
+  ERA_FLOORS0:2, ERA_DEPTH_K0:0.05, ERA_DEPTH_K:0.10, CORE_ERA_HP0:0.30, CORE_ERA_HP_K:0.22, CORE_ERA_DEF0:0.75, CORE_ERA_DEF_K:0.05, CORE_ERA0_LV_K:0.5, CORE_ERA0_LV_CAP:0.5, SENT_ERA:[2,3,3,4,4,5,6],   // v3.1 世代0の魔核はさらに薄く(HP×0.30・被ダメ0.75・Lv補正は半分で上限+50%): 一人のルミナが討てる。魔物の深さ倍率は毎世代+10%(討たれるごとに魔物も強く)
   /* v2.4 視界の記憶: SEEN_T 秒ごとに半径 SEEN_R×SEEN_RY の楕円を「見た」にする。探索点は未探索率×EXPLORE_UNSEEN_W − 距離×EXPLORE_DIST_W で選ぶ(SEEN_EXPLORE=0 で旧挙動)。BOSS_PICK=1 でボスを想定した武器選び */
   SEEN_T:0.25, SEEN_R:560, SEEN_RY:400, SEEN_EXPLORE:1, EXPLORE_UNSEEN_W:2.5, EXPLORE_DIST_W:0.4, EXPLORE_DONE:0.96, BOSS_PICK:1, BOSS_MEMORY_T:60,
   /* v2.4 ボス級(カードのボス)は彼女の Lv で厚くなり(+5%/Lv、上限 +250%)、光が通りにくい(被ダメ 80%)。魔核・番兵は各自の値 */
@@ -660,7 +660,7 @@ const SKILLS={
 /* v3.0 ヒロイン定義。パーティは HEROES の並びで最大4人まで(現在は2人)。武器はヒロインごと、パッシブは共通、Lv・経験値はパーティ共通 */
 const HEROES={
   lumina:{ name:'ルミナ',   col:'#8fd3ff', hair:'#f2e8d8', sprite:'lumina', wps:['bolt','orb','nova','whip','rain','cross','sanct','blade','thunder','holy','chain','spirit','shield'],
-           start:{bolt:2,orb:1}, grow:['bolt','orb','nova'], hpMul:1.12, spdMul:1.0, armor:1, dmgMul:1.10, regenMul:1.10, fearMul:1.0, braveAdd:0, kiteMul:1.0,   // v3.2 一人で第5層まで潜れるように(HP+12%・護り+1・火力+10%・回復+10%)。v3.1 の弱体化は取り消し
+           start:{bolt:2,orb:1}, grow:['bolt','orb','nova'], hpMul:1.22, spdMul:1.0, armor:2, dmgMul:1.20, regenMul:1.15, fearMul:1.0, braveAdd:0, kiteMul:1.0,   // v3.2 一人で第5層まで潜れるように(HP+22%・護り+2・火力+20%・回復+15%)。v3.1 の弱体化は取り消し
            skills:{ blink:{ name:'光の跳躍', icon:'✦', lv:22, cd:20, desc:'囲まれた時、光になって最も空いている方へ180px跳ぶ。0.6秒無敵' },
                     purge:{ name:'浄化の脈', icon:'❂', lv:38, cd:35, desc:'二肢以上を掴まれるか押し倒された時、光を破裂させて全ての拘束を千切り、半径120の魔物を弾いて止める' },
                     bulwark:{ name:'聖光の壁', icon:'◈', lv:52, cd:45, desc:'HPが35%を切った時、4秒間 被ダメ-70%・自然回復×4' } },
