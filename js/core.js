@@ -194,6 +194,7 @@ function defaultMeta(){
     curse:null,   // ボス敗北の呪い {id,left}
     map:{ gen:0, floor:0, known:{}, visited:{}, seen:0 },   // 地形マップの記憶(世代・階層ごと)
     run:{ floor:1, fails:0, day:1, clears:0, deepest:1, storySeen:{}, hero:null },   // hero: v2.1 引き継ぎ(リセットまで残る彼女のLv・武器・パッシブ・進化)   // v2.0 深淵の潜行: 今の階層 / この階層での連敗 / 潜行の日数 / 魔核討伐回数 / 最深到達
+    party:{ roster:['lumina'], joined:{}, resets:0 },   // v3.1 出撃するヒロイン(最初はルミナ一人。二連敗リセット×世代≥1でフレイラが合流) / 合流の記録 {id:{era,gen,why}} / 前の合流からのリセット回数(保険の判定に使う)
     settings:{ autoplay:true, gfx:'hd', gfxAuto:true, deckMode:'manual', advAuto:true },   // advAuto: v2.1 物語(ADV)の自動送り   // deckMode: manual / auto(階層に合わせておまかせ) / random   // gfx: 'hd'=描き込み / 'pixel'=ドット。gfxAuto: fps低下で装飾を自動で省く
   };
 }
@@ -210,6 +211,9 @@ function loadMeta(){
       for(const k of ['ailBy','capBy','capCause']) META.life[k]=Object.assign({}, (d.life||{})[k]||{});
       META.nightItems=Object.assign({mist:true}, d.nightItems||{});
       META.run=Object.assign(defaultMeta().run, d.run||{}); META.run.storySeen=META.run.storySeen||{};
+      { const dp=d.party||null; let roster=(dp&&Array.isArray(dp.roster)&&dp.roster.length)?dp.roster.slice():['lumina'];   // v3.1 出撃の並び
+        if(!dp && d.run && d.run.storySeen && d.run.storySeen.join && !roster.includes('freila')) roster.push('freila');   // v3.0 のセーブ(二人で潜っていた)はフレイラを残す
+        META.party=Object.assign({roster:['lumina'],joined:{},resets:0}, dp||{}); META.party.roster=roster.filter(id=>typeof HEROES==='undefined'||HEROES[id]); if(!META.party.roster.length) META.party.roster=['lumina']; META.party.joined=META.party.joined||{}; }
       META.map=Object.assign(defaultMeta().map, d.map||{}); if(META.map.floor===undefined) META.map.floor=0;
       META.traits=Object.assign({}, d.traits||{});
       META.codex=Object.assign({}, d.codex||{});

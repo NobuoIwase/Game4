@@ -19,9 +19,9 @@ function newHero(id){
     x:0, y:0, vx:0, vy:0, r:10,
     maxHp:Math.round(175*(1+0.18*gb)*(1+0.08*(LU.vital||0))*(1+0.03*will)*gsc*HD.hpMul), hp:0,
     armor:Math.max(0, 7 + gb - aArmor + Math.floor((LU.guard||0)*0.5) + HD.armor),
-    regen:(0.9+0.15*gb+0.08*(LU.bless||0))*(1-0.3*aRegen),
+    regen:(0.9+0.15*gb+0.08*(LU.bless||0))*(1-0.3*aRegen)*(HD.regenMul||1),   // v3.1 素性の回復係数
     baseSpeed:154*(1-0.06*aSpeed)*(1+0.02*(LU.swift||0))*HD.spdMul,
-    dmgMult:(1+0.06*(LU.zeal||0))*(1+0.02*will)*gsc,
+    dmgMult:(1+0.06*(LU.zeal||0))*(1+0.02*will)*gsc*(HD.dmgMul||1),   // v3.1 素性の火力係数
     will, curse:null, curseAmp:0, curseAche:false,     // v1.6 抵抗の意志 / ボス敗北の呪い
     hypnoG:0, hypnoFloor:0, heatG:0, inMusk:false,     // v1.6 催眠ゲージ(呪いの下限) / 発情ゲージ(雲から) / 雄臭の雲の中
     id, name:HD.name, hi:0, out:false, captive:null, assist:null, thanksT:0, seenT:0, lineT:0, lowSaid:false,   // v3.0 素性 / 離脱(捕獲) / 救援 / 個別の台詞タイマー
@@ -205,7 +205,7 @@ function buildDeck(mode){
 function applyDeckMode(){ const mode=(META.settings&&META.settings.deckMode)||'manual'; if(mode==='manual') return null; META.deck=buildDeck(mode); saveMeta(); return mode; }
 /* ================= 戦闘開始/終了 ================= */
 function startBattle(){
-  const heroes=PARTY_ORDER.filter(id=>HEROES[id]).map((id,i)=>{ const h=newHero(id); h.hi=i; return h; }); const hero=heroes[0];
+  const heroes=partyIds().map((id,i)=>{ const h=newHero(id); h.hi=i; return h; }); const hero=heroes[0];   // v3.1 出撃するのは META.party.roster(最初はルミナ一人)
   { const top=heroes.reduce((a,h)=>h.level>a.level?h:a,heroes[0]); for(const h of heroes){ if(h!==top){ h.level=top.level; h.xp=top.xp; h.xpNeed=top.xpNeed; } } }   // v3.0 Lv はパーティ共通(片方だけ引き継ぎが残っていても揃える)
   G.B={
     time:0, over:false,
@@ -260,9 +260,10 @@ function startBattle(){
   { const F=G.B.floor, sf=storyFloor(F.depth); let lines=null;
     const V30=(typeof STORY_V30!=='undefined')?STORY_V30:null, PRO=(V30&&V30.prologue&&V30.prologue.length&&G.B.heroes.length>1)?V30.prologue:STORY.prologue;   // v3.0 二人の序章
     const fIntro=(!META.run.storySeen['f'+F.depth]&&sf.intro.length)?['' ].concat(sf.intro):[];
-    if(!META.run.storySeen.prologue && PRO.length){ lines=PRO.concat(fIntro); META.run.storySeen.prologue=1; META.run.storySeen.join=1; META.run.storySeen['f'+F.depth]=1; saveMeta(); }
-    else if(!META.run.storySeen.join && G.B.heroes.length>1 && V30 && V30.party && V30.party.join && V30.party.join.length){ lines=V30.party.join.concat(fIntro); META.run.storySeen.join=1; META.run.storySeen['f'+F.depth]=1; saveMeta(); }   // 旧セーブ: フレイラの合流
-    else if((META.era|0)>0 && !META.run.storySeen['loop'+META.era] && V30 && V30.era && V30.era.loopIntro && V30.era.loopIntro.length){ lines=V30.era.loopIntro.concat(fIntro); META.run.storySeen['loop'+META.era]=1; META.run.storySeen['f'+F.depth]=1; saveMeta(); }   // v3.0 組み替わった後の朝
+    const loopI=((META.era|0)>0 && !META.run.storySeen['loop'+META.era])?storyLoopIntro(G.B.heroes.length):null;   // v3.1 組み替わった後の朝(一人版/二人版)
+    if(!META.run.storySeen.prologue && PRO.length){ lines=PRO.concat(fIntro); META.run.storySeen.prologue=1; if(G.B.heroes.length>1) META.run.storySeen.join=1; META.run.storySeen['f'+F.depth]=1; saveMeta(); }   // v3.1 一人で始めたなら合流の朝はまだ
+    else if(!META.run.storySeen.join && G.B.heroes.length>1 && V30 && V30.party && V30.party.join && V30.party.join.length){ const late=(META.run.joinWhy==='late' && V30.party.joinLate && V30.party.joinLate.length); lines=(late?V30.party.joinLate:V30.party.join).concat(fIntro); META.run.storySeen.join=1; if(late) META.run.storySeen['loop'+META.era]=1; META.run.storySeen['f'+F.depth]=1; META.run.joinWhy=''; saveMeta(); }   // v3.1 合流の朝(二連敗の後 / 一人で討ち続けた後の変奏)
+    else if(loopI){ lines=loopI.concat(fIntro); META.run.storySeen['loop'+META.era]=1; META.run.storySeen['f'+F.depth]=1; saveMeta(); }   // v3.0 組み替わった後の朝
     else if(META.run.fails>0 && STORY.retry.length){ lines=storyRetry(); }
     else if(sf.intro.length && !META.run.storySeen['f'+F.depth]){ lines=sf.intro; META.run.storySeen['f'+F.depth]=1; saveMeta(); }
     if(META.run.leftBehind && V30 && V30.party && V30.party.reunion && V30.party.reunion.length){ META.run.leftBehind=false; lines=V30.party.reunion.concat(lines&&lines.length?['']:[]).concat(lines||[]); saveMeta(); }   // v3.0 置いていかれた子が戻った朝(導入の前に)
@@ -272,7 +273,7 @@ function startBattle(){
 function enMax(){ const F=(G.B&&G.B.floor)||curFloor(); return Math.round(Math.min(BAL.EN_MAX*F.en.max*eraMul(), BAL.EN_BASE*F.en.base + 6*altarLv('encap') + BAL.EN_PER_LV*(G.B?G.B.hero.level:1))*(1+BAL.PRESS_EN_MAX*pressure())); }   // v3.0 世代で天井が上がる   // v2.0 深いほど多い / v2.1 長居するほど多い
 /* v2.1 深淵の圧: 同じ階層に長く居るほど夜側が強くなる(EN上限・EN回復・召喚頭数・場の上限)。階層を跨ぐと時間は戻る */
 const pressMax=()=>Math.min(BAL.PRESS_MAX+0.6, 1.2+0.2*eraNow());   // v3.0 圧の上限は世代で上がる(1.2→2.6)
-const coreDef=()=>Math.max(BAL.CORE_DEF, 0.7-BAL.CORE_ERA_DEF_K*eraNow());
+const coreDef=()=>Math.max(BAL.CORE_DEF, (BAL.CORE_ERA_DEF0||0.7)-BAL.CORE_ERA_DEF_K*eraNow());   // v3.1 世代0は 0.75
 function pressure(){ const B=G.B; if(!B) return 0; return Math.min(pressMax(), Math.max(0,B.time-BAL.PRESS_T0)/BAL.PRESS_T1); }
 function fieldCap(){ return Math.round(BAL.FIELD_CAP*(1+BAL.PRESS_CAP*pressure())); }
 
@@ -282,11 +283,13 @@ function endBattle(outcome){
   B.over=true;
   saveSeen(); if(B.bossSeen){ META.run.bossSeen=true; }   // v2.4 見た範囲とボスの記憶を run に残す
   const gb=Math.min(3,META.gen.battle||0);
-  let orbGain=B.orbFrag, essGain=Math.round(B.essence);
+  // v3.1 収入: 一日の撃破ぶんは逓減(essSoft)し、世代の係数を掛ける。結果ごとの加算は深さ・世代で少し伸びる
+  const eraK=1+BAL.ESS_ERA_K*eraNow(), orbK=1+BAL.ORB_ERA_K*eraNow();
+  let orbGain=Math.round(essSoft(B.orbFrag,BAL.ORB_SOFT)*orbK), essGain=Math.round(essSoft(B.essence)*eraK);
   if(outcome==='capture'){ orbGain+=BAL.ORB_CAPTURE + BAL.ORB_CAPTURE_GEN*gb; essGain+=BAL.CAPTURE_ESS_BONUS; }
   if(outcome==='survive'){ essGain+=BAL.SURVIVE_ESS_BONUS; }
-  if(outcome==='descend'){ essGain+=BAL.DESCEND_ESS; }   // v2.0 降りられた日
-  if(outcome==='clear'){ essGain+=BAL.CLEAR_ESS; }       // v2.0 魔核を討たれた日
+  if(outcome==='descend'){ essGain+=BAL.DESCEND_ESS+BAL.DESCEND_ESS_DEPTH*Math.max(0,B.floor.depth-1); }   // v2.0 降りられた日(v3.1 深いほど)
+  if(outcome==='clear'){ essGain+=BAL.CLEAR_ESS+BAL.CLEAR_ESS_ERA*eraNow(); }                            // v2.0 魔核を討たれた日(v3.1 世代ほど)
   META.essence+=essGain; META.orbs+=orbGain;
   META.runs++;
   META.life.dmg+=Math.round(B.dmgDealt); META.life.ail+=B.ailCount; META.life.kills+=B.kills;
@@ -339,6 +342,8 @@ function endBattle(outcome){
   }else if(outcome==='clear'){
     META.run.clears=(META.run.clears||0)+1; META.era=(META.era|0)+1; runReset(); rotReset=true; decay=luminaDecay(); runNote='clear';   // v3.0 深淵が組み替わる(世代+1: 階層が増え、魔核が太る)
   }
+  // v3.1 参戦の判定: 深淵が一度組み替わった後(世代≥1)に二連敗で入口へ戻された朝、次のヒロインが来る(保険: リセット3回 / 一人のまま世代4)
+  const joinId=partyJoinCheck(runNote);
   saveMeta();
   bgmStop();
   G.mode='result';
@@ -348,8 +353,9 @@ function endBattle(outcome){
     coins:coinGain, shop:shopped, decay,
     will:META.lumina.will||0, willUp:outcome==='capture', shrines:B.shrineGot, gateT:B.gateT, used:B.used, eventsN:B.eventsN, eventsDone:B.eventsDone,
     floor:B.floor, floorBefore, runNote, fails:META.run.fails, nextFloor:META.run.floor, seals:Object.keys(B.seals).length,
-    storyLines: outcome==='clear'?((typeof STORY_V30!=='undefined'&&STORY_V30.era&&STORY_V30.era.coreDown&&STORY_V30.era.coreDown.length)?STORY_V30.era.coreDown[Math.min(STORY_V30.era.coreDown.length-1,Math.max(0,(META.era|0)-1))].concat(twoP&&V30E.ending?V30E.ending:STORY.ending):(twoP&&V30E.ending?V30E.ending:STORY.ending))
-      :(runNote==='reset'?((twoP&&V30E.reset)?V30E.reset:STORY.reset):(outcome==='capture'&&B.captures&&B.captures.length>1&&typeof STORY_V30!=='undefined'&&STORY_V30.party&&STORY_V30.party.bothCaptured?STORY_V30.party.bothCaptured:(outcome==='descend'&&B.heroes.some(h=>h.out)&&typeof STORY_V30!=='undefined'&&STORY_V30.party&&STORY_V30.party.leftBehind?STORY_V30.party.leftBehind:null))), newCurse:newCurse?BOSS_CURSES[newCurse.id]:null,
+    storyLines: outcome==='clear'?storyClearLines(twoP)
+      :(runNote==='reset'?(((twoP&&V30E.reset)?V30E.reset:STORY.reset).concat((joinId&&V30E.party&&V30E.party.joinHint&&V30E.party.joinHint.length)?[''].concat(V30E.party.joinHint):[])):(outcome==='capture'&&B.captures&&B.captures.length>1&&typeof STORY_V30!=='undefined'&&STORY_V30.party&&STORY_V30.party.bothCaptured?STORY_V30.party.bothCaptured:(outcome==='descend'&&B.heroes.some(h=>h.out)&&typeof STORY_V30!=='undefined'&&STORY_V30.party&&STORY_V30.party.leftBehind?STORY_V30.party.leftBehind:null))), newCurse:newCurse?BOSS_CURSES[newCurse.id]:null,   // v3.1 一人版の結末 / 合流の予兆
+    join:joinId?HEROES[joinId].name:null, joinWhy:META.run.joinWhy||'',
     captures:B.captures, leftBehind:B.heroes.filter(h=>h.out).map(h=>h.name),
     carryLv:(META.run.hero&&META.run.hero.level)||0,
     curseGone:(oldCurse&&!META.curse&&!newCurse)?BOSS_CURSES[oldCurse.id]:null});
@@ -362,6 +368,39 @@ function runReset(){
   META.rot={dmg:0, ail:0, captures:0, battles:0};
   META.gen.know={}; META.gen.zoneKnow={}; META.gen.trapKnow={};   // 世代が変わると、覚えたことも忘れる(手記に書いた分だけ残る)
   { const o=META.run.storySeen||{}; const n={prologue:o.prologue, join:o.join}; for(const k in o) if(k.startsWith('loop')) n[k]=o[k]; META.run.storySeen=n; }   // 階層の導入はまた出る(序章・合流・世代の朝は出ない)
+}
+/* v3.1 一日のエッセンスの逓減: 素の合計 x → SOFT·ln(1+x/SOFT)。少ない日はほぼそのまま、多い日は頭打ち気味 */
+function essSoft(x,soft){ const S=(soft===undefined?BAL.ESS_SOFT:soft)||0; x=Math.max(0,x||0); return S>0?S*Math.log(1+x/S):x; }   // soft を渡せばオーブにも使える
+/* v3.1 参戦: 出撃の並びにヒロインを加え、翌朝の合流の場面(party.join / joinLate)を出す。META.party.joined に記録 */
+function partyJoin(id,why){
+  if(!HEROES[id]) return false; META.party=META.party||{roster:['lumina'],joined:{},resets:0};
+  if(META.party.roster.includes(id) || META.party.roster.length>=PARTY_MAX) return false;
+  META.party.roster.push(id); META.party.joined[id]={era:eraNow(), gen:META.gen.idx, runs:META.runs, why:why||''}; META.party.resets=0;
+  delete META.run.storySeen.join; META.run.joinWhy=why||'';   // 合流の朝はまだ出ていない
+  return true;
+}
+/* v3.1 参戦の判定(夜明けの処理)。PARTY_JOIN の並びで、まだ居ない最初のヒロインについて:
+   二連敗リセットの朝 → 世代≥minEra なら来る(保険: 前の合流からのリセット回数≥resets)。魔核を討った朝 → 世代≥lateEra なら来る(一人で討ち続けた変奏) */
+function partyJoinCheck(runNote){
+  if(typeof PARTY_JOIN==='undefined') return null; META.party=META.party||{roster:['lumina'],joined:{},resets:0};
+  const rule=PARTY_JOIN.find(j=>HEROES[j.id]&&!META.party.roster.includes(j.id)); if(!rule) return null;
+  if(runNote==='reset'){ META.party.resets=(META.party.resets||0)+1; if((META.era|0)>=rule.minEra || META.party.resets>=rule.resets){ if(partyJoin(rule.id,'reset')) return rule.id; } }
+  else if(runNote==='clear' && (META.era|0)>=rule.lateEra){ if(partyJoin(rule.id,'late')) return rule.id; }
+  return null;
+}
+/* v3.1 魔核を討った日の物語: 二人なら世代ごとの結末(coreDown)+二人版の結末、一人なら一人版(coreDownSolo: 初回/再び)+従来の結末の続き */
+function storyClearLines(twoP){
+  const V=(typeof STORY_V30!=='undefined')?STORY_V30:null, k=Math.max(0,(META.era|0)-1);   // era はもう +1 されている
+  if(twoP){ const cd=(V&&V.era&&V.era.coreDown&&V.era.coreDown.length)?V.era.coreDown[Math.min(V.era.coreDown.length-1,k)]:[]; return cd.concat((V&&V.ending)?V.ending:STORY.ending); }
+  const solo=V&&V.era&&V.era.coreDownSolo; const cs=solo?(k===0?solo.first:(solo.again||solo.first)):null;
+  if(cs&&cs.length) return cs.concat(STORY.ending.slice(1));   // 一人版は結末の1行目(光が届いた…)を置き換える
+  return STORY.ending;
+}
+/* v3.1 組み替わった後の朝: 二人版 loopIntro / 一人版 loopIntroSolo(初回/再び)。無ければ null */
+function storyLoopIntro(n){
+  const V=(typeof STORY_V30!=='undefined')?STORY_V30:null; if(!V||!V.era) return null;
+  if(n>1) return (V.era.loopIntro&&V.era.loopIntro.length)?V.era.loopIntro:null;
+  const s=V.era.loopIntroSolo; if(!s) return null; const a=((META.era|0)<=1)?s.first:(s.again||s.first); return (a&&a.length)?a:null;
 }
 /* 世代の夜明け: 彼女の自己強化は BAL.LUMINA_DECAY 段ぶん薄れる。高い系統から1段ずつ。
    初期値に戻るわけではない——世代を跨ぐごとに、土台が少しずつ上がっていく */
@@ -1340,7 +1379,7 @@ function aiUpdate(dt){
   const moved=Math.hypot(p.x-p.prevX,p.y-p.prevY);
   if(restraintCount(p)>0) addStruggle(moved*BAL.STRUGGLE_MOVE_RATE);
 
-  if(Math.abs(p.vx)>12) p.face=p.vx>0?1:-1;
+  if(Math.abs(p.vx)>12 && p.steerState!=='talk') p.face=p.vx>0?1:-1;   // v3.1 話している間は相手の方を向いたまま
   p.moving=Math.hypot(p.vx,p.vy)>30;
 
   const LBL={flee:'かいひ行動!', boss:'ボスかいひ!!', dodge:'よける!(おぼえてる)', gem:'ジェム回収', poi:'めざす場所へ', explore:'たんさく中', heart:'ハートへ!',
@@ -1626,7 +1665,7 @@ function aiDecide(foc){
       goalOk = threat<(urgent?0.6:0.3);                                   // 脅威が濃いときは目当てへ歩かない(牽制/回避に戻る)
       // v2.1 目当てがあるなら歩く。ジェムは進む先の「道すがら」だけ拾う(ジェム畑と目当ての間を往復しない)。ジェムの群れそのものが目当てなら普通に拾い集める
       walk = goalOk && goal.kind!=='gems' && (goal.kind!=='explore' || leaving);
-      atGoal = walk && Math.hypot(goal.x-p.x,goal.y-p.y)<90;
+      atGoal = walk && Math.hypot(goal.x-p.x,goal.y-p.y)<(goal.kind==='gather'?30:90);   // v3.1 集合はそばまで寄る
       // v2.1 ジェムに足を取られない: 目当てへ歩いているのに GOAL_STALL_T 秒で60px も近づけなければ(降り続けるジェムを拾い続けている)、GEM_FAST_T 秒は足元以外のジェムを拾わない
       if(walk){ const gd=Math.hypot(goal.x-p.x,goal.y-p.y), gk=giveUpKey(goal);
         if(p.gKey!==gk){ p.gKey=gk; p.gBest=gd; p.gT=B.time; }
@@ -1783,8 +1822,8 @@ function aiDecide(foc){
   { const o=partnerOf(p); if(o){ const ddx=o.x-p.x, ddy=o.y-p.y, dd=Math.hypot(ddx,ddy)||1;
       if(dd>BAL.PARTY_LEASH){ const w=Math.min(1.4,(dd-BAL.PARTY_LEASH)/200); dx+=ddx/dd*w; dy+=ddy/dd*w; }
       else if(dd<BAL.PARTY_SEP && attachCount(p)===0){ dx-=ddx/dd*0.45; dy-=ddy/dd*0.45; } } }
-  if(B.party && B.time<B.party.talkUntil && attachCount(p)===0 && threat<0.6){ dx*=0.05; dy*=0.05; state='talk'; }
-  p.steerX=dx; p.steerY=dy; p.steerState=state;
+  if(B.party && B.time<B.party.talkUntil && attachCount(p)===0 && threat<0.6){ dx*=0.05; dy*=0.05; state='talk'; const o=partnerOf(p); if(o && Math.abs(o.x-p.x)>6) p.face=o.x>p.x?1:-1; }   // v3.1 話す間は相手の方を向く
+  p.steerX=dx; p.steerY=dy; p.steerState=state; p.threatV=threat;   // v3.1 脅威の見積もりを残す(集合の判定に使う)
 }
 
 /* 知っている(理解以上)罠のそば */
@@ -2348,7 +2387,7 @@ function spawnUnit(id, x, y, o){
   if(id==='suiyou'){ u.sub=false; u.grabCd=0; }
   if(id==='mouth'){ u.grabCd=1.5; u.lickT=0; }
   if(id==='guardian'){ u.castCd=3; u.aimT=0; u.lookA=0; }
-  if(id==='core'){ u.whipCd=2; u.whipT=0; u.pulseCd=5; u.pulseT=0; u.spawnCd=4; u.lookA=0; u.hp=u.maxHp=Math.round(BAL.CORE_HP*(BAL.CORE_ERA_HP0+BAL.CORE_ERA_HP_K*eraNow())*(1+0.08*Math.max(0,(META.gen.idx||1)-1))*(1+Math.min(BAL.CORE_HP_LV_CAP,BAL.CORE_HP_LV*Math.max(0,heroLv-1)))); u.era=eraNow(); u.r=Math.round(MONSTERS.core.r*(0.68+0.08*Math.min(4,u.era))); }   // v3.0 世代0は薄く小さく(見た目も弱く)、討たれるごとに厚く大きく   // v2.2 引き継いだLvが高いほど厚い(最大×4.5)
+  if(id==='core'){ u.whipCd=2; u.whipT=0; u.pulseCd=5; u.pulseT=0; u.spawnCd=4; u.lookA=0; { const e0=eraNow()===0, lvK=BAL.CORE_HP_LV*(e0?BAL.CORE_ERA0_LV_K:1), lvCap=e0?BAL.CORE_ERA0_LV_CAP:BAL.CORE_HP_LV_CAP; u.hp=u.maxHp=Math.round(BAL.CORE_HP*(BAL.CORE_ERA_HP0+BAL.CORE_ERA_HP_K*eraNow())*(1+0.08*Math.max(0,(META.gen.idx||1)-1))*(1+Math.min(lvCap,lvK*Math.max(0,heroLv-1)))); } u.era=eraNow(); /* v3.1 世代0は Lv 補正も半分 */ u.r=Math.round(MONSTERS.core.r*(0.68+0.08*Math.min(4,u.era))); }   // v3.0 世代0は薄く小さく(見た目も弱く)、討たれるごとに厚く大きく   // v2.2 引き継いだLvが高いほど厚い(最大×4.5)
   // 地形の恩恵: 湿地で粘る種のHP、巣の魔物のHP。速度は毎フレーム今いる地形で決まる(spd0 が素の速度)
   u.spd0=u.spd; u.zone=zoneAt(x,y); u.item=!!MONSTERS[id].item;   // 設置物は押し合いで動かない
   if(id==='suiyou') u.sub=(u.zone==='water'||u.zone==='damp');   // v2.0 水妖は水の中で待つ
@@ -3127,6 +3166,7 @@ function gateAllowed(){ return true; }   // (v2.0: 門は降り口に置き換�
 function goalValid(p,g){
   const B=G.B, M=META.map; if(!g) return false;
   if(g.kind==='rescue') return !!(g.ref && g.ref.out);   // v3.0 まだ捕まっている間
+  if(g.kind==='gather'){ const P=B.party; return !!(P && P.gather && B.time<P.gather.until && !partyGathered() && !partyDanger()); }   // v3.1 集合の途中
   if(g.kind==='event') return B.event===g.ref;
   if(g.kind==='chest') return B.chests.includes(g.ref) && !g.ref.taken;
   if(g.kind==='item') return B.items.includes(g.ref);
@@ -3175,6 +3215,10 @@ function partyTick(dt){
   P.calm=near===0?(P.calm||0)+0.5:0;
   if(P.calm>=6 && B.time-(P.lastBanter||-99)>28){ P.lastBanter=B.time; P.calm=0; partyExchange('idle'); }
 }
+/* v3.1 集合の判定: 皆が重心から GATHER_R 以内か / 近くに脅威(魔物・拘束・押し倒し・薄い体力)があるか */
+function partyCenter(){ const B=G.B; let cx=0,cy=0,n=0; for(const h of B.heroes){ if(h.out) continue; cx+=h.x; cy+=h.y; n++; } return n?{x:cx/n,y:cy/n,n}:null; }
+function partyGathered(){ const B=G.B, c=partyCenter(); if(!c||c.n<2) return true; for(const h of B.heroes){ if(h.out) continue; if(Math.hypot(h.x-c.x,h.y-c.y)>BAL.GATHER_R) return false; } return true; }
+function partyDanger(){ const B=G.B; for(const h of B.heroes){ if(h.out) continue; if(attachCount(h)>0 || h.pinned || h.hp<h.maxHp*0.4 || (h.threatV||0)>=BAL.GATHER_DANGER_THREAT || nearEnemyCount(h.x,h.y,BAL.GATHER_DANGER_R,false)>0) return true; } return false; }
 function updateGoal(p){
   const B=G.B, P=B.party, active=B.heroes.filter(h=>!h.out);
   if(!P || active.length<2) return updateGoalSolo(p);
@@ -3183,12 +3227,27 @@ function updateGoal(p){
     else if(P.goal.ref && P.goal.kind!=='explore' && P.goal.kind!=='event'){ P.goal.x=P.goal.ref.x; P.goal.y=P.goal.ref.y; }
     return p.goal;
   }
+  // v3.1 集合が終わった(揃った・時間切れ・脅威で打ち切り): このあと決めて、向き合って話す
+  let gathered=false;
+  if(P.gather){ gathered=partyGathered() && !partyDanger(); P.gather=null; P.gatherDone=B.time; B.nGatherDone=(B.nGatherDone||0)+(gathered?1:0); }
   const ci0=B.ci, props=[];
   for(const h of active){ B.ci=h.hi; const g=updateGoalSolo(h); if(g) props.push({h,g}); }
   B.ci=ci0;
   if(!props.length){ P.goal=null; P.owner=null; return null; }
   const g0=props[0].g;
   const same=props.every(x=>x.g.kind===g0.kind && x.g.ref===g0.ref && Math.hypot(x.g.x-g0.x,x.g.y-g0.y)<60);
+  // v3.1 相談は近寄ってから: 話す価値のある決め直し(探索以外・台詞の間隔が明けている)で、離れていて脅威が薄ければ、まず互いに歩み寄る
+  const talkable=B.time-P.decidedT>BAL.PARTY_TALK_CD && props.some(x=>x.g.kind!=='explore');
+  if(talkable && !P.gatherDone && B.time-(P.gatherT||-99)>BAL.GATHER_CD && !partyGathered() && !partyDanger()){
+    const c=partyCenter(); P.gather={until:B.time+BAL.GATHER_T, x:c.x, y:c.y}; P.gatherT=B.time;
+    const gg={kind:'gather', sub:'gather', x:c.x, y:c.y, ref:null, key:'gather', d:0, worth:1.3, score:1.3};
+    P.goal=gg; P.owner=active[0]; P.until=P.gather.until;
+    for(const h of active){ h.goal=gg; h.goalT=B.time+BAL.GOAL_RETHINK; }
+    const caller=active.find(h=>h.hi===P.turn)||active[0];   // 優先権の子が呼ぶ
+    if(sayPartyAs(caller.hi,'gather.call',1,0)){ P.gatherCaller=caller.hi; } else P.gatherCaller=-1;
+    B.nGather=(B.nGather||0)+1;
+    return p.goal;
+  }
   let win=props[0];
   if(!same){
     win=props.find(x=>x.h.hi===P.turn)||props[0];
@@ -3199,10 +3258,14 @@ function updateGoal(p){
   P.goal=win.g; P.owner=win.h; P.until=B.time+(same?BAL.GOAL_RETHINK:BAL.PARTY_HOLD);
   for(const x of props){ x.h.goal=P.goal; x.h.goalT=B.time+BAL.GOAL_RETHINK; }
   B.nDecide=(B.nDecide||0)+1; if(!same) B.nSplit=(B.nSplit||0)+1;
-  if(B.time-P.decidedT>BAL.PARTY_TALK_CD && P.goal.kind!=='explore'){
+  if((B.time-P.decidedT>BAL.PARTY_TALK_CD && P.goal.kind!=='explore') || gathered){   // 集まったのなら(探索でも)必ず一言交わす
     P.decidedT=B.time; const kind=goalKindKey(P.goal);
-    if(sayPartyAs(win.h.hi,'propose.'+kind,1,0)){ for(const x of props){ if(x===win) continue; pendingLine(x.h.hi, same?'same':(x.g.score>win.g.score?'yield':'agree'), 0.9, 1); } if(!same) P.talkUntil=B.time+BAL.TALK_T; }
+    let t0=0;
+    if(gathered){ const other=active.find(h=>h.hi!==(P.gatherCaller>=0?P.gatherCaller:win.h.hi)); if(other){ pendingLine(other.hi,'gather.arrive',0.2,1); t0=0.9; } }   // 呼ばれた子が着いて一言
+    const said=t0>0?(pendingLine(win.h.hi,'propose.'+kind,t0,1),true):sayPartyAs(win.h.hi,'propose.'+kind,1,0);
+    if(said){ for(const x of props){ if(x===win) continue; pendingLine(x.h.hi, same?'same':(x.g.score>win.g.score?'yield':'agree'), t0+0.9, 1); } if((!same || gathered) && (gathered || partyGathered())) P.talkUntil=B.time+(gathered?BAL.GATHER_TALK_T:BAL.TALK_T); }   // 集まって話した時は少し長く向き合う。離れたまま(集合できなかった)なら声だけ掛けて足は止めない(v3.1)
   }
+  P.gatherDone=0;
   return p.goal;
 }
 function updateGoalSolo(p){

@@ -361,6 +361,8 @@ function goalName(gl){
   if(gl.kind==='poi') return (POI_DEF[gl.sub]&&POI_DEF[gl.sub].name)||gl.sub;
   if(gl.kind==='pick') return (PICK_DEF[gl.sub]&&PICK_DEF[gl.sub].name)||gl.sub;
   if(gl.kind==='gems') return 'ジェムの群れ';
+  if(gl.kind==='gather') return '集まって相談';   // v3.1
+  if(gl.kind==='rescue') return '救出';
   return '探索';
 }
 function dirName(dx,dy){ const a=Math.atan2(dy,dx); const i=Math.round((a+Math.PI)/(Math.PI/4))%8; return ['西','北西','北','北東','東','南東','南','南西'][i]; }
@@ -2661,7 +2663,7 @@ function drawHUD(g){
   drawMinimap(g);
   g.fillText('enemies:'+B.enemies.length+' fps:'+Math.round(G.fps)+(TS>1?' x'+TS:''), 12, H-6);
   g.textAlign='right'; g.fillStyle='rgba(255,255,255,0.3)'; g.font='bold 10px '+FONT;
-  g.fillText('v3.0 深淵 — 二人', W-12, H-6);
+  g.fillText('v3.1 深淵 — 合流', W-12, H-6);
 }
 function drawCards(g){
   const B=G.B, c=B.lvCards; if(!c) return;

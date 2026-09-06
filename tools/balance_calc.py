@@ -12,7 +12,10 @@ NIGHT_STAT_LV,NIGHT_STAT_CAP=0.04,0.8
 NEED=lambda l:(6+l*3.2+l*l*0.18)*(1+0.05*max(0,l-20))
 XPSOFT=lambda l:1/(1+0.03*max(0,l-15))
 CORE_HP,CORE_HP_LV,CORE_HP_LV_CAP,CORE_DEF=28000,0.04,3.0,0.4   # v2.4: 26000→28000
-ESS_RATE,DESCEND_ESS,CLEAR_ESS,CAPTURE_ESS=0.55,60,40,60
+ESS_RATE,DESCEND_ESS,CLEAR_ESS,CAPTURE_ESS=0.30,40,120,45   # v3.1: 0.55→0.30 / 降下 40+15·(深さ-1) / 討伐 120+60·世代 / 捕獲 45
+ESS_SOFT,ESS_ERA_K,ORB_ERA_K,ORB_SOFT=700,0.12,0.10,80     # v3.1: 一日の撃破ぶんは SOFT·ln(1+x/SOFT) で逓減、世代ごとに +12%(オーブ +10%、オーブの逓減は 80)
+DESCEND_ESS_DEPTH,CLEAR_ESS_ERA=15,60
+def ess_soft(x): return ESS_SOFT*math.log(1+x/ESS_SOFT) if ESS_SOFT>0 else x
 def en_max(lv,fl,t):
     base,regen,mx=FLOORS[fl][2],FLOORS[fl][3],FLOORS[fl][4]
     pr=min(PRESS_MAX,max(0,t-PRESS_T0)/PRESS_T1)
@@ -40,23 +43,31 @@ for lv in (20,35,45,60,75):
     dps=180*(1+0.035*(lv-1))  # 実測(Lv44で1270raw≒570eff, Lv60で≒1100eff)に近い粗い直線
     print(f'| {lv} | {hp:,.0f} | {eff:,.0f} | {dps*2.5:,.0f} raw | {eff/(dps*2.5):.0f} |')
 print()
-print('## D. v3 構想: 階層解放と難度の案')
-print('| 討伐回数(世代) | 開放階層 | 深さ倍率(HP/与ダメ) | 圧の上限 | EN上限係数 | 番兵の数(第1層→最深) |'); print('|---|---|---|---|---|---|')
-for c in range(0,7):
-    floors=min(5,2+c)  # 初回は2階層、討伐ごとに+1(5で打ち止め)
-    depth=1+0.12*c      # 討伐ごとに全階層の魔物が+12%
-    pmax=1.2+0.2*c      # 圧の上限 1.2→2.4
-    enmul=1+0.08*c
-    sent=f'{2+min(2,c//2)}→{3+min(3,c//2)}'
-    print(f'| {c} | 1〜{floors} | ×{depth:.2f} | {min(2.6,pmax):.1f} | ×{enmul:.2f} | {sent} |')
+print('## D. 世代(討伐回数)ごとの階層解放と難度(v3.1 実装値)')
+print('| 討伐回数(世代) | 開放階層 | 深さ倍率(魔物HP/与ダメ・EN天井) | 圧の上限 | 番兵の上限 | 魔核HP係数 | 魔核の被ダメ |'); print('|---|---|---|---|---|---|---|')
+NFLOORS,ERA_FLOORS0,ERA_DEPTH_K0,ERA_DEPTH_K=8,2,0.10,0.10
+CORE_ERA_HP0,CORE_ERA_HP_K,CORE_ERA_DEF0,CORE_ERA_DEF_K=0.30,0.28,0.75,0.05
+SENT_ERA=[2,3,3,4,4,5,6]
+for c in range(0,9):
+    floors=min(NFLOORS,ERA_FLOORS0+c)
+    depth=1+ERA_DEPTH_K0*c+ERA_DEPTH_K*max(0,c-(NFLOORS-ERA_FLOORS0))
+    pmax=min(2.6,1.2+0.2*c)
+    sent=SENT_ERA[min(len(SENT_ERA)-1,c)]
+    corehp=CORE_ERA_HP0+CORE_ERA_HP_K*c
+    coredef=max(0.4,CORE_ERA_DEF0-CORE_ERA_DEF_K*c)
+    print(f'| {c} | 1〜{floors} | ×{depth:.2f} | {pmax:.1f} | {sent} | ×{corehp:.2f}{"(Lv補正は半分・上限+50%)" if c==0 else ""} | {coredef:.2f} |')
 print()
 print('## E. v3 構想: 2人以上で潜る時の係数(案)')
 print('| 人数 | 彼女側 火力合計 | 夜側 EN上限 | 召喚頭数 | 魔物HP | 捕獲条件 | 経験値の分配 |'); print('|---|---|---|---|---|---|---|')
 for n in (1,2,3):
     print(f'| {n} | ×{1+0.85*(n-1):.2f}(2人目以降は85%) | ×{1+0.6*(n-1):.2f} | ×{1+0.5*(n-1):.2f} | ×{1+0.35*(n-1):.2f} | 全員捕獲でその日の敗北。1人捕まると残りは救出か降下を選ぶ | ジェムは拾った人、討伐xpは均等 |')
 print()
-print('## F. v3 構想: 経済(エッセンス/オーブ)の1日あたり収入の見込み(現行の係数)')
-print('| 結果 | 撃破xp(概算) | エッセンス | オーブ | 備考 |'); print('|---|---|---|---|---|')
-for name,kills,xpavg,bonus,orb in (('第1層 降下(205s)',1300,3.0,DESCEND_ESS,26),('第3層 降下(220s)',4000,5.0,DESCEND_ESS,40),('捕獲(第2層)',2500,4.0,CAPTURE_ESS,20+5*3+35),('魔核討伐',15000,6.0,CLEAR_ESS,90)):
-    ess=kills*xpavg*ESS_RATE+bonus
-    print(f'| {name} | {kills*xpavg:,.0f} | {ess:,.0f} | {orb} | 解放費用は 60〜1250(魔物)・12〜44(祭壇) |')
+print('## F. v3.1 経済(エッセンス/オーブ)の1日あたり収入(逓減と世代係数込み)')
+print('| 結果 | 世代 | 撃破xp(概算) | 素のエッセンス(xp×0.30) | 逓減後 | +結果の加算 | 一日の合計 | オーブ(概算) |'); print('|---|---|---|---|---|---|---|---|')
+for name,era,kills,xpavg,kind,depth,orb in (('第1層 降下(205s)',0,600,3.2,'descend',1,12),('第2層 捕獲',0,1500,4.0,'capture',2,45),('第2層 魔核討伐',0,1500,4.5,'clear',2,30),('第3層 降下',1,3000,5.0,'descend',3,20),('第3層 魔核討伐',1,4000,5.5,'clear',3,60),('第5層 降下',3,6000,6.5,'descend',5,40),('第7層 魔核討伐',5,12000,8.0,'clear',7,120)):
+    raw=kills*xpavg*ESS_RATE; soft=ess_soft(raw)*(1+ESS_ERA_K*era)
+    bonus={'descend':DESCEND_ESS+DESCEND_ESS_DEPTH*(depth-1),'capture':CAPTURE_ESS,'clear':CLEAR_ESS+CLEAR_ESS_ERA*era}[kind]
+    osoft=ORB_SOFT*math.log(1+orb/ORB_SOFT)
+    print(f'| {name} | {era} | {kills*xpavg:,.0f} | {raw:,.0f} | {soft:,.0f} | +{bonus} | **{soft+bonus:,.0f}** | {round(osoft*(1+ORB_ERA_K*era))} |')
+print()
+print('読み方: 解放の総額は 魔物 15,300 + 陣形 1,580 + 夜側アイテム 約2,500 + カード強化 約25,000 ≒ 45k。一日 500〜1,500 なので 40〜50日分。祭壇は全段で 848 オーブ(一日 20〜80。長い日でも逓減で 130 前後)。')

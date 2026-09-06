@@ -33,13 +33,17 @@ const BAL={
   NIGHT_STAT_LV:0.04,      // 彼女のLv-1ごとの召喚hp/dmg加算
   NIGHT_STAT_CAP:0.8,
   EN_REFUND:0.6,           // ヒロインが倒したときのEN還元率(ユニット単価×係数)
-  ESS_RATE:0.55,           // エッセンス=撃破xp×係数
-  ORB_DMG_STEP:45,         // 与ダメこれごとにオーブ+1
+  ESS_RATE:0.30,           // エッセンス=撃破xp×係数(v3.1 0.55→0.30: ループで長期化するので)
+  ESS_SOFT:700,            // v3.1 一日のエッセンスの逓減: 素の合計 x → SOFT·ln(1+x/SOFT)(700で頭打ち気味。深い階層の大量撃破や魔核討伐の日が一日で研究所を買い切らないように)
+  ESS_ERA_K:0.12,          // v3.1 世代ごとの収入係数(+12%/世代。深淵が深くなるぶん実りも増える)
+  ORB_DMG_STEP:90,         // 与ダメこれごとにオーブ+1(v3.1 45→90)
   ORB_PER_AIL:1,           // 状態異常付与ごと
-  ORB_CAPTURE:20,          // 捕獲ベース
-  ORB_CAPTURE_GEN:5,       // ×世代内戦歴
-  SURVIVE_ESS_BONUS:30,
-  CAPTURE_ESS_BONUS:60,
+  ORB_CAPTURE:14,          // 捕獲ベース(v3.1 20→14)
+  ORB_CAPTURE_GEN:4,       // ×世代内戦歴(v3.1 5→4)
+  ORB_ERA_K:0.10,          // v3.1 世代ごとのオーブ係数(+10%/世代)
+  ORB_SOFT:80,             // v3.1 一日のオーブ(与ダメ・異常ぶん)の逓減: x → SOFT·ln(1+x/SOFT)(長く生き延びた日の 300〜400 個を 130 前後に。捕獲の加算は逓減しない)
+  SURVIVE_ESS_BONUS:25,    // (v3.1 30→25)
+  CAPTURE_ESS_BONUS:45,    // (v3.1 60→45)
 
   /* --- スタミナ / 抵抗 / 押し倒し --- */
   STAMINA_MAX:100,
@@ -147,7 +151,7 @@ const BAL={
   CHEST_TIMES:[40,110,180,250],
   // v2.0 階層
   EXIT_STAND:2.5, EXIT_WORTH:0.5, EXIT_WORTH_PER_MIN:0.5, EXIT_HP_MIN:0.45,   // 降り口: そばに立つ秒数 / 目当ての価値(時間で増す) / HPがこれ未満なら降りない
-  RUN_FAILS_RESET:2, DESCEND_ESS:60, CLEAR_ESS:40,                           // 二連敗でリセット / 降りられた日・魔核を討たれた日の夜側エッセンス
+  RUN_FAILS_RESET:2, DESCEND_ESS:40, DESCEND_ESS_DEPTH:15, CLEAR_ESS:120, CLEAR_ESS_ERA:60,   // 二連敗でリセット / 降りられた日(+深さ)・魔核を討たれた日(+世代)の夜側エッセンス(v3.1 調整)
   CORE_HP:28000, CORE_HP_LV:0.04, CORE_HP_LV_CAP:3.0, CORE_WHIP_CD:2.2, CORE_PULSE_CD:5.5, CORE_SPAWN_CD:7, CORE_DEF:0.4, CORE_AURA_R:140, CORE_FLING:0.025, CORE_TWO_PH:0.4,   // 魔核(v2.2 強化: HP↑・被ダメ↓・間隔↓・脈の圏内は熱と敏感化)
   RING_CD:25, RING_R:470, RING_STUN:0.9,                                         // v2.2 包囲円陣: オート指揮の間隔 / 輪の半径 / 出現直後の硬直
   FLOOR_AFFINITY:1.2, FLESH_HEAT:1.6,                                         // 階層の得意種 HP倍率 / 肉の床の発情ゲージ(毎秒)
@@ -176,7 +180,9 @@ const BAL={
   /* v3.0 深淵のループ: 初期の開放階層 ERA_FLOORS0、世代ごとの深さ倍率(+K0/世代、階層が増えなくなった後はさらに +K/世代)。魔核は世代0で薄い(CORE_ERA_HP0 倍)、世代ごとに厚く */
   /* v3.0 パーティ: 二人の距離が PARTY_LEASH を超えると寄る力、PARTY_MAXDX/DY を超えると引き戻す(画面外に出ない)。救出は RESCUE_R 内に RESCUE_T 秒。相談の間 TALK_T 秒は足を止める */
   PARTY_LEASH:380, PARTY_MAXDX:740, PARTY_MAXDY:360, PARTY_SEP:34, RESCUE_R:60, RESCUE_T:3.0, TALK_T:1.3, ASSIST_R:120, HEART_YIELD:0.15, PARTY_HOLD:7, PARTY_TALK_CD:10,
-  ERA_FLOORS0:2, ERA_DEPTH_K0:0.06, ERA_DEPTH_K:0.10, CORE_ERA_HP0:0.45, CORE_ERA_HP_K:0.28, CORE_ERA_DEF_K:0.05, SENT_ERA:[2,3,3,4,4,5,6],
+  /* v3.1 相談は近寄ってから: 決め直しの時、皆が重心から GATHER_R 以内に居なければ、脅威が薄い限り GATHER_T 秒を上限に歩み寄ってから話す。GATHER_DANGER_R 内に魔物が居れば集合は飛ばして即決。集合の間隔 GATHER_CD */
+  GATHER_R:48, GATHER_T:3.2, GATHER_DANGER_R:150, GATHER_DANGER_THREAT:0.5, GATHER_CD:8, GATHER_TALK_T:2.6,
+  ERA_FLOORS0:2, ERA_DEPTH_K0:0.10, ERA_DEPTH_K:0.10, CORE_ERA_HP0:0.30, CORE_ERA_HP_K:0.28, CORE_ERA_DEF0:0.75, CORE_ERA_DEF_K:0.05, CORE_ERA0_LV_K:0.5, CORE_ERA0_LV_CAP:0.5, SENT_ERA:[2,3,3,4,4,5,6],   // v3.1 世代0の魔核はさらに薄く(HP×0.30・被ダメ0.75・Lv補正は半分で上限+50%): 一人のルミナが討てる。魔物の深さ倍率は毎世代+10%(討たれるごとに魔物も強く)
   /* v2.4 視界の記憶: SEEN_T 秒ごとに半径 SEEN_R×SEEN_RY の楕円を「見た」にする。探索点は未探索率×EXPLORE_UNSEEN_W − 距離×EXPLORE_DIST_W で選ぶ(SEEN_EXPLORE=0 で旧挙動)。BOSS_PICK=1 でボスを想定した武器選び */
   SEEN_T:0.25, SEEN_R:560, SEEN_RY:400, SEEN_EXPLORE:1, EXPLORE_UNSEEN_W:2.5, EXPLORE_DIST_W:0.4, EXPLORE_DONE:0.96, BOSS_PICK:1, BOSS_MEMORY_T:60,
   /* v2.4 ボス級(カードのボス)は彼女の Lv で厚くなり(+5%/Lv、上限 +250%)、光が通りにくい(被ダメ 80%)。魔核・番兵は各自の値 */
@@ -637,7 +643,7 @@ const SKILLS={
 /* v3.0 ヒロイン定義。パーティは HEROES の並びで最大4人まで(現在は2人)。武器はヒロインごと、パッシブは共通、Lv・経験値はパーティ共通 */
 const HEROES={
   lumina:{ name:'ルミナ',   col:'#8fd3ff', hair:'#f2e8d8', sprite:'lumina', wps:['bolt','orb','nova','whip','rain','cross','sanct','blade','thunder','holy','chain','spirit','shield'],
-           start:{bolt:2,orb:1}, grow:['bolt','orb','nova'], hpMul:1.0, spdMul:1.0, armor:0, fearMul:1.0, braveAdd:0, kiteMul:1.0,
+           start:{bolt:2,orb:1}, grow:['bolt','orb','nova'], hpMul:0.92, spdMul:1.0, armor:-1, dmgMul:0.94, regenMul:0.9, fearMul:1.0, braveAdd:0, kiteMul:1.0,   // v3.1 程々に負けるように少し弱く(HP-8%・護り-1・火力-6%・回復-10%)
            skills:{ blink:{ name:'光の跳躍', icon:'✦', lv:22, cd:20, desc:'囲まれた時、光になって最も空いている方へ180px跳ぶ。0.6秒無敵' },
                     purge:{ name:'浄化の脈', icon:'❂', lv:38, cd:35, desc:'二肢以上を掴まれるか押し倒された時、光を破裂させて全ての拘束を千切り、半径120の魔物を弾いて止める' },
                     bulwark:{ name:'聖光の壁', icon:'◈', lv:52, cd:45, desc:'HPが35%を切った時、4秒間 被ダメ-70%・自然回復×4' } },
@@ -651,7 +657,13 @@ const HEROES={
            pref:{chest:1.1, boss:1.3, treasure:1.15, item:1.1, stairs:1.15, core:1.3, explore:1.1, event:1.05, shrine:0.8, stele:0.7, pool:0.85, spring:0.9, gems:0.9, shroom:0.85},
            desc:'火を操る近接主体の天使。気が強く、前に出る' },
 };
-const PARTY_ORDER=['lumina','freila'];   // 出撃するヒロインの並び(先頭が代表)
+const PARTY_ORDER=['lumina','freila'];   // 全ヒロインの並び(合流の順。出撃するのは partyIds())
+const PARTY_MAX=4;                        // v3.1 パーティの上限(作りは3〜4人まで)
+/* v3.1 出撃するヒロイン: META.party.roster(最初はルミナ一人)。HEROES に無い名前は落とし、上限で切る */
+function partyIds(){ const r=(typeof META!=='undefined'&&META&&META.party&&Array.isArray(META.party.roster))?META.party.roster:['lumina']; const out=[]; for(const id of r){ if(HEROES[id]&&!out.includes(id)) out.push(id); if(out.length>=PARTY_MAX) break; } return out.length?out:['lumina']; }
+/* v3.1 参戦の規則(合流の順に並ぶ)。minEra: 深淵が組み替わった後(世代≥minEra)に二連敗で入口へ戻された朝に来る。
+   resets: 保険——前の合流からのリセット回数がこれに達したら世代を問わず来る。lateEra: 保険——一人(いまの人数)で世代がここまで進んだら、その組み替わりの朝に来る */
+const PARTY_JOIN=[ { id:'freila', minEra:1, resets:3, lateEra:4 } ];
 const luminaUpCost=(id,rank)=>Math.round(LUMINA_UPG[id].base*Math.pow(1.5,rank));
 const luminaRank=id=>((META.lumina&&META.lumina.upg)||{})[id]||0;
 const shaveCost=rank=>Math.round(6+3*rank);   // 自己強化を1段削ぐオーブ費用

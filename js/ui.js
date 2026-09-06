@@ -279,7 +279,7 @@ const UI={
     const wipeArmed=this._wipeArm && performance.now()-this._wipeArm<3000;
     return `
       <h1>ルミナ・サバイバーズ</h1>
-      <div class="sub">v3.0 深淵 — 二人の天使 × MONSTER DECK</div>
+      <div class="sub">v3.1 深淵 — 一人で始まり、二人になる × MONSTER DECK</div>
       <p>あなたは<b>夜側の指揮者</b>。デッキから魔物を差し向け、AIで戦う光の少女<b>「ルミナ」</b>を追い詰める。<br>
       彼女に魔物が倒されるほどあなたのエネルギーとエッセンスは増え、彼女もまた強くなる。</p>
       <div style="text-align:center;color:var(--gold);font-size:12px;margin-bottom:8px">${esc(best)} ・ 通算${META.runs}戦 / 捕獲${META.captures}回</div>
@@ -632,10 +632,11 @@ const UI={
     const cap=sum.outcome==='capture';
     const title=cap?'★ 捕獲成功':(sum.outcome==='descend'?'降りられた……(第'+((sum.floorBefore||1)+1)+'層へ)':(sum.outcome==='clear'?'魔核、討たれる——彼女は目的を果たした':(sum.outcome==='survive'?'守りきられた……':'撤退……')));
     const color=cap?'var(--vio)':'var(--gold)';
-    const runHtml=sum.runNote==='reset'?`<div class="newbadge">⟳ 二連敗——深淵の霧が彼女の記憶を奪い、入口へ。次より第${genNum(META.gen.idx)}世代(手記だけが残る)</div>`
+    const joinHtml=sum.join?`<div class="newbadge" style="color:#ff9a7a;border-color:#ff9a7a">✦ ${esc(sum.join)}が翌朝、降りてくる——${sum.joinWhy==='late'?'一人で討たせる数ではない、と':'一人では勝てなくなった、と'}</div>`:'';   // v3.1 参戦の予兆
+    const runHtml=(sum.runNote==='reset'?`<div class="newbadge">⟳ 二連敗——深淵の霧が彼女の記憶を奪い、入口へ。次より第${genNum(META.gen.idx)}世代(手記だけが残る)</div>`
       :(sum.runNote==='retry'?`<div class="note" style="color:#ff86b3;margin:6px 0">彼女は明日も第${(sum.floor||{}).depth||1}層に立つ(連敗 ${sum.fails}/${BAL.RUN_FAILS_RESET}。あと1敗でリセット)</div>`
       :(sum.runNote==='descend'?`<div class="note" style="color:#8fd3ff;margin:6px 0">次の潜行は第${sum.nextFloor}層 ${esc((FLOORS[(sum.nextFloor||1)-1]||{}).name||'')}。深いほど夜側のENは多く、魔物は硬い</div>`
-      :(sum.runNote==='clear'?`<div class="newbadge">✦ 深淵は組み替わる。次より第${genNum(META.gen.idx)}世代——彼女はまた入口に立つ</div>`:'')));
+      :(sum.runNote==='clear'?`<div class="newbadge">✦ 深淵は組み替わる。次より第${genNum(META.gen.idx)}世代——彼女はまた入口に立つ</div>`:''))))+joinHtml;
     const by=cap&&sum.capturedBy&&MONSTERS[sum.capturedBy]?MONSTERS[sum.capturedBy].name:null;
     const causeTxt=cap?({stamina:'スタミナが尽き、組み伏せられた', charm:'魅了に蕩けたまま、力尽きた', hp:'体力が尽きた'}[sum.cause]||'体力が尽きた'):null;
     // v3.0 捕まったヒロインごとの敗北本文(二人なら二本)。ヒロインの声の表(SCENES / SCENES_F)で引く
