@@ -452,7 +452,7 @@ function sayLine(path,prio,cd,fallback){
 const giveUpKey=t=>(t&&typeof t==='object')?(t.ref||t):t;
 function gaveUp(t){ const B=G.B; if(!B||!B.giveUp||!t) return false; const u=B.giveUp.get(giveUpKey(t)); return u!==undefined && B.time<u; }
 function giveUpOn(t){ const B=G.B; if(!B||!B.giveUp||!t) return;
-  if(t.kind==='rescue' || t.kind==='wait' || (t.out && t.captive)) return;   // v3.2 捕まった仲間だけは諦めない(嫌な地形で足がすくんでも、目当てからは外さない)
+  if(t.kind==='rescue' || t.kind==='wait' || t.kind==='cover' || (t.out && t.captive)) return;   // v3.2 捕まった仲間だけは諦めない(嫌な地形で足がすくんでも、目当てからは外さない)。v4.0 カバーも
   B.giveUp.set(giveUpKey(t),B.time+BAL.GIVEUP_CD); }
 /* ================= 学習(世代内の知識) =================
    何かされた回数(met)と敗北(cap)で 未知→認識→理解→熟知。世代リセットで忘れる。
@@ -1435,14 +1435,14 @@ function aiUpdate(dt){
     charmwalk:'ふらふらと、ちかづいていく…', heatwalk:'熱にまけて、よろめき寄る…',
     hypno:'……電波に、あしが……', item:'おちてる品へ!', beg:'……おねだり、なんて……してない……',
     g_event:'光の柱へ!', g_chest:'たからばこへ!', g_boss:'おうさまの箱へ!', g_item:'おちてる品へ!', g_shrine:'祠へ', g_spring:'泉で休みに', g_pool:'清水であらいに',
-    g_stele:'石碑をよみに', g_stairs:'降り口へ', g_seal:'封印石を灯しに', g_core:'魔核へ——', g_lantern:'あかりへ', g_shroom:'光茸をとりに', g_nectar:'蜜の花へ', g_treasure:'沈んだ宝へ', g_explore:'たんさく中', g_gems:'ジェムをあつめる', hesitate:'まよっている……', think:'かんがえ中……', abort:'にげだす!', retreat:'逃げに徹する!', kite2:'引き撃ち', talk:'相談中……', assist:'仲間を助ける!', rescue:'救出する!', g_rescue:'仲間を救いに'};
+    g_stele:'石碑をよみに', g_stairs:'降り口へ', g_seal:'封印石を灯しに', g_core:'魔核へ——', g_lantern:'あかりへ', g_shroom:'光茸をとりに', g_nectar:'蜜の花へ', g_treasure:'沈んだ宝へ', g_explore:'たんさく中', g_gems:'ジェムをあつめる', hesitate:'まよっている……', think:'かんがえ中……', abort:'にげだす!', retreat:'逃げに徹する!', kite2:'引き撃ち', talk:'相談中……', assist:'仲間を助ける!', rescue:'救出する!', g_rescue:'仲間を救いに', g_cover:'仲間をかばう!'};
   const BBL={flee:'にげなきゃ〜!', boss:'おっきいのこわい!!', dodge:'あれは…だめ、よけなきゃ!', gem:'キラキラかいしゅう♪', poi:'あそこまで、いってみる', explore:'こっちは、まだ見てない',
     heart:'ハートみっけ!', prop:'燭台こわして回復しなきゃ', chest:'たからばこだ〜!',
     kite:'このきょりキープ…', wait:'つぎはどこから…?', struggle:'はなれてよ〜っ!',
     charmwalk:'…なんで、あしが…', heatwalk:'…あつくて、なにも…',
     hypno:'……あっち、いかなきゃ……', item:'なにか、おちてる!', beg:'……ちがう……',
     g_event:'あのひかり、いってみる', g_chest:'たからばこだ〜!', g_boss:'おうさまの、たからばこ……!', g_item:'なにか、おちてる!', g_shrine:'ほこら、いこう', g_spring:'ちょっと、やすみたい……',
-    g_pool:'あらいたい……べたべた', g_stele:'なにか、かいてある', g_stairs:'……おりる。つぎへ', g_seal:'あれ、ともさなきゃ', g_core:'……あれが、しんぞう', g_lantern:'あかり、あったかそう……', g_shroom:'あのひかり、とろう', g_nectar:'はな……あまいにおい', g_treasure:'みずのなかに、なにか……', g_explore:'こっちは、まだ見てない', g_gems:'キラキラ、ぜんぶひろう♪', hesitate:'……どうしよ', think:'……うーん', abort:'やっぱ、むり!', retreat:'ぜんぶ、にげるっ!', kite2:'さがりながら、うつ!', talk:'どっち、いく?', assist:'いま、たすける!', rescue:'まって、いくから!', g_rescue:'いま、いく!'};
+    g_pool:'あらいたい……べたべた', g_stele:'なにか、かいてある', g_stairs:'……おりる。つぎへ', g_seal:'あれ、ともさなきゃ', g_core:'……あれが、しんぞう', g_lantern:'あかり、あったかそう……', g_shroom:'あのひかり、とろう', g_nectar:'はな……あまいにおい', g_treasure:'みずのなかに、なにか……', g_explore:'こっちは、まだ見てない', g_gems:'キラキラ、ぜんぶひろう♪', hesitate:'……どうしよ', think:'……うーん', abort:'やっぱ、むり!', retreat:'ぜんぶ、にげるっ!', kite2:'さがりながら、うつ!', talk:'どっち、いく?', assist:'いま、たすける!', rescue:'まって、いくから!', g_rescue:'いま、いく!', g_cover:'そっち、やばそう! いく!'};
   if(p.dodging>0){ p.dodging-=dt; }
   p.aiLabel=LBL[state]||LBL.wait;
   if(state!==p.aiState){
@@ -1581,7 +1581,11 @@ function aiDecide(foc){
     if(want!==p.aiMode){ p.aiMode=want; p.modeUntil=B.time+BAL.MODE_HOLD; p.escape=null; if(want==='flee') sayLine('retreat',1,8,'むり、にげる!'); else if(want==='kite') sayLine('kite',0,12); }
   }
   // v3.0 仲間のカバー: 掴まれている/押し倒されている相手へ寄り、その魔物を優先して撃つ(自分が自由な時)
-  { const o=partnerOf(p); const need=!!(o && (attachCount(o)>0 || o.pinned || o.charmBind) && attachCount(p)===0 && !p.pinned && !p.charmBind); if(need && !p.assist) sayPartyAs(B.ci, o.pinned?'assist.pin':'assist.grab',2,8); p.assist=need?o:null; }
+  { const o=partnerOf(p), cv=coverTarget(p);   // v4.0 拘束だけでなく「調子の悪さ」でも寄る
+    const grabbed=!!(o && (attachCount(o)>0 || o.pinned || o.charmBind));
+    const need=!!cv;
+    if(need && !p.assist) sayPartyAs(B.ci, o&&o.pinned?'assist.pin':(grabbed?'assist.grab':'assist.cover'),2,8);
+    p.assist=need?cv:null; }
   let dx=0, dy=0, state='wait';
   // v2.1 降りる気になったら: 知っている降り口(開いていて、番兵が居ない)へ向かう力が、逃げ・牽制に混ざる。そばまで来たら踏みとどまって降りる
   const exitQ=(B.wantExit&&G.map&&!B.exitLocked)?G.map.pois.find(q=>q.kind==='stairs'&&META.map.known[q.key]):null;
@@ -1655,7 +1659,7 @@ function aiDecide(foc){
       if(p.hp<p.maxHp*0.7){ for(const h2 of B.hearts){ if(G.map && (!passAt(h2.x,h2.y,false) || !reachableAt(h2.x,h2.y,false))) continue; if(gaveUp(h2)) continue; const hx=h2.x-p.x, hy=h2.y-p.y, d=Math.hypot(hx,hy)||1; if(d<260 && (hx*ux+hy*uy)/d>-0.2 && d<pd){ pd=d; pick=h2; pk='heart'; } } }
       if(!pick){ const mag=heroStat(p).magnet; for(const gm of B.gems){ const gx=gm.x-p.x, gy=gm.y-p.y, d=Math.hypot(gx,gy)||1; if(d<mag*0.9 || d>BAL.KITE_GEM_R) continue; if((gx*ux+gy*uy)/d<-0.25) continue; if(G.map && !passAt(gm.x,gm.y,false)) continue; if(d<pd){ pd=d; pick=gm; pk='gem'; } } }
       if(pick){ const sv=steerTo(p,pick.x,pick.y), wgt=pk==='heart'?0.75:0.65; dx=sv.x*wgt+ux*(1-wgt); dy=sv.y*wgt+uy*(1-wgt); if(pk==='heart') state='heart'; } }
-  }else if(p.assist && Math.hypot(p.assist.x-p.x,p.assist.y-p.y)>BAL.ASSIST_R && threat<1.4){
+  }else if(p.assist && Math.hypot(p.assist.x-p.x,p.assist.y-p.y)>BAL.ASSIST_R && threat<1.4+Math.min(1.0,distressOf(p.assist)*0.35)){   // v4.0 相方が悪いほど、多少の脅威でも踏み込む
     const sv=steerTo(p,p.assist.x,p.assist.y); dx=sv.x+ax*0.6; dy=sv.y+ay*0.6; state='assist';   // v3.0 仲間のそばへ
   }else if(threat>0.9){
     const m=Math.hypot(ax,ay)||1;
@@ -1763,7 +1767,7 @@ function aiDecide(foc){
       const key=giveUpKey(target), d0=Math.hypot(target.x-p.x,target.y-p.y);
       // v3.2 「その場に立つ」のが仕事の目当て(救出・封印石・清水・祠・泉・降り口・巣窟の待機)は、着いて立っている間だけ見張りを止める。
       //      それ以外(箱・品・資源・探索)は元どおり見張る——止めてしまうと、届かない物のそばで壁ぞいに回り続けた
-      const standKind=(kind==='g_rescue'||kind==='g_wait'||kind==='g_seal'||kind==='g_pool'||kind==='g_stele'||kind==='g_shrine'||kind==='g_spring'||kind==='g_stairs');
+      const standKind=(kind==='g_rescue'||kind==='g_wait'||kind==='g_cover'||kind==='g_seal'||kind==='g_pool'||kind==='g_stele'||kind==='g_shrine'||kind==='g_spring'||kind==='g_stairs');
       if(p.tgtKey!==key){ p.tgtKey=key; p.tgtBest=d0; p.tgtT=B.time; p.tgtNear=0; }
       else{
         if(d0<90 && !p.tgtNear) p.tgtNear=B.time;
@@ -1911,12 +1915,14 @@ function nearestEnemies(n,maxD){
   const arr=[];
   for(const e of B.enemies){
     const grabber=!!(p.assist && ((e.state==='attached' && e.ti===p.assist.hi) || p.assist.pinBy===e));   // v3.0 仲間を掴んでいる魔物
+    const swarm=!grabber && !!(p.assist && Math.hypot(e.x-p.assist.x,e.y-p.assist.y)<BAL.COVER_ENEMY_R);   // v4.0 相方に群がっている魔物
     if(e.dead||e.dormant||(e.state==='attached'&&!grabber)) continue;
     if(!inSight(e,p)) continue;                       // 見えていない敵は撃てない
     let d=Math.hypot(e.x-p.x,e.y-p.y); if(grabber) d*=0.25;
     // 魅了された相手は狙いが後回し(距離に下駄)。理解した脅威は優先討伐(距離を差し引く)
     let prio=knowLv(e.id)>=2?(SPEC_THREAT[e.id]||0)*90:0;
     if(B.coreWar && e.id==='core') prio+=BAL.CORE_FOCUS_D;   // v4.0 魔核戦: 取り巻きより先に、心臓を削る
+    if(swarm) prio+=BAL.COVER_FOCUS_D;                       // v4.0 カバー: 相方に群がっているものを先に散らす
     arr.push({e, d:d+charmLvFor(p,e)*140-prio});
     if(d>=maxD) arr.pop();
   }
@@ -3235,6 +3241,7 @@ function gateAllowed(){ return true; }   // (v2.0: 門は降り口に置き換�
 function goalValid(p,g){
   const B=G.B, M=META.map; if(!g) return false;
   if(g.kind==='rescue') return !!(g.ref && g.ref.out);   // v3.0 まだ捕まっている間
+  if(g.kind==='cover'){ const o=g.ref; if(!o||o.out) return false; if(distressOf(o)<BAL.COVER_TH*0.7) return false; g.x=o.x; g.y=o.y; return true; }   // v4.0 相方が持ち直すまで
   if(g.kind==='gather'){ const P=B.party; return !!(P && P.gather && B.time<P.gather.until && !partyGathered() && !partyDanger()); }   // v3.1 集合の途中
   if(g.kind==='wait') return !!(B.party && B.party.denRole);   // v3.2 外で待っている間
   if(g.kind==='event') return B.event===g.ref;
@@ -3263,9 +3270,12 @@ function goalPref(p,kind,sub){ const HD=HEROES[p.id]; if(!HD||!HD.pref) return 1
 function goalKindKey(g){ if(!g) return 'explore'; if(g.kind==='poi'||g.kind==='pick') return g.sub; if(g.kind==='chest') return g.sub==='boss'?'boss':'chest'; return g.kind; }
 function pendingLine(hi,path,delay,prio){ const P=G.B&&G.B.party; if(!P) return; P.pending=P.pending||[]; P.pending.push({hi,path,at:G.B.time+(delay||0.9),prio:prio||1}); }
 function partyShare(p,kind,x,y,force){
-  const B=G.B, o=partnerOf(p); if(!o) return false;
+  const B=G.B, P=B.party, o=partnerOf(p); if(!o) return false;
   const far=Math.abs(x-o.x)>W/2 || Math.abs(y-o.y)>H/2;   // 相手の画面外の物だけ伝える(ボスは必ず)
   if(!far && !force) return false;
+  // v4.0 行き先になる物(場所・宝箱・光の柱)を見つけたら「新しい報せ」として覚えておく。
+  //      敵が薄ければ、次の決め直しで互いに歩み寄って相談する引き金になる
+  if(P && kind!=='boss') P.sight={kind, x, y, at:B.time, by:p.hi};
   if(sayPartyAs(p.hi,'share.'+kind,kind==='boss'?2:1,10)){ pendingLine(o.hi,'share.ack',0.9,1); return true; } return false;
 }
 function partyExchange(key,sub){
@@ -3313,7 +3323,10 @@ function updateGoal(p){
   const same=props.every(x=>x.g.kind===g0.kind && x.g.ref===g0.ref && Math.hypot(x.g.x-g0.x,x.g.y-g0.y)<60);
   // v3.1 相談は近寄ってから: 話す価値のある決め直し(探索以外・台詞の間隔が明けている)で、離れていて脅威が薄ければ、まず互いに歩み寄る
   const talkable=B.time-P.decidedT>BAL.PARTY_TALK_CD && props.some(x=>x.g.kind!=='explore');
-  if(talkable && !P.gatherDone && B.time-(P.gatherT||-99)>BAL.GATHER_CD && !partyGathered() && !partyDanger()){
+  // v4.0 見えた物を伝えた直後は、いつもの間隔を待たずに「近くで相談」を呼ぶ(敵が薄い時だけ)
+  const news=!!(P.sight && B.time-P.sight.at<BAL.SHARE_T && B.time-(P.sightT||-99)>BAL.SHARE_CD);
+  if((talkable||news) && !P.gatherDone && (news || B.time-(P.gatherT||-99)>BAL.GATHER_CD) && !partyGathered() && !partyDanger()){
+    if(news){ P.sightT=B.time; P.sightUse=P.sight; P.sight=null; B.nNewsGather=(B.nNewsGather||0)+1; }
     const c=partyCenter(); P.gather={until:B.time+BAL.GATHER_T, x:c.x, y:c.y}; P.gatherT=B.time;
     const gg={kind:'gather', sub:'gather', x:c.x, y:c.y, ref:null, key:'gather', d:0, worth:1.3, score:1.3};
     P.goal=gg; P.owner=active[0]; P.until=P.gather.until;
@@ -3322,6 +3335,13 @@ function updateGoal(p){
     if(sayPartyAs(caller.hi,'gather.call',1,0)){ P.gatherCaller=caller.hi; } else P.gatherCaller=-1;
     B.nGather=(B.nGather||0)+1;
     return p.goal;
+  }
+  // v4.0 集まって相談: 報せた物が候補にあるなら、それを推す(伝えた甲斐がある)
+  if(P.sightUse && gathered){
+    const sg=P.sightUse; let pick=null, pd=1e9;
+    for(const x of props){ const d=Math.hypot(x.g.x-sg.x,x.g.y-sg.y); if(d<200 && d<pd){ pd=d; pick=x; } }
+    if(pick){ for(const x of props) if(x!==pick) x.g.score*=0.55; }
+    P.sightUse=null;
   }
   let win=props[0];
   if(!same){
@@ -3366,6 +3386,7 @@ function updateGoalSolo(p){
     add('event',ev.kind,ex,ey,w*(leaving?0.5:1),ev,ev.key); }
   for(const it of B.items){ if(it.known) add('item',it.kind,it.x,it.y,3.0,it); }
   for(const c of B.heroes){ if(c.out && c.captive && c!==p) add('rescue','rescue',c.x,c.y,BAL.RESCUE_WORTH,c,'rescue'+c.hi); }   // v3.0 捕まった仲間の救出は最優先の目当て(v3.2 価値を上げ、他を割り引く)
+  { const cv=coverTarget(p); if(cv) add('cover','cover',cv.x,cv.y,BAL.COVER_WORTH,cv,'cover'+cv.hi); }   // v4.0 調子の悪い相方のそばへ(探索に流れない)
   for(const c of B.chests){ if(c.known && !c.taken) add('chest',c.bossChest?'boss':'chest',c.x,c.y,(c.bossChest?3.0:2.6)*(leaving?0.3:1),c); }   // v2.1 降りると決めたら箱は後回し
   for(const q of G.map.pois){
     if(!M.known[q.key]) continue; let w=0;
@@ -4562,6 +4583,38 @@ function corelingTick(e,dt,d,dx,dy){
     if(attachMonster(e,'cling',{r:0,needMul:0.75})){ codexMet('coreling'); }
   }
 }
+/* ================= v4.0 カバーAI =================
+   「発情しきって囲まれている相方を無視して探索する」をやめさせる。
+   相方の調子の悪さ(拘束・押し倒し・絶頂・催眠・発情・敏感・遅さ・体力・囲まれ)を一つの数にして、
+   自分よりはっきり悪ければ、寄って、群がっている魔物を先に撃つ */
+function distressOf(h){
+  if(!h||h.out) return 0;
+  const B=G.B; let v=0;
+  v+=attachCount(h)*0.55;
+  if(h.pinned) v+=1.7;
+  if(h.charmBind) v+=1.0;
+  if(h.climaxT>0) v+=1.2;
+  v+=(h.hypnoLv||0)*0.35;
+  v+=(h.heatLv||0)*0.30;
+  v+=Math.max(0,(h.aphro||0)-55)/45*0.7;
+  v+=Math.max(0,(h.sensit||0)-60)/40*0.4;
+  if(h.slow>0) v+=0.3;
+  if(h.exhausted) v+=0.35;
+  v+=Math.max(0,(1-h.hp/h.maxHp)-0.45)/0.55*0.9;
+  v+=Math.min(1,nearEnemyCount(h.x,h.y,BAL.COVER_ENEMY_R,false)/BAL.COVER_ENEMY_N)*0.8;
+  return v;
+}
+/* いま相方をカバーすべきか(入ったら COVER_HOLD 秒は続ける) */
+function coverTarget(p){
+  const B=G.B, o=partnerOf(p);
+  if(!o||o.out) return null;
+  if(o.captive) return null;                                   // 捕まっているなら救出(rescue)の担当
+  if(attachCount(p)>0||p.pinned||p.charmBind||p.climaxT>0) return null;   // 自分が動けないなら無理
+  const th=distressOf(o), my=distressOf(p);
+  if(p.coverUntil>B.time && th>=BAL.COVER_TH*0.7) return o;    // ちらつかせない
+  if(th>=BAL.COVER_TH && th>my+BAL.COVER_MARGIN){ p.coverUntil=B.time+BAL.COVER_HOLD; return o; }
+  return null;
+}
 /* ================= v4.0 魔核戦の専念 =================
    魔核の間に踏み込んだら、彼女はもう魔核から離れない。離れてよいのは、
    体力とスタミナを取り戻す用(ハート・燭台・泉・清水・蜜の花)と、仲間の救出だけ。
@@ -4585,7 +4638,7 @@ function coreWarTick(dt){
 /* 魔核戦の間、その位置まで足を伸ばしてよいか(回復の用と救出は例外) */
 function coreLeashOk(kind,sub,x,y){
   const B=G.B; if(!B.coreWar||!B.core) return true;
-  if(kind==='rescue'||kind==='wait'||kind==='gather') return true;
+  if(kind==='rescue'||kind==='wait'||kind==='gather'||kind==='cover') return true;
   if(kind==='poi'&&(sub==='core'||sub==='spring'||sub==='pool')) return true;
   if(kind==='pick'&&sub==='nectar') return true;
   if(kind==='event'&&sub==='pool') return true;

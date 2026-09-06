@@ -315,6 +315,16 @@ idは汎用カタログ準拠。効果はすべて数値・挙動レベルで表
   `storyTick`: 落ち着いている時(拘束・発情・魔物30体超でない)に 38〜58 秒ごと、その階層の独り言を吹き出しで。降り口で `descend`、魔核の間を見つけた時に `finalEncounter`(1戦1度)。結果画面: clear=`ending`、reset=`reset`。
 - 表示: `#storybox`(盤面の上、タップか時間で閉じる)。ホームの「物語」画面は序章と到達済みの階層の導入、魔核討伐後は結末を載せる。
 
+### 3-31. v4.0 (D) カバーAIと共有→相談
+
+- **調子の悪さ** (`distressOf(h)`): 拘束数×0.55 / 押し倒し 1.7 / 魅了拘束 1.0 / 絶頂 1.2 / `hypnoLv`×0.35 / `heatLv`×0.30 / `aphro` 55超を 45で正規化×0.7 / `sensit` 60超を 40で×0.4 / 鈍足 0.3 / スタミナ切れ 0.35 / 体力 55%未満を×0.9 / `nearEnemyCount(170)` を `COVER_ENEMY_N`(5)で正規化×0.8。
+- **カバーの判定** (`coverTarget(p)`): 相方が離脱中(救出は別担当)でなく、自分が拘束・押し倒し・絶頂でないこと。`distressOf(o) >= COVER_TH(1.15)` かつ `> distressOf(p) + COVER_MARGIN(0.45)` で成立し、`p.coverUntil = time + COVER_HOLD(2.5)` を立てる。保持中は閾値の 0.7 倍まで緩めるのでちらつかない。
+- **目当てとして**: `add('cover','cover',o.x,o.y,COVER_WORTH(5.2),o,...)`。救出(6.5)の一段下、宝箱(2.6)より上。`goalValid` は相方の distress が閾値の 0.7 倍を割ったら解く(位置は毎回追従)。`giveUpOn` の対象外、諦めの見張りの `standKind` に含む、魔核戦の鎖も例外。
+- **撃ち方**: `aiDecide` の assist 判定を `coverTarget` に置き換え(拘束されている時だけでなく調子が悪い時も)。`nearestEnemies` で「相方から `COVER_ENEMY_R` 以内の魔物」に `COVER_FOCUS_D`(420)の優先度。寄る判定の脅威上限は `1.4 + min(1.0, distress*0.35)` に広げた。台詞は `assist.cover`。
+- **見えた物の共有** (`partyShare`): これまでの声掛けに加え、ボス以外は `P.sight={kind,x,y,at,by}` を記録。
+- **報せで集合** (`updateGoal`): `P.sight` が `SHARE_T`(14秒)以内で、前回の報せ集合から `SHARE_CD`(24秒)明けていれば、いつもの `PARTY_TALK_CD`/`GATHER_CD` を待たずに集合を呼ぶ(`partyDanger()` が偽 = 誰も拘束されておらず、体力も脅威も問題ない時だけ)。呼んだ時点で `P.sightUse` に移し、`P.sight` は消す。
+- **報せた物を推す**: 集合が成立した回の決め直しで、`P.sightUse` の位置から 200px 以内の案が出ていれば、他の案の score を 0.55 倍する。伝えた甲斐がある。
+
 ### 3-30. v4.0 (C) 強化魔核
 
 - **素の体力**: `CORE_HP` 28000 → 22400。世代の倍率(`CORE_ERA_HP0 + CORE_ERA_HP_K*era`)と Lv 補正はそのまま。

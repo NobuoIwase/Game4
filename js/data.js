@@ -75,6 +75,16 @@ const BAL={
   CORE_RAGE_PH:0.5, CORE_RAGE_GAS_CD:8, CORE_RAGE_GAS_R:300, CORE_RAGE_GAS_LIFE:9,   // 発狂: 広範囲媚薬ガス
   CORE_RAGE_SLAM_CD:6, CORE_RAGE_SLAM_R:300, CORE_RAGE_SLAM_DMG:1.5,                 // 発狂: 広範囲の薙ぎ
   CORE_RAGE_CD:0.72,                        // 発狂中は他の技の間隔もこの倍に
+  /* --- v4.0 カバーAI: 相方の「調子の悪さ」を測って助けに行く --- */
+  COVER_TH:1.15,           // この値を超えたら「まずい」。放って探索を続けない
+  COVER_MARGIN:0.45,       // 自分より相手がこれだけ悪い時だけ動く(共倒れを避ける)
+  COVER_WORTH:5.2,         // カバーの目当ての価値(救出 6.5 の一段下、宝箱 2.6 より上)
+  COVER_R:96,              // ここまで寄れば「そばに居る」
+  COVER_ENEMY_R:170, COVER_ENEMY_N:5,   // 相方の周りの魔物: この半径にこの数で満点
+  COVER_HOLD:2.5,          // 一度カバーに入ったら、少なくともこの秒数は続ける(ちらつき防止)
+  COVER_FOCUS_D:420,       // 相方に群がっている魔物を先に撃つ(距離から差し引く)
+  /* --- v4.0 見えた物を伝えて、近寄って相談 --- */
+  SHARE_T:14, SHARE_CD:24,   // 伝えた物が「新しい報せ」でいられる秒数 / 続けて集合を呼ばない間隔
 
   /* --- v3.2 甘い褥の巣窟(えちえちエリア) --- */
   DEN_ENTER_HEAT:22, DEN_ENTER_SENS:14,       // 敷居をまたいだ瞬間、匂いに殴られる

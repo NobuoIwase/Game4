@@ -398,6 +398,7 @@ function goalName(gl){
   if(gl.kind==='gather') return '集まって相談';   // v3.1
   if(gl.kind==='wait') return '入口で待つ';       // v3.2
   if(gl.kind==='rescue') return '救出';
+  if(gl.kind==='cover') return '仲間をかばう';   // v4.0
   return '探索';
 }
 function dirName(dx,dy){ const a=Math.atan2(dy,dx); const i=Math.round((a+Math.PI)/(Math.PI/4))%8; return ['西','北西','北','北東','東','南東','南','南西'][i]; }
