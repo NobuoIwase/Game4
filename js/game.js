@@ -1368,8 +1368,41 @@ function aiUpdate(dt){
   // 詰まり検知: 進みたいのに進めていない(壁の角など)→ 探索点へ経路で抜ける
   { const want=Math.hypot(p.steerX||0,p.steerY||0), moved=Math.hypot(p.x-p.prevX,p.y-p.prevY);
     if(want>0.3 && moved<st.speed*dt*0.25 && attachCount(p)===0 && !p.pinned && !p.charmBind) p.stuckT=(p.stuckT||0)+dt; else p.stuckT=Math.max(0,(p.stuckT||0)-dt*2);
-    if(p.stuckT>1.2){ p.stuckT=0; p.unstickT=2.5; B.nUnstick=(B.nUnstick||0)+1; p.explore=null; p.exploreUntil=0; p.dest=null; p.destUntil=0; p.path=null; }
-    if(p.unstickT>0) p.unstickT-=dt; }
+    if(p.stuckT>1.2){ p.stuckT=0; p.unstickT=2.5; B.nUnstick=(B.nUnstick||0)+1; p.explore=null; p.exploreUntil=0; p.dest=null; p.destUntil=0; p.path=null;
+      // v3.2 同じ目当てで二度つっかえたら、その目当ては諦める。通れない隙間の前でいつまでも回らないように
+      //      (救出と巣窟の待機だけは諦めない——そこに立つのが仕事なので)
+      const gk=p.goal?goalKindKey(p.goal):'', keep=(gk==='rescue'||gk==='wait'||(p.goal&&(p.goal.kind==='rescue'||p.goal.kind==='wait')));
+      const k=p.tgtKey||(p.goal&&giveUpKey(p.goal))||null;
+      if(k && p.unstickKey===k && B.time-(p.unstickT0||-99)<14) p.unstickN=(p.unstickN||0)+1;
+      else { p.unstickKey=k; p.unstickN=1; p.unstickT0=B.time; }
+      if(k && !keep && p.unstickN>=2){
+        if(p.goal) giveUpOn(p.goal);
+        if(B.giveUp && typeof k==='object') B.giveUp.set(k,B.time+BAL.GIVEUP_CD);
+        p.goal=null; p.goalT=0; p.tgtKey=null; p.tgtNear=0; p.unstickN=0;
+        B.nStuckDrop=(B.nStuckDrop||0)+1; sayLine('giveUp',0,20,'……とおれない。べつのとこ、いこ');
+      } }
+    if(p.unstickT>0) p.unstickT-=dt;
+    // v3.2 堂々巡りの脱出: つっかえ判定(ほぼ静止)では捕まえられない「歩いてはいるのに同じ所を回っている」を、位置の履歴で見る。
+    //      通れない隙間の前や、届かない物の周りで延々と回るのを止める(拘束・押し倒し・相談・待機・救出の最中は数えない)
+    { const busy=attachCount(p)>0||p.pinned||p.charmBind||p.climaxT>0||p.freezeT>0||p.out;
+      const intent=p.aiState==='talk'||p.aiState==='g_wait'||p.aiState==='g_rescue'||p.aiState==='hesitate'||p.aiState==='think';
+      const gk=p.goal?goalKindKey(p.goal):'';
+      if(busy||intent||gk==='rescue'||gk==='wait'||B.time<(p.orbitCd||0)){ p.orbit=null; }
+      else{
+        if(!p.orbit) p.orbit={t:B.time, sx:p.x, sy:p.y, r:0, s:0};
+        const o=p.orbit; o.s-=dt;
+        if(o.s<=0){ o.s=0.25; o.r=Math.max(o.r, Math.hypot(p.x-o.sx,p.y-o.sy)); }
+        if(B.time-o.t>BAL.ORBIT_T){
+          if(o.r<BAL.ORBIT_R){
+            if(p.goal) giveUpOn(p.goal);
+            if(p.tgtKey && B.giveUp && typeof p.tgtKey==='object') B.giveUp.set(p.tgtKey,B.time+BAL.GIVEUP_CD);
+            p.goal=null; p.goalT=0; p.tgtKey=null; p.tgtNear=0; p.path=null; p.explore=null; p.exploreUntil=0; p.dest=null; p.destUntil=0;
+            p.orbitCd=B.time+BAL.ORBIT_CD; B.nOrbit=(B.nOrbit||0)+1;
+            sayLine('giveUp',0,20,'……ここ、とおれない。べつのとこ いこ');
+          }
+          p.orbit=null;
+        }
+      } } }
   // v1.8 ジェム畑に留まった時間(目当てがあるのに拾い続けている)→ FARM_T を超えたら FARM_BREAK 秒は歩く
   // (v1.8 の FARM_T/FARM_BREAK による「拾う/歩く」の交代は v2.1 の道すがら回収と群れの時間割で置き換えた)
 
@@ -1722,18 +1755,21 @@ function aiDecide(foc){
     // v2.1 諦めの見張り: 同じ目標へ向かって GIVEUP_T 秒近づけなければ(壁の向こう・入口で弾かれる・押し合い)、その目標を外して他へ。燭台(撃つ間は止まる)と降り口の上は除く
     if(target && kind!=='prop' && !(kind==='g_stairs' && exitGuard)){
       const key=giveUpKey(target), d0=Math.hypot(target.x-p.x,target.y-p.y);
-      // v3.2 着いてしまえば見張らない: 救出・封印石・清水・祠・降り口のように「その場に立つ」のが仕事の目当ては、
-      //      近づかない時間が続いても諦めではない(以前は仲間を救っている3秒の間に、その仲間を目当てから外していた)
-      if(d0<90){ p.tgtKey=key; p.tgtBest=d0; p.tgtT=B.time; }
-      else if(p.tgtKey===key){
-        if(d0<p.tgtBest-14){ p.tgtBest=d0; p.tgtT=B.time; }
+      // v3.2 「その場に立つ」のが仕事の目当て(救出・封印石・清水・祠・泉・降り口・巣窟の待機)は、着いて立っている間だけ見張りを止める。
+      //      それ以外(箱・品・資源・探索)は元どおり見張る——止めてしまうと、届かない物のそばで壁ぞいに回り続けた
+      const standKind=(kind==='g_rescue'||kind==='g_wait'||kind==='g_seal'||kind==='g_pool'||kind==='g_stele'||kind==='g_shrine'||kind==='g_spring'||kind==='g_stairs');
+      if(p.tgtKey!==key){ p.tgtKey=key; p.tgtBest=d0; p.tgtT=B.time; p.tgtNear=0; }
+      else{
+        if(d0<90 && !p.tgtNear) p.tgtNear=B.time;
+        const standing=standKind && d0<90 && (kind==='g_wait' || B.time-(p.tgtNear||B.time)<BAL.GIVEUP_NEAR_T);
+        if(standing || d0<p.tgtBest-14){ p.tgtBest=Math.min(p.tgtBest,d0); p.tgtT=B.time; }
         else if(B.time-p.tgtT>BAL.GIVEUP_T){
           giveUpOn(target); B.nGiveUp=(B.nGiveUp||0)+1;
           if(p.goal && (giveUpKey(p.goal)===key || p.goal===target)){ if(p.goal.kind==='explore'){ p.explore=null; p.exploreUntil=0; } p.goal=null; p.goalT=0; }
-          p.path=null; p.tgtKey=null; target=null; kind='';
+          p.path=null; p.tgtKey=null; p.tgtNear=0; target=null; kind='';
           sayLine('giveUp',0,20,'……とれない。あとで!');
         }
-      } else { p.tgtKey=key; p.tgtBest=d0; p.tgtT=B.time; }
+      }
     } else p.tgtKey=null;
     if(target){
       const d=Math.hypot(target.x-p.x,target.y-p.y)||1;

@@ -56,6 +56,8 @@ const BAL={
   DEN_FLOWER_CD:6.5, DEN_FLOWER_R:80, DEN_FLOWER_LIFE:7, DEN_FLOWER_RATE:0.9,   // 媚薬の花
   DEN_BEAM_CD:9, DEN_BEAM_LEN:560, DEN_BEAM_AIM:1.0, DEN_BEAM_FIRE:0.35, DEN_BEAM_W:26,   // 壁の光線
   DEN_GUARD_HP:2.4, DEN_GUARD_MIN:320, DEN_GUARD_DMG:1.3,   // 番人
+  ORBIT_T:11, ORBIT_R:105, ORBIT_CD:16,   // v3.2 堂々巡りの脱出: ORBIT_T 秒のあいだ ORBIT_R の枠から出られていなければ(歩いてはいるのに進んでいない)、その目当てを捨てて別を選ぶ
+  GIVEUP_NEAR_T:18,        // v3.2 「その場に立つ」目当ての上限: 着いて立っているだけの時間がこれを超えたら、やはり諦める(待機だけは相方が中に居る限り待つ)
   RESCUE_WORTH:6.5,        // v3.2 捕まった仲間の救出の価値(仲間が捕まっている間は他の目当てを割り引くので、拾い食いに負けない)
   RESCUE_FOCUS:0.45,       // v3.2 仲間が捕まっている間、救出以外の目当ての価値に掛かる係数
 
@@ -196,7 +198,7 @@ const BAL={
   PARTY_LEASH:380, PARTY_MAXDX:740, PARTY_MAXDY:360, PARTY_SEP:34, RESCUE_R:60, RESCUE_T:3.0, TALK_T:1.3, ASSIST_R:120, HEART_YIELD:0.15, PARTY_HOLD:7, PARTY_TALK_CD:10,
   /* v3.1 相談は近寄ってから: 決め直しの時、皆が重心から GATHER_R 以内に居なければ、脅威が薄い限り GATHER_T 秒を上限に歩み寄ってから話す。GATHER_DANGER_R 内に魔物が居れば集合は飛ばして即決。集合の間隔 GATHER_CD */
   GATHER_R:48, GATHER_T:3.2, GATHER_DANGER_R:150, GATHER_DANGER_THREAT:0.5, GATHER_CD:8, GATHER_TALK_T:2.6,
-  ERA_FLOORS0:2, ERA_DEPTH_K0:0.10, ERA_DEPTH_K:0.10, CORE_ERA_HP0:0.30, CORE_ERA_HP_K:0.28, CORE_ERA_DEF0:0.75, CORE_ERA_DEF_K:0.05, CORE_ERA0_LV_K:0.5, CORE_ERA0_LV_CAP:0.5, SENT_ERA:[2,3,3,4,4,5,6],   // v3.1 世代0の魔核はさらに薄く(HP×0.30・被ダメ0.75・Lv補正は半分で上限+50%): 一人のルミナが討てる。魔物の深さ倍率は毎世代+10%(討たれるごとに魔物も強く)
+  ERA_FLOORS0:2, ERA_DEPTH_K0:0.075, ERA_DEPTH_K:0.10, CORE_ERA_HP0:0.30, CORE_ERA_HP_K:0.28, CORE_ERA_DEF0:0.75, CORE_ERA_DEF_K:0.05, CORE_ERA0_LV_K:0.5, CORE_ERA0_LV_CAP:0.5, SENT_ERA:[2,3,3,4,4,5,6],   // v3.1 世代0の魔核はさらに薄く(HP×0.30・被ダメ0.75・Lv補正は半分で上限+50%): 一人のルミナが討てる。魔物の深さ倍率は毎世代+10%(討たれるごとに魔物も強く)
   /* v2.4 視界の記憶: SEEN_T 秒ごとに半径 SEEN_R×SEEN_RY の楕円を「見た」にする。探索点は未探索率×EXPLORE_UNSEEN_W − 距離×EXPLORE_DIST_W で選ぶ(SEEN_EXPLORE=0 で旧挙動)。BOSS_PICK=1 でボスを想定した武器選び */
   SEEN_T:0.25, SEEN_R:560, SEEN_RY:400, SEEN_EXPLORE:1, EXPLORE_UNSEEN_W:2.5, EXPLORE_DIST_W:0.4, EXPLORE_DONE:0.96, BOSS_PICK:1, BOSS_MEMORY_T:60,
   /* v2.4 ボス級(カードのボス)は彼女の Lv で厚くなり(+5%/Lv、上限 +250%)、光が通りにくい(被ダメ 80%)。魔核・番兵は各自の値 */
@@ -658,7 +660,7 @@ const SKILLS={
 /* v3.0 ヒロイン定義。パーティは HEROES の並びで最大4人まで(現在は2人)。武器はヒロインごと、パッシブは共通、Lv・経験値はパーティ共通 */
 const HEROES={
   lumina:{ name:'ルミナ',   col:'#8fd3ff', hair:'#f2e8d8', sprite:'lumina', wps:['bolt','orb','nova','whip','rain','cross','sanct','blade','thunder','holy','chain','spirit','shield'],
-           start:{bolt:2,orb:1}, grow:['bolt','orb','nova'], hpMul:0.92, spdMul:1.0, armor:-1, dmgMul:0.94, regenMul:0.9, fearMul:1.0, braveAdd:0, kiteMul:1.0,   // v3.1 程々に負けるように少し弱く(HP-8%・護り-1・火力-6%・回復-10%)
+           start:{bolt:2,orb:1}, grow:['bolt','orb','nova'], hpMul:1.12, spdMul:1.0, armor:1, dmgMul:1.10, regenMul:1.10, fearMul:1.0, braveAdd:0, kiteMul:1.0,   // v3.2 一人で第5層まで潜れるように(HP+12%・護り+1・火力+10%・回復+10%)。v3.1 の弱体化は取り消し
            skills:{ blink:{ name:'光の跳躍', icon:'✦', lv:22, cd:20, desc:'囲まれた時、光になって最も空いている方へ180px跳ぶ。0.6秒無敵' },
                     purge:{ name:'浄化の脈', icon:'❂', lv:38, cd:35, desc:'二肢以上を掴まれるか押し倒された時、光を破裂させて全ての拘束を千切り、半径120の魔物を弾いて止める' },
                     bulwark:{ name:'聖光の壁', icon:'◈', lv:52, cd:45, desc:'HPが35%を切った時、4秒間 被ダメ-70%・自然回復×4' } },
@@ -677,7 +679,7 @@ const PARTY_MAX=4;                        // v3.1 パーティの上限(作り�
 function partyIds(){ const r=(typeof META!=='undefined'&&META&&META.party&&Array.isArray(META.party.roster))?META.party.roster:['lumina']; const out=[]; for(const id of r){ if(HEROES[id]&&!out.includes(id)) out.push(id); if(out.length>=PARTY_MAX) break; } return out.length?out:['lumina']; }
 /* v3.1 参戦の規則(合流の順に並ぶ)。minEra: 深淵が組み替わった後(世代≥minEra)に二連敗で入口へ戻された朝に来る。
    resets: 保険——前の合流からのリセット回数がこれに達したら世代を問わず来る。lateEra: 保険——一人(いまの人数)で世代がここまで進んだら、その組み替わりの朝に来る */
-const PARTY_JOIN=[ { id:'freila', minEra:1, resets:3, lateEra:4 } ];   // lateEra は「一人で第6層(骸の回廊)に降りさせない」で決まる: 開放階層=2+世代 なので、世代4の朝までに必ず合流する(第6〜8層の物語は二人のもの)。joinLate の文の線の数もこれに合わせてある
+const PARTY_JOIN=[ { id:'freila', minEra:3, resets:5, lateEra:4 } ];   // lateEra は「一人で第6層(骸の回廊)に降りさせない」で決まる: 開放階層=2+世代 なので、世代4の朝までに必ず合流する(第6〜8層の物語は二人のもの)。joinLate の文の線の数もこれに合わせてある
 const luminaUpCost=(id,rank)=>Math.round(LUMINA_UPG[id].base*Math.pow(1.5,rank));
 const luminaRank=id=>((META.lumina&&META.lumina.upg)||{})[id]||0;
 const shaveCost=rank=>Math.round(6+3*rank);   // 自己強化を1段削ぐオーブ費用
