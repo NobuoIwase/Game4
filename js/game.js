@@ -236,7 +236,7 @@ function startBattle(){
     seenT:0, bossSeen:!!(META.run&&META.run.bossSeen), exploreSaid:false,                          // v2.4 視界の記憶 / この run でボスを見た(武器選びに使う)
     lights:[], lanterns:[], floorLight:0,                                                          // v4.0 暗闇: 残る灯り / 催淫灯篭 / その階で得た灯り
     coreWar:false, core:null,                                                                      // v4.0 魔核戦に入ったか / その個体
-    dry:[], evapT:-99,                                                                             // v4.0 フレイラが焼いた床(日を跨いで残る) / 媚薬が蒸発した時刻
+    dry:[], evapT:-99, coreRoots:null,                                                             // v4.0 フレイラが焼いた床(日を跨いで残る) / 媚薬が蒸発した時刻 / 魔核の跡(根→渦)
   };
   genMap();               // 地形(世代×階層で変わる)
   G.B.lanterns=G.map.pois.filter(q=>q.kind==='lantern').map(q=>({x:q.x,y:q.y,key:q.key,said:false}));   // v4.0 催淫灯篭(光源であり罠でもある)
@@ -361,6 +361,7 @@ function endBattle(outcome){
     floor:B.floor, floorBefore, runNote, fails:META.run.fails, nextFloor:META.run.floor, seals:Object.keys(B.seals).length,
     storyLines: outcome==='clear'?storyClearLines(twoP)
       :(runNote==='reset'?(((twoP&&V30E.reset)?V30E.reset:STORY.reset).concat((joinId&&V30E.party&&V30E.party.joinHint&&V30E.party.joinHint.length)?[''].concat(V30E.party.joinHint):[])):(outcome==='capture'&&B.captures&&B.captures.length>1&&typeof STORY_V30!=='undefined'&&STORY_V30.party&&STORY_V30.party.bothCaptured?STORY_V30.party.bothCaptured:(outcome==='descend'&&B.heroes.some(h=>h.out)&&typeof STORY_V30!=='undefined'&&STORY_V30.party&&STORY_V30.party.leftBehind?STORY_V30.party.leftBehind:null))), newCurse:newCurse?BOSS_CURSES[newCurse.id]:null,   // v3.1 一人版の結末 / 合流の予兆
+    loopFx: outcome==='clear'?'vortex':(runNote==='reset'?'miracle':null),   // v4.0 結末の文の後に流す演出(赤黒い渦 / 白い奇跡の光)
     join:joinId?HEROES[joinId].name:null, joinWhy:META.run.joinWhy||'',
     captures:B.captures, leftBehind:B.heroes.filter(h=>h.out).map(h=>h.name),
     carryLv:(META.run.hero&&META.run.hero.level)||0,
@@ -2525,7 +2526,8 @@ function killEnemy(e){
     setBanner('魔核、討たれる','深淵の心臓が止まった——彼女は目的を果たした','#ffd76a');
     heroBubble(h,'……おわった。おわった、よ',true,3);
     META.life.herBoss++;
-    G.mode='survived'; B.winT=3.2; G.shake=Math.min(14,G.shake+10); S.boss();
+    B.coreRoots={x:e.x, y:e.y, r:e.r, t:0, era:e.era||0};   // v4.0 本体は消え、根だけが残る → 巻き上がって赤黒い渦へ
+    G.mode='survived'; B.winT=BAL.LOOP_WIN_T; G.shake=Math.min(14,G.shake+10); S.boss();
     return;
   }
   if(e.boss){
@@ -4791,7 +4793,15 @@ function spawnDen(){
   const F=B.floor, at=(x,y,m)=>snapFloor(x,y,false,m||3)||{x,y};
   const deep=at(L.deep.x,L.deep.y,4);
   { B.chests.push({x:deep.x,y:deep.y,t:0,taken:false,bossChest:true,known:false,lewd:true}); }                        // 王の宝箱は最奥
-  { const q=at(L.x+(L.deep.x-L.x)*0.35, L.y+L.ry*0.45); B.chests.push({x:q.x,y:q.y,t:0,taken:false,known:false,lewd:true}); }   // 宝箱は沼のあたり
+  // v4.0 常設の宝箱を3つに: 沼のあたり・喉道寄り・奥の脇。高リスクだがハイリターン
+  { const spots=[[0.35,0.45],[-0.10,-0.42],[0.62,-0.30]];
+    for(let k=0;k<Math.min(BAL.DEN_CHESTS,spots.length);k++){ const q=at(L.x+(L.deep.x-L.x)*spots[k][0], L.y+L.ry*spots[k][1]); B.chests.push({x:q.x,y:q.y,t:0,taken:false,known:false,lewd:true}); } }
+  // v4.0 赤ジェム: 黄より強い。奥ほど濃くまばらに散らす
+  for(let k=0;k<BAL.DEN_REDGEM;k++){
+    const u=(k+0.5)/BAL.DEN_REDGEM, a=u*TAU*1.6+0.7, rr=0.30+0.60*u;
+    const q=at(L.x+(L.deep.x-L.x)*rr+Math.cos(a)*L.rx*0.22, L.y+Math.sin(a)*L.ry*0.55, 3);
+    dropGem(q.x,q.y,BAL.DEN_REDGEM_V);
+  }
   { const q=at(L.x-(L.deep.x-L.x)*0.2, L.y-L.ry*0.5); spawnPick('treasure',q.x,q.y,false); }
   { const q=at(L.x+L.rx*0.1, L.y+L.ry*0.72); spawnPick('nectar',q.x,q.y,false); const q2=at(L.x-L.rx*0.15,L.y-L.ry*0.75); spawnPick('nectar',q2.x,q2.y,false); }
   const beamKind=(F.lewd&&F.lewd.beam)||'hypno', other=beamKind==='hypno'?'climax':'hypno';
@@ -5761,6 +5771,28 @@ function survivedTick(dt){
   B.winT-=dt;
   p.anim+=dt; p.orbAng+=2.5*dt;
   if(Math.random()<dt*14) parts(p.x+rand(-160,160),p.y-rand(-20,160),1,['#fff','#ffd76a','#8fd3ff','#ff86b3'],26,1.3);
+  // v4.0 魔核の跡: 根だけになり、巻き上がって赤黒い渦へ(時間が巻き戻る合図)
+  const cr=B.coreRoots;
+  if(cr){
+    cr.t+=dt;
+    const T1=BAL.LOOP_ROOT_T, T2=BAL.LOOP_WIND_T;
+    if(cr.t<T1){ if(Math.random()<dt*10) parts(cr.x+rand(-cr.r*1.8,cr.r*1.8), cr.y+rand(-cr.r*0.9,cr.r*0.9), 1, ['#7a1f44','#3a0b20','#c2456f'], 60, 1.0); }
+    else if(cr.t<T1+T2){
+      const k=(cr.t-T1)/T2;
+      if(Math.random()<dt*(18+40*k)){ const a=rand(TAU), rr=cr.r*(2.6-1.9*k)*rand(0.5,1.2);
+        parts(cr.x+Math.cos(a)*rr, cr.y+Math.sin(a)*rr*0.7, 1, ['#c2456f','#3a0b20','#ff5d9a'], 40+60*k, 0.7); }
+      if(!cr.windSaid && k>0.25){ cr.windSaid=true; setBanner('根が巻き上がる','千切れた根が渦を描きはじめる','#c2456f'); G.shake=Math.min(10,G.shake+5); sfx(140,60,0.8,'sawtooth',0.06); }
+      G.shake=Math.max(G.shake, 1.5*k);
+    }
+    else if(!cr.vortex){
+      cr.vortex=true;
+      setBanner('赤黒い渦','深淵が、時ごと巻き戻ろうとしている','#8a1030');
+      G.shake=Math.min(16,G.shake+9); sfx(90,30,1.4,'sine',0.11);
+      for(const q of B.heroes){ if(!q.out) sayPartyOrLine(q,'feat.vortex','うずが……! ぜんぶ、まきこまれてく……!'); }
+    }
+    if(cr.vortex && Math.random()<dt*26){ const a=rand(TAU), rr=rand(cr.r*1.2, cr.r*7);
+      parts(cr.x+Math.cos(a)*rr, cr.y+Math.sin(a)*rr*0.7, 1, ['#8a1030','#3a0b20','#ff2e6a','#000'], 200, 0.9); }
+  }
   if(B.winT<=0) endBattle(B.descending?'descend':(B.cleared?'clear':'survive'));
 }
 

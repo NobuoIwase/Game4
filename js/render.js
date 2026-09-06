@@ -43,8 +43,9 @@ function drawGem(g,gem){
     g.restore();
     return;
   }
-  const s=gem.v>=4?5.5:4.2;
-  const c=gem.v>=4?'#ffd76a':(gem.v>=2?'#7f9bff':'#6fd6ff');
+  const red=gem.v>=9;   // v4.0 赤ジェム: 黄より強い。巣窟の奥にまばらに落ちている
+  const s=red?7.0:(gem.v>=4?5.5:4.2);
+  const c=red?'#ff5d7a':(gem.v>=4?'#ffd76a':(gem.v>=2?'#7f9bff':'#6fd6ff'));
   g.save();
   g.translate(gem.x,gem.y+Math.sin(gem.t*3)*2);
   g.rotate(gem.t*1.6);
@@ -116,6 +117,56 @@ function drawProp(g,pr){
     g.fillRect(-w2/2,-32,w2,3);
     g.fillStyle='#ffd76a';
     g.fillRect(-w2/2,-32,w2*clamp(pr.hp/pr.max,0,1),3);
+  }
+  g.restore();
+}
+/* v4.0 魔核の跡: 本体が消えて根だけが残り、巻き上がって赤黒い渦になる(時間が巻き戻る合図) */
+function drawCoreRoots(g,cr){
+  const t=cr.t, r=cr.r, T1=BAL.LOOP_ROOT_T, T2=BAL.LOOP_WIND_T;
+  const wind=Math.max(0,Math.min(1,(t-T1)/T2));           // 巻き上がり 0→1
+  const vor=Math.max(0,Math.min(1,(t-T1-T2)/1.2));        // 渦 0→1
+  const spin=t*(0.5+5.5*wind+9*vor);
+  g.save(); g.translate(cr.x,cr.y);
+  // 影
+  g.fillStyle='rgba(12,2,8,'+(0.5+0.4*vor).toFixed(2)+')'; g.beginPath(); g.ellipse(0,r*0.3,r*(1.5+2.6*vor),r*(0.6+1.0*vor),0,0,TAU); g.fill();
+  // 根: 巻き上がるほど中心へ寄り、渦では帯になる
+  const n=14;
+  for(let i=0;i<n;i++){
+    const a0=i*TAU/n+0.2, a=a0+spin*(0.25+0.9*wind);
+    const L=r*(2.1-1.0*wind+2.6*vor)*(1+0.12*Math.sin(t*2+i));
+    const lift=-r*0.5*wind;
+    g.strokeStyle=vor>0?'rgba(138,16,48,'+(0.5+0.4*vor).toFixed(2)+')':'rgba(58,11,32,0.85)';
+    g.lineWidth=(7-2.5*wind)*(1+vor);
+    g.lineCap='round';
+    g.beginPath(); g.moveTo(Math.cos(a)*r*0.35, Math.sin(a)*r*0.2+lift);
+    g.quadraticCurveTo(Math.cos(a+0.5+1.6*vor)*L*0.6, Math.sin(a+0.5+1.6*vor)*L*0.4+lift, Math.cos(a+1.1*vor)*L, Math.sin(a+1.1*vor)*L*0.62);
+    g.stroke();
+  }
+  // 千切れた心臓の根株(渦になるまで残る)
+  if(vor<1){
+    g.globalAlpha=1-vor;
+    g.fillStyle='#3a0b20'; g.beginPath(); g.ellipse(0,-r*0.1,r*(0.55-0.3*wind),r*(0.4-0.2*wind),0,0,TAU); g.fill();
+    g.strokeStyle='rgba(194,69,111,0.5)'; g.lineWidth=2;
+    g.beginPath(); g.ellipse(0,-r*0.1,r*(0.55-0.3*wind),r*(0.4-0.2*wind),0,0,TAU); g.stroke();
+    g.globalAlpha=1;
+  }
+  // 赤黒い渦
+  if(vor>0){
+    const R=r*(1.4+5.2*vor);
+    const gr=g.createRadialGradient(0,0,R*0.05,0,0,R);
+    gr.addColorStop(0,'rgba(0,0,0,'+(0.9*vor).toFixed(2)+')');
+    gr.addColorStop(0.35,'rgba(60,4,20,'+(0.72*vor).toFixed(2)+')');
+    gr.addColorStop(0.7,'rgba(138,16,48,'+(0.42*vor).toFixed(2)+')');
+    gr.addColorStop(1,'rgba(138,16,48,0)');
+    g.fillStyle=gr; g.beginPath(); g.ellipse(0,0,R,R*0.72,0,0,TAU); g.fill();
+    g.strokeStyle='rgba(255,46,106,'+(0.5*vor).toFixed(2)+')'; g.lineWidth=3;
+    for(let k=0;k<5;k++){
+      g.beginPath();
+      for(let s=0;s<=28;s++){ const u=s/28, ang=spin*0.8+k*TAU/5+u*4.2, rr=R*(0.12+0.88*u);
+        const px=Math.cos(ang)*rr, py=Math.sin(ang)*rr*0.72;
+        if(s===0) g.moveTo(px,py); else g.lineTo(px,py); }
+      g.stroke();
+    }
   }
   g.restore();
 }
@@ -3128,6 +3179,7 @@ function draw(){
     const B=G.B, p=B.hero;
     drawLight(g,p.x,p.y);
     if(B.dry) for(const d of B.dry) drawDry(g,d);   // v4.0 フレイラが焼いた床(日を跨いで残る)
+    if(B.coreRoots) drawCoreRoots(g,B.coreRoots);  // v4.0 魔核の跡: 根 → 赤黒い渦
     for(const st of B.stains) drawStain(g,st);
     for(const tr of B.trails) drawTrail(g,tr);
     for(const c of B.clouds) drawCloud(g,c);

@@ -315,6 +315,12 @@ idは汎用カタログ準拠。効果はすべて数値・挙動レベルで表
   `storyTick`: 落ち着いている時(拘束・発情・魔物30体超でない)に 38〜58 秒ごと、その階層の独り言を吹き出しで。降り口で `descend`、魔核の間を見つけた時に `finalEncounter`(1戦1度)。結果画面: clear=`ending`、reset=`reset`。
 - 表示: `#storybox`(盤面の上、タップか時間で閉じる)。ホームの「物語」画面は序章と到達済みの階層の導入、魔核討伐後は結末を載せる。
 
+### 3-33. v4.0 (F) 巣窟の報酬とループの演出
+
+- **報酬** (`spawnDen`): 王の宝箱は `L.deep`(最奥)。常設の宝箱は `DEN_CHESTS`(3)を楕円上の相対位置 [0.35,0.45] / [-0.10,-0.42] / [0.62,-0.30] に。赤ジェムは `DEN_REDGEM`(5)個を、口から奥へ螺旋に散らして `dropGem(x,y,DEN_REDGEM_V=14)`。`drawGem` は `v>=9` を赤(#ff5d7a・辺7.0)で描く(黄は v>=4)。全て `snapFloor` を通すので届く床の上。
+- **魔核の跡** (`B.coreRoots`): 討たれた時に `{x,y,r,t,era}` を残し、`B.winT` を `LOOP_WIN_T`(5.6秒)に。`survivedTick` が `t` を進め、`LOOP_ROOT_T`(1.6)まで=根が揺れる / そこから `LOOP_WIND_T`(3.2)=巻き上がり(途中でバナーと揺れ) / その後=`vortex` を立ててバナー・台詞 `feat.vortex`。`drawCoreRoots` が段階に応じて根の角度・長さ・色を変え、渦では放射グラデーションと5本の螺旋を重ねる。
+- **結果画面の演出** (`UI.loopFx`): `endBattle` が `loopFx: 'vortex'(clear) / 'miracle'(reset)` を結果に載せる。`showResult` は結末の文を `showStory(..., {onEnd})` で流し、**読み終わった後に**全画面の `#loopfx` を差し込む。CSS のみ(conic-gradient の回転 + スケール)で、vortex 5.6秒 / miracle 4.6秒で自動的に消える。`prefers-reduced-motion` では 1.2 秒に短縮。文字は「——深淵が、巻き戻る」「——もう一度、はじめから」。
+
 ### 3-32. v4.0 (E) フレイラの火属性と水弱点
 
 - **湿り気** (`ZONE_WET` / `wetAt(x,y)`): 地形ごとの 0..1 に `1 - dryAt(x,y)` を掛けたもの。`dryAt` は焼いた円の重なり(中心ほど強く、縁で 0.45 まで落ちる)。

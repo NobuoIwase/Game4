@@ -679,8 +679,22 @@ const UI={
         <button class="sub" data-act="go" data-arg="home">ホーム</button>
       </div>
     </div></div>`;
-    if(sum.storyLines&&sum.storyLines.length) this.showStory(sum.storyLines);   // v2.1 結末・リセットの物語は結果画面の上で流れる
+    // v2.1 結末・リセットの物語は結果画面の上で流れる。v4.0 その後にループの演出(赤黒い渦 / 白い奇跡の光)
+    if(sum.storyLines&&sum.storyLines.length) this.showStory(sum.storyLines, sum.loopFx?{onEnd:()=>this.loopFx(sum.loopFx)}:undefined);
+    else if(sum.loopFx) this.loopFx(sum.loopFx);
     if(cap) this.tryLoadCG(sum.capturedBy);
+  },
+
+  /* v4.0 ループの演出: 結末の文が終わった後、画面いっぱいに流す。
+     clear → 魔核の根が巻いた赤黒い渦(時間が巻き戻る) / reset → 二人が白く光って初日へ戻る */
+  loopFx(kind){
+    if(!kind) return;
+    const old=document.getElementById('loopfx'); if(old) old.remove();
+    const d=document.createElement('div'); d.id='loopfx'; d.className=(kind==='miracle')?'miracle':'vortex';
+    d.innerHTML='<div class="core"></div><div class="core b"></div><div class="word">'+(kind==='miracle'?'——もう一度、はじめから':'——深淵が、巻き戻る')+'</div>';
+    (document.getElementById('stage')||document.body).appendChild(d);
+    if(typeof S!=='undefined'){ if(kind==='miracle'){ if(S.clear) S.clear(); } else if(S.boss) S.boss(); }
+    setTimeout(()=>{ const q=document.getElementById('loopfx'); if(q) q.remove(); }, kind==='miracle'?4700:5700);
   },
 
   /* 敗北スチル: assets/cg/defeat_<id>.png → defeat.png の順に探す(無ければ注記のみ) */

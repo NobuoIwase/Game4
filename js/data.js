@@ -95,6 +95,10 @@ const BAL={
   DRY_SLIME_HP:0.85, DRY_SLIME_SPD:0.85,   // 乾いた床の上では、ヌルヌル系が弱る
   DRY_EVAP_R:560, DRY_EVAP_N:6, DRY_EVAP_RATE:1.75, DRY_EVAP_LIFE:15,   // 巣窟で焼いた時: 蒸発した媚薬が外まで広がる
   DRY_EVAP_HEAT:26,                  // 蒸発の瞬間、その場の二人に乗る発情
+  /* --- v4.0 巣窟の報酬とループの演出 --- */
+  DEN_CHESTS:3, DEN_REDGEM:5, DEN_REDGEM_V:14,   // 常設の宝箱の数 / 赤ジェムの数と価値(黄4より強い)
+  LOOP_WIN_T:5.6,          // 魔核が根になってから渦が立つまで(結果画面へ移るまでの秒数)
+  LOOP_ROOT_T:1.6, LOOP_WIND_T:3.2,              // 根だけになる → 巻き上がる → 渦
 
   /* --- v3.2 甘い褥の巣窟(えちえちエリア) --- */
   DEN_ENTER_HEAT:22, DEN_ENTER_SENS:14,       // 敷居をまたいだ瞬間、匂いに殴られる
