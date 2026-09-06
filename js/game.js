@@ -285,7 +285,8 @@ function endBattle(outcome){
   const gb=Math.min(3,META.gen.battle||0);
   // v3.1 収入: 一日の撃破ぶんは逓減(essSoft)し、世代の係数を掛ける。結果ごとの加算は深さ・世代で少し伸びる
   const eraK=1+BAL.ESS_ERA_K*eraNow(), orbK=1+BAL.ORB_ERA_K*eraNow();
-  let orbGain=Math.round(essSoft(B.orbFrag,BAL.ORB_SOFT)*orbK), essGain=Math.round(essSoft(B.essence)*eraK);
+  const softK=Math.max(0.05,(B.time||0)/BAL.ESS_SOFT_T);   // v3.1 逓減の基準をその日の長さに比例させる(短い日を積んでも得しない)
+  let orbGain=Math.round(essSoft(B.orbFrag,BAL.ORB_SOFT*softK)*orbK), essGain=Math.round(essSoft(B.essence,BAL.ESS_SOFT*softK)*eraK);
   if(outcome==='capture'){ orbGain+=BAL.ORB_CAPTURE + BAL.ORB_CAPTURE_GEN*gb; essGain+=BAL.CAPTURE_ESS_BONUS; }
   if(outcome==='survive'){ essGain+=BAL.SURVIVE_ESS_BONUS; }
   if(outcome==='descend'){ essGain+=BAL.DESCEND_ESS+BAL.DESCEND_ESS_DEPTH*Math.max(0,B.floor.depth-1); }   // v2.0 降りられた日(v3.1 深いほど)
@@ -4352,7 +4353,11 @@ function storyTick(dt){
   const B=G.B, p=B.hero; if(B.storyLineT===undefined) B.storyLineT=25;
   B.storyLineT-=dt; if(B.storyLineT>0) return;
   B.storyLineT=38+rand(20);
-  const fl=LINES.floor&&LINES.floor[B.floor.depth-1], sf=storyFloor(B.floor.depth), pool=(fl&&fl.length)?fl:sf.enter; if(!pool||!pool.length) return;   // v2.1 階層の独り言は lines.js
+  // v3.1 階層の独り言は話者ごとの表から(ルミナ=LINES.floor は0基点の配列、フレイラ=LINES_F.floor は階層番号のキー)。無ければ物語の行から本人の台詞だけを拾う(地の文や相手の台詞を吹き出しに出さない)
+  const T=(p.id==='freila'&&typeof LINES_F!=='undefined')?LINES_F:LINES;
+  let pool=T.floor?(Array.isArray(T.floor)?T.floor[B.floor.depth-1]:T.floor[String(B.floor.depth)]):null;
+  if(!pool||!pool.length){ const sf=storyFloor(B.floor.depth); pool=(sf.enter||[]).map(l=>(typeof l==='string')?l:((l&&l.s===p.id)?l.t:null)).filter(Boolean); }
+  if(!pool||!pool.length) return;   // v2.1 階層の独り言は lines.js
   if(p.pinned||p.charmBind||p.climaxT>0||attachCount(p)>0||p.heatLv>0||B.enemies.length>30) return;
   heroBubble(p,pickRand(pool),false,0);
 }

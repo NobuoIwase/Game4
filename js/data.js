@@ -34,7 +34,8 @@ const BAL={
   NIGHT_STAT_CAP:0.8,
   EN_REFUND:0.6,           // ヒロインが倒したときのEN還元率(ユニット単価×係数)
   ESS_RATE:0.30,           // エッセンス=撃破xp×係数(v3.1 0.55→0.30: ループで長期化するので)
-  ESS_SOFT:700,            // v3.1 一日のエッセンスの逓減: 素の合計 x → SOFT·ln(1+x/SOFT)(700で頭打ち気味。深い階層の大量撃破や魔核討伐の日が一日で研究所を買い切らないように)
+  ESS_SOFT:700,            // v3.1 一日のエッセンスの逓減: 素の合計 x → S·ln(1+x/S)(深い階層の大量撃破や魔核討伐の日が一日で研究所を買い切らないように)
+  ESS_SOFT_T:200,          // v3.1 逓減の基準は「その日の長さ」: S=ESS_SOFT×(その日の秒数/ESS_SOFT_T)。抑えるのは総量ではなく毎秒の勢いなので、早々に撤退して短い日を積んでも実入りは増えない
   ESS_ERA_K:0.12,          // v3.1 世代ごとの収入係数(+12%/世代。深淵が深くなるぶん実りも増える)
   ORB_DMG_STEP:90,         // 与ダメこれごとにオーブ+1(v3.1 45→90)
   ORB_PER_AIL:1,           // 状態異常付与ごと
@@ -657,13 +658,12 @@ const HEROES={
            pref:{chest:1.1, boss:1.3, treasure:1.15, item:1.1, stairs:1.15, core:1.3, explore:1.1, event:1.05, shrine:0.8, stele:0.7, pool:0.85, spring:0.9, gems:0.9, shroom:0.85},
            desc:'火を操る近接主体の天使。気が強く、前に出る' },
 };
-const PARTY_ORDER=['lumina','freila'];   // 全ヒロインの並び(合流の順。出撃するのは partyIds())
 const PARTY_MAX=4;                        // v3.1 パーティの上限(作りは3〜4人まで)
 /* v3.1 出撃するヒロイン: META.party.roster(最初はルミナ一人)。HEROES に無い名前は落とし、上限で切る */
 function partyIds(){ const r=(typeof META!=='undefined'&&META&&META.party&&Array.isArray(META.party.roster))?META.party.roster:['lumina']; const out=[]; for(const id of r){ if(HEROES[id]&&!out.includes(id)) out.push(id); if(out.length>=PARTY_MAX) break; } return out.length?out:['lumina']; }
 /* v3.1 参戦の規則(合流の順に並ぶ)。minEra: 深淵が組み替わった後(世代≥minEra)に二連敗で入口へ戻された朝に来る。
    resets: 保険——前の合流からのリセット回数がこれに達したら世代を問わず来る。lateEra: 保険——一人(いまの人数)で世代がここまで進んだら、その組み替わりの朝に来る */
-const PARTY_JOIN=[ { id:'freila', minEra:1, resets:3, lateEra:5 } ];   // lateEra は joinLate の文(石段の線が四本・五本目を彫ろうとして)に合わせる: 線は組み替わりの朝ごとに増えるので、5回目の討伐の朝に四本
+const PARTY_JOIN=[ { id:'freila', minEra:1, resets:3, lateEra:4 } ];   // lateEra は「一人で第6層(骸の回廊)に降りさせない」で決まる: 開放階層=2+世代 なので、世代4の朝までに必ず合流する(第6〜8層の物語は二人のもの)。joinLate の文の線の数もこれに合わせてある
 const luminaUpCost=(id,rank)=>Math.round(LUMINA_UPG[id].base*Math.pow(1.5,rank));
 const luminaRank=id=>((META.lumina&&META.lumina.upg)||{})[id]||0;
 const shaveCost=rank=>Math.round(6+3*rank);   // 自己強化を1段削ぐオーブ費用

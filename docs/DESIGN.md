@@ -22,7 +22,7 @@
 [ホーム] → 出撃 → [5分戦闘] → リザルト → 研究所/祭壇/編成 → 出撃 …
                      │
                      ├ 彼女が魔物を倒す → EN還元 + エッセンス + 彼女のXP(リスク)
-                     ├ 与ダメ45ごと/異常付与ごと → オーブ片
+                     ├ 与ダメ90ごと/異常付与ごと → オーブ片
                      └ HP0 → 捕獲(オーブ大) / 5:00生存 → 彼女の勝ち(エッセンスボーナス)
 世代: 4戦で経験リセット(世代内は装備・HP・護りを継承して強くなる)
 ```
@@ -318,12 +318,13 @@ idは汎用カタログ準拠。効果はすべて数値・挙動レベルで表
 ### 3-26. v3.1 一人で始まる潜行と参戦・経済・微弱体化・近寄って相談
 
 - **出撃の並び(`META.party`)**: `{roster:['lumina'], joined:{}, resets:0}`。`partyIds()`(data.js)が roster を HEROES で濾して `PARTY_MAX`(4)で切り、`startBattle` はこれで `newHero` を作る。`loadMeta` の移行: `party` の無い保存で `run.storySeen.join` が立っていれば(v3.0 で二人で潜っていた)フレイラを残す。v2.x の保存は一人。
-- **参戦の判定(`partyJoinCheck(runNote)`, endBattle の潜行の進みの直後)**: `PARTY_JOIN=[{id:'freila', minEra:1, resets:3, lateEra:5}]`(lateEra は `joinLate` の文が「石段の線が四本」で始まるのに合わせる: 線は組み替わりの朝ごとに増えるので、5回目の討伐の朝に四本ある) の並びで、まだ居ない最初の規則について——`reset` の朝は `META.party.resets++` し、`era>=minEra || resets>=rule.resets` で `partyJoin(id,'reset')`。`clear` の朝は `era>=lateEra` で `partyJoin(id,'late')`。`partyJoin` は roster に足し、`joined[id]={era,gen,runs,why}`、`resets=0`、`storySeen.join` を消し `run.joinWhy` を置く。結果画面へ `join`(名前)と `joinWhy` を渡す(赤い帯)。二連敗の文(reset)の後に `party.joinHint`(3行)を継ぐ。
+- **参戦の判定(`partyJoinCheck(runNote)`, endBattle の潜行の進みの直後)**: `PARTY_JOIN=[{id:'freila', minEra:1, resets:3, lateEra:5}]`(lateEra=4 は「一人で第6層に降りさせない」で決まる: 開放階層 `2+era` なので世代4で第6層が開き、第6〜8層の物語・降下文は二人用に書かれている。`joinLate` の文の線の数もこれに合わせて三本/四本目にした) の並びで、まだ居ない最初の規則について——`reset` の朝は `META.party.resets++` し、`era>=minEra || resets>=rule.resets` で `partyJoin(id,'reset')`。`clear` の朝は `era>=lateEra` で `partyJoin(id,'late')`。`partyJoin` は roster に足し、`joined[id]={era,gen,runs,why}`、`resets=0`、`storySeen.join` を消し `run.joinWhy` を置く。結果画面へ `join`(名前)と `joinWhy` を渡す(赤い帯)。二連敗の文(reset)の後に `party.joinHint`(3行)を継ぐ。
 - **朝の文の選び方(startBattle)**: 序章は一人なら `STORY.prologue`(`storySeen.join` は二人の時だけ立てる)。`!storySeen.join && heroes>1` で `party.join`、`joinWhy==='late'` なら `party.joinLate`(その世代の `loop<era>` も既読に)。組み替わりの朝は `storyLoopIntro(n)`: 二人なら `era.loopIntro`、一人なら `era.loopIntroSolo.first`(世代1)/`again`。魔核を討った日は `storyClearLines(twoP)`: 二人なら `era.coreDown[era-1]`+二人版 ending、一人なら `era.coreDownSolo.first/again` + 結び(初回は `STORY.ending.slice(1)`、二度目以降は `era.endingSoloAgain` の5行。一人版の冒頭は結末の1行目を置き換える形で書かれている)。図鑑のフレイラの赤ペン(`CODEX_F`)は `partyIds().includes('freila')` で門をかけ、合流するまで出さない(ui.js)。魔核の対峙・再挑戦・リセットは v3.0 の人数分岐のまま。
-- **経済(endBattle)**: `essGain = round(essSoft(B.essence)·(1+ESS_ERA_K·era)) + 結果の加算`、`essSoft(x)=ESS_SOFT·ln(1+x/ESS_SOFT)`(700)。`B.essence` は撃破 xp×`ESS_RATE`(0.30)。加算: capture 45 / survive 25 / descend `40+15·(depth−1)` / clear `120+60·era`。`orbGain = round(essSoft(B.orbFrag, ORB_SOFT(80))·(1+ORB_ERA_K·era))`+捕獲 `14+4·gb`。`ORB_DMG_STEP` 90。表は `tools/balance_calc.py` の F。
+- **経済(endBattle)**: `essGain = round(essSoft(B.essence)·(1+ESS_ERA_K·era)) + 結果の加算`、`essSoft(x)=ESS_SOFT·ln(1+x/ESS_SOFT)`(700)。`B.essence` は撃破 xp×`ESS_RATE`(0.30)。加算: capture 45 / survive 25 / descend `40+15·(depth−1)` / clear `120+60·era`。`orbGain = round(essSoft(B.orbFrag, ORB_SOFT(80))·(1+ORB_ERA_K·era))`+捕獲 `14+4·gb`。`ORB_DMG_STEP` 90。**逓減の基準はその日の長さに比例**(`S=ESS_SOFT×(B.time/ESS_SOFT_T(200))`、オーブは `ORB_SOFT` で同じ比)——量ではなく毎秒の勢いを抑える形なので、早々に撤退して短い日を積んでも実入りは変わらない(実測: 同じ勢いなら240秒の日も40秒の日も 7.9/秒、短い日6回=長い日1回の0.999倍)。表は `tools/balance_calc.py` の F。
 - **ルミナの係数(`newHero`)**: `HD.dmgMul`(dmgMult に掛ける)/`HD.regenMul`(regen に掛ける)を追加。lumina: hpMul 0.92 / armor −1 / dmgMul 0.94 / regenMul 0.9。フレイラは 1.0。
 - **世代0の魔核と世代の強化**: `CORE_ERA_HP0` 0.30(0.45から)、`coreDef()=max(0.4, CORE_ERA_DEF0(0.75)−0.05·era)`、世代0だけ Lv 補正を `CORE_ERA0_LV_K`(0.5倍)・上限 `CORE_ERA0_LV_CAP`(+50%)に。`ERA_DEPTH_K0` 0.10(魔物の HP/与ダメ・EN 天井が毎世代 +10%。階層が増えなくなった後はさらに +10%)。
 - **近寄って相談(`updateGoal`)**: 決め直しで `talkable`(台詞の間隔 `PARTY_TALK_CD` が明け、探索以外の案がある)かつ `!partyGathered()`(誰かが重心から `GATHER_R` 48 より外)かつ `!partyDanger()`(拘束・押し倒し・HP40%未満・`p.threatV`≥0.5・`GATHER_DANGER_R` 150 内に動く魔物、のどれも無い)なら、`P.gather={until:+GATHER_T(3.2), x,y(重心)}` を置き、全員の目当てを `{kind:'gather', score:1.3}` に(aiDecide は gather を 30px まで歩く。`goalValid` は集合中・脅威なし・未集合のあいだ有効)。優先権(`P.turn`)の子が `gather.call`。次の決め直しで `P.gather` を畳み、揃っていれば `gathered`: 呼ばれた子の `gather.arrive`(0.2秒)→ 勝った案の `propose`(0.9秒)→ 返事(1.8秒)、`talkUntil=+GATHER_TALK_T`(2.6秒)。探索の決定でも集まったなら一言交わす。`aiDecide` の talk 中は `p.face` を相手へ向け、移動側の向き更新は talk 中は止める。`aiDecide` は `p.threatV` に脅威の見積もりを残す。`GATHER_CD`(8秒)で連発を防ぐ。
+- **階層の独り言(`storyTick`)**: 話者ごとの表から引く(ルミナ `LINES.floor` は0基点の配列、フレイラ `LINES_F.floor` は階層番号のキー)。ルミナの第6〜8層を書き足した。表に無い時は物語の `enter` から**その話者の台詞だけ**を拾う(以前は第6層以降で `LINES.floor` を外れ、`{s,t}` の物語行がそのまま吹き出しに入って `[object Object]` になっていた。フレイラもルミナの台詞を喋っていた)。
 - **検証(run_v31.js)**: join(一人開始→世代0の二連敗では来ない→世代1の二連敗で合流・翌朝二人・二重に来ない・保険2種・移行3種)、gather(180秒で集合3〜6回・うち揃って話したのが2〜3回、話す間の向き合い 11.9/13.1秒、呼びかけ/到着の台詞。離れたまま集合できなかった時は声だけで足は止めない)、econ(逓減表と結果別の収入)、solo(一人の通し: 一日ごとの結果・Lv・収入・購入を記録するキャンペーン。新規セーブ・おまかせ編成・オート指揮・毎朝の貪欲な購入で 4本: 世代0の魔核討伐 2/2/3/6日目、合流 8/8/13/14日目(世代1で1本・世代2で3本)、捕獲は日の 40〜57%、一日の収入 400〜2,900 エッセンス)。弱体化なし(hpMul 1.0 等)の対照では 世代0討伐 5日目・世代1討伐 9日目・合流 11日目。
 
 ### 3-25. v3.0 多ヒロイン基盤・フレイラ・パーティAI・深淵のループ
@@ -398,8 +399,8 @@ idは汎用カタログ準拠。効果はすべて数値・挙動レベルで表
 | 資源 | 入手 | 用途 |
 |---|---|---|
 | EN(戦闘内) | 自然回復0.78+0.07×Lv。上限=12+3×彼女Lv(最大60)+彼女の撃破還元(単価×0.6) | カード召喚(コスト=カード基礎×陣形係数)。CD=1.5+コスト×0.11 |
-| エッセンス | 彼女が倒した魔物のxp×0.55+勝敗ボーナス | 解放・強化(Lv5まで)・融合・陣形解放 |
-| オーブ | 与ダメ45ごと+異常付与ごと(2sレート制限)+捕獲20+世代内戦歴×5 | 祭壇(初期状態の書き換え・永続) |
+| エッセンス | 彼女が倒した魔物のxp×0.30 →その日の逓減(S·ln(1+x/S)、S はその日の長さに比例)→×(1+0.12×世代)+勝敗ボーナス(捕獲45/生存25/降下40+15×(深さ−1)/討伐120+60×世代) | 解放・強化(Lv5まで)・融合・陣形解放 |
+| オーブ | 与ダメ90ごと+異常付与ごと(2sレート制限)→同じ逓減(S=80×長さ比)→×(1+0.10×世代)+捕獲14+世代内戦歴×4 | 祭壇(初期状態の書き換え・永続) |
 
 ### 4-1. コンボ(同一カード連打)
 
