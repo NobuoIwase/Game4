@@ -315,6 +315,14 @@ idは汎用カタログ準拠。効果はすべて数値・挙動レベルで表
   `storyTick`: 落ち着いている時(拘束・発情・魔物30体超でない)に 38〜58 秒ごと、その階層の独り言を吹き出しで。降り口で `descend`、魔核の間を見つけた時に `finalEncounter`(1戦1度)。結果画面: clear=`ending`、reset=`reset`。
 - 表示: `#storybox`(盤面の上、タップか時間で閉じる)。ホームの「物語」画面は序章と到達済みの階層の導入、魔核討伐後は結末を載せる。
 
+### 3-29. v4.0 (B) 魔核戦の専念
+
+- **入る条件** (`coreWarTick`): 最終階層に魔核が生きていて、誰かが `CORE_WAR_R`(540)以内に入るか、魔核の HP が満タンを割った瞬間に `B.coreWar=true`。以後その戦闘の間は解けない。入った時に全員の目当てと探索点を捨て、バナーと台詞(`feat.coreWar`)。
+- **鎖** (`coreLeashOk`): 目当ての採点 `add()` の入口で、`CORE_LEASH`(600)より遠い候補を落とす。例外は `rescue`/`wait`/`gather`、`poi:core|spring|pool`、`pick:nectar`、`event:pool`。`forceProp`(体力半分で燭台へ強行)も魔核から 600 以内の燭台だけ。
+- **戻る力**: `poi:core` の価値が `CORE_WORTH`(6.5)に上がる。さらに移動の最後で、魔核から `CORE_PULL_R`(300)より離れていれば距離に応じて `CORE_PULL_K`(0.5)まで魔核へ向く成分を混ぜる(拘束・迷い・回復・救出の最中は除く)。600 を超えていれば `feat.coreBack`。
+- **攻め方**: 戦闘モードの決定で、`coreWar && hp>maxHp*CORE_FIGHT_HP(0.34) && !exhausted` なら `want='fight'` に上書き(囲まれても引かない)。体力を割れば通常の `flee`/`kite` 判定に戻る。
+- **狙い**: `nearestEnemies` の優先度に `CORE_FOCUS_D`(900)を足す(距離から差し引く形)。射程内に魔核があれば、取り巻きより先に撃つ。射程の判定は素の距離で行うので、届かない魔核を撃とうとはしない。
+
 ### 3-28. v4.0 (A) 暗闇
 
 - **暗さ**: `FLOORS[].dark` (f1 0.34 → f8 0.88)。`darkLevel()` がそれを返し、`lightAt(x,y)` が「その点の明るさ 0..1」を返す。素の明るさは `1 - darkLevel()`。

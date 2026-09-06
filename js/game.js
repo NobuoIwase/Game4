@@ -235,6 +235,7 @@ function startBattle(){
     placed:[], itemT:9, ringCd:0, lewdSeen:false,                                                  // v2.2 夜側の設置物 / 包囲円陣の間隔 / えちえちエリアの初見
     seenT:0, bossSeen:!!(META.run&&META.run.bossSeen), exploreSaid:false,                          // v2.4 視界の記憶 / この run でボスを見た(武器選びに使う)
     lights:[], lanterns:[], floorLight:0,                                                          // v4.0 暗闇: 残る灯り / 催淫灯篭 / その階で得た灯り
+    coreWar:false, core:null,                                                                      // v4.0 魔核戦に入ったか / その個体
   };
   genMap();               // 地形(世代×階層で変わる)
   G.B.lanterns=G.map.pois.filter(q=>q.kind==='lantern').map(q=>({x:q.x,y:q.y,key:q.key,said:false}));   // v4.0 催淫灯篭(光源であり罠でもある)
@@ -1575,7 +1576,8 @@ function aiDecide(foc){
   const ttk=hpNear/Math.max(1,p.dpsEst); p.press=ttk/BAL.FLEE_TTK+nNear/BAL.FLEE_N; p.ttkEst=ttk; p.nNear=nNear;
   if(BAL.SMART_AI && B.time>=p.modeUntil){
     const lvK=1+BAL.MODE_LV_K*Math.max(0,BAL.MODE_LV-p.level);   // 低Lvは武器が弱く何でも「倒し切れない」に見える→秒の閾値を緩める(Lv15で等倍)
-    const want=(ttk>BAL.FLEE_TTK*lvK||nNear>=BAL.FLEE_N)?'flee':((ttk>BAL.KITE_TTK*lvK||nNear>=BAL.KITE_N)?'kite':'fight');
+    let want=(ttk>BAL.FLEE_TTK*lvK||nNear>=BAL.FLEE_N)?'flee':((ttk>BAL.KITE_TTK*lvK||nNear>=BAL.KITE_N)?'kite':'fight');
+    if(B.coreWar && p.hp>p.maxHp*BAL.CORE_FIGHT_HP && !p.exhausted) want='fight';   // v4.0 魔核戦: 体力があるうちは下がらない
     if(want!==p.aiMode){ p.aiMode=want; p.modeUntil=B.time+BAL.MODE_HOLD; p.escape=null; if(want==='flee') sayLine('retreat',1,8,'むり、にげる!'); else if(want==='kite') sayLine('kite',0,12); }
   }
   // v3.0 仲間のカバー: 掴まれている/押し倒されている相手へ寄り、その魔物を優先して撃つ(自分が自由な時)
@@ -1600,6 +1602,7 @@ function aiDecide(foc){
   if(p.hp<p.maxHp*0.5 && !bossNear && B.hearts.length===0){
     let pd=520;
     for(const pr of B.props){
+      if(B.coreWar && B.core && Math.hypot(pr.x-B.core.x,pr.y-B.core.y)>BAL.CORE_LEASH) continue;   // v4.0 魔核戦: 遠い燭台までは走らない
       const d=Math.hypot(pr.x-p.x,pr.y-p.y);
       if(d<pd){ pd=d; forceProp=pr; }
     }
@@ -1840,6 +1843,13 @@ function aiDecide(foc){
       dx+=ax*1.5; dy+=ay*1.5;
     }
   }
+  // v4.0 魔核戦: 離れていたら詰め寄る(回復に走っている時と、拘束・迷いの最中は除く)
+  if(B.coreWar && B.core && state!=='struggle' && state!=='hesitate' && state!=='heart' && state!=='prop' && state!=='g_spring' && state!=='g_pool' && state!=='rescue' && state!=='g_rescue' && !p.charmBind){
+    const cd=Math.hypot(B.core.x-p.x,B.core.y-p.y);
+    if(cd>BAL.CORE_PULL_R){ const k=Math.min(1,(cd-BAL.CORE_PULL_R)/420)*BAL.CORE_PULL_K;
+      dx=dx*(1-k)+(B.core.x-p.x)/cd*k; dy=dy*(1-k)+(B.core.y-p.y)/cd*k;
+      if(cd>BAL.CORE_LEASH) sayLine('feat.coreBack',0,20,'はなれちゃ、だめ……もどる'); }
+  }
   // 学習した強敵の狙いを見たら、いま何をしていても横へ跳ぶのを優先する(捕まっている時以外)
   if(strong && state!=='struggle'){
     const m=Math.hypot(ddx,ddy)||1;
@@ -1905,7 +1915,8 @@ function nearestEnemies(n,maxD){
     if(!inSight(e,p)) continue;                       // 見えていない敵は撃てない
     let d=Math.hypot(e.x-p.x,e.y-p.y); if(grabber) d*=0.25;
     // 魅了された相手は狙いが後回し(距離に下駄)。理解した脅威は優先討伐(距離を差し引く)
-    const prio=knowLv(e.id)>=2?(SPEC_THREAT[e.id]||0)*90:0;
+    let prio=knowLv(e.id)>=2?(SPEC_THREAT[e.id]||0)*90:0;
+    if(B.coreWar && e.id==='core') prio+=BAL.CORE_FOCUS_D;   // v4.0 魔核戦: 取り巻きより先に、心臓を削る
     arr.push({e, d:d+charmLvFor(p,e)*140-prio});
     if(d>=maxD) arr.pop();
   }
@@ -3339,7 +3350,7 @@ function updateGoalSolo(p){
   const cands=[];
   if(B.dbgCands) B.lastCands=null;   // 検証用: 目当ての候補を覗く(B.dbgCands=true の時だけ)
   const anyCaptive=B.heroes.some(c=>c.out&&c.captive&&c!==p);   // v3.2 仲間が捕まっている間は、寄り道の価値を落とす(木の実を拾いに行かない)
-  const add=(kind,sub,x,y,worth,ref,key)=>{ worth*=goalPref(p,kind,sub); if(anyCaptive && kind!=='rescue') worth*=BAL.RESCUE_FOCUS; if(worth<=0 || !passAt(x,y,false) || nearKnownTrap(x,y)) return; if(ref && gaveUp(ref)) return; /* v2.1 諦めた目標は外す */ if(crestKnow()>=1 && B.traps.some(tr=>tr.armed && Math.hypot(tr.x-x,tr.y-y)<tr.r+40)) return; /* 知っている紋の罠の上は目当てにしない */ const d=Math.hypot(x-p.x,y-p.y); const fz=zoneFear(zoneAt(x,y)), fm=fz>=3?0.5:(fz>=2?0.7:(fz>=1?0.9:1));
+  const add=(kind,sub,x,y,worth,ref,key)=>{ worth*=goalPref(p,kind,sub); if(anyCaptive && kind!=='rescue') worth*=BAL.RESCUE_FOCUS; if(!coreLeashOk(kind,sub,x,y)) return; /* v4.0 魔核戦の間は寄り道しない */ if(worth<=0 || !passAt(x,y,false) || nearKnownTrap(x,y)) return; if(ref && gaveUp(ref)) return; /* v2.1 諦めた目標は外す */ if(crestKnow()>=1 && B.traps.some(tr=>tr.armed && Math.hypot(tr.x-x,tr.y-y)<tr.r+40)) return; /* 知っている紋の罠の上は目当てにしない */ const d=Math.hypot(x-p.x,y-p.y); const fz=zoneFear(zoneAt(x,y)), fm=fz>=3?0.5:(fz>=2?0.7:(fz>=1?0.9:1));
     const lm=(darkLevel()>0.05 && kind!=='rescue' && kind!=='wait')?(BAL.DARK_GOAL_K+(1-BAL.DARK_GOAL_K)*lightAt(x,y)):1;   // v4.0 暗い所は気が進まない(行かないわけではない)
     cands.push({kind,sub,x,y,ref,key,d,worth,score:worth*fm*lm/(1+d/600)}); };   // v2.2 嫌な地形の中の目当ては割り引く(価値そのものは入る判断に使うので残す)
   const hpR=p.hp/p.maxHp, stR=p.stamina/p.staminaMax;
@@ -3362,7 +3373,7 @@ function updateGoalSolo(p){
     else if(q.kind==='stele') w=B.steleRead[q.key]?0:1.7;
     else if(q.kind==='stairs') w=(B.exitLocked||!B.wantExit)?0:BAL.EXIT_WORTH_WANT;   // v2.1 「降りよう」と決めてから(exitTick)。それまでは他を見て回る
     else if(q.kind==='seal') w=B.seals[q.key]?0:2.4;
-    else if(q.kind==='core') w=B.wantExit?BAL.EXIT_WORTH_WANT:2.6;   // v2.2 向かう気になったら最優先
+    else if(q.kind==='core') w=B.coreWar?BAL.CORE_WORTH:(B.wantExit?BAL.EXIT_WORTH_WANT:2.6);   // v2.2 向かう気になったら最優先 / v4.0 戦い始めたら戻る力
     else if(q.kind==='lantern') w=lanternWant(p)?BAL.LANTERN_WANT*darkLevel():0;   // v4.0 暗いほど灯りに寄りたい(そばに居ると発情が溜まると知っていても)
     if(leaving && q.kind!=='stairs' && q.kind!=='seal' && q.kind!=='core' && q.kind!=='spring') w*=0.3;
     add('poi',q.kind,q.x,q.y,w,q,q.key);
@@ -4406,6 +4417,35 @@ function gainFloorLight(kind,x,y){
   if(x!==undefined) pushLight(x,y,260,BAL.DARK_MEM_T*2,1);
   if(darkLevel()>0.25){ floatTxt(x!==undefined?x:B.hero.x, (y!==undefined?y:B.hero.y)-96, '灯りが増えた','#ffe9a8',12,1.6); sayLine('feat.lightUp',0,14,'あかるく、なった……! これで、みえる'); }
 }
+/* ================= v4.0 魔核戦の専念 =================
+   魔核の間に踏み込んだら、彼女はもう魔核から離れない。離れてよいのは、
+   体力とスタミナを取り戻す用(ハート・燭台・泉・清水・蜜の花)と、仲間の救出だけ。
+   戦い方も変わる: 体力があるうちは引き撃ちも逃げも選ばず、狙いは魔核そのものへ向く */
+function coreUnit(){ const B=G.B; if(!B||!B.floor||!B.floor.final) return null; for(const e of B.enemies){ if(e.id==='core'&&!e.dead) return e; } return null; }
+function coreWarTick(dt){
+  const B=G.B; if(!B) return;
+  const C=coreUnit(); B.core=C;
+  if(!C){ B.coreWar=false; return; }
+  if(B.coreWar) return;
+  let go=C.hp<C.maxHp*0.999;   // 一発でも入れたら、もう始まっている
+  if(!go) for(const h of B.heroes){ if(!h.out && Math.hypot(h.x-C.x,h.y-C.y)<BAL.CORE_WAR_R){ go=true; break; } }
+  if(!go) return;
+  B.coreWar=true;
+  for(const h of B.heroes){ h.goal=null; h.goalT=0; h.explore=null; h.exploreUntil=0; }
+  setBanner('魔核戦','ここから離れない——削り切るまで','#ff6b81');
+  const li=leaderIdx();
+  { const c0=B.ci; B.ci=li; sayLine('feat.coreWar',2,0,'……にげない。ここで、おわらせる'); B.ci=c0; }
+  for(const h of B.heroes){ if(h.out||h.hi===li) continue; pendingLine(h.hi,'feat.coreWar',1.2,2); }
+}
+/* 魔核戦の間、その位置まで足を伸ばしてよいか(回復の用と救出は例外) */
+function coreLeashOk(kind,sub,x,y){
+  const B=G.B; if(!B.coreWar||!B.core) return true;
+  if(kind==='rescue'||kind==='wait'||kind==='gather') return true;
+  if(kind==='poi'&&(sub==='core'||sub==='spring'||sub==='pool')) return true;
+  if(kind==='pick'&&sub==='nectar') return true;
+  if(kind==='event'&&sub==='pool') return true;
+  return Math.hypot(x-B.core.x,y-B.core.y)<BAL.CORE_LEASH;
+}
 /* ================= v3.2 甘い褥の巣窟 =================
    壁際に食い込んだ大きな窪地。入口は喉道ひとつで、いちばん奥に王の宝箱がある。
    前室→沼→最奥と進むほど発情と敏感化の効きが強く、床から伸びる手も早くなる。
@@ -5343,6 +5383,7 @@ function battleTick(dt){
   eachHero(()=>poiTick(dt));   // 祠・泉・門(v3.0 ヒロインごと)
   denTick(dt);                 // v3.2 巣窟の魔法陣・媚薬の花・壁の光線・番人(1フレームに1度)
   lightsTick(dt); lanternTick(dt);   // v4.0 灯りの寿命と催淫灯篭
+  coreWarTick(dt);                   // v4.0 魔核戦に入ったか
   for(const k in B.itemCd){ if(B.itemCd[k]>0) B.itemCd[k]-=dt; }
   eachHero(()=>trapsTick(dt));
   // 小淫魔: 近くの数を数える(集中低下)。快感は煽りアクション時のみ(バーストCD持ち)

@@ -59,6 +59,13 @@ const BAL={
   DARK_SEEN:0.3,           // 地図に残るのは、この明るさ以上で見た所だけ
   LANTERN_R:210, LANTERN_HEAT:3.4, LANTERN_SENS:0.9, LANTERN_N:[2,2,3,3,3,4,4,4],
   LANTERN_WANT:1.35, LANTERN_HEAT_MAX:50, LANTERN_STAY:5.5, LANTERN_CD:26, DARK_FAR_SEE:900,   // 催淫灯篭: 明るいが、そばに居ると発情と敏感化が進む
+  /* --- v4.0 魔核戦の専念 --- */
+  CORE_WAR_R:540,          // ここまで近づいたら「魔核戦」に入る(以後その日は解けない)
+  CORE_LEASH:600,          // 魔核戦の間、そこから離れてよい距離(回復の用があれば例外)
+  CORE_WORTH:6.5,          // 魔核戦の間の「魔核へ」の価値(戻る力)
+  CORE_FIGHT_HP:0.34,      // これより体力があるうちは、引き撃ちも逃げも選ばず攻める
+  CORE_FOCUS_D:900,        // 狙いの優先(距離からこのぶん差し引いて、魔核を先に撃つ)
+  CORE_PULL_R:300, CORE_PULL_K:0.5,   // 魔核から離れていたら、この強さで詰め寄る
 
   /* --- v3.2 甘い褥の巣窟(えちえちエリア) --- */
   DEN_ENTER_HEAT:22, DEN_ENTER_SENS:14,       // 敷居をまたいだ瞬間、匂いに殴られる
