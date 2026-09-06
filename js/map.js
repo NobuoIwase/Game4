@@ -57,6 +57,7 @@ function genMap(){
   // ---- 壁: 外周の岩、岩/崖の塊、崖の稜線(切れ目つき)
   const solid=new Uint8Array(N);
   const set=(i,j,v)=>{ if(inMap(i,j)) solid[j*MAP_W+i]=v; };
+  const setW=(i,j,v)=>{ if(v && Math.hypot(i-MAP_W/2,(j-MAP_H/2)*1.4)<12) return; set(i,j,v); };   // v3.2 壁を置く時だけ、出発点の周りは空けておく
   // v3.2 外周: 真四角の縁をやめ、厚みがなだらかに揺れる岩に。数か所は入り江(岩が内側へ大きく食い込む)になり、その間が岬になる
   const edgeProf=(n)=>{
     const a1=rnd()*TAU, a2=rnd()*TAU, a3=rnd()*TAU, f1=1+rnd()*1.2, f2=2.4+rnd()*1.8, f3=4.5+rnd()*2.5;
@@ -99,7 +100,7 @@ function genMap(){
     let a=a0, ci=s.i, cj=s.j;
     for(let t=0;t<L;t++){ a+=curve; ci+=Math.cos(a); cj+=Math.sin(a)*0.75;
       if(ramps.some(rp=>Math.abs(t-rp)<2)) continue;                              // 坂: ここだけ越えられる
-      for(let w=-1;w<=1;w++) set(Math.round(ci-Math.sin(a)*w), Math.round(cj+Math.cos(a)*w*0.75), SOLID_CLIFF); }
+      for(let w=-1;w<=1;w++) setW(Math.round(ci-Math.sin(a)*w), Math.round(cj+Math.cos(a)*w*0.75), SOLID_CLIFF); }
     formFeats.push({kind:'escarp', r:L*MAP_T*0.4, i:Math.round(s.i+Math.cos(a0)*L*0.5), j:Math.round(s.j+Math.sin(a0)*L*0.4)}); };
   const rockfall=()=>{ const s=pickSpot(6); if(!s) return; const a=rnd()*TAU;
     for(let k=0;k<5;k++){ const dd=k*2.2; disk(s.i+Math.cos(a)*dd*1.3, s.j+Math.sin(a)*dd*0.85, Math.max(0.8,3.0-k*0.5), Math.max(0.7,2.2-k*0.36), SOLID_ROCK); } };
@@ -168,7 +169,7 @@ function genMap(){
       for(let w=-4;w<=4;w++){
         const i=Math.round(ci-dj*w), j=Math.round(cj+di*w);
         if(i<3||j<3||i>=MAP_W-3||j>=MAP_H-3) continue;
-        if(Math.abs(w)<=1) set(i,j,0); else if(Math.abs(w)<=4 && t<L) set(i,j,SOLID_CLIFF);
+        if(Math.abs(w)<=1) set(i,j,0); else if(Math.abs(w)<=4 && t<L) setW(i,j,SOLID_CLIFF);
       }
     }
     protectRing(pi,pj,RING+0.6);                                 // 掘って繋ぐ処理に裏口を開けさせない
@@ -223,7 +224,15 @@ function genMap(){
       if(!usedF.every(u=>Math.hypot(u.i-ci,u.j-cj)>u.r+Math.max(rx,ry)+4)) continue;
       ok=true;
     }
-    if(!ok){ cj=Math.round(MAP_H/2); ci=right?(MAP_W-3-rx):(2+rx); }
+    if(!ok){   // どうしても空きが見つからない時は、いちばん空いている行を選ぶ(中央に落とすと出発点や闘技場と重なる)
+      let bs=-1e9;
+      for(const rr of [true,false]){ const ii=rr?(MAP_W-3-rx):(2+rx);
+        for(let jj=6+ry; jj<=MAP_H-6-ry; jj+=2){
+          const dc=Math.hypot(ii-MAP_W/2,(jj-MAP_H/2)*1.4); if(dc<16) continue;
+          let worst=1e9; for(const u of usedF) worst=Math.min(worst, Math.hypot(u.i-ii,u.j-jj)-u.r);
+          const sc=Math.min(worst,40)+dc*0.05;
+          if(sc>bs){ bs=sc; ci=ii; cj=jj; right=rr; } } }
+      if(bs<=-1e9){ cj=Math.round(MAP_H*0.25); ci=right?(MAP_W-3-rx):(2+rx); } }
     const dir=right?-1:1, L=4+Math.floor(rnd()*3);              // dir: 内側(通路の伸びる向き)
     usedF.push({i:ci,j:cj,r:Math.max(rx,ry)+3});
     const ZL=ZI('lewd'), ZH=ZI('haze');
@@ -262,14 +271,20 @@ function genMap(){
       // 壁の内側の面を探す: 縁から中心へ向かって進み、最初に床になった所を光の出どころにする(壁の中から線を引くと自分の壁で遮られる)
       let oi=-1, oj=-1;
       for(let t=0;t<26;t++){ const ii=Math.round(ci+Math.cos(a)*(rx*1.3-t*0.5)), jj=Math.round(cj+Math.sin(a)*(ry*1.3-t*0.5));
-        if(!inMap(ii,jj)) continue; if(!solid[jj*MAP_W+ii]){ oi=ii; oj=jj; break; } }
+        if(!inMap(ii,jj)) continue;
+        if(!solid[jj*MAP_W+ii] && q2(ii,jj)<=1){ oi=ii; oj=jj; break; } }   // 巣窟の内側の床にだけ据える(囲いの外の床を掴むと、自分の壁ごしに撃つことになる)
       if(oi<0) continue;
       const o=T2(oi,oj), pt=P(oi+Math.cos(a)*1.3, oj+Math.sin(a)*1.3);   // pt=壁に埋まって見える口 / o=線を引く起点(床)
       pt.ox=o.x; pt.oy=o.y; pt.ang=Math.atan2(tileCY(Math.round(cj))-o.y, tileCX(Math.round(ci))-o.x);
       den.beams.push(pt);
     }
     den.guard=P(ci-dir*rx*0.34, cj+(rnd()-0.5)*ry*0.6);
-    feat.lewd=den; feat.denPool=P(ax+dir*1.5, ay+(rnd()<0.5?3:-3)); feat.haze=P(ax,ay);
+    feat.lewd=den;
+    { const pi=Math.round(ax+dir*1.5), s0=(rnd()<0.5?1:-1); let pj=null;   // 清水は口の外の床に(壁の中に置くと、場所が別の所へ流れる)
+      for(const dd of [3*s0,-3*s0,4*s0,-4*s0,2*s0,-2*s0,5*s0,-5*s0]){ const jj=ay+dd; if(inMap(pi,jj) && !solid[jj*MAP_W+pi]){ pj=jj; break; } }
+      if(pj===null){ for(let jj=ay-6;jj<=ay+6&&pj===null;jj++) if(inMap(pi,jj) && !solid[jj*MAP_W+pi]) pj=jj; }
+      feat.denPool=(pj===null)?P(ax,ay):P(pi,pj); }
+    feat.haze=P(ax,ay);
     feat.list.push(Object.assign({kind:'lewd',r:Math.max(rx,ry)*MAP_T},T2(ci,cj)));
   };
   /* 肉の喉道: 曲がりくねった幅3の道を岩で挟み、終点を闘技場(魔核の間)に */

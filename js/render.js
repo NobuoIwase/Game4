@@ -2229,9 +2229,10 @@ function drawDenBeam(g,bm){
   g.globalAlpha=bm.state==='idle'?(0.35+0.2*Math.sin(t*2)):0.95;
   g.fillStyle=col; g.beginPath(); g.ellipse(0,0,6,4.4,bm.ang,0,TAU); g.fill();
   g.restore();
-  if(bm.state==='aim'){   // 狙い: 細い線が伸びる
+  if(bm.state==='aim'){   // 狙い: 細い線が伸びる(壁で止まる)
+    const L=(typeof denBeamLen==='function')?denBeamLen(bm.ox,bm.oy,bm.aimA):BAL.DEN_BEAM_LEN;
     g.save(); g.globalAlpha=0.30+0.25*Math.sin(t*22); g.strokeStyle=col; g.lineWidth=1.6;
-    g.beginPath(); g.moveTo(bm.ox,bm.oy); g.lineTo(bm.ox+Math.cos(bm.aimA)*BAL.DEN_BEAM_LEN, bm.oy+Math.sin(bm.aimA)*BAL.DEN_BEAM_LEN); g.stroke(); g.restore();
+    g.beginPath(); g.moveTo(bm.ox,bm.oy); g.lineTo(bm.ox+Math.cos(bm.aimA)*L, bm.oy+Math.sin(bm.aimA)*L); g.stroke(); g.restore();
   }
 }
 function drawDen(g){

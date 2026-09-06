@@ -1072,7 +1072,7 @@ function statesTick(h,dt){
     if(h.lewdT>=BAL.DEN_GROPE[dst]){ h.lewdT=rand(-1.5,0); floorGrope(h); if(dst===0 && Math.random()<BAL.DEN_ABORT) zoneAbort(h); }
   }else if(h.zone==='haze'){ learnZone('haze',dt*0.3); addHeatG(BAL.HAZE_HEAT*dt); applySensit(BAL.HAZE_SENS*dt); h.lewdT=0; }   // v3.2 口の外の澱み
   else h.lewdT=0;
-  if(h.zoneEnter && !h.zoneAbortTried && zoneFear(h.zone)>=2 && ((h.heatG||0)-(h.zoneHeat0||0)>=15 || (h.sensit||0)-(h.zoneSens0||0)>=10)){ if(Math.random()<0.45) zoneAbort(h); else h.zoneAbortTried=true; }   // 火照りが急に進んだら、半分弱は逃げ出す
+  if(h.zoneEnter && !h.zoneAbortTried && zoneFear(h.zone)>=2 && denStage(h.x,h.y)<=0 && ((h.heatG||0)-(h.zoneHeat0||0)>=15 || (h.sensit||0)-(h.zoneSens0||0)>=10)){ if(Math.random()<0.45) zoneAbort(h); else h.zoneAbortTried=true; }   // 火照りが急に進んだら、半分弱は逃げ出す(v3.2 巣窟の沼・最奥まで来ていたら引き返さない——前室と外だけ)
   const B=G.B;
   // ---- v1.3 催眠Lv: 時間で薄れる。Ⅲでは、その場で自分を慰めはじめる
   if(h.hypnoLv>0){
@@ -1626,6 +1626,7 @@ function aiDecide(foc){
     if(exitGo){ const k=exitOpen?0.5:0.35; dx=dx*0.65+(exX-p.x)/exitD*k; dy=dy*0.65+(exY-p.y)/exitD*k; }   // v2.1 逃げるなら降り口(か包囲位置)の方へ
   }else{
     let target=null, kind='';
+    const allyCaptive=B.heroes.some(c=>c.out&&c.captive&&c!==p);   // v3.2 仲間が捕まっている間は、寄り道の直接目標(品・宝箱)を取らない(価値の割引だけでは足りなかった)
     p.propTarget=null;
     if(p.hp < p.maxHp*0.6){
       let td=420;
@@ -1644,7 +1645,7 @@ function aiDecide(foc){
         if(target) p.propTarget=target;
       }
     }
-    if(!target && threat<0.6){
+    if(!target && threat<0.6 && !allyCaptive){
       // 燭台からこぼれた品(全消去/全回収/流星群)は多少の脅威があっても拾いに行く
       let td=480;
       for(const it of B.items){
@@ -1655,7 +1656,7 @@ function aiDecide(foc){
         if(d<td){ td=d; target=it; kind='item'; }
       }
     }
-    if(!target && threat<0.3){
+    if(!target && threat<0.3 && !allyCaptive){
       let td=520;
       for(const c of B.chests){
         if(c.lewd && !c.known) continue;   // v2.2 えちえちエリアの箱は見つけてから
@@ -1740,7 +1741,7 @@ function aiDecide(foc){
       dx=sv.x; dy=sv.y;
       state=kind;
       if(B.time<(p.pauseUntil||0) && threat<0.3 && kind!=='g_stairs' && attachCount(p)===0){ dx=0; dy=0; state='think'; }   // v2.2 目当てを変えた直後の一拍
-      else if(kind!=='g_stairs' && kind!=='heart' && kind!=='prop' && !B.wantExit && threat<0.5 && attachCount(p)===0){
+      else if(kind!=='g_stairs' && kind!=='heart' && kind!=='prop' && kind!=='g_wait' && kind!=='g_rescue' && !B.wantExit && threat<0.5 && attachCount(p)===0){   // v3.2 外で待つ・救出は迷いに掛けない(待つだけで巣窟を「怖い所」と覚えて、踏み込めなくなっていた)
         // v2.2 迷い: 進む先が嫌な地形(学習済み)かえちえちエリアなら、境で足を止めて迷う。報酬と体調で入るか諦めるか決める
         if(p.hesit && p.hesit.key!==giveUpKey(target)) p.hesit=null;   // 目標が変わったら迷いも仕切り直し
         if(p.hesit){
@@ -4338,11 +4339,14 @@ function denRuneHit(h,r){
   awardAil('rune'); awardAil('crest');
 }
 /* 壁の光線: 狙いをつけてから、線で撃つ */
+/* 光線が届く長さ: 最初の壁まで(岩は光も通さない) */
+function denBeamLen(x,y,a){ const dx=Math.cos(a), dy=Math.sin(a); for(let s=10;s<=BAL.DEN_BEAM_LEN;s+=10){ if(!passAt(x+dx*s,y+dy*s,true)) return s-10; } return BAL.DEN_BEAM_LEN; }
 function denBeamFire(bm){
-  const B=G.B, len=BAL.DEN_BEAM_LEN, dx=Math.cos(bm.aimA), dy=Math.sin(bm.aimA);
-  B.fx.push({kind:'denbeam', x:bm.x, y:bm.y, ang:bm.aimA, len, t:0, life:0.32, col:bm.type==='hypno'?'#b46cff':'#ff86b3'});
+  const B=G.B, len=denBeamLen(bm.ox,bm.oy,bm.aimA), dx=Math.cos(bm.aimA), dy=Math.sin(bm.aimA);
+  B.fx.push({kind:'denbeam', x:bm.ox, y:bm.oy, ang:bm.aimA, len, t:0, life:0.32, col:bm.type==='hypno'?'#b46cff':'#ff86b3'});   // v3.2 描くのも当たるのも、撃つ起点(壁の内側の面)から同じ線で
   for(const h of B.heroes){
     if(h.out) continue;
+    if(denStage(h.x,h.y)<0) continue;   // v3.2 巣窟の外(澱みで待つ相方)は、中の罠には撃たれない
     const rx=h.x-bm.ox, ry=(h.y-12)-bm.oy, along=rx*dx+ry*dy;
     if(along<0||along>len) continue;
     if(Math.abs(rx*dy-ry*dx)>BAL.DEN_BEAM_W) continue;
@@ -4383,7 +4387,8 @@ function denRoleTick(){
   const R=P.denRole, ex=B.heroes[R.in], wt=B.heroes[R.wait];
   if(!ex||!wt||ex.out||wt.out){ P.denRole=null; return; }
   if(!denGoalIn(P.goal) && B.time-R.since>3){ P.denRole=null; return; }              // 目当てが巣窟から離れた
-  if(denStage(ex.x,ex.y)<0 && B.time-R.since>5){ P.denRole=null; return; }           // 中の子が出てきた
+  if(denStage(ex.x,ex.y)>=0) R.lastIn=B.time;                                         // 中に居る間は時計を進めない
+  else if(R.lastIn && B.time-R.lastIn>5){ P.denRole=null; return; }                    // 中の子が出てきた(入る前の道中では解かない)
   if(denPeril(ex)){ sayPartyAs(wt.hi,'den.rush',2,0); P.denRole=null; }               // 危ない: 待つのをやめる
 }
 /* 待つ側の立ち位置: 口の外。中の子が画面の端に近づいた分だけ、口の内側へ踏み込んで詰める */
@@ -4407,7 +4412,7 @@ function denAssignRole(win,active){
   const HD=HEROES[other.id]||{}, brave=(HD.braveAdd||0)>0.1;
   const together = brave || win.h.hp<win.h.maxHp*0.6 || (B.den&&B.den.guardUp) || denPeril(win.h);
   if(together){ sayPartyAs(other.hi,'den.together',1,0); return; }
-  P.denRole={in:win.h.hi, wait:other.hi, since:B.time};
+  P.denRole={in:win.h.hi, wait:other.hi, since:B.time, lastIn:0};
   B.nDenWait=(B.nDenWait||0)+1;
   if(sayPartyAs(other.hi,'den.wait',1,0)) pendingLine(win.h.hi,'den.goIn',1.1,1);
 }
@@ -4425,7 +4430,7 @@ function denTick(dt){
     if(f.cd>0) continue;
     f.cd=BAL.DEN_FLOWER_CD*rand(0.8,1.3);
     if(!act.some(h=>Math.hypot(h.x-f.x,h.y-f.y)<560)) continue;   // 誰も居ない所では咲かない(雲の無駄打ちを避ける)
-    f.bloom=1; spawnCloud(f.x,f.y,BAL.DEN_FLOWER_R,BAL.DEN_FLOWER_LIFE,BAL.DEN_FLOWER_RATE,'gas');
+    f.bloom=1; spawnCloud(f.x,f.y,BAL.DEN_FLOWER_R,BAL.DEN_FLOWER_LIFE,BAL.DEN_FLOWER_RATE,'denflower');   // v3.2 種族名を借りない(居ない魔物の学習が進んでしまう)
   }
   for(const bm of D.beams){
     bm.t+=dt;
