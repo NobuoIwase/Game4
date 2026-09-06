@@ -1383,7 +1383,7 @@ function aiUpdate(dt){
   if(Math.abs(p.vx)>12 && p.steerState!=='talk') p.face=p.vx>0?1:-1;   // v3.1 話している間は相手の方を向いたまま
   p.moving=Math.hypot(p.vx,p.vy)>30;
 
-  const LBL={flee:'かいひ行動!', boss:'ボスかいひ!!', dodge:'よける!(おぼえてる)', gem:'ジェム回収', poi:'めざす場所へ', explore:'たんさく中', heart:'ハートへ!',
+  const LBL={g_gather:'集まって相談', flee:'かいひ行動!', boss:'ボスかいひ!!', dodge:'よける!(おぼえてる)', gem:'ジェム回収', poi:'めざす場所へ', explore:'たんさく中', heart:'ハートへ!',
     prop:'燭台をこわして回復!', chest:'たからばこへ!', kite:'まちうけ・けん制', wait:'けいかい中',
     struggle:'ふりほどこうともがいている!',
     charmwalk:'ふらふらと、ちかづいていく…', heatwalk:'熱にまけて、よろめき寄る…',
@@ -1403,7 +1403,7 @@ function aiUpdate(dt){
     p.aiState=state;
     // エロ状態が乗っている間は、のんきなおしゃべりを封じる(台詞の主導権はエロ側)
     const ero=p.heatLv>0||p.aphro>=45||restraintCount(p)>0||p.climaxT>0||p.charms.some(c=>c.lv>0);   // ゲージだけの魅了エントリ(lv0)は数えない
-    if(!ero) heroBubble(p,BBL[state]);
+    if(!ero && BBL[state]) heroBubble(p,BBL[state]);   // v3.1 表に無い状態(g_gather など)で空の吹き出しを置かない
   }
 }
 
@@ -1666,7 +1666,7 @@ function aiDecide(foc){
       goalOk = threat<(urgent?0.6:0.3);                                   // 脅威が濃いときは目当てへ歩かない(牽制/回避に戻る)
       // v2.1 目当てがあるなら歩く。ジェムは進む先の「道すがら」だけ拾う(ジェム畑と目当ての間を往復しない)。ジェムの群れそのものが目当てなら普通に拾い集める
       walk = goalOk && goal.kind!=='gems' && (goal.kind!=='explore' || leaving);
-      atGoal = walk && Math.hypot(goal.x-p.x,goal.y-p.y)<(goal.kind==='gather'?30:90);   // v3.1 集合はそばまで寄る
+      atGoal = walk && Math.hypot(goal.x-p.x,goal.y-p.y)<90;
       // v2.1 ジェムに足を取られない: 目当てへ歩いているのに GOAL_STALL_T 秒で60px も近づけなければ(降り続けるジェムを拾い続けている)、GEM_FAST_T 秒は足元以外のジェムを拾わない
       if(walk){ const gd=Math.hypot(goal.x-p.x,goal.y-p.y), gk=giveUpKey(goal);
         if(p.gKey!==gk){ p.gKey=gk; p.gBest=gd; p.gT=B.time; }
@@ -3219,9 +3219,11 @@ function partyTick(dt){
 /* v3.1 集合の判定: 皆が重心から GATHER_R 以内か / 近くに脅威(魔物・拘束・押し倒し・薄い体力)があるか */
 function partyCenter(){ const B=G.B; let cx=0,cy=0,n=0; for(const h of B.heroes){ if(h.out) continue; cx+=h.x; cy+=h.y; n++; } return n?{x:cx/n,y:cy/n,n}:null; }
 function partyGathered(){ const B=G.B, c=partyCenter(); if(!c||c.n<2) return true; for(const h of B.heroes){ if(h.out) continue; if(Math.hypot(h.x-c.x,h.y-c.y)>BAL.GATHER_R) return false; } return true; }
-function partyDanger(){ const B=G.B; for(const h of B.heroes){ if(h.out) continue; if(attachCount(h)>0 || h.pinned || h.hp<h.maxHp*0.4 || (h.threatV||0)>=BAL.GATHER_DANGER_THREAT || nearEnemyCount(h.x,h.y,BAL.GATHER_DANGER_R,false)>0) return true; } return false; }
+function partyDanger(){ const B=G.B; if(B.heroes.some(h=>h.out)) return true;   // v3.1 誰かが捕まっているなら相談どころではない(救出が先。3人以上でも救出の案を潰さない)
+  for(const h of B.heroes){ if(h.out) continue; if(attachCount(h)>0 || h.pinned || h.hp<h.maxHp*0.4 || (h.threatV||0)>=BAL.GATHER_DANGER_THREAT || nearEnemyCount(h.x,h.y,BAL.GATHER_DANGER_R,false)>0) return true; } return false; }
 function updateGoal(p){
   const B=G.B, P=B.party, active=B.heroes.filter(h=>!h.out);
+  if(P && P.gather && (active.length<2 || B.time>P.gather.until+1)){ P.gather=null; P.gatherDone=0; }   // v3.1 流れた集合(誰かが捕まった・戦いが長引いた)は、後で「いま集まった」と数えない
   if(!P || active.length<2) return updateGoalSolo(p);
   if(P.goal && P.owner && !P.owner.out && goalValid(P.owner,P.goal) && B.time<P.until){
     if(p.goal!==P.goal){ p.goal=P.goal; p.goalT=B.time+BAL.GOAL_RETHINK; }
@@ -3262,9 +3264,10 @@ function updateGoal(p){
   if((B.time-P.decidedT>BAL.PARTY_TALK_CD && P.goal.kind!=='explore') || gathered){   // 集まったのなら(探索でも)必ず一言交わす
     P.decidedT=B.time; const kind=goalKindKey(P.goal);
     let t0=0;
-    if(gathered){ const other=active.find(h=>h.hi!==(P.gatherCaller>=0?P.gatherCaller:win.h.hi)); if(other){ pendingLine(other.hi,'gather.arrive',0.2,1); t0=0.9; } }   // 呼ばれた子が着いて一言
+    if(gathered){ const arr=active.find(h=>h.hi!==(P.gatherCaller>=0?P.gatherCaller:win.h.hi));   // 呼ばれて歩いてきた子が着いて一言
+      if(arr){ pendingLine(arr.hi,'gather.arrive',0.2,1); t0=(arr.hi===win.h.hi)?1.7:0.9; } }   // 着いた子がそのまま言い出す時は、前の吹き出しが消えてから(同じ子の続けざまの台詞は潰れる)
     const said=t0>0?(pendingLine(win.h.hi,'propose.'+kind,t0,1),true):sayPartyAs(win.h.hi,'propose.'+kind,1,0);
-    if(said){ for(const x of props){ if(x===win) continue; pendingLine(x.h.hi, same?'same':(x.g.score>win.g.score?'yield':'agree'), t0+0.9, 1); } if((!same || gathered) && (gathered || partyGathered())) P.talkUntil=B.time+(gathered?BAL.GATHER_TALK_T:BAL.TALK_T); }   // 集まって話した時は少し長く向き合う。離れたまま(集合できなかった)なら声だけ掛けて足は止めない(v3.1)
+    if(said){ for(const x of props){ if(x===win) continue; pendingLine(x.h.hi, same?'same':(x.g.score>win.g.score?'yield':'agree'), t0+0.9, 1); } if((!same || gathered) && (gathered || partyGathered())) P.talkUntil=B.time+(gathered?Math.max(BAL.GATHER_TALK_T,t0+1.6):BAL.TALK_T); }   // 集まって話した時は言い終わるまで向き合う。離れたまま(集合できなかった)なら声だけ掛けて足は止めない(v3.1)
   }
   P.gatherDone=0;
   return p.goal;
@@ -4150,7 +4153,7 @@ function beginCapture(src,cause){
     B.bullets=B.bullets.filter(b=>b.hi!==B.ci);
     setBanner(h.name+'、捕まった!', others[0].name+'は救い出すか、置いて降りるか','#c98cff');
     for(const o of others) sayPartyAs(o.hi,'captured.watch',3,0);
-    B.party.goal=null;
+    B.party.goal=null; B.party.pending=[]; B.party.talkUntil=0; B.party.gather=null; B.party.gatherDone=0;   // v3.1 相談は中断(言いかけの台詞と足止めを捨てる)
     return;
   }
   G.mode='captured'; B.captureT=2.8; h.pinned=true;
