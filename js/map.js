@@ -37,7 +37,7 @@ function clampMapY(y,m){ m=m===undefined?24:m; return clamp(y,-MAP_HH+m,MAP_HH-m
 /* ================= 生成 ================= */
 function genMap(){
   const gi=mapGen(), F=curFloor(), fl=F.depth, seed=1000+gi*7919+fl*104729+(typeof eraNow==='function'?eraNow()*31337:0);   // v2.0 世代×階層で地形が決まる(同じ階層への再挑戦は同じ地形) / v3.0 世代(era)で最終階層が動くので種にも入れる
-  if(G.map && G.map.seed===seed && META.map && META.map.gen===gi && META.map.floor===fl){ G.map.flowT=-9; G.map.heroTile=null; return; }   // 同じ世代・同じ階層: 流れ場だけ次の出撃で作り直す
+  if(G.map && G.map.seed===seed && META.map && META.map.gen===gi && META.map.floor===fl){ G.map.flowT=-9; G.map.heroTile=null; G.map.flows=null; return; }   // 同じ世代・同じ階層: 流れ場だけ次の出撃で作り直す
   let sd=seed; const rnd=()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; };
   const N=MAP_W*MAP_H;
   // ---- 地形帯: ボロノイ風。巣は端のほう、出発点は苔
@@ -256,7 +256,7 @@ function clearAround(x,y,r){
     G.map.solid[j*MAP_W+i]=0;
   }
   for(let dj=-r-1;dj<=r+1;dj++) for(let di=-r-1;di<=r+1;di++) G.map.chunks.delete(chunkKey(Math.floor((i0+di)/CHUNK),Math.floor((j0+dj)/CHUNK)));
-  G.map.mini=null; G.map.flowT=-9; G.map.heroTile=null;
+  G.map.mini=null; G.map.flowT=-9; G.map.heroTile=null; G.map.flows=null;
 }
 /* ================= 流れ場(魔物の回り込み)・視線・経路 ================= */
 function bfsField(si,sj,fly){
@@ -276,16 +276,19 @@ function bfsField(si,sj,fly){
   return dist;
 }
 function updateFlow(force){
-  const B=G.B; if(!G.map||!B) return; const p=B.hero;
-  const hi=tileI(p.x), hj=tileJ(p.y);
-  if(!force && G.map.dist && G.map.heroTile && G.map.heroTile[0]===hi && G.map.heroTile[1]===hj) return;
-  if(!force && B.time-G.map.flowT<0.35) return;
-  G.map.heroTile=[hi,hj]; G.map.flowT=B.time;
-  G.map.dist=bfsField(hi,hj,false); G.map.distF=bfsField(hi,hj,true);
+  const B=G.B; if(!G.map||!B) return; G.map.flows=G.map.flows||{};
+  const hs=B.heroes||[B.hero]; const li=(typeof leaderIdx==='function')?leaderIdx():0;
+  hs.forEach((p,i)=>{   // v3.0 ヒロインごとの流れ場(魔物は自分の標的の場で回り込む)。代表の場は従来の dist/distF にも入れる
+    if(p.out) return; const hi=tileI(p.x), hj=tileJ(p.y), F=G.map.flows[i];
+    if(!force && F && F.tile[0]===hi && F.tile[1]===hj) return;
+    if(!force && F && B.time-F.t<0.35) return;
+    const nf={dist:bfsField(hi,hj,false), distF:bfsField(hi,hj,true), tile:[hi,hj], t:B.time}; G.map.flows[i]=nf;
+    if(i===li){ G.map.heroTile=[hi,hj]; G.map.flowT=B.time; G.map.dist=nf.dist; G.map.distF=nf.distF; }
+  });
 }
 /* (x,y) から彼女へ近づく向き: 隣接タイルのうち距離が最小のものへ */
-function flowDir(x,y,fly){
-  const f=fly?G.map.distF:G.map.dist; if(!f) return null;
+function flowDir(x,y,fly,hi){
+  const F=(G.map.flows&&hi!==undefined)?G.map.flows[hi]:null; const f=F?(fly?F.distF:F.dist):(fly?G.map.distF:G.map.dist); if(!f) return null;
   const i=tileI(x), j=tileJ(y); if(!inMap(i,j)) return null;
   const here=f[j*MAP_W+i]; let best=-1, bi=i, bj=j;
   for(let dj=-1;dj<=1;dj++) for(let di=-1;di<=1;di++){

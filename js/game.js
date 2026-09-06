@@ -254,7 +254,6 @@ function startBattle(){
   { const F=G.B.floor; setBanner('第'+F.depth+'層 '+F.name+(META.run.fails>0?'(再挑戦)':'')+(hero.level>1?' — Lv'+hero.level+'を引き継ぎ':''), F.sub, F.col); }
   heroBubble(hero,'今日も、まもりぬくよ!',true);
   if(heroes[1]) heroBubble(heroes[1],'……行く。付いてきなさい',true);
-  if(META.run.leftBehind && typeof STORY_V30!=='undefined' && STORY_V30.party && STORY_V30.party.reunion){ META.run.leftBehind=false; const L0=STORY_V30.party.reunion; setTimeout(()=>{ if(G.B===G.B) UI.showStory(L0,{dur:5}); },50); }   // v3.0 置いていかれた子が戻った朝
   UI.enterBattle();
   bgmStart('battle');
   // v2.0 物語: 初めての出撃は序章、階層に降り立った導入(潜行ごとに1度)、敗北の翌朝は再挑戦の文
@@ -266,6 +265,7 @@ function startBattle(){
     else if((META.era|0)>0 && !META.run.storySeen['loop'+META.era] && V30 && V30.era && V30.era.loopIntro && V30.era.loopIntro.length){ lines=V30.era.loopIntro.concat(fIntro); META.run.storySeen['loop'+META.era]=1; META.run.storySeen['f'+F.depth]=1; saveMeta(); }   // v3.0 組み替わった後の朝
     else if(META.run.fails>0 && STORY.retry.length){ lines=storyRetry(); }
     else if(sf.intro.length && !META.run.storySeen['f'+F.depth]){ lines=sf.intro; META.run.storySeen['f'+F.depth]=1; saveMeta(); }
+    if(META.run.leftBehind && V30 && V30.party && V30.party.reunion && V30.party.reunion.length){ META.run.leftBehind=false; lines=V30.party.reunion.concat(lines&&lines.length?['']:[]).concat(lines||[]); saveMeta(); }   // v3.0 置いていかれた子が戻った朝(導入の前に)
     if(lines&&lines.length) UI.showStory(lines,{dur:8+lines.length*1.3});
     G.B.storyLineT=22+rand(10); }
 }
@@ -360,7 +360,7 @@ function runReset(){
   META.gen.battle=0; META.gen.idx++;
   META.rot={dmg:0, ail:0, captures:0, battles:0};
   META.gen.know={}; META.gen.zoneKnow={}; META.gen.trapKnow={};   // 世代が変わると、覚えたことも忘れる(手記に書いた分だけ残る)
-  META.run.storySeen={prologue:(META.run.storySeen||{}).prologue};   // 階層の導入はまた出る(序章は出ない)
+  { const o=META.run.storySeen||{}; const n={prologue:o.prologue, join:o.join}; for(const k in o) if(k.startsWith('loop')) n[k]=o[k]; META.run.storySeen=n; }   // 階層の導入はまた出る(序章・合流・世代の朝は出ない)
 }
 /* 世代の夜明け: 彼女の自己強化は BAL.LUMINA_DECAY 段ぶん薄れる。高い系統から1段ずつ。
    初期値に戻るわけではない——世代を跨ぐごとに、土台が少しずつ上がっていく */
@@ -606,7 +606,7 @@ function climaxTick(dt){
   const B=G.B, h=B.hero;
   h.climaxT-=dt;
   if(!h.pinned && !h.charmBind){
-    B.pinSceneT+=dt;
+    if(B.pinSceneHi===B.ci) B.pinSceneT+=dt;
     if(B.pinScene && B.pinSceneT>2.6){ B.pinSceneT=0; B.pinSceneIdx++; }
   }
   const el=BAL.CLIMAX_DUR*(h.deepClimax?BAL.DEEP_MULT:1)-h.climaxT;
@@ -633,7 +633,7 @@ function climaxTick(dt){
   if(h.climaxT<=0){
     h.climaxT=0;
     h.refractT=BAL.REFRACT_T;
-    if(!h.pinned && !h.charmBind) B.pinScene=null;
+    if(!h.pinned && !h.charmBind) if(B.pinSceneHi===B.ci) B.pinScene=null;
     heatUp();
     if(h.deepClimax){ h.deepClimax=false; heatUp(); }   // 深い絶頂は発情を二段深める
   }
@@ -842,7 +842,7 @@ function enterPin(mon){
 function pinTick(dt){
   const B=G.B, h=B.hero;
   h.pinT-=dt;
-  B.pinSceneT+=dt;
+  if(B.pinSceneHi===B.ci) B.pinSceneT+=dt;
   if(B.pinScene && B.pinSceneT>2.6){ B.pinSceneT=0; B.pinSceneIdx++; }
   if(h.pinT<=0){
     h.pinT=BAL.PIN_PULSE_T;
@@ -863,7 +863,7 @@ function pinTick(dt){
       h.ifr=1.2;
       heroBubble(h,'まだ……まけないっ!',true,2);
       setBanner('振りほどいた!',h.name+'は立ち上がった','#8fd3ff');
-      B.pinScene=null;
+      if(B.pinSceneHi===B.ci) B.pinScene=null;
     }
   }
 }
@@ -889,7 +889,7 @@ function releaseCharmBind(sane){
   if(!h.charmBind) return;
   const mon=h.charmBind.mon;
   h.charmBind=null; h.charmSanity=0;
-  B.pinScene=null;
+  if(B.pinSceneHi===B.ci) B.pinScene=null;
   if(sane && mon && !mon.dead){
     // 我に返っても、惚れた記憶は一段しか薄れない(魅了は簡単には解けない)
     const c=charmEntry(h,mon.id);
@@ -909,7 +909,7 @@ function releaseCharmBind(sane){
 function charmBindTick(dt){
   const B=G.B, h=B.hero;
   const mon=h.charmBind.mon;
-  B.pinSceneT+=dt;
+  if(B.pinSceneHi===B.ci) B.pinSceneT+=dt;
   if(B.pinScene && B.pinSceneT>2.6){ B.pinSceneT=0; B.pinSceneIdx++; }
   if(!mon||mon.dead||mon.dormant){
     releaseCharmBind(false);
@@ -2488,7 +2488,7 @@ function enemiesUpdate(dt){
     const fly=canFly(e.id);
     // 壁で彼女が見えないときは、流れ場(BFS)に沿って回り込む(以降の追跡・照準はその向きを使う)
     e.blocked=false;
-    if(d>36 && G.map && !losClear(e.x,e.y,p.x,p.y,fly)){ const f=flowDir(e.x,e.y,fly); if(f){ dx=f.x*d; dy=f.y*d; e.blocked=true; } }
+    if(d>36 && G.map && !losClear(e.x,e.y,p.x,p.y,fly)){ const f=flowDir(e.x,e.y,fly,e.ti); if(f){ dx=f.x*d; dy=f.y*d; e.blocked=true; } }   // v3.0 標的のヒロインの流れ場で回り込む
 
     if(e.dormant){
       e.dormT+=dt;
@@ -2511,6 +2511,7 @@ function enemiesUpdate(dt){
     }
     e.zone=zoneAt(e.x,e.y); if(e.spd0!==undefined) e.spd=e.spd0*zoneMonSpd(e.zone,e.id)*((e.hasteT||0)>0?1.35:1); if((e.hasteT||0)>0) e.hasteT-=dt;   // v2.4 王の号令で一時的に速い
     if((e.burnT||0)>0){ e.burnT-=dt; e.burnTick=(e.burnTick||0)-dt; if(e.burnTick<=0){ e.burnTick=0.4; damageEnemy(e,3+0.08*p.level); if(Math.random()<0.5) parts(e.x,e.y-e.r*0.5,1,['#ff7a3a','#ffd76a'],40,0.4); } }   // v3.0 煉獄の剣の燃焼
+    if(e.dead) continue;   // 燃え尽きた個体はこのフレームの行動をしない
     e.x=clampMapX(e.x,e.r); e.y=clampMapY(e.y,e.r);
     if(e.stun>0){ e.stun-=dt; }
     else if(e.id==='inyoku'){
@@ -3405,13 +3406,13 @@ function poiTick(dt){
     if(q.kind==='stairs'){
       if(!B.wantExit && d<130 && M.known[q.key]) sayLine('stairsWait',0,30,'まだ、おりないよ。あとで!');   // v2.1 まだ降りない
       if(!B.exitLocked && !exitGuarded() && d<60 && !p.pinned && p.climaxT<=0 && attachCount(p)===0 && !p.charmBind){
-        B.exitT+=dt; if(B.exitT>0.3 && B.exitT<0.3+dt) heroBubble(p,'……ここから、おりられる',false,2);
+        if(B.ci===nearestHeroIdx(q.x,q.y)) B.exitT+=dt;   // v3.0 いちばん近い子だけが進める(二人で倍速にならない) if(B.exitT>0.3 && B.exitT<0.3+dt) heroBubble(p,'……ここから、おりられる',false,2);
         if(B.exitT>=BAL.EXIT_STAND && G.mode==='battle') startDescend();
-      }else if(d>=60) B.exitT=Math.max(0,B.exitT-dt*2);
+      }else if(d>=60 && !B.heroes.some(h=>!h.out&&h!==p&&Math.hypot(q.x-h.x,q.y-h.y)<60)) B.exitT=Math.max(0,B.exitT-dt*2);   // v3.0 相手が降り口に居るなら減らさない
     }
     if(q.kind==='seal'){
       if(!B.seals[q.key] && d<44 && !p.pinned && p.climaxT<=0 && attachCount(p)===0 && !p.charmBind){
-        q.litT=(q.litT||0)+dt;
+        if(B.ci===nearestHeroIdx(q.x,q.y)) q.litT=(q.litT||0)+dt;   // v3.0 いちばん近い子だけが灯す
         if(q.litT>=BAL.EXIT_STAND){
           B.seals[q.key]=1; B.used.seal=(B.used.seal||0)+1;
           const n=Object.keys(B.seals).length, tot=G.map.pois.filter(o=>o.kind==='seal').length;
@@ -3420,7 +3421,7 @@ function poiTick(dt){
           parts(q.x,q.y-20,24,['#ffd76a','#fff'],140,0.9); S.pick();
           if(n>=tot){ B.exitLocked=false; p.goal=null; }
         }
-      }else if(d>=44) q.litT=0;
+      }else if(d>=44 && !B.heroes.some(h=>!h.out&&h!==p&&Math.hypot(q.x-h.x,q.y-h.y)<44)) q.litT=0;   // v3.0 相手が石のそばに居るなら消さない
     }
   }
 }
@@ -3494,7 +3495,7 @@ function nearEnemyCount(x,y,r,all){ let n=0; for(const e of G.B.enemies){ if(e.d
 function skillTick(dt){
   const B=G.B, p=B.hero;
   for(const k in p.skillCd) if(p.skillCd[k]>0) p.skillCd[k]-=dt;
-  if(BAL.SMART_AI){ if(p.aiMode==='flee') B.fleeT=(B.fleeT||0)+dt; else B.fleeT=Math.max(0,(B.fleeT||0)-dt*0.5); }   // 逃げ続けた秒数(exitTick が「降り口を探す」に使う)
+  if(BAL.SMART_AI && B.ci===leaderIdx()){ const anyFlee=B.heroes.some(h=>!h.out&&h.aiMode==='flee'); if(anyFlee) B.fleeT=(B.fleeT||0)+dt; else B.fleeT=Math.max(0,(B.fleeT||0)-dt*0.5); }   // 逃げ続けた秒数(誰かが逃げに徹している間。exitTick が「降り口を探す」に使う)
   if(p.guardT>0){ p.guardT-=dt; if(Math.random()<dt*10) parts(p.x+rand(-16,16),p.y-rand(0,30),1,['#ffd76a','#fff'],30,0.6); }
   if(G.mode!=='battle') return;
   if(p.freezeT>0 || (p.stumbleDur||0)>0 || p.bathT>0 || p.poolT>0 || p.readT>0) return;   // 時間停止・よろめき・湯/清水/石碑の間は奥義も出ない
@@ -3504,7 +3505,7 @@ function skillTick(dt){
   if(skillReady(p,'purge') && (attachCount(p)>=2 || p.pinned) && !p.charmBind && p.hypnoLv<2){   // 催眠Ⅱ+では振り払う気が起きない
     for(const sl of attachedSlots(p)) detachLimb(sl,{fling:true});
     for(const sl of suckSlots(p)) detachSucker(sl,{fling:true});
-    if(p.pinned){ p.pinned=false; p.pinBy=null; p.pinEscape=0; p.struggle=0; B.pinScene=null; }
+    if(p.pinned){ p.pinned=false; p.pinBy=null; p.pinEscape=0; p.struggle=0; if(B.pinSceneHi===B.ci) B.pinScene=null; }
     for(const e of B.enemies){ if(e.dead||e.dormant||e.item) continue; const dx=e.x-p.x, dy=e.y-p.y, d=Math.hypot(dx,dy)||0.001; if(d<120){ if(MONSTERS[e.id].spd>0 && !MONSTERS[e.id].guardian){ e.x+=dx/d*90; e.y+=dy/d*90; collideMap(e,e.r*0.75,canFly(e.id)); } e.stun=Math.max(e.stun||0,e.boss?0.6:1.2); } }
     p.ifr=Math.max(p.ifr,1.0); p.stamina=Math.min(p.staminaMax,p.stamina+20); useSkill(p,'purge'); parts(p.x,p.y-14,40,['#fff','#8fd3ff','#ffd76a'],260,0.9); G.shake=Math.min(8,G.shake+5);
   }
@@ -3575,7 +3576,7 @@ function linesTick(dt){
   if(pr>=0.9 && B.pressSaid<2){ B.pressSaid=2; setBanner('深淵の圧','ここに長く居すぎた','#ff5d7a'); sayLine('pressure.high',1,0,'ここ、ながくいたらまずい……!'); }
   if(p.hp<p.maxHp*0.5 && !p.lowSaid){ p.lowSaid=true; sayLine('hurtLow',1,0); const o=partnerOf(p); if(o) sayPartyAs(o.hi,'assist.low',2,10); } else if(p.hp>p.maxHp*0.72) p.lowSaid=false;
   let near=0; for(const e of B.enemies){ if(!e.dead&&!e.dormant&&inSight(e,p)){ near++; if(e.boss) B.bossSeen=true; } }   // v2.4 ボスを見た(以後の武器選びはボスを想定)
-  B.calmT=near===0?(B.calmT||0)+0.5:0; if(B.calmT>=4 && B.time>30){ B.calmT=0; sayLine('calm',0,45); }
+  if(B.ci===leaderIdx()){ B.calmT=near===0?(B.calmT||0)+0.5:0; if(B.calmT>=4 && B.time>30){ B.calmT=0; sayLine('calm',0,45); } }   // v3.0 共有タイマーは代表だけ
 }
 /* ================= v2.0 新種 ================= */
 /* 淫翼: 頭上を旋回し、急降下して両腕に抱きつく(数秒で離れて舞い戻る)。翼の粉で敏感に */
@@ -3867,7 +3868,7 @@ function chooseNightItem(p,held){
 function trapsTick(dt){
   const B=G.B, p=B.hero;
   for(const tr of B.traps){
-    tr.t+=dt;
+    if(B.ci===leaderIdx()) tr.t+=dt;   // v3.0 寿命は一度だけ進める(ヒロインごとに呼ばれる)
     if(tr.armed && !p.pinned && p.freezeT<=0 && Math.hypot(p.x-tr.x,p.y-tr.y)<tr.r){
       tr.armed=false; tr.t=Math.max(tr.t,tr.life-0.8);
       const kind=tr.kind||'rune';
@@ -4118,12 +4119,12 @@ function bulletsUpdate(dt){
     /* --- v2.0 みちびきの精霊: いちばん近い敵へ曲がりながら追い、当たれば小範囲ではぜる --- */
     if(b.kind==='spirit'){
       b.life-=dt;
-      if(!b.target||b.target.dead||b.target.dormant){ let bt=null, bd=520; for(const e of B.enemies){ if(e.dead||e.dormant||e.state==='attached') continue; const dd=Math.hypot(e.x-b.x,e.y-b.y); if(dd<bd){ bd=dd; bt=e; } } b.target=bt; }
+      if(!b.target||b.target.dead||b.target.dormant){ let bt=null, bd=520; for(const e of B.enemies){ if(e.dead||e.dormant||(e.state==='attached'&&e.ti===b.hi)) continue; const dd=Math.hypot(e.x-b.x,e.y-b.y); if(dd<bd){ bd=dd; bt=e; } } b.target=bt; }
       if(b.target){ const dx=b.target.x-b.x, dy=(b.target.y-b.target.r*0.6)-b.y, d=Math.hypot(dx,dy)||1; b.vx+=(dx/d*b.spd-b.vx)*Math.min(1,dt*b.turn); b.vy+=(dy/d*b.spd-b.vy)*Math.min(1,dt*b.turn); }
       b.x+=b.vx*dt; b.y+=b.vy*dt;
       if(Math.random()<0.6) parts(b.x,b.y,1,[b.evo?'#ffe3ef':'#e8f4ff','#fff'],16,0.3);
       let hitE=null;
-      for(const e of B.enemies){ if(e.dead||e.dormant||e.state==='attached') continue; if(Math.hypot(e.x-b.x,(e.y-e.r*0.6)-b.y)<e.r+8){ hitE=e; break; } }
+      for(const e of B.enemies){ if(e.dead||e.dormant||(e.state==='attached'&&e.ti===b.hi)) continue; if(Math.hypot(e.x-b.x,(e.y-e.r*0.6)-b.y)<e.r+8){ hitE=e; break; } }
       if(hitE||b.life<=0){
         if(hitE){ for(const e of B.enemies){ if(e.dead||e.dormant) continue; if(Math.hypot(e.x-b.x,(e.y-e.r*0.6)-b.y)<b.splash+e.r) damageEnemy(e,b.dmg); } parts(b.x,b.y,b.evo?12:8,['#e8f4ff','#fff','#ffd76a'],130,0.4); sfx(1000,300,0.1,'sine',0.04); if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN*0.6); }
         b.life=0;
@@ -4143,7 +4144,7 @@ function bulletsUpdate(dt){
       b.x+=b.vx*dt; b.y+=b.vy*dt; b.life-=dt;
       if(Math.random()<0.4) parts(b.x,b.y,1,['#fff3c4','#fff'],20,0.25);
       for(const e of B.enemies){
-        if(e.dead||e.dormant||e.state==='attached'||(e.crossCd||0)>0) continue;
+        if(e.dead||e.dormant||(e.state==='attached'&&e.ti===b.hi)||(e.crossCd||0)>0) continue;
         if(Math.hypot(e.x-b.x,(e.y-e.r*0.6)-b.y)<e.r+7){
           damageEnemy(e,b.dmg);
           e.crossCd=0.45;
@@ -4157,7 +4158,7 @@ function bulletsUpdate(dt){
     if(Math.random()<0.3) parts(b.x,b.y,1,['#ffd76a','#fff'],20,0.25);
     let hit=false;
     for(const e of B.enemies){
-      if(e.dead||e.dormant||e===b.last||e.state==='attached') continue;
+      if(e.dead||e.dormant||e===b.last||(e.state==='attached'&&e.ti===b.hi)) continue;
       if(Math.hypot(e.x-b.x,(e.y-e.r*0.6)-b.y)<e.r+5){
         damageEnemy(e,b.dmg);
         parts(b.x,b.y,4,['#ffd76a','#fff'],100,0.3);
@@ -4308,14 +4309,16 @@ function spawnInitialPicks(){
 function picksTick(dt){
   const B=G.B, T=B.pickT, p=B.hero;
   const n={shroom:0,nectar:0,treasure:0}; for(const pk of B.picks) if(!pk.dead) n[pk.kind]++;
+  if(B.ci===leaderIdx()){   // v3.0 湧きのタイマーは一度だけ進める(ヒロインごとに呼ばれる)
   T.shroom-=dt;   if(T.shroom<=0){   T.shroom=BAL.PICK_SHROOM_RESPAWN;  if(n.shroom<BAL.PICK_SHROOM_MAX) spawnPick('shroom'); }
   T.nectar-=dt;   if(T.nectar<=0){   T.nectar=BAL.PICK_NECTAR_RESPAWN;  if(n.nectar<BAL.PICK_NECTAR_MAX) spawnPick('nectar'); }
   T.treasure-=dt; if(T.treasure<=0){ T.treasure=BAL.PICK_TREASURE_CD;   if(n.treasure<BAL.PICK_TREASURE_MAX) spawnPick('treasure'); }
+  }
   // 見えたものは覚える(あとで目当てにできる)
   for(const pk of B.picks){ if(!pk.dead && !pk.known && inSight(pk,p)){ pk.known=true; if(B.time-B.seeToastT>2.5){ B.seeToastT=B.time; floatTxt(pk.x,pk.y-30,'みつけた: '+PICK_DEF[pk.kind].name,'#8fd3ff',11,1.5); sayLine('pick.'+pk.kind,0,14); } } }   // v2.1 資源ごとの台詞
   for(const c of B.chests){ if(!c.known && inSight(c,p)){ c.known=true; floatTxt(c.x,c.y-30,'みつけた: 宝箱','#ffd76a',11,1.5); } }
   for(const it of B.items){ if(!it.known && inSight(it,p)) it.known=true; }
-  for(const k in B.poolCd){ if(B.poolCd[k]>0) B.poolCd[k]-=dt; }
+  if(B.ci===leaderIdx()) for(const k in B.poolCd){ if(B.poolCd[k]>0) B.poolCd[k]-=dt; }   // v3.0 一度だけ
 }
 function applyPick(pk){
   const B=G.B, p=B.hero; pk.dead=true; B.used[pk.kind]++;
@@ -4899,7 +4902,7 @@ function rescueTick(dt){
     else c.captive.rescue=Math.max(0,c.captive.rescue-dt*0.7); }
 }
 function rescueHero(c,by){
-  const B=G.B; c.out=false; c.pinned=false; c.pinBy=null; c.pinEscape=0; c.struggle=0; c.captive=null; c.hp=Math.max(c.hp,Math.round(c.maxHp*0.5)); c.stamina=Math.max(c.stamina,Math.round(c.staminaMax*0.6)); c.ifr=1.5; c.aiMode='fight'; c.goal=null; c.path=null; c.exhausted=false; c.thanksT=1.3;
+  const B=G.B; c.out=false; c.pinned=false; c.pinBy=null; c.pinEscape=0; c.struggle=0; c.captive=null; B.captures=(B.captures||[]).filter(x=>x.hi!==c.hi); /* 救い出した子の捕獲記録は消す */ c.hp=Math.max(c.hp,Math.round(c.maxHp*0.5)); c.stamina=Math.max(c.stamina,Math.round(c.staminaMax*0.6)); c.ifr=1.5; c.aiMode='fight'; c.goal=null; c.path=null; c.exhausted=false; c.thanksT=1.3;
   B.rescues=(B.rescues||0)+1; setBanner(c.name+'を救い出した!', by.name+'が縛めを解いた','#8fd3ff'); parts(c.x,c.y-14,30,['#fff','#8fd3ff','#ffd76a'],200,0.8); S.lvup();
   sayPartyAs(by.hi,'rescue.done',3,0); B.party.goal=null;
   if(typeof STORY_V30!=='undefined' && STORY_V30.party && STORY_V30.party.rescue && !B.rescueStorySeen){ B.rescueStorySeen=true; UI.showStory(STORY_V30.party.rescue,{dur:5}); }

@@ -2439,7 +2439,7 @@ function getCG(names){
 }
 function drawCutin(g){
   const B=G.B; if(!B) return;
-  const h=B.hero;
+  const h=(B.heroes&&B.heroes[B.pinSceneHi]&&!B.heroes[B.pinSceneHi].out)?B.heroes[B.pinSceneHi]:B.hero;   // v3.0 場面の主
   let im=null;
   if(h.pinned){ const id=h.pinBy?h.pinBy.id:'default'; im=getCG(['pin_'+id+'.png','pin.png']); }
   else if(h.charmBind){ im=getCG(['charmbind_'+h.charmBind.mon.id+'.png','charmbind.png']); }
@@ -2457,8 +2457,8 @@ function drawCutin(g){
   g.restore();
 }
 function drawPinScene(g){
-  const B=G.B;
-  if(!B||!(B.hero.pinned||B.hero.charmBind||B.hero.climaxT>0)||!B.pinScene||!B.pinScene.beats||!B.pinScene.beats.length) return;
+  const B=G.B; const hh=B&&((B.heroes&&B.heroes[B.pinSceneHi])||B.hero);   // v3.0 場面の主(押し倒された/絶頂した子)
+  if(!B||!hh||hh.out||!(hh.pinned||hh.charmBind||hh.climaxT>0)||!B.pinScene||!B.pinScene.beats||!B.pinScene.beats.length) return;
   const beat=B.pinScene.beats[B.pinSceneIdx % B.pinScene.beats.length];
   g.save();
   const w2=Math.min(640,W-80);
@@ -2569,7 +2569,7 @@ function drawHUD(g){
   g.font='bold 11px '+FONT;
   const label='AI思考: '+p.aiLabel;
   const cw=g.measureText(label).width+34;
-  const chipY=narrow?72:48;
+  const chipY=(narrow?72:48)+Math.max(0,B.heroes.length-1)*(narrow?30:26);   // v3.0 二人分の段の下に
   rr(g,10,chipY,cw,22,11);
   g.fillStyle='rgba(24,30,60,0.82)'; g.fill();
   g.strokeStyle='rgba(143,211,255,0.65)'; g.lineWidth=1.3; g.stroke();
@@ -2584,7 +2584,7 @@ function drawHUD(g){
     const gcol=gl.kind==='event'?((EVENT_DEF[gl.sub]&&EVENT_DEF[gl.sub].col)||'#ffd76a'):'#ffe9b0';
     const gtxt='目当て: '+goalName(gl)+(gd>60?'  '+dirName(gx,gy)+' '+Math.round(gd)+'px':'  ここ');
     const gw=g.measureText(gtxt).width+26;
-    const gx0=narrow?10:10+cw+8, gy0=narrow?chipY+24:48;   // 狭い画面ではAI思考チップの下に置く
+    const gx0=narrow?10:10+cw+8, gy0=narrow?chipY+24:chipY;   // 狭い画面ではAI思考チップの下に置く(v3.0 段の数に合わせて下がる)
     rr(g,gx0,gy0,gw,22,11); g.fillStyle='rgba(40,30,20,0.82)'; g.fill(); g.strokeStyle=hexA(gcol,0.7); g.lineWidth=1.3; g.stroke();
     g.fillStyle=gcol; g.textAlign='left'; g.textBaseline='middle'; g.fillText(gtxt,gx0+13,gy0+11.5);
     drawEdgeArrow(g,gl.x,gl.y,gcol,goalName(gl));
@@ -3013,7 +3013,7 @@ function draw(){
     if(p.out && p.captive) drawCaptiveMark(g,p);
     drawStateFx(g,p);
     if(G.mode==='battle'){
-      if(p.pinned) drawPinGauge(g,p);
+      if(p.pinned && !p.out) drawPinGauge(g,p);   // v3.0 捕まって残っている子には脱出ゲージを出さない
       else if(p.charmBind) drawCharmBindGauge(g,p);
       else if(restraintCount(p)>0) drawStruggleRing(g,p);
     }

@@ -213,7 +213,7 @@ const UI={
     const nm=$('advName'); nm.textContent=(NAMES[ln.s]!==undefined)?NAMES[ln.s]:ln.s; nm.className=ln.s;
     // v3.0 立ち絵は話しているヒロインに切り替える(地の文は直前の話者のまま暗く)
     { const img=$('advImg'); const who=(ln.s==='lumina'||ln.s==='freila')?ln.s:(A.lastWho||'lumina'); A.lastWho=who;
-      if(img && img.dataset.who!==who){ img.dataset.who=who; img.dataset.fb='0'; img.style.visibility=''; img.src=who==='freila'?'assets/ref/freila.png':'assets/ref/lumina_novelai.png'; } }
+      if(img && img.dataset.who!==who){ img.dataset.who=who; img.dataset.fb='0'; img.style.visibility=''; img.src=who==='freila'?'assets/ref/freila_stand.png':'assets/ref/lumina_novelai.png'; } }
     const st=$('advStand'); st.className=((ln.s==='lumina'||ln.s==='freila')?'speak':'dim')+(ln.f?' f-'+ln.f:'');
     const tx=$('advText'); tx.className=ln.s; tx.textContent='';
     A.typeT=0; A.shown=0; A.dwell=0; A.full=(ln.s==='lumina'||ln.s==='freila'||ln.s==='town'||ln.s==='voice')?'「'+ln.t+'」':ln.t;
