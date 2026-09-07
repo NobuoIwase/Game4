@@ -4,6 +4,13 @@
 ============================================================ */
 
 const EN_COLORS={
+  /* v6.0 新しい種 */
+  mirrorling:['#bcdcff','#7fa8d0'], glyphmite:['#ff8cbe','#8a2c66'], silkmite:['#ffc8dc','#c07a9c'],
+  frostbud:['#d8f2ff','#8ec6e8'], stiller:['#b0a8d0','#6a628c'], lethemoth:['#e8e0e4','#b0a8b4'],
+  gallery:['#e8e0e0','#ffb3cf'], echoer:['#c8c0b0','#8a8272'], bonesoldier:['#b9b2a4','#7a7466'],
+  nichelord:['#ff8fb3','#7a2038'], seatflesh:['#ff7fa6','#7a2038'], heartroot:['#ff9ec2','#8a1a3c'],
+  tallykeeper:['#b8b0c8','#3a3348'],
+  mirrorqueen:['#cfe4ff','#2a4a6a'], nevermet:['#e8dce4','#a898a8'], firstslug:['#c8e07a','#7a9a3a'],
   slug:['#b8d86a','#7a9a3a'], ghost:['#dfe4ff','#aab4e8'],
   slime:['#8fe8c9','#3fae86'], worm:['#c9a06a','#7a5a3a'], imp:['#ff86b3','#b8548a'],
   gas:['#ff9ec2','#d86aa0'], flower:['#e86a9c','#8fe8c9'],
@@ -1139,6 +1146,315 @@ function drawEnemy(g,e){
    ★art の引き回しは drawBody / renderShaded / spriteKey / MON_IRIS / MON_OVER の
      全部で揃えること——一箇所でも取りこぼすと、上位個体だけ目玉が描かれない等の
      静かな欠落になる(見た目では気づけない) */
+/* ================= v6.0 新しい種の絵 =================
+   ★どれも既存の骨格に寄せず、「何をする一体か」が一目で分かる形にする。
+   間接責めの種(映り身・観客・帳の番)は、責める線そのものを描く。 */
+
+/* 映り身: 本人の姿を上下に反した青白い影。★手の位置だけが本人と違う動きをする */
+function drawMirrorling(g,e){
+  const r=e.r, t=e.t;
+  g.save();
+  g.globalAlpha=0.42;
+  g.scale(1,-1);                                  /* 上下に反す=映り込み */
+  g.fillStyle='rgba(150,200,235,0.85)';
+  /* 頭 */ g.beginPath(); g.arc(0,-r*1.1,r*0.42,0,TAU); g.fill();
+  /* 胴 */ g.beginPath(); g.moveTo(-r*0.42,-r*0.7); g.quadraticCurveTo(0,r*0.1,-r*0.30,r*0.7);
+  g.lineTo(r*0.30,r*0.7); g.quadraticCurveTo(0,r*0.1,r*0.42,-r*0.7); g.closePath(); g.fill();
+  /* 脚 */ g.fillRect(-r*0.26,r*0.6,r*0.20,r*0.7); g.fillRect(r*0.06,r*0.6,r*0.20,r*0.7);
+  /* ★腕: 本人の動きではなく、胸と腿へ寄っていく */
+  const sw=0.5+0.5*Math.sin(t*1.6+e.joff);
+  g.strokeStyle='rgba(150,200,235,0.9)'; g.lineWidth=r*0.20; g.lineCap='round';
+  g.beginPath(); g.moveTo(-r*0.40,-r*0.55); g.quadraticCurveTo(-r*0.55,-r*0.1, -r*0.16-sw*r*0.06, -r*0.30+sw*r*0.10); g.stroke();
+  g.beginPath(); g.moveTo( r*0.40,-r*0.55); g.quadraticCurveTo( r*0.60, r*0.2,  r*0.10+sw*r*0.06,  r*0.55-sw*r*0.10); g.stroke();
+  g.globalAlpha=0.30; g.strokeStyle='rgba(255,255,255,0.9)'; g.lineWidth=1;
+  g.beginPath(); g.arc(0,-r*1.1,r*0.42,0,TAU); g.stroke();
+  g.restore();
+}
+/* 紋喰い: 紋の形(円+内接三角)が浮き上がって歩いている。脚は描かない */
+function drawGlyphmite(g,e){
+  const r=e.r, ph=0.6+0.4*Math.sin(e.t*3+e.joff);
+  g.save(); g.translate(0,-r*0.5-Math.sin(e.t*4+e.joff)*1.5);
+  g.fillStyle='rgba(70,20,60,0.62)'; g.beginPath(); g.arc(0,0,r*0.92,0,TAU); g.fill();
+  g.strokeStyle='rgba(255,140,190,'+(0.85*ph).toFixed(2)+')'; g.lineWidth=1.6;
+  g.beginPath(); g.arc(0,0,r*0.92,0,TAU); g.stroke();
+  g.beginPath(); for(let m=0;m<3;m++){ const a=-Math.PI/2+m*TAU/3, x=Math.cos(a)*r*0.92, y=Math.sin(a)*r*0.92; if(m===0) g.moveTo(x,y); else g.lineTo(x,y); } g.closePath(); g.stroke();
+  g.fillStyle='rgba(255,190,220,'+(0.9*ph).toFixed(2)+')'; g.beginPath(); g.arc(0,0,r*0.20,0,TAU); g.fill();
+  g.restore();
+}
+/* 糸紡ぎ: 暗い桃の紡錘。★脚は4本だけ(実在昆虫に寄せない)。尻から糸を一本 */
+function drawSilkmite(g,e){
+  const r=e.r, sw=Math.sin(e.t*7+e.joff);
+  g.save(); g.translate(0,-r*0.6);
+  g.strokeStyle='rgba(230,190,215,0.55)'; g.lineWidth=1;
+  for(let i=0;i<4;i++){ const s=i<2?-1:1, o=(i%2)*0.5;
+    g.beginPath(); g.moveTo(s*r*0.2,0); g.quadraticCurveTo(s*r*0.7,r*0.25+o*3+sw, s*r*0.9, r*0.7+o*2); g.stroke(); }
+  g.fillStyle='rgba(200,120,160,0.9)';
+  g.beginPath(); g.ellipse(0,0,r*0.42,r*0.72,0,0,TAU); g.fill();
+  g.fillStyle='rgba(255,220,235,0.6)'; g.beginPath(); g.ellipse(-r*0.12,-r*0.22,r*0.14,r*0.22,0,0,TAU); g.fill();
+  g.fillStyle='rgba(30,10,24,0.9)'; g.beginPath(); g.arc(0,-r*0.5,r*0.14,0,TAU); g.fill();
+  g.strokeStyle='rgba(255,220,235,0.5)'; g.lineWidth=0.9;
+  g.beginPath(); g.moveTo(0,r*0.7); g.quadraticCurveTo(sw*3,r*1.3,sw*5,r*1.9); g.stroke();
+  g.restore();
+}
+/* 霜の芽: 床から生えた六角柱を三本。根元に霜の輪 */
+function drawFrostbud(g,e){
+  const r=e.r;
+  g.save();
+  g.fillStyle='rgba(255,255,255,0.20)'; g.beginPath(); g.ellipse(0,0,r*0.95,r*0.36,0,0,TAU); g.fill();
+  const col=['rgba(200,235,250,0.75)','rgba(228,246,255,0.8)','rgba(178,220,242,0.7)'];
+  const hs=[1.0,1.5,0.75], xs=[-r*0.42,0,r*0.44];
+  for(let i=0;i<3;i++){ const H=r*hs[i], w=r*0.24;
+    g.fillStyle=col[i];
+    g.beginPath(); g.moveTo(xs[i]-w,0); g.lineTo(xs[i]-w*0.7,-H); g.lineTo(xs[i],-H-r*0.28); g.lineTo(xs[i]+w*0.7,-H); g.lineTo(xs[i]+w,0); g.closePath(); g.fill();
+    g.fillStyle='rgba(255,255,255,0.6)'; g.fillRect(xs[i]-1,-H+2,1.6,H*0.6); }
+  g.restore();
+}
+/* 澱み手: 手の形。★輪郭を三重にずらして重ねる=見ただけで「遅れている」と分かる */
+function drawStiller(g,e){
+  const r=e.r, t=e.t;
+  const hand=(dx,dy,al)=>{
+    g.save(); g.translate(dx,dy);
+    g.fillStyle='rgba(150,140,175,'+al+')';
+    g.beginPath(); g.ellipse(0,0,r*0.62,r*0.52,0,0,TAU); g.fill();
+    for(let i=0;i<4;i++){ const a=-Math.PI*0.85+i*0.42, L=r*(0.85+0.12*Math.sin(t*2+i+e.joff));
+      g.strokeStyle='rgba(150,140,175,'+al+')'; g.lineWidth=r*0.20; g.lineCap='round';
+      g.beginPath(); g.moveTo(Math.cos(a)*r*0.3,Math.sin(a)*r*0.3); g.lineTo(Math.cos(a)*L,Math.sin(a)*L); g.stroke(); }
+    g.strokeStyle='rgba(150,140,175,'+al+')'; g.lineWidth=r*0.22; g.lineCap='round';
+    g.beginPath(); g.moveTo(r*0.2,r*0.15); g.lineTo(r*0.75,r*0.45); g.stroke();
+    g.restore();
+  };
+  hand( r*0.55, r*0.42, 0.15);   /* 8px 遅れ */
+  hand( r*0.28, r*0.21, 0.30);   /* 4px 遅れ */
+  hand( 0,      0,      0.60);   /* 本体 */
+}
+/* 忘れ蛾: 乳白の翼。紋は目玉ではなく渦を二つ。真っ白なのに見つけにくい */
+function drawLethemoth(g,e){
+  const r=e.r, fl=Math.sin(e.t*11+e.joff);
+  g.save(); g.translate(0,-r*0.5);
+  for(const s of [-1,1]){
+    g.save(); g.scale(s,1); g.rotate(fl*0.28);
+    g.fillStyle='rgba(232,224,228,0.72)';
+    g.beginPath(); g.moveTo(0,0); g.quadraticCurveTo(r*1.5,-r*0.9, r*1.15, r*0.15); g.quadraticCurveTo(r*0.8, r*0.75, 0, r*0.2); g.closePath(); g.fill();
+    g.strokeStyle='rgba(200,190,205,0.55)'; g.lineWidth=1.1;
+    g.beginPath(); g.arc(r*0.85,-r*0.12,r*0.20,0.6,4.4); g.stroke();
+    g.beginPath(); g.arc(r*0.62, r*0.20,r*0.13,0.9,4.9); g.stroke();
+    g.restore();
+  }
+  g.fillStyle='rgba(214,206,212,0.95)';
+  g.beginPath(); g.ellipse(0,0,r*0.24,r*0.62,0,0,TAU); g.fill();
+  g.fillStyle='rgba(160,150,165,0.8)'; g.beginPath(); g.arc(0,-r*0.55,r*0.20,0,TAU); g.fill();
+  g.restore();
+}
+/* 三つ目の観客: 瞼のない眼球に短い翼を一対。組の間に張る三角形は MON_OVER が描く */
+function drawGallery(g,e){
+  const r=e.r, F=(G.B&&G.B.floor)||null, iris=(F&&F.col)||'#ffb3cf';
+  g.save(); g.translate(0,-r*0.7);
+  g.fillStyle='rgba(220,206,220,0.7)';
+  for(const s of [-1,1]){ g.save(); g.scale(s,1); g.rotate(Math.sin(e.t*9+e.joff)*0.3);
+    g.beginPath(); g.moveTo(r*0.6,0); g.quadraticCurveTo(r*1.5,-r*0.6,r*1.25,r*0.25); g.quadraticCurveTo(r*0.95,r*0.2,r*0.6,0); g.fill(); g.restore(); }
+  g.fillStyle='#e8e0e0'; g.beginPath(); g.arc(0,0,r*0.85,0,TAU); g.fill();
+  const gx=(G.B&&G.B.hero)?clamp((G.B.hero.x-e.x)/220,-1,1):0, gy=(G.B&&G.B.hero)?clamp((G.B.hero.y-e.y)/180,-1,1):0;
+  g.fillStyle=iris; g.beginPath(); g.arc(gx*r*0.3,gy*r*0.3,r*0.42,0,TAU); g.fill();
+  g.fillStyle='#140f18'; g.beginPath(); g.arc(gx*r*0.36,gy*r*0.36,r*0.20,0,TAU); g.fill();
+  g.fillStyle='rgba(255,255,255,0.8)'; g.beginPath(); g.arc(-r*0.22,-r*0.28,r*0.12,0,TAU); g.fill();
+  g.restore();
+}
+/* 声移し: 人型でも獣でもない。骨白の、口だけの器 */
+function drawEchoer(g,e){
+  const r=e.r, vc=(e.voice&&HEROES[e.voice]&&HEROES[e.voice].col)||'#ffd0e4';
+  g.save(); g.translate(0,-r*0.6);
+  g.fillStyle='#c8c0b0';
+  g.beginPath(); g.moveTo(-r*0.55,-r*0.9); g.quadraticCurveTo(-r*0.85,r*0.4,-r*0.42,r*1.0);
+  g.lineTo(r*0.42,r*1.0); g.quadraticCurveTo(r*0.85,r*0.4,r*0.55,-r*0.9); g.closePath(); g.fill();
+  /* 上端が唇の形に開いている。中は空洞で暗い */
+  g.fillStyle='#241e1c';
+  g.beginPath(); g.ellipse(0,-r*0.9,r*0.55,r*0.26,0,0,TAU); g.fill();
+  g.strokeStyle='#ddd4c4'; g.lineWidth=1.6;
+  g.beginPath(); g.moveTo(-r*0.55,-r*0.9); g.quadraticCurveTo(0,-r*1.16,r*0.55,-r*0.9); g.stroke();
+  g.beginPath(); g.moveTo(-r*0.55,-r*0.9); g.quadraticCurveTo(0,-r*0.66,r*0.55,-r*0.9); g.stroke();
+  /* 抱えている声の主の色が、器の内側にだけ薄く灯る */
+  const ph=0.35+0.25*Math.sin(e.t*1.4+e.joff);
+  g.globalAlpha=ph; g.fillStyle=vc;
+  g.beginPath(); g.ellipse(0,-r*0.82,r*0.40,r*0.18,0,0,TAU); g.fill();
+  g.globalAlpha=1;
+  g.restore();
+}
+/* 骨兵: 灰白の細い胴に肋を三本。歩くたび全体が縦に揺れてカタカタする */
+function drawBonesoldier(g,e){
+  const r=e.r, sh=Math.sin(e.t*13+e.joff)*1.5;
+  g.save(); g.translate(0,-r*0.8+sh);
+  g.strokeStyle='#b9b2a4'; g.lineWidth=r*0.30; g.lineCap='round';
+  g.beginPath(); g.moveTo(0,-r*0.35); g.lineTo(0,r*0.9); g.stroke();
+  g.lineWidth=r*0.18;
+  for(let i=0;i<3;i++){ const y=-r*0.1+i*r*0.34;
+    g.beginPath(); g.moveTo(-r*0.42,y); g.lineTo(r*0.42,y); g.stroke(); }
+  const sw=Math.sin(e.t*8+e.joff)*0.35;
+  g.lineWidth=r*0.16;
+  g.beginPath(); g.moveTo(-r*0.35,-r*0.1); g.lineTo(-r*0.75,r*0.35+sw*r*0.3); g.stroke();
+  g.beginPath(); g.moveTo( r*0.35,-r*0.1); g.lineTo( r*0.75,r*0.35-sw*r*0.3); g.stroke();
+  g.beginPath(); g.moveTo(-r*0.16,r*0.9); g.lineTo(-r*0.26,r*1.5); g.stroke();
+  g.beginPath(); g.moveTo( r*0.16,r*0.9); g.lineTo( r*0.26,r*1.5); g.stroke();
+  g.fillStyle='#c6bfb0'; g.beginPath(); g.ellipse(0,-r*0.68,r*0.36,r*0.44,0,0,TAU); g.fill();
+  g.fillStyle='#181410';
+  g.beginPath(); g.ellipse(-r*0.14,-r*0.72,r*0.10,r*0.13,0,0,TAU); g.fill();
+  g.beginPath(); g.ellipse( r*0.14,-r*0.72,r*0.10,r*0.13,0,0,TAU); g.fill();
+  g.restore();
+}
+
+/* 窪みの主: 窪みそのものを大きく描く。人型のシルエットに沿った肉の縁 */
+function drawNichelord(g,e){
+  const r=e.r, op=e.open?1:0, t=e.t;
+  g.save();
+  g.fillStyle='#4a0f22';
+  g.beginPath(); g.ellipse(0,0,r*0.98,r*1.25,0,0,TAU); g.fill();
+  /* 人型の窪み: 頭・肩・腰・脚 */
+  g.fillStyle='#2a0512';
+  g.beginPath(); g.arc(0,-r*0.72,r*0.28,0,TAU); g.fill();
+  g.beginPath(); g.ellipse(0,-r*0.10,r*0.44,r*0.44,0,0,TAU); g.fill();
+  g.beginPath(); g.ellipse(0, r*0.62,r*0.30,r*0.52,0,0,TAU); g.fill();
+  /* 襞: 開くと外へ反り返る */
+  const sw=op*(0.5+0.5*Math.sin(t*1.6+e.joff));
+  g.strokeStyle='rgba(220,110,150,0.6)'; g.lineWidth=r*0.10;
+  for(let k=0;k<7;k++){ const a=-Math.PI/2+(k-3)*0.42;
+    const R0=r*0.62, R1=r*(0.86+sw*0.24);
+    g.beginPath(); g.moveTo(Math.cos(a)*R0,Math.sin(a)*R0*1.2); g.lineTo(Math.cos(a)*R1,Math.sin(a)*R1*1.2); g.stroke(); }
+  g.strokeStyle='rgba(255,200,225,0.35)'; g.lineWidth=1.4;
+  g.beginPath(); g.ellipse(0,0,r*0.98,r*1.25,0,0,TAU); g.stroke();
+  g.restore();
+}
+/* 褥座: 座面と背もたれ。遠いと二つの塊、近いと椅子。★座面には既に人の形の窪み */
+function drawSeatflesh(g,e){
+  const r=e.r, f=(e.form||0);
+  const gap=(2-f)*r*0.32;
+  g.save();
+  /* 背もたれ */
+  g.fillStyle='#7a2038';
+  g.beginPath(); g.ellipse(0,-r*0.75-gap,r*0.80,r*0.62,0,0,TAU); g.fill();
+  /* 座面 */
+  g.beginPath(); g.ellipse(0, r*0.20+gap,r*0.95,r*0.48,0,0,TAU); g.fill();
+  if(f>=1){
+    g.strokeStyle='rgba(255,190,215,0.45)'; g.lineWidth=1.6;
+    g.beginPath(); g.ellipse(0,-r*0.75-gap,r*0.80,r*0.62,0,0,TAU); g.stroke();
+    g.beginPath(); g.ellipse(0, r*0.20+gap,r*0.95,r*0.48,0,0,TAU); g.stroke();
+  }
+  if(f>=2){
+    /* 座面に残った人の形の窪み */
+    g.fillStyle='rgba(40,6,20,0.55)';
+    g.beginPath(); g.ellipse(0,r*0.18,r*0.40,r*0.26,0,0,TAU); g.fill();
+    g.fillStyle='rgba(255,170,205,0.30)';
+    g.beginPath(); g.ellipse(0,r*0.10,r*0.30,r*0.14,0,0,TAU); g.fill();
+  }
+  g.fillStyle='rgba(255,210,230,0.45)';
+  g.beginPath(); g.ellipse(-r*0.28,-r*0.90-gap,r*0.20,r*0.12,0,0,TAU); g.fill();
+  g.restore();
+}
+/* 心根: 壁から生えた太い根。★繋いでいる間、光の粒が「壁の側」へ流れる */
+function drawHeartroot(g,e){
+  const r=e.r, t=e.t;
+  g.save();
+  for(let k=0;k<3;k++){
+    const a=-Math.PI/2+(k-1)*0.55;
+    const ex=Math.cos(a)*r*1.5, ey=Math.sin(a)*r*1.5;
+    g.strokeStyle='rgba(180,50,90,0.65)'; g.lineWidth=r*(0.26-k*0.05); g.lineCap='round';
+    g.beginPath(); g.moveTo(0,r*0.5); g.quadraticCurveTo(ex*0.5,ey*0.4+Math.sin(t+k)*3,ex,ey); g.stroke();
+    g.strokeStyle='rgba(255,150,190,0.5)'; g.lineWidth=r*0.08;
+    g.beginPath(); g.moveTo(0,r*0.5); g.quadraticCurveTo(ex*0.5,ey*0.4,ex,ey); g.stroke();
+    if(e.feeding){ /* ★流れる向きは常に根元(=壁の側) */
+      for(let m=0;m<3;m++){ const u=1-(((t*0.7+m/3+k*0.11)%1));
+        const px=ex*u*u+ex*0.5*2*u*(1-u), py=(r*0.5)*(1-u)*(1-u)+ey*0.4*2*u*(1-u)+ey*u*u;
+        g.fillStyle='rgba(255,220,235,0.85)'; g.beginPath(); g.arc(px,py,1.8,0,TAU); g.fill(); } }
+  }
+  g.fillStyle='#8a1a3c'; g.beginPath(); g.ellipse(0,r*0.55,r*0.62,r*0.42,0,0,TAU); g.fill();
+  g.fillStyle='rgba(255,150,190,0.35)'; g.beginPath(); g.ellipse(-r*0.16,r*0.44,r*0.20,r*0.12,0,0,TAU); g.fill();
+  g.restore();
+}
+/* 帳の番: 石版に半分埋まった上半身。顔は無く、片腕だけが長く伸びて刻んでいる。
+   ★刻む動作は「なめらかに動かさない」——関節が一段ずつカクッと動く */
+function drawTallykeeper(g,e){
+  const r=e.r, step=Math.floor(((e.t*2)%1)*4)/4;
+  g.save();
+  g.fillStyle='#3a3348';
+  g.beginPath(); g.moveTo(-r*0.72,r*0.9); g.lineTo(-r*0.58,-r*0.6); g.quadraticCurveTo(0,-r*1.0,r*0.58,-r*0.6);
+  g.lineTo(r*0.72,r*0.9); g.closePath(); g.fill();
+  /* 顔の位置は、ただの平らな面 */
+  g.fillStyle='#4a4258';
+  g.beginPath(); g.ellipse(0,-r*0.62,r*0.34,r*0.40,0,0,TAU); g.fill();
+  /* 片腕だけが長く伸びて、壁面に細い線を刻む */
+  const ax=r*(0.9+step*0.7), ay=-r*(0.2+step*0.5);
+  g.strokeStyle='#4a4258'; g.lineWidth=r*0.18; g.lineCap='round';
+  g.beginPath(); g.moveTo(r*0.35,-r*0.3); g.lineTo(r*0.75,-r*0.34); g.lineTo(ax,ay); g.stroke();
+  g.strokeStyle='rgba(255,150,190,'+(e.on?0.55:0.22)+')'; g.lineWidth=1.4;
+  const n=Math.min(6,Object.keys(e.tally||{}).length+1);
+  for(let k=0;k<n;k++){ const y=-r*0.9+k*r*0.24;
+    g.beginPath(); g.moveTo(r*0.85,y); g.lineTo(r*1.35,y-2); g.stroke(); }
+  g.restore();
+}
+/* 水鏡の女王: 水面から上半身だけ。★顔は描かず、頭部は磨かれた鏡面(覗いた側が映る) */
+function drawMirrorqueen(g,e){
+  const r=e.r, t=e.t, ex=!!e.exposed;
+  g.save();
+  g.fillStyle=ex?'#2a4a6a':'#1c3550';
+  g.beginPath(); g.moveTo(-r*0.85,r*0.9); g.quadraticCurveTo(-r*0.55,-r*0.3,-r*0.34,-r*0.55);
+  g.lineTo(r*0.34,-r*0.55); g.quadraticCurveTo(r*0.55,-r*0.3,r*0.85,r*0.9); g.closePath(); g.fill();
+  /* 長い腕。水面に手のひらを伏せている */
+  g.strokeStyle=ex?'#35597c':'#254866'; g.lineWidth=r*0.20; g.lineCap='round';
+  for(const s of [-1,1]){ g.beginPath(); g.moveTo(s*r*0.34,-r*0.35);
+    g.quadraticCurveTo(s*r*1.15,r*0.1+Math.sin(t*0.8)*3, s*r*1.5, r*0.72); g.stroke(); }
+  /* 頭部: 磨かれた鏡面。継ぎ目もヒビも無い(割れている時だけ入る) */
+  const hy=-r*0.95;
+  g.fillStyle='#14121c'; g.beginPath(); g.arc(0,hy,r*0.42,0,TAU); g.fill();
+  g.fillStyle='rgba(255,255,255,0.14)';
+  g.beginPath(); g.moveTo(-r*0.34,hy+r*0.28); g.lineTo(r*0.02,hy-r*0.36); g.lineTo(r*0.12,hy-r*0.34); g.lineTo(-r*0.24,hy+r*0.30); g.closePath(); g.fill();
+  g.fillStyle='rgba(150,190,230,0.12)'; g.fillRect(-r*0.42,hy+r*0.12,r*0.84,r*0.26);
+  if(ex){ g.strokeStyle='rgba(210,235,255,0.7)'; g.lineWidth=1;
+    for(let k=0;k<5;k++){ const a=k*1.26+e.joff;
+      g.beginPath(); g.moveTo(0,hy); g.lineTo(Math.cos(a)*r*0.42,hy+Math.sin(a)*r*0.42); g.stroke(); } }
+  g.restore();
+}
+/* はじめましての君: 乳白の水から立つ人影。★顔の部分だけ毎フレーム定まらない */
+function drawNevermet(g,e){
+  const r=e.r, t=e.t;
+  const jx=()=>(Math.random()-0.5)*3, jy=()=>(Math.random()-0.5)*3;
+  g.save();
+  g.fillStyle='rgba(232,220,228,0.88)';
+  g.beginPath(); g.moveTo(-r*0.62,r*1.1); g.quadraticCurveTo(-r*0.48,-r*0.2,-r*0.30,-r*0.55);
+  g.lineTo(r*0.30,-r*0.55); g.quadraticCurveTo(r*0.48,-r*0.2,r*0.62,r*1.1); g.closePath(); g.fill();
+  g.strokeStyle='rgba(200,188,200,0.7)'; g.lineWidth=r*0.16; g.lineCap='round';
+  for(const s of [-1,1]){ g.beginPath(); g.moveTo(s*r*0.28,-r*0.36);
+    g.quadraticCurveTo(s*r*0.66,r*0.2+Math.sin(t*1.1)*3, s*r*0.5, r*0.7); g.stroke(); }
+  /* 頭 */
+  g.fillStyle='rgba(238,228,234,0.95)'; g.beginPath(); g.arc(0,-r*0.86,r*0.34,0,TAU); g.fill();
+  /* ★顔だけがずれて定まらない */
+  g.fillStyle='rgba(150,140,150,0.55)';
+  g.beginPath(); g.arc(-r*0.13+jx(),-r*0.90+jy(),r*0.06,0,TAU); g.fill();
+  g.beginPath(); g.arc( r*0.13+jx(),-r*0.90+jy(),r*0.06,0,TAU); g.fill();
+  g.strokeStyle='rgba(150,140,150,0.45)'; g.lineWidth=1.2;
+  g.beginPath(); g.moveTo(-r*0.10+jx(),-r*0.72+jy()); g.lineTo(r*0.10+jx(),-r*0.72+jy()); g.stroke();
+  g.restore();
+}
+/* はじめの夜の主: 1階のナメクジと同じ寸法。★濃くなっても大きくしない。
+   違いは体内を走る桃色の脈の本数だけ */
+function drawFirstslug(g,e){
+  const r=e.r, th=Math.min(6,e.thick||0), ph=Math.sin(e.t*2+e.joff);
+  g.save();
+  g.fillStyle='#8aa84a';
+  g.beginPath(); g.ellipse(0,0,r*(1.05+ph*0.04),r*0.72,0,0,TAU); g.fill();
+  g.fillStyle='rgba(200,224,122,0.85)';
+  g.beginPath(); g.ellipse(-r*0.18,-r*0.20,r*0.42,r*0.26,0,0,TAU); g.fill();
+  /* 濃さは体内の脈でだけ表す */
+  g.strokeStyle='rgba(255,120,180,0.5)'; g.lineWidth=1.5;
+  for(let k=0;k<th;k++){ const y=-r*0.42+k*(r*0.84/Math.max(1,th));
+    g.beginPath(); g.moveTo(-r*0.85,y); g.quadraticCurveTo(0,y+Math.sin(e.t*1.6+k)*3,r*0.85,y); g.stroke(); }
+  /* 触角 */
+  g.strokeStyle='#7a9a3a'; g.lineWidth=r*0.12; g.lineCap='round';
+  for(const s of [-1,1]){ g.beginPath(); g.moveTo(s*r*0.30,-r*0.5);
+    g.lineTo(s*r*0.42,-r*0.95+ph*2); g.stroke();
+    g.fillStyle='#2a3a12'; g.beginPath(); g.arc(s*r*0.42,-r*0.98+ph*2,r*0.10,0,TAU); g.fill(); }
+  g.fillStyle='rgba(255,255,255,'+(0.25+0.06*th)+')';
+  g.beginPath(); g.ellipse(-r*0.30,-r*0.30,r*0.22,r*0.10,0,0,TAU); g.fill();
+  g.restore();
+}
+
 function drawBody(g,e){
   const aid=e.art||e.id;
   if(aid==='core') drawCore(g,e);
@@ -1174,6 +1490,22 @@ function drawBody(g,e){
   else if(aid==='slugqueen') drawQueen(g,e);
   else if(aid==='dreamtree') drawDreamtree(g,e);
   else if(aid==='tower') drawTower(g,e);
+  else if(aid==='nichelord') drawNichelord(g,e);
+  else if(aid==='seatflesh') drawSeatflesh(g,e);
+  else if(aid==='heartroot') drawHeartroot(g,e);
+  else if(aid==='tallykeeper') drawTallykeeper(g,e);
+  else if(aid==='mirrorqueen') drawMirrorqueen(g,e);
+  else if(aid==='nevermet') drawNevermet(g,e);
+  else if(aid==='firstslug') drawFirstslug(g,e);
+  else if(aid==='mirrorling') drawMirrorling(g,e);
+  else if(aid==='glyphmite') drawGlyphmite(g,e);
+  else if(aid==='silkmite') drawSilkmite(g,e);
+  else if(aid==='frostbud') drawFrostbud(g,e);
+  else if(aid==='stiller') drawStiller(g,e);
+  else if(aid==='lethemoth') drawLethemoth(g,e);
+  else if(aid==='gallery') drawGallery(g,e);
+  else if(aid==='echoer') drawEchoer(g,e);
+  else if(aid==='bonesoldier') drawBonesoldier(g,e);
   else if(aid==='spore') drawSpore(g,e);
   else if(aid==='ghosthand') drawGhosthand(g,e);
   else if(aid==='eye') drawEye(g,e);
@@ -1357,6 +1689,23 @@ const MON_IRIS={
 };
 /* 焼いた絵の上に重ねる生きた部分(≤3回の塗り)。ゴーストの瞳は彼女を追い、小淫魔は近づくと頰を染め、目玉は瞬く */
 const MON_OVER={
+  /* v6.0 三つ目の観客: 組の間に光の線で三角形を張る。★三角形の中に居ることが一目で分かる。
+     視線が全部通っている(=効いている)時だけ濃くする */
+  gallery(g,e){
+    const B=G.B; if(!B) return;
+    const kin=B.enemies.filter(o=>!o.dead&&o.id==='gallery');
+    if(kin.indexOf(e)!==0 || kin.length<3) return;
+    const on=!!B.galleryOn;
+    g.save(); g.setTransform(1,0,0,1,0,0); g.translate(-e.x,-e.y);   /* 本体のローカル座標を解いて世界座標で引く */
+    g.strokeStyle=on?'rgba(255,180,220,0.42)':'rgba(255,180,220,0.16)'; g.lineWidth=on?1.6:1;
+    g.beginPath();
+    for(let i=0;i<3;i++){ const a2=kin[i], b2=kin[(i+1)%3]; g.moveTo(a2.x,a2.y-a2.r*0.7); g.lineTo(b2.x,b2.y-b2.r*0.7); }
+    g.stroke();
+    const p=B.hero;
+    if(p && on){ g.strokeStyle='rgba(255,200,230,0.30)'; g.lineWidth=1;
+      g.beginPath(); for(const k of kin){ g.moveTo(k.x,k.y-k.r*0.7); g.lineTo(p.x,p.y-14); } g.stroke(); }
+    g.restore();
+  },
   ghost(g,e){
     const p=G.B&&G.B.hero; if(!p) return;
     const r=e.r, dx=p.x-e.x, dy=p.y-e.y, d=Math.hypot(dx,dy)||1;
@@ -3732,6 +4081,12 @@ function draw(){
     const B=G.B, p=B.hero;
     drawLight(g,p.x,p.y);
     drawZoneV6(g);   /* v6.0 鏡の映り・灯った紋・澱の残像・忘れ水の渦 */
+    if(B.silks && B.silks.length){   /* v6.0 糸紡ぎが張った糸。倒しても残る */
+      g.strokeStyle='rgba(255,200,220,0.42)'; g.lineWidth=0.9;
+      g.beginPath(); for(const s2 of B.silks){ g.moveTo(s2.x0,s2.y0); g.lineTo(s2.x1,s2.y1); } g.stroke();
+      g.fillStyle='rgba(255,240,248,0.7)';
+      for(const s2 of B.silks){ g.beginPath(); g.arc((s2.x0+s2.x1)/2,(s2.y0+s2.y1)/2,1.2,0,TAU); g.fill(); }
+    }
     if(B.rings) for(const R of B.rings) drawRing(g,R);   // v4.1 菌輪
     if(B.mires) for(const m of B.mires) drawMire(g,m);   // v5.0 媚薬沼
     if(B.dryAura) drawDryAura(g,B.dryAura);        // v5.0 フレイラの炎のエリア(焼けた床は地形チップに焼き込まれる)

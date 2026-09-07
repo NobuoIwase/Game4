@@ -363,7 +363,7 @@ const UI={
     };
     const sections=TIERS.map(t=>{
       const inDeck=META.deck.filter(id=>tierOf(id)===t);
-      const pool=Object.keys(MONSTERS).filter(id=>tierOf(id)===t&&META.cards[id]&&META.cards[id].owned&&!META.deck.includes(id));
+      const pool=Object.keys(MONSTERS).filter(id=>tierOf(id)===t&&!MONSTERS[id].field&&META.cards[id]&&META.cards[id].owned&&!META.deck.includes(id));
       const empties=Math.max(0,TIER_CAP[t]-inDeck.length);
       const slots=inDeck.map(id=>card(id,true)).join('')+
         Array.from({length:empties},()=>`<div class="mcard empty"><div class="nm">空き枠</div><div class="st">${esc(TIER_NAMES[t])}を1枚</div></div>`).join('');
