@@ -119,6 +119,7 @@ const BAL={
   /* --- v5.0 ヤミコ --- */
   YAMI_WAKE:260, YAMI_SLEEP_DEF:0.25,      // 眠っている間の起床距離 / 眠っている間の被ダメ(起こさないと削れない)
   YAMI_MERCY:0.15,                         // これ以下には削らない(彼女はとどめを刺さない。飽きて手を止める)
+  YAMI_ERA:10, YAMI_DEPTH:12,              // 渦の中心(第12層)が開く世代まで、眠り手は現れない
   YAMI_BLADE_CD:3.4, YAMI_BLADE_R:210, YAMI_BLADE_DMG:26,   // 闇の刃(広い薙ぎ)
   YAMI_RING_CD:6.0, YAMI_RING_R:150, YAMI_RING_DMG:16,      // 闇の輪
   YAMI_SPEAR_CD:5.2, YAMI_SPEAR_DMG:34, YAMI_SPEAR_SPD:520, // 闇の穿ち(遠くの一体へ)

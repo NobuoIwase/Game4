@@ -3565,7 +3565,7 @@ function yamiStage(){ return yamiState().st|0; }
 function yamiAdvance(runNote){
   const Y=yamiState(), era=eraNow();
   if(Y.st===0){
-    if(runNote==='clear' && META.party.roster.includes('kuu')){ Y.st=1; Y.era=era; }   // 討った翌朝から、渦の中心に横たわっている
+    if(runNote==='clear' && META.party.roster.includes('kuu') && era>=BAL.YAMI_ERA){ Y.st=1; Y.era=era; }   // 討った翌朝から、渦の中心に横たわっている(渦が開くまでは現れない)
   }else if(Y.st===1){
     if(runNote==='clear'){ Y.st=2; Y.era=era; }   // その回の魔核を討った次の回、淫魔たちに囲まれている
   }else if(Y.st===2){
@@ -3575,7 +3575,7 @@ function yamiAdvance(runNote){
 }
 /* 渦の中心(最終階層)に、眠っている者を置く */
 function spawnYamiBoss(){
-  const B=G.B; if(yamiStage()!==1 || !B.floor.final) return;
+  const B=G.B; if(yamiStage()!==1 || !B.floor.final || B.floor.depth<BAL.YAMI_DEPTH) return;   // 物語は「渦の中心」と言っている。そこ以外には置かない
   const c=B.enemies.find(e=>e.id==='core');
   let q=null;
   for(let k=0;k<400&&!q;k++){ const a=rand(TAU), d=rand(240,420);
@@ -3591,7 +3591,7 @@ function spawnYamiBoss(){
 }
 /* 淫魔三種に囲まれている(救出の一幕) */
 function spawnYamiCaptive(){
-  const B=G.B; if(yamiStage()!==2 || !B.floor.final) return;
+  const B=G.B; if(yamiStage()!==2 || !B.floor.final || B.floor.depth<BAL.YAMI_DEPTH) return;
   const c=B.enemies.find(e=>e.id==='core');
   let q=null;
   for(let k=0;k<400&&!q;k++){ const a=rand(TAU), d=rand(300,520);
