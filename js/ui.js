@@ -209,12 +209,12 @@ const UI={
   advSyncAuto(){ const b=$('advAuto'); if(b) b.textContent='自動送り: '+((META.settings.advAuto!==false)?'ON':'OFF'); },
   advRender(){
     const A=this.adv, ln=A.lines[A.idx]; if(!ln) return;
-    const NAMES={lumina:'ルミナ', freila:'フレイラ', kuu:'クウ', town:'街の人', voice:'声', n:''};
-    const SPK=['lumina','freila','kuu'];   // v5.0 立ち絵と鉤括弧の付く話者
+    const NAMES={lumina:'ルミナ', freila:'フレイラ', kuu:'クウ', yamiko:'ヤミコ', town:'街の人', voice:'声', n:''};
+    const SPK=['lumina','freila','kuu','yamiko'];   // v5.0 立ち絵と鉤括弧の付く話者
     const nm=$('advName'); nm.textContent=(NAMES[ln.s]!==undefined)?NAMES[ln.s]:ln.s; nm.className=ln.s;
     // v3.0 立ち絵は話しているヒロインに切り替える(地の文は直前の話者のまま暗く)
     { const img=$('advImg'); const who=SPK.includes(ln.s)?ln.s:(A.lastWho||'lumina'); A.lastWho=who;
-      const SRC={lumina:'assets/ref/lumina_novelai.png', freila:'assets/ref/freila.png', kuu:'assets/ref/kuu.png'};
+      const SRC={lumina:'assets/ref/lumina_novelai.png', freila:'assets/ref/freila.png', kuu:'assets/ref/kuu.png', yamiko:'assets/ref/yamiko.png'};
       if(img && img.dataset.who!==who){ img.dataset.who=who; img.dataset.fb='0'; img.style.visibility=''; img.src=SRC[who]||SRC.lumina; } }
     const st=$('advStand'); st.className=(SPK.includes(ln.s)?'speak':'dim')+' who-'+(A.lastWho||'lumina')+(ln.f?' f-'+ln.f:'');
     const tx=$('advText'); tx.className=ln.s; tx.textContent='';
@@ -593,16 +593,19 @@ const UI={
       const fx=(typeof CODEX_F!=='undefined' && fjoin)?CODEX_F[sel]:null;   // v3.0 フレイラの欄外書き込み(赤ペン)
       const kjoin=(typeof partyIds==='function')?partyIds().includes('kuu'):false;   // v5.0 クウの青い細字
       const kx=(typeof CODEX_K!=='undefined' && kjoin)?CODEX_K[sel]:null;
+      const yjoin=(typeof partyIds==='function')?partyIds().includes('yamiko'):false;   // v5.0 ヤミコの墨の走り書き
+      const yx=(typeof CODEX_Y!=='undefined' && yjoin)?CODEX_Y[sel]:null;
       const mg=t=>t?`<div class="mnote">${esc(t)}</div>`:'';
       const mgk=t=>t?`<div class="mnote k">${esc(t)}</div>`:'';   // v5.0 クウの青い細字
+      const mgy=t=>t?`<div class="mnote y">${esc(t)}</div>`:'';   // v5.0 ヤミコの墨の走り書き
       const entries=[];
       if(note){
-        entries.push(`<div class="entry"><span class="lbl">特徴</span>${noteHtml(note.base)}${mg(fx&&fx.base)}${mgk(kx&&kx.base)}</div>`);
+        entries.push(`<div class="entry"><span class="lbl">特徴</span>${noteHtml(note.base)}${mg(fx&&fx.base)}${mgk(kx&&kx.base)}${mgy(yx&&yx.base)}</div>`);
         for(let i=0;i<3;i++){
-          if(stg>=i+1) entries.push(`<div class="entry"><span class="lbl">追記${['一','二','三'][i]}</span>${noteHtml(note.add[i], i===2)}${mg(fx&&fx.add&&fx.add[i])}${mgk(kx&&kx.add&&kx.add[i])}</div>`);
+          if(stg>=i+1) entries.push(`<div class="entry"><span class="lbl">追記${['一','二','三'][i]}</span>${noteHtml(note.add[i], i===2)}${mg(fx&&fx.add&&fx.add[i])}${mgk(kx&&kx.add&&kx.add[i])}${mgy(yx&&yx.add&&yx.add[i])}</div>`);
           else{ entries.push(`<div class="entry locked">（追記${['一','二','三'][i]}は、まだ書かれていない——${['この種族に何かされた夜','この種族が絡んだ絶頂','この種族への敗北'][i]}の後に増える）</div>`); break; }
         }
-        if(stg>=3 && note.after) entries.push(`<div class="after">${esc(note.after)}${mg(fx&&fx.after)}${mgk(kx&&kx.after)}</div>`);   // v3.0 末尾に、赤ペンの余白の様子 / v5.0 青の細字
+        if(stg>=3 && note.after) entries.push(`<div class="after">${esc(note.after)}${mg(fx&&fx.after)}${mgk(kx&&kx.after)}${mgy(yx&&yx.after)}</div>`);   // v3.0 末尾に、赤ペンの余白の様子 / v5.0 青の細字
       }
       detail=`<div class="stcard" style="text-align:left">
         <div style="display:flex;gap:12px;align-items:center">

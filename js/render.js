@@ -14,6 +14,7 @@ const EN_COLORS={
   coreling:['#ffc2d8','#a03a62'],   // v4.0 核の落とし子
   lurecap:['#9fe8c8','#c85682'], hugcap:['#f0e0bc','#b89468'],   // v4.1 きのこ
   miretent:['#e08ac0','#8a3a62'],   // v5.0 沼の触手
+  yamiboss:['#a77dff','#2a1a3e','#e8d8ff'],   // v5.0 渦の眠り手
   tower:['#c98cff','#5a3a7a'],
   spore:['#c9ecff','#7fb8e0'], ghosthand:['#dfe4ff','#aab4e8'], eye:['#f0e8ff','#7a3ff2'],
   succubus:['#ff86b3','#5a1f3a'], web:['#ffb3cf','#fff'],
@@ -349,6 +350,22 @@ function drawFx(g,f){
     for(let i=0;i<8;i++){ const th=i*TAU/8; g.beginPath();
       g.moveTo(f.x+Math.cos(th)*f.r*0.6, f.y+Math.sin(th)*f.r*0.45);
       g.lineTo(f.x+Math.cos(th)*f.r*(0.9+1.6*pr), f.y+Math.sin(th)*f.r*(0.7+1.2*pr)-40*pr); g.stroke(); }
+  }else if(f.kind==='darkring'){   // v5.0 闇が外へ抜ける
+    const pr=clamp(f.t/f.life,0,1), R=f.r*Math.min(1,pr*2.0);
+    g.save(); g.globalAlpha=(1-pr)*0.85;
+    g.strokeStyle='rgba(42,26,62,0.95)'; g.lineWidth=14*(1-pr);
+    g.beginPath(); g.ellipse(f.x,f.y,R,R*0.66,0,0,TAU); g.stroke();
+    g.strokeStyle='rgba(167,125,255,0.8)'; g.lineWidth=3*(1-pr);
+    g.beginPath(); g.ellipse(f.x,f.y,R*0.94,R*0.62,0,0,TAU); g.stroke();
+    g.restore();
+  }else if(f.kind==='darkslash'){   // v5.0 闇の刃の薙ぎ
+    const pr=clamp(f.t/f.life,0,1);
+    g.save(); g.globalAlpha=(1-pr)*0.9; g.translate(f.x,f.y); g.rotate(f.ang);
+    g.fillStyle='rgba(42,26,62,0.7)';
+    g.beginPath(); g.arc(0,0,f.r*(0.4+0.6*pr),-1.1,1.1); g.arc(0,0,f.r*0.25,1.1,-1.1,true); g.closePath(); g.fill();
+    g.strokeStyle='rgba(167,125,255,0.9)'; g.lineWidth=3;
+    g.beginPath(); g.arc(0,0,f.r*(0.4+0.6*pr),-1.1,1.1); g.stroke();
+    g.restore();
   }else if(f.kind==='icepath'){   // v5.0 氷の道: 白い線が伸びて、青白い帯になって残る
     const pr=clamp(f.t/f.life,0,1), grow=clamp(f.t/0.25,0,1), L=f.len*grow;
     const ux=Math.cos(f.ang), uy=Math.sin(f.ang)*0.9;
@@ -596,16 +613,19 @@ const FREILA_SPR=new Image(); let FREILA_OK=false; FREILA_SPR.onload=()=>{ FREIL
 const FREILA_HD=new Image(); let FREILA_HD_OK=false; FREILA_HD.onload=()=>{ FREILA_HD_OK=true; }; FREILA_HD.onerror=()=>{ FREILA_HD_OK=false; }; FREILA_HD.src='assets/sprites/freila_hd.png';
 const KUU_SPR=new Image(); let KUU_OK=false; KUU_SPR.onload=()=>{ KUU_OK=true; }; KUU_SPR.onerror=()=>{ KUU_OK=false; }; KUU_SPR.src='assets/sprites/kuu.png';
 const KUU_HD=new Image(); let KUU_HD_OK=false; KUU_HD.onload=()=>{ KUU_HD_OK=true; }; KUU_HD.onerror=()=>{ KUU_HD_OK=false; }; KUU_HD.src='assets/sprites/kuu_hd.png';
+const YAMI_SPR=new Image(); let YAMI_OK=false; YAMI_SPR.onload=()=>{ YAMI_OK=true; }; YAMI_SPR.onerror=()=>{ YAMI_OK=false; }; YAMI_SPR.src='assets/sprites/yamiko.png';
+const YAMI_HD=new Image(); let YAMI_HD_OK=false; YAMI_HD.onload=()=>{ YAMI_HD_OK=true; }; YAMI_HD.onerror=()=>{ YAMI_HD_OK=false; }; YAMI_HD.src='assets/sprites/yamiko_hd.png';
 /* v5.0 ヒロインの絵姿は表で引く(三人目からは三項では足りない) */
 const HERO_IMG={
   lumina:{px:()=>LUMINA_SPR, hd:()=>LUMINA_HD, pxOk:()=>LUMINA_OK, hdOk:()=>true},
   freila:{px:()=>FREILA_SPR, hd:()=>FREILA_HD, pxOk:()=>FREILA_OK, hdOk:()=>FREILA_HD_OK},
   kuu:   {px:()=>KUU_SPR,    hd:()=>KUU_HD,    pxOk:()=>KUU_OK,    hdOk:()=>KUU_HD_OK},
+  yamiko:{px:()=>YAMI_SPR,   hd:()=>YAMI_HD,   pxOk:()=>YAMI_OK,   hdOk:()=>YAMI_HD_OK},
 };
 const heroImg=id=>HERO_IMG[id]||HERO_IMG.lumina;
 /* v1.4: 原本(160×240)から端末の実ピクセル寸のスプライトを一度だけ焼く(色変種込み)。毎フレームの ctx.filter を廃止 */
 const LUMINA_H=60;                    // 論理高さ(足元アンカー -hgt+2 は据え置き)
-const HERO_VARS={lumina:{key:''}, freila:{key:''}, kuu:{key:''}};   // v3.0 ヒロインごとの焼き絵(v5.0 クウ)
+const HERO_VARS={lumina:{key:''}, freila:{key:''}, kuu:{key:''}, yamiko:{key:''}};   // v3.0 ヒロインごとの焼き絵(v5.0 クウ・ヤミコ)
 function bakeVariants(img,cw,ch,smooth){
   let src=img;                        // 2段階で縮小(1回で縮めるとぼやける)
   while(smooth && src.height>ch*2){
@@ -1113,6 +1133,7 @@ function drawEnemy(g,e){
 /* 種族ごとの本体描画(drawEnemy から分離。描き込みモードではオフスクリーンで陰影を重ねる) */
 function drawBody(g,e){
   if(e.id==='core') drawCore(g,e);
+  else if(e.id==='yamiboss') drawYamiBoss(g,e);
   else if(e.id==='miretent') drawMiretentBody(g,e);
   else if(e.id==='lurecap') drawLurecap(g,e);
   else if(e.id==='hugcap') drawHugcap(g,e);
@@ -2611,6 +2632,81 @@ function drawMireTent(g,m,tn,t){
   for(let k=1;k<=3;k++){ const u=k/4, px=bx+(ex-bx)*u, py=by+(ey-by)*u;
     g.fillStyle='rgba(255,190,225,0.5)'; g.beginPath(); g.arc(px+Math.cos(tn.a+1.6)*2.2,py+Math.sin(tn.a+1.6)*1.8,1.3,0,TAU); g.fill(); }
 }
+/* v5.0 救出の一幕: 三体に囲まれて、抵抗の形すら残っていない。吸っていた闇が抜けて、白く漏れている */
+function drawYamiCap(g,C){
+  if(C.freed) return;
+  const t=C.t, lift=Math.sin(t*1.6)*3;
+  g.save(); g.translate(C.x, C.y);
+  /* 漏れた光の溜まり */
+  const gg=g.createRadialGradient(0,-14,6,0,-14,86);
+  gg.addColorStop(0,'rgba(255,240,255,0.45)'); gg.addColorStop(1,'rgba(200,170,255,0)');
+  g.fillStyle=gg; g.beginPath(); g.arc(0,-14,86,0,TAU); g.fill();
+  /* 押さえつけられた翼(四枚。開いたまま閉じられない) */
+  g.fillStyle='rgba(42,26,62,0.72)';
+  for(const sx of [-1,1]) for(const k of [0,1]){
+    const a=(0.35+k*0.5)*1, L=26-k*6;
+    g.save(); g.scale(sx,1); g.rotate(a);
+    g.beginPath(); g.moveTo(4,-12); g.quadraticCurveTo(L*0.9,-20,L,-4); g.quadraticCurveTo(L*0.6,-4,5,-6); g.closePath(); g.fill(); g.restore();
+  }
+  /* 仰向けの身体。輪郭が白く抜けている */
+  g.fillStyle='rgba(58,36,86,0.95)';
+  g.beginPath(); g.ellipse(0,-12+lift*0.3,15,9,0.12,0,TAU); g.fill();
+  g.fillStyle='rgba(255,246,255,0.85)';
+  g.beginPath(); g.ellipse(0,-12+lift*0.3,15,9,0.12,0,TAU); g.globalAlpha=0.35; g.fill(); g.globalAlpha=1;
+  g.fillStyle='#2a1a3e'; g.beginPath(); g.arc(-11,-17+lift*0.4,6.4,0,TAU); g.fill();   // 仰け反った頭
+  /* 吸われきったヘイロー(輪が欠けている) */
+  g.strokeStyle='rgba(200,170,255,0.85)'; g.lineWidth=2;
+  g.beginPath(); g.ellipse(-11,-27+lift*0.4,9,3.2,0,0.5,TAU-0.9); g.stroke();
+  /* 漏れる光の粒 */
+  for(let i=0;i<5;i++){ const ph=(t*0.5+i*0.2)%1;
+    g.fillStyle='rgba(255,240,255,'+((1-ph)*0.55).toFixed(2)+')';
+    g.beginPath(); g.arc(Math.sin(i*2.3+t)*16, -18-ph*34, 1.6+ph*2.4, 0, TAU); g.fill(); }
+  /* 救出の進み */
+  if(C.save>0){
+    const pr=Math.min(1,C.save/BAL.YAMI_SAVE_T);
+    g.strokeStyle='rgba(255,255,255,0.9)'; g.lineWidth=3; g.lineCap='round';
+    g.beginPath(); g.arc(0,-14,44,-Math.PI/2,-Math.PI/2+TAU*pr); g.stroke();
+  }
+  g.restore();
+}
+/* v5.0 渦の眠り手。横たわっている間は闇が薄く、目覚めると光を吸って濃くなる */
+function drawYamiBoss(g,e){
+  const R=e.r, t=(G.B?G.B.time:0), asleep=!!e.asleep, melt=(e.meltT||0)>0;
+  g.save();
+  if(melt) g.globalAlpha=0.28;
+  /* 吸い込む闇の縁 */
+  const gg=g.createRadialGradient(0,-R*0.6,R*0.3,0,-R*0.6,R*2.4);
+  gg.addColorStop(0,'rgba(42,26,62,0.85)'); gg.addColorStop(1,'rgba(20,10,30,0)');
+  g.fillStyle=gg; g.beginPath(); g.arc(0,-R*0.6,R*2.4,0,TAU); g.fill();
+  if(asleep){
+    /* 横たわっている: 翼を畳んだ影 */
+    g.fillStyle='#2a1a3e'; g.beginPath(); g.ellipse(0,-R*0.25,R*1.25,R*0.55,0.18,0,TAU); g.fill();
+    g.fillStyle='#3a2456'; g.beginPath(); g.ellipse(-R*0.5,-R*0.4,R*0.42,R*0.3,-0.4,0,TAU); g.fill();
+    g.strokeStyle='rgba(167,125,255,0.5)'; g.lineWidth=1.6;
+    g.beginPath(); g.moveTo(-R*1.0,-R*0.1); g.quadraticCurveTo(0,-R*0.9,R*1.0,-R*0.15); g.stroke();
+    g.fillStyle='rgba(232,216,255,0.5)'; g.beginPath(); g.arc(R*0.55,-R*0.45,R*0.14,0,TAU); g.fill();   // 眠っている顔のあたり
+    g.restore(); return;
+  }
+  /* 起きている: 立ち上がった影と、四枚の裂けた翼 */
+  g.fillStyle='#2a1a3e';
+  for(const sx of [-1,1]) for(const k of [0,1]){
+    const a=(-0.55-k*0.55)*1, L=R*(1.6-k*0.35), wob=Math.sin(t*2+k)*0.12;
+    g.save(); g.scale(sx,1); g.rotate(a+wob);
+    g.beginPath(); g.moveTo(R*0.2,-R*0.7); g.quadraticCurveTo(L*0.8,-R*1.5,L,-R*0.5);
+    g.quadraticCurveTo(L*0.6,-R*0.35,R*0.25,-R*0.5); g.closePath(); g.fill(); g.restore();
+  }
+  g.fillStyle='#3a2456'; g.beginPath(); g.ellipse(0,-R*0.9,R*0.42,R*0.86,0,0,TAU); g.fill();
+  g.fillStyle='#2a1a3e'; g.beginPath(); g.arc(0,-R*1.65,R*0.36,0,TAU); g.fill();
+  /* 光を吸われた輪(ヘイローの反転) */
+  g.strokeStyle='rgba(167,125,255,0.85)'; g.lineWidth=2.4;
+  g.beginPath(); g.ellipse(0,-R*2.15,R*0.5,R*0.18,0,0,TAU); g.stroke();
+  g.fillStyle='rgba(232,216,255,0.9)';
+  for(const sx of [-1,1]){ g.beginPath(); g.ellipse(sx*R*0.15,-R*1.7,R*0.09,R*0.055,0,0,TAU); g.fill(); }
+  if((e.swing||0)>0){ e.swing-=1/60;
+    g.save(); g.rotate(e.swingA||0); g.strokeStyle='rgba(167,125,255,0.6)'; g.lineWidth=4;
+    g.beginPath(); g.arc(0,-R*0.6,R*2.2,-0.9,0.9); g.stroke(); g.restore(); }
+  g.restore();
+}
 /* v5.0 図鑑の絵姿: 沼から生えた一本の触手(沼の縁も少しだけ描く) */
 function drawMiretentBody(g,e){
   const R=e.r||10, t=(G.B?G.B.time:0)*1.6+(e.ph||0);
@@ -3488,6 +3584,7 @@ function draw(){
     for(const it of B.items) drawItem(g,it);
     for(const pk of B.picks) drawPick(g,pk);                 // v1.8 地形の資源
     if(B.event) drawEventPillar(g,B.event);                  // v1.8 光の柱
+    if(B.yamiCap) drawYamiCap(g,B.yamiCap);                  // v5.0 囲まれている誰か
     if(B.ebullets) for(const b of B.ebullets) drawRuneBolt(g,b);
 
     drawSightSectors(g,B);

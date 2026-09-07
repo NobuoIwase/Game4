@@ -116,6 +116,19 @@ const BAL={
   MIRE_TENT:3, MIRE_TENT_R:78, MIRE_TENT_CD:4.6,  // 生えている触手の数 / 届く距離 / 掴み直しの間隔
   MIRE_FEAR:2,                       // 沼そのものの嫌い方(避けて通る)
   /* 蒸発: 沼の広さと深さに比例して、ぶわーっと外まで広がる */
+  /* --- v5.0 ヤミコ --- */
+  YAMI_WAKE:260, YAMI_SLEEP_DEF:0.25,      // 眠っている間の起床距離 / 眠っている間の被ダメ(起こさないと削れない)
+  YAMI_BLADE_CD:3.4, YAMI_BLADE_R:210, YAMI_BLADE_DMG:26,   // 闇の刃(広い薙ぎ)
+  YAMI_RING_CD:6.0, YAMI_RING_R:150, YAMI_RING_DMG:16,      // 闇の輪
+  YAMI_SPEAR_CD:5.2, YAMI_SPEAR_DMG:34, YAMI_SPEAR_SPD:520, // 闇の穿ち(遠くの一体へ)
+  YAMI_CALL_CD:11, YAMI_CALL_N:3,          // 影の召喚(その階層の相性種)
+  YAMI_MELT_CD:7, YAMI_MELT_T:1.1,         // 闇に溶けて回り込む間隔と、溶けている秒数
+  YAMI_DARK_EAT:0.55, YAMI_DARK_R:230,     // 周りの光を吸う強さと半径(ヒロインとしての特徴でもある)
+  YAMI_LEAK:0.85,                          // えっちな目に遭っている間だけ、吸った光が漏れる(発情/敏感で増える)
+  YAMI_STEP_R:520, YAMI_STEP_DARK:0.45,    // 闇の中の瞬間移動: 届く距離 / これより暗い所へだけ跳べる
+  YAMI_BEG:0.55, YAMI_BEG_CD:9,            // 追い詰められると助けを乞う(強がりが崩れる閾値)
+  YAMI_SAVE_R:120, YAMI_SAVE_T:3.5,        // 救出: この距離で、この秒数そばに居ると解ける
+  YAMI_SAVE_IMPS:3,                        // 嬲っている淫魔の数(小淫魔・寸止めの淫魔・夢魔の女王)
   /* --- v5.0 クウの氷 --- */
   ICE_STAM:0.10, ICE_STAM_MIN:0.18,   // 一度に注ぐスタミナの割合 / これだけ無いと引かない
   ICE_LEN:820, ICE_W:46,              // 氷の道の長さ / 半幅
@@ -555,6 +568,13 @@ const MONSTERS={
     desc:'人の背丈ほどの、柔らかい茸。動かない。近づくと柄がゆっくりしなって、傘が上からかぶさってくる。傘の裏の襞は温かく湿っていて、閉じ込めたものを撫でつづける。押し返せば抜けられるが、その間ずっと撫でられている。',
     trait:'動かない。近づくと傘をかぶせて閉じ込め、襞で撫でながら胞子を溜める',
   },
+  /* ---- v5.0 渦の中心で眠る者(カードではない。ヤミコの一段目) ---- */
+  yamiboss:{
+    name:'渦の眠り手', role:'大ボス・闇の加護', cost:0, unlock:-1, tier:'boss', guardian:true,
+    hp:3400, spd:74, r:26, dmg:22, xp:320, boss:true,
+    desc:'渦の中心に横たわっていた者。魔核の闇と、天使の加護の両方を持っている。近づくまで目を覚まさない。目覚めると闇に溶けて回り込み、ヒロインたちのものによく似た——ただし遥かに大きく重い——武器を振るう。快感ではなく、体力を削りに来る。',
+    trait:'闇に溶けて移動/影の召喚/闇の刃・輪・穿ち。快感ではなく体力を削る',
+  },
   /* ---- v5.0 媚薬沼の触手(カードではない。沼の縁に生えている) ---- */
   miretent:{
     name:'沼の触手', role:'地形・繋留', cost:0, unlock:-1, tier:'fodder', guardian:true,
@@ -632,6 +652,7 @@ const POI_DEF={
   pool:  { name:'清水', desc:'湿った洞の澄んだ水。敏感化・発情・粘液がひどければ浸かって流す(2秒・45秒に1度)' },
   stele: { name:'石碑', desc:'石畳の回廊の碑文。読むと出会った魔物の知識が1段進み、知らない場所が1つ分かる(1戦1度ずつ)' },
   lantern:{ name:'催淫灯篭', desc:'v4.0 暗がりに灯る桃色の灯篭。遠くからでも見え、周りを照らす——が、そばに居ると発情と敏感化がじわじわ進む' },
+  yamicap:{ name:'囲まれている誰か', desc:'v5.0 渦の中心で、闇を纏った者が三体に囲まれている。そばに立ち続けるか、三体を払えば解ける' },
 };
 /* ================= v2.0 階層(深淵) =================
    一日=一階層。降り口に着けば次の階層へ(その日は終わり)。捕まれば同じ階層に再挑戦、二連敗で入口へ戻る(世代が変わり経験を失う。手記だけ残る)。
@@ -829,6 +850,17 @@ const HEROES={
                  stasis:{    name:'静止の一点', icon:'❈', lv:52, cd:60, desc:'HPが32%を切った時、半径260のすべてを止める。HP22%回復・2.4秒無敵。近くの味方は6秒 足が速く弾が増える' } },
         pref:{pool:1.35, lantern:1.25, stele:1.15, shroom:1.10, explore:1.15, gems:0.9, nectar:0.9, core:0.9, boss:0.8, spring:0.45, hotspring:0.35},
         desc:'氷を操る天使。無口で、少しませている。フレイラの隣は苦手' },
+  /* v5.0 四人目。渦の中心で、魔核の闇と天使の加護の両方を持って生まれた者。堕天使ではない。
+     発光を持たないどころか、周りの光を吸う。ただし吸っているだけなので、えっちな目に遭うと漏れて光る */
+  yamiko:{ name:'ヤミコ', col:'#a77dff', hair:'#2a1a3e', sprite:'yamiko', wps:['dblade','dring','dspear','dcall','dstep'],
+        start:{dblade:5,dring:5}, grow:['dblade','dring','dspear'], hpMul:1.06, spdMul:1.04, armor:1, dmgMul:1.00, stamMul:0.92,
+        fearMul:1.25, braveAdd:0.1, kiteMul:1.10, lightR:120, lightK:0.55, dark:true, pickPenalty:0.45,
+        startPs:{ward:2, haste:1, reach:1, pierce:1},   // 最初から育っている(その代わりレベルアップの札に出にくい)
+        skills:{ shadowstep:{ name:'影渡り', icon:'❖', lv:18, cd:16, desc:'囲まれた時、闇の濃い所へ溶けて抜ける。暗いほど遠くへ跳べる' },
+                 nightveil:{  name:'夜の帳', icon:'☾', lv:34, cd:32, desc:'二肢以上を掴まれるか押し倒された時、闇が弾けて拘束を断ち、周りの魔物の目を潰す' },
+                 duskcall:{   name:'黄昏の招き', icon:'✵', lv:50, cd:58, desc:'HPが35%を切った時、闇から三体の影を呼び、6秒のあいだ肩代わりさせる' } },
+        pref:{chest:1.2, treasure:1.25, boss:1.1, core:1.15, item:1.15, gems:1.1, stairs:1.05, explore:0.95, shrine:0.55, spring:0.9, pool:0.9, stele:0.9, lantern:0.5, shroom:0.55},
+        desc:'渦の中心で生まれた者。光を吸う闇を纏う。強がるが、追い詰められるとすぐ助けを乞う' },
 };
 const PARTY_MAX=4;                        // v3.1 パーティの上限(作りは3〜4人まで)
 /* v3.1 出撃するヒロイン: META.party.roster(最初はルミナ一人)。HEROES に無い名前は落とし、上限で切る */
@@ -868,6 +900,12 @@ const UPG={
   ibloom: {name:'霜の華',           d1:'敵の足元に',      d2:'こおる華がひらく', max:8, kind:'wp', bossW:0.70, owner:'kuu'},
   iorbit: {name:'氷衛',             d1:'みんなの まわりを', d2:'氷がまもって回る', max:8, kind:'wp', bossW:0.90, owner:'kuu'},
   iecho:  {name:'氷の追い矢',       d1:'みんなの弾に',    d2:'氷の弾が ならぶ',  max:8, kind:'wp', bossW:1.35, owner:'kuu'},
+  /* v5.0 ヤミコの武器(闇)。敵だった頃と同じ形。天使側に触発されて弱まっている */
+  dblade: {name:'闇の刃',           d1:'まえを ひろく',    d2:'闇が なぎはらう',  max:8, kind:'wp', bossW:1.40, owner:'yamiko'},
+  dring:  {name:'闇の輪',           d1:'まわりに 闇の輪',  d2:'触れた者を 削る',  max:8, kind:'wp', bossW:1.00, owner:'yamiko'},
+  dspear: {name:'闇の穿ち',         d1:'とおくの一体を',   d2:'闇の槍が つらぬく', max:8, kind:'wp', bossW:1.55, owner:'yamiko'},
+  dcall:  {name:'影の招き',         d1:'闇から 影が',      d2:'呼ばれて たたかう', max:8, kind:'wp', bossW:0.85, owner:'yamiko'},
+  dstep:  {name:'影渡りの余波',     d1:'消えた場所に',     d2:'闇が はじける',    max:8, kind:'wp', bossW:0.95, owner:'yamiko'},
   speed: {name:'スピードシューズ', d1:'いどう速度',      d2:'+10%',            max:5, kind:'ps'},
   vital: {name:'マックスハート',   d1:'さいだいHP+25',   d2:'いまも回復する',   max:5, kind:'ps'},
   magnet:{name:'ジェムマグネット', d1:'ジェムの回収',    d2:'はんいUP',        max:5, kind:'ps', bossW:0.8},
@@ -924,6 +962,13 @@ const EVOS={
     d1:'華が床ごと凍りつき', d2:'道になって残る' },
   aurora:{ name:'極光', base:'iorbit', pair:'dup',
     d1:'八つの氷がみなを囲み', d2:'一撃を代わりに砕く' },
+  /* v5.0 ヤミコの進化 */
+  eclipse:{ name:'蝕の刃', base:'dblade', pair:'pierce',
+    d1:'刃が闇ごと薙ぎ', d2:'光を消して通る' },
+  umbra:{ name:'影の環', base:'dring', pair:'area',
+    d1:'輪が二重になり', d2:'触れた者を闇へ引く' },
+  gloom:{ name:'深闇の槍', base:'dspear', pair:'reach',
+    d1:'槍が闇を貫き', d2:'向こう側まで届く' },
 };
 /* v2.1 引き継ぎで Lv が階層を跨いで積み上がるため、Lv20 を超えると必要量が更に増える(飽和させる) */
 const need=l=>Math.floor((6 + l*3.2 + l*l*0.18)*(1+BAL.NEED_SOFT_K*Math.max(0,l-BAL.NEED_SOFT_LV)));

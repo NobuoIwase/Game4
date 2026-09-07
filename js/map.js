@@ -904,7 +904,7 @@ function drawPoi(g,q){
     g.fillStyle='rgba(255,206,235,'+(0.75*fl).toFixed(2)+')'; g.beginPath(); g.ellipse(0,-30+hz*0.3,3.4,5,0,0,TAU); g.fill();
     for(let i=0;i<3;i++){ const ph=(t*0.35+i*0.33)%1; g.fillStyle='rgba(255,170,215,'+((1-ph)*0.30).toFixed(2)+')'; g.beginPath(); g.arc(hz+Math.sin(i*2.1+t)*7,-34-ph*40,2.2+ph*4,0,TAU); g.fill(); }   // 立ちのぼる甘い気
   }
-  if(known){ g.fillStyle='rgba(143,211,255,0.9)'; g.font='bold 10px sans-serif'; g.textAlign='center'; g.fillText(POI_DEF[q.kind].name, 0, ({stairs:-22,core:-70,seal:-56,spring:-30,pool:-28,stele:-50,lantern:-52})[q.kind]||-50); }
+  if(known && POI_DEF[q.kind]){ g.fillStyle=q.kind==='yamicap'?'rgba(200,170,255,0.95)':'rgba(143,211,255,0.9)'; g.font='bold 10px sans-serif'; g.textAlign='center'; g.fillText(POI_DEF[q.kind].name, 0, ({stairs:-22,core:-70,seal:-56,spring:-30,pool:-28,stele:-50,lantern:-52,yamicap:-56})[q.kind]||-50); }
   g.restore();
 }
 /* ミニマップ(左下): 地形色・壁・知っている場所・彼女・ボス */
@@ -940,6 +940,7 @@ function drawMinimap(g){
     for(let j=0;j<MAP_H;j++) for(let i=0;i<MAP_W;i++) if(G.map.iceT[j*MAP_W+i]) g.fillRect(x0+i*sc,y0+j*sc,sc,sc);
   }
   if(B.mires) for(const m of B.mires){ if(m.dry) continue; g.fillStyle=m.iced?'rgba(200,235,255,0.9)':'rgba(200,90,150,0.85)'; g.fillRect(tx(m.x)-1,ty(m.y)-1,2,2); }   // v5.0 媚薬沼(凍ったものは薄氷の色)
+  if(B.yamiCap && !B.yamiCap.freed){ g.fillStyle='#c9aaff'; g.fillRect(tx(B.yamiCap.x)-2,ty(B.yamiCap.y)-2,4,4); }   // v5.0 囲まれている誰か
   for(const pk of B.picks){ if(pk.dead||!pk.known) continue; g.fillStyle=pk.kind==='shroom'?'#9fe8c8':(pk.kind==='family'?'#ffe1a8':(pk.kind==='nectar'?'#ffb3cf':'#ffd76a')); g.fillRect(tx(pk.x)-1,ty(pk.y)-1,2,2); }   // v1.8 知っている資源
   if(p.goal){ const gl=p.goal; g.strokeStyle='rgba(255,233,176,0.55)'; g.lineWidth=1; g.setLineDash([2,2]); g.beginPath(); g.moveTo(tx(p.x),ty(p.y)); g.lineTo(tx(gl.x),ty(gl.y)); g.stroke(); g.setLineDash([]);
     g.strokeStyle='#ffe9b0'; g.beginPath(); g.arc(tx(gl.x),ty(gl.y),3.5+Math.sin(performance.now()*0.006),0,TAU); g.stroke(); }   // v1.8 目当て

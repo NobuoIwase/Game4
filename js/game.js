@@ -31,8 +31,9 @@ function newHero(id){
     skillCd:(()=>{ const o={}; for(const k in HD.skills) o[k]=0; return o; })(), guardT:0, emberT:0, aiMode:'fight', modeUntil:0, escape:null, dpsEst:20, hesitN:{},   // v2.3 奥義 / 戦闘モード / 地形ごとの迷った回数
     stuckT:0, unstickT:0, path:null, zoneLast:undefined,                                       // v1.7 壁・経路
     level:1, xp:0, xpNeed:need(1),
-    wp:(()=>{ const o={}; for(const k in UPG) if(UPG[k].kind==='wp') o[k]=0; for(const k in HD.start) o[k]=HD.start[k]; return o; })(),   // v3.0 全武器の枠を持ち、自分の武器だけ育つ
-    ps:{speed:0, vital:0, magnet:0, haste:0, ward:0, growth:0, area:0, dup:0, luck:0, endure:0, reach:0, pierce:0, regen:0},
+    wp:(()=>{ const o={}; for(const k in UPG) if(UPG[k].kind==='wp') o[k]=0; for(const k in HD.start) o[k]=Math.min(UPG[k]?UPG[k].max:8, HD.start[k]); return o; })(),   // v3.0 全武器の枠を持ち、自分の武器だけ育つ
+    ps:(()=>{ const o={speed:0, vital:0, magnet:0, haste:0, ward:0, growth:0, area:0, dup:0, luck:0, endure:0, reach:0, pierce:0, regen:0};
+      for(const k in (HD.startPs||{})) if(o[k]!==undefined) o[k]=HD.startPs[k]; return o; })(),   // v5.0 素性ごとの初期パッシブ(ヤミコは最初から育っている)
     evo:(()=>{ const o={}; for(const k in EVOS) o[k]=0; return o; })(),
     boltT:0.6, novaT:2.5, orbAng:0, novaAnim:0, novaR:0,
     chainT:1.0, spiritT:1.2, shieldPulse:0, shieldR:0, shieldArc:0, shieldAng:0,   // v2.0 新武器
@@ -243,7 +244,7 @@ function startBattle(){
     coreWar:false, core:null,                                                                      // v4.0 魔核戦に入ったか / その個体
     wornSaid:false,                                                                                // v5.0 すり減りの弱音
     bond:false, bondT:0, rings:[],                                                                 // v4.1 家族茸の絆の灯り / 菌輪
-    mires:[], dryAura:null,                                                                        // v5.0 媚薬沼 / フレイラの乾燥オーラ
+    mires:[], dryAura:null, shades:[], yami:null, yamiCap:null,                                                                        // v5.0 媚薬沼 / フレイラの乾燥オーラ
     dry:[], evapT:-99, coreRoots:null,                                                             // v4.0 フレイラが焼いた床(日を跨いで残る) / 媚薬が蒸発した時刻 / 魔核の跡(根→渦)
   };
   genMap();               // 地形(世代×階層で変わる)
@@ -260,6 +261,8 @@ function startBattle(){
   spawnWildShrooms();     // v4.1 洞そのものとして生えている茸(媚茸・抱き茸)
   spawnRings();           // v4.1 菌輪
   spawnMires();           // v5.0 媚薬沼(水溜まりのように点在)
+  spawnYamiBoss();        // v5.0 渦の中心で眠っている者(ヤミコの一段目)
+  spawnYamiCaptive();     // v5.0 淫魔たちに囲まれている所(救出の一幕)
   dryInit();              // v5.0 焼けた床(タイル単位。前の日の分を復元)
   iceInit();              // v5.0 凍らせた床(前の日の分を復元)
   // 描き込みスプライトの事前焼き(デッキの種族×位相を最初の数十フレームで焼いておく)
@@ -278,8 +281,8 @@ function startBattle(){
     const V30=(typeof STORY_V30!=='undefined')?STORY_V30:null, PRO=(V30&&V30.prologue&&V30.prologue.length&&G.B.heroes.length>1)?V30.prologue:STORY.prologue;   // v3.0 二人の序章
     const fIntro=(!META.run.storySeen['f'+F.depth]&&sf.intro.length)?['' ].concat(sf.intro):[];
     const loopI=((META.era|0)>0 && !META.run.storySeen['loop'+META.era])?storyLoopIntro(G.B.heroes.length):null;   // v3.1 組み替わった後の朝(一人版/二人版)
-    if(!META.run.storySeen.prologue && PRO.length){ lines=PRO.concat(fIntro); META.run.storySeen.prologue=1; if(G.B.heroes.length>1) META.run.storySeen.join=1; META.run.storySeen['f'+F.depth]=1; saveMeta(); }   // v3.1 一人で始めたなら合流の朝はまだ
-    else if(!META.run.storySeen.join && G.B.heroes.length>1 && V30 && V30.party && V30.party.join && V30.party.join.length){ const late=(META.run.joinWhy==='late' && V30.party.joinLate && V30.party.joinLate.length); lines=(late?V30.party.joinLate:V30.party.join).concat(fIntro); META.run.storySeen.join=1; if(late) META.run.storySeen['loop'+META.era]=1; META.run.storySeen['f'+F.depth]=1; META.run.joinWhy=''; saveMeta(); }   // v3.1 合流の朝(二連敗の後 / 一人で討ち続けた後の変奏)
+    if(!META.run.storySeen.prologue && PRO.length){ lines=PRO.concat(fIntro); META.run.storySeen.prologue=1; if(G.B.heroes.length>1) for(const id of partyIds()) if(id!=='lumina') META.run.storySeen['join_'+id]=1; META.run.storySeen['f'+F.depth]=1; saveMeta(); }   // v3.1 一人で始めたなら合流の朝はまだ
+    else if(joinMorning(V30,fIntro,F)){ lines=joinMorning(V30,fIntro,F,true); }   // v3.1 合流の朝(二連敗の後 / 一人で討ち続けた後の変奏)。v5.0 誰の合流かで場面を分ける
     else if(loopI){ lines=loopI.concat(fIntro); META.run.storySeen['loop'+META.era]=1; META.run.storySeen['f'+F.depth]=1; saveMeta(); }   // v3.0 組み替わった後の朝
     else if(META.run.fails>0 && STORY.retry.length){ lines=storyRetry(); }
     else if(sf.intro.length && !META.run.storySeen['f'+F.depth]){ lines=sf.intro; META.run.storySeen['f'+F.depth]=1; saveMeta(); }
@@ -362,6 +365,7 @@ function endBattle(outcome){
     META.run.clears=(META.run.clears||0)+1; META.era=(META.era|0)+1; runReset(true); rotReset=true; decay=luminaDecay(); runNote='clear';   // v3.0 深淵が組み替わる(世代+1: 階層が増え、魔核が太る) / v5.0 魔核が巻き戻すので、彼女たちは何も知らない朝に立つ
   }
   // v3.1 参戦の判定: 深淵が一度組み替わった後(世代≥1)に二連敗で入口へ戻された朝、次のヒロインが来る(保険: リセット3回 / 一人のまま世代4)
+  yamiAdvance(runNote);   // v5.0 ヤミコの段を進める(眠り → 救出 → 参戦)
   const joinId=partyJoinCheck(runNote);
   saveMeta();
   bgmStop();
@@ -390,7 +394,7 @@ function runReset(wipeKnow){
   META.rot={dmg:0, ail:0, captures:0, battles:0};
   if(wipeKnow){ META.gen.know={}; META.gen.zoneKnow={}; META.gen.trapKnow={}; META.gen.dryLesson=0; }   // 魔核が巻き戻した時だけ、覚えたことも書き換えられる(手記に書いた分だけ残る)
   dryClearAll(); iceClearAll();   // v4.0/v5.0 焼いた床も凍らせた床も、巻き戻りで元の洞へ戻る
-  { const o=META.run.storySeen||{}; const n={prologue:o.prologue, join:o.join}; for(const k in o) if(k.startsWith('loop')) n[k]=o[k]; META.run.storySeen=n; }   // 階層の導入はまた出る(序章・合流・世代の朝は出ない)
+  { const o=META.run.storySeen||{}; const n={prologue:o.prologue}; for(const k in o) if(k.startsWith('loop')||k.startsWith('join')) n[k]=o[k]; META.run.storySeen=n; }   // 階層の導入はまた出る(序章・合流・世代の朝は出ない)
 }
 /* v3.1 一日のエッセンスの逓減: 素の合計 x → SOFT·ln(1+x/SOFT)。少ない日はほぼそのまま、多い日は頭打ち気味 */
 function essSoft(x,soft){ const S=(soft===undefined?BAL.ESS_SOFT:soft)||0; x=Math.max(0,x||0); return S>0?S*Math.log(1+x/S):x; }   // soft を渡せばオーブにも使える
@@ -399,7 +403,7 @@ function partyJoin(id,why){
   if(!HEROES[id]) return false; META.party=META.party||{roster:['lumina'],joined:{},resets:0};
   if(META.party.roster.includes(id) || META.party.roster.length>=PARTY_MAX) return false;
   META.party.roster.push(id); META.party.joined[id]={era:eraNow(), gen:META.gen.idx, runs:META.runs, why:why||''}; META.party.resets=0;
-  delete META.run.storySeen.join; META.run.joinWhy=why||'';   // 合流の朝はまだ出ていない
+  delete META.run.storySeen['join_'+id]; META.run.joinWho=id; META.run.joinWhy=why||'';   // v5.0 その子の合流の朝は、まだ出ていない
   return true;
 }
 /* v3.1 参戦の判定(夜明けの処理)。PARTY_JOIN の並びで、まだ居ない最初のヒロインについて:
@@ -454,6 +458,7 @@ function codexMark(id,key,n){
 function linesFor(id){
   if(id==='freila' && typeof LINES_F!=='undefined') return LINES_F;
   if(id==='kuu'    && typeof LINES_K!=='undefined') return LINES_K;
+  if(id==='yamiko' && typeof LINES_Y!=='undefined') return LINES_Y;
   return null;
 }
 function codexMet(id){
@@ -905,7 +910,7 @@ function enterPin(mon){
   B.pinScene=sceneForHero(h,'pin', sid); B.pinSceneHi=B.ci;   // v3.0 押し倒された子の声で
   B.pinSceneIdx=0; B.pinSceneT=0;
   setBanner(h.name+'が押し倒された!','もがいて逃れろ——スタミナかHPが尽きれば敗北','#ff5d7a');
-  heroBubble(h,h.id==='freila'?'……っ、どけ!':'はなれて……っ!',true,2);
+  heroBubble(h,{freila:'……っ、どけ!', kuu:'……のいて', yamiko:'……離れなさい。いま'}[h.id]||'はなれて……っ!',true,2);
   S.capture();
   G.shake=Math.min(9,G.shake+5);
   awardAil('pinned');
@@ -1978,6 +1983,7 @@ function weaponsUpdate(dt){
   if(atkMult<=0) return;
   if(p.id==='freila') freilaWeapons(p,dt,atkMult);   // v3.0 火の武器
   if(p.id==='kuu') kuuWeapons(p,dt,atkMult);          // v5.0 氷の武器
+  if(p.id==='yamiko') yamiWeapons(p,dt,atkMult);      // v5.0 闇の武器
   if(p.wp.bolt>0){
     p.boltT-=dt*atkMult;
     if(p.boltT<=0){
@@ -2502,6 +2508,7 @@ function offerLevelup(){
       w*=p.taste[k]||1;   // 今夜の好み: 噛み合わない夜はビルドが散る
       if(bossy) w*=UPG[k].bossW||1;
       if(UPG[k].kind==='wp' && ownN>1){ const o=UPG[k].owner||'lumina'; w*=(wpAvail/ownCnt[o])/ownN; }
+      if(UPG[k].kind==='wp'){ const HD=HEROES[UPG[k].owner||'lumina']||{}; if(HD.pickPenalty) w*=HD.pickPenalty; }   // v5.0 最初から育っている子の札は出にくい
       if(UPG[k].kind==='wp' && B.heroes.length>1){ const h=heroOf(k); const tot=B.heroes.map(x=>Object.values(x.wp).reduce((a,b)=>a+b,0)); const mine=Object.values(h.wp).reduce((a,b)=>a+b,0), avg=tot.reduce((a,b)=>a+b,0)/tot.length; if(mine<avg-1) w*=1.3; else if(mine>avg+1) w*=0.75; }   // v3.0 二人の武器の育ちを揃える(どちらか一人しか強化できない)
     }
     w*=rand(0.9,1.1);
@@ -2531,18 +2538,18 @@ function applyUpg(k){
     const id=k.slice(4); const p=heroOf(EVOS[id].base);
     p.evo[id]=1;
     setBanner('★ 武器融合!', p.name+' — '+EVOS[id].name, '#ffd76a');
-    heroBubble(p,p.id==='freila'?'……熱い。いい火':'ちからが、あふれてくる…!',true);
+    heroBubble(p,{freila:'……熱い。いい火', kuu:'……かたちが、変わった', yamiko:'……ああ。これ、思い出した'}[p.id]||'ちからが、あふれてくる…!',true);
     parts(p.x,p.y-16,30,['#fff','#ffd76a','#8fd3ff'],220,0.8);
     return;
   }
   if(UPG[k].kind==='wp'){   // v3.0 武器は持ち主だけ
     const p=heroOf(k); applyUpgStat(p,k);
     floatTxt(p.x,p.y-64,UPG[k].name+' Lv'+curLv(k)+(curLv(k)>BAL.WP_EVO_LV?' 覚醒!':'!'),'#ffd76a',13,1.5);
-    heroBubble(p,p.id==='freila'?'……よし':'つよくなった♪',true);
+    heroBubble(p,{freila:'……よし', kuu:'……ん', yamiko:'……悪くない'}[p.id]||'つよくなった♪',true);
   } else {                  // パッシブは全員に効く
     for(const h of B.heroes){ applyUpgStat(h,k); if(k==='vital'){ h.hp=Math.min(h.maxHp,h.hp+25); } }
     const p=B.heroes[leaderIdx()]; floatTxt(p.x,p.y-64,UPG[k].name+' Lv'+curLv(k)+'!','#ffd76a',13,1.5);
-    heroBubble(p,p.id==='freila'?'……全員、少し強くなった':'みんな、つよくなった♪',true);
+    heroBubble(p,{freila:'……全員、少し強くなった', kuu:'……みんな、すこし', yamiko:'……全員ぶん。効いてる'}[p.id]||'みんな、つよくなった♪',true);
   }
 }
 function lvTick(dt){
@@ -2668,7 +2675,7 @@ function killEnemy(e){
   if(!MONSTERS[e.id].item) codexOf(e.id).kills++;
   // v3.0 誰かの四肢に付いていたら解放(全員を見る)
   for(let i=0;i<B.heroes.length;i++){ const hh=B.heroes[i];
-    if(e.limb && hh.limbs[e.limb] && hh.limbs[e.limb].mon===e){ hh.limbs[e.limb]=null; heroBubble(hh,hh.id==='freila'?'……離れた':'とれたっ!'); }
+    if(e.limb && hh.limbs[e.limb] && hh.limbs[e.limb].mon===e){ hh.limbs[e.limb]=null; heroBubble(hh,{freila:'……離れた', kuu:'……とれた', yamiko:'……ようやく'}[hh.id]||'とれたっ!'); }
     for(const sl of attachedSlots(hh)){ if(hh.limbs[sl].mon===e) hh.limbs[sl]=null; }
     for(const sl of suckSlots(hh)){ if(hh.suckers[sl].mon===e) hh.suckers[sl]=null; }
     if(hh.pinBy===e) hh.pinBy=null;
@@ -2838,6 +2845,8 @@ function enemiesUpdate(dt){
       guardianTick(e,dt,d,dx,dy);
     }else if(e.id==='core'){
       coreTick(e,dt,d,dx,dy);
+    }else if(e.id==='yamiboss'){
+      yamiBossTick(e,dt,d,dx,dy);
     }else if(e.id==='coreling'){
       corelingTick(e,dt,d,dx,dy);
     }else if(e.id==='lurecap'){
@@ -3508,6 +3517,329 @@ function partyCenter(){ const B=G.B; let cx=0,cy=0,n=0; for(const h of B.heroes)
 function partyGathered(){ const B=G.B, c=partyCenter(); if(!c||c.n<2) return true; for(const h of B.heroes){ if(h.out) continue; if(Math.hypot(h.x-c.x,h.y-c.y)>BAL.GATHER_R) return false; } return true; }
 function partyDanger(){ const B=G.B; if(B.heroes.some(h=>h.out)) return true;   // v3.1 誰かが捕まっているなら相談どころではない(救出が先。3人以上でも救出の案を潰さない)
   for(const h of B.heroes){ if(h.out) continue; if(attachCount(h)>0 || h.pinned || h.hp<h.maxHp*0.4 || (h.threatV||0)>=BAL.GATHER_DANGER_THREAT || nearEnemyCount(h.x,h.y,BAL.GATHER_DANGER_R,false)>0) return true; } return false; }
+/* ================= v5.0 ヤミコ =================
+   渦の中心で、魔核の闇と天使の加護の両方を持って生まれた者。堕天使ではない。
+   三段の筋: (1)渦の中心で眠っている大ボス → (2)淫魔たちに囲まれている所を助けられる → (3)参戦。
+   ヒロインとしての特徴: 発光を持たないどころか、周りの光を吸う。吸っているだけなので、
+   えっちな目に遭うと漏れて光る。闇の中でだけ瞬間移動できる。武器とパッシブは最初からLv5 */
+/* v5.0 合流の朝: 誰が来たかで場面を分ける(単一フラグのままだと、三人目の朝にフレイラとの出会いが再生される) */
+function joinMorning(V30,fIntro,F,take){
+  if(!(G.B.heroes.length>1) || !V30 || !V30.party) return null;
+  const who=META.run.joinWho||'freila';
+  if(META.run.storySeen['join_'+who]) return null;
+  const J=(V30.party.joinBy&&V30.party.joinBy[who])||((who==='freila')?{join:V30.party.join, joinLate:V30.party.joinLate}:null);
+  if(!J||!J.join||!J.join.length) return null;
+  const late=(META.run.joinWhy==='late' && J.joinLate && J.joinLate.length);
+  if(!take) return true;
+  META.run.storySeen['join_'+who]=1;
+  if(late) META.run.storySeen['loop'+META.era]=1;
+  META.run.storySeen['f'+F.depth]=1; META.run.joinWhy=''; saveMeta();
+  return (late?J.joinLate:J.join).concat(fIntro);
+}
+function yamiState(){ META.yami=META.yami||{st:0,era:-1,saved:0}; return META.yami; }
+const yamiDmgK=e=>(e&&e.dmg?e.dmg/MONSTERS.yamiboss.dmg:1);
+/* 一幕を出す(1戦に一度ずつ。ADV の間は時間が止まる) */
+function yamiStory(key){
+  const B=G.B; B.yamiSeen=B.yamiSeen||{}; if(B.yamiSeen[key]) return;
+  B.yamiSeen[key]=1;
+  const V=(typeof STORY_V30!=='undefined')?STORY_V30.yami:null;
+  if(V && V[key] && V[key].length && typeof UI!=='undefined' && UI.showStory) UI.showStory(V[key]);
+}   // 階層と世代のぶん(spawnUnit が e.dmg に掛けている)
+function yamiStage(){ return yamiState().st|0; }
+/* 段を進める(endBattle から)。クウが加わった後、最初に魔核を討った回の「次の回」から眠り始める */
+function yamiAdvance(runNote){
+  const Y=yamiState(), era=eraNow();
+  if(Y.st===0){
+    if(runNote==='clear' && META.party.roster.includes('kuu')){ Y.st=1; Y.era=era; }   // 討った翌朝から、渦の中心に横たわっている
+  }else if(Y.st===1){
+    if(runNote==='clear'){ Y.st=2; Y.era=era; }   // その回の魔核を討った次の回、淫魔たちに囲まれている
+  }else if(Y.st===2){
+    if(Y.saved && runNote==='clear'){ Y.st=3; Y.era=era; partyJoin('yamiko','rescued'); }   // 助けた回の魔核を討てば、次の回から参戦
+  }
+  saveMeta();
+}
+/* 渦の中心(最終階層)に、眠っている者を置く */
+function spawnYamiBoss(){
+  const B=G.B; if(yamiStage()!==1 || !B.floor.final) return;
+  const c=B.enemies.find(e=>e.id==='core');
+  let q=null;
+  for(let k=0;k<400&&!q;k++){ const a=rand(TAU), d=rand(240,420);
+    const x=(c?c.x:0)+Math.cos(a)*d, y=(c?c.y:0)+Math.sin(a)*d;
+    const s=snapFloor(x,y,false,4); if(s&&reachableAt(s.x,s.y,false)) q=s; }
+  if(!q) q=snapFloor(c?c.x+300:300, c?c.y:0, false, 6)||{x:300,y:0};
+  const u=spawnUnit('yamiboss',q.x,q.y,{});
+  if(!u) return;
+  u.hp=u.maxHp=Math.round(MONSTERS.yamiboss.hp*(1+0.18*Math.max(0,eraNow()-6))*(1+0.05*Math.max(0,(B.hero.level||1)-1)));
+  u.asleep=true; u.wakeT=0; u.bladeCd=1.2; u.ringCd=4; u.spearCd=3; u.callCd=6; u.meltCd=5; u.meltT=0;
+  B.yami=u;
+}
+/* 淫魔三種に囲まれている(救出の一幕) */
+function spawnYamiCaptive(){
+  const B=G.B; if(yamiStage()!==2 || !B.floor.final) return;
+  const c=B.enemies.find(e=>e.id==='core');
+  let q=null;
+  for(let k=0;k<400&&!q;k++){ const a=rand(TAU), d=rand(300,520);
+    const x=(c?c.x:0)+Math.cos(a)*d, y=(c?c.y:0)+Math.sin(a)*d;
+    const s=snapFloor(x,y,false,5); if(s&&reachableAt(s.x,s.y,false)) q=s; }
+  if(!q) q=snapFloor(c?c.x+400:400, c?c.y:0, false, 6)||{x:400,y:0};
+  B.yamiCap={x:q.x, y:q.y, t:0, save:0, seen:false, freed:false, imps:[]};
+  const kinds=['imp','succubus','succuqueen'];
+  for(let i=0;i<BAL.YAMI_SAVE_IMPS;i++){
+    const a=i*TAU/BAL.YAMI_SAVE_IMPS+0.4, e=spawnUnit(kinds[i%kinds.length], q.x+Math.cos(a)*34, q.y+Math.sin(a)*26, {});
+    if(!e) continue;
+    e.yamiHold=true; e.hp=e.maxHp=Math.round(e.maxHp*1.6); e.homeX=q.x; e.homeY=q.y; e.holdA=a;
+    B.yamiCap.imps.push(e);
+  }
+  META.map.known['yamicap']=1;
+  G.map.pois.push({kind:'yamicap', x:q.x, y:q.y, key:'yamicap'});
+}
+/* 眠り手の毎フレーム */
+function yamiBossTick(e,dt,d,dx,dy){
+  const B=G.B, p=B.hero;
+  if(e.asleep){
+    if(d<BAL.YAMI_WAKE){
+      e.asleep=false; e.wakeT=1.2;
+      yamiStory('wake');
+      setBanner('渦の眠り手','横たわっていたものが、目を開けた。光を吸って、闇が濃くなる','#a77dff');
+      sayLine('feat.yamiWake',1,0,'……なにか、おきた。ひかりが、すいこまれてる');
+      G.shake=Math.min(14,G.shake+8); sfx(90,50,0.9,'sawtooth',0.11);
+      B.fx.push({kind:'darkring', x:e.x, y:e.y, r:BAL.YAMI_DARK_R, t:0, life:1.2});
+      codexMet('yamiboss');
+    }
+    return;
+  }
+  if(e.wakeT>0){ e.wakeT-=dt; return; }   // 起き上がる間
+  if(e.meltT>0){   // 闇に溶けている間は当たらない
+    e.meltT-=dt;
+    if(e.meltT<=0){
+      let q=null;
+      for(let k=0;k<40&&!q;k++){ const a=rand(TAU), dd=rand(120,260);
+        const s=snapFloor(p.x+Math.cos(a)*dd, p.y+Math.sin(a)*dd, false, 4);
+        if(s&&reachableAt(s.x,s.y,false)) q=s; }
+      if(q){ e.x=q.x; e.y=q.y; }
+      B.fx.push({kind:'darkring', x:e.x, y:e.y, r:110, t:0, life:0.6});
+      parts(e.x,e.y-10,18,['#2a1a3e','#a77dff','#5a3a7a'],150,0.6);
+    }
+    return;
+  }
+  e.meltCd-=dt; e.bladeCd-=dt; e.ringCd-=dt; e.spearCd-=dt; e.callCd-=dt;
+  if(e.meltCd<=0 && d>280){ e.meltCd=BAL.YAMI_MELT_CD; e.meltT=BAL.YAMI_MELT_T; parts(e.x,e.y-10,14,['#2a1a3e','#a77dff'],110,0.5); return; }
+  if(d>60){ e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt; }
+  /* 闇の刃: 前を広く薙ぐ */
+  if(e.bladeCd<=0 && d<BAL.YAMI_BLADE_R+40){
+    e.bladeCd=BAL.YAMI_BLADE_CD; e.swing=0.3; e.swingA=Math.atan2(dy,dx);
+    for(const h of B.heroes){ if(h.out) continue;
+      const hx=h.x-e.x, hy=(h.y-10)-e.y, hd=Math.hypot(hx,hy);
+      if(hd>BAL.YAMI_BLADE_R+12) continue;
+      const da=Math.abs(((Math.atan2(hy,hx)-e.swingA+Math.PI*3)%TAU)-Math.PI);
+      if(da<1.1){ const ci0=B.ci; B.ci=h.hi; hurtHero(BAL.YAMI_BLADE_DMG*yamiDmgK(e), e, {pierce:true}); B.ci=ci0; } }
+    B.fx.push({kind:'darkslash', x:e.x, y:e.y, ang:e.swingA, r:BAL.YAMI_BLADE_R, t:0, life:0.4});
+    sfx(180,70,0.3,'sawtooth',0.09);
+  }
+  /* 闇の輪: 自分の周りで弾ける */
+  if(e.ringCd<=0 && d<BAL.YAMI_RING_R+60){
+    e.ringCd=BAL.YAMI_RING_CD;
+    for(const h of B.heroes){ if(h.out) continue;
+      if(Math.hypot(h.x-e.x,h.y-e.y)<BAL.YAMI_RING_R+10){ const ci0=B.ci; B.ci=h.hi; hurtHero(BAL.YAMI_RING_DMG*yamiDmgK(e), e, {noKb:true}); B.ci=ci0; } }
+    B.fx.push({kind:'darkring', x:e.x, y:e.y, r:BAL.YAMI_RING_R, t:0, life:0.7});
+    G.shake=Math.min(9,G.shake+4); sfx(120,60,0.4,'square',0.08);
+  }
+  /* 闇の穿ち: 遠くの一体へ槍を放つ */
+  if(e.spearCd<=0){
+    e.spearCd=BAL.YAMI_SPEAR_CD;
+    let t=null, td=-1; for(const h of B.heroes){ if(h.out) continue; const hd=Math.hypot(h.x-e.x,h.y-e.y); if(hd>td){ td=hd; t=h; } }
+    if(t){ const a=Math.atan2((t.y-10)-e.y,t.x-e.x);
+      B.ebullets.push({kind:'dark', x:e.x, y:e.y-8, vx:Math.cos(a)*BAL.YAMI_SPEAR_SPD, vy:Math.sin(a)*BAL.YAMI_SPEAR_SPD, t:0, life:1.6, r:9, dmg:BAL.YAMI_SPEAR_DMG*yamiDmgK(e), src:'yamiboss'});
+      sfx(300,120,0.25,'triangle',0.06); }
+  }
+  /* 影の招き: その階層の相性種を呼ぶ */
+  if(e.callCd<=0){
+    e.callCd=BAL.YAMI_CALL_CD;
+    const aff=(B.floor.affinity||['hand']).filter(id=>MONSTERS[id]&&!MONSTERS[id].boss&&!MONSTERS[id].guardian);
+    for(let i=0;i<BAL.YAMI_CALL_N;i++){
+      const id=pickRand(aff.length?aff:['hand']), a=rand(TAU), q=snapFloor(e.x+Math.cos(a)*rand(70,150), e.y+Math.sin(a)*rand(70,150), false, 3);
+      if(q){ const u=spawnUnit(id,q.x,q.y,{}); if(u){ u.fromDark=true; parts(q.x,q.y-8,10,['#2a1a3e','#a77dff'],100,0.5); } }
+    }
+    B.fx.push({kind:'darkring', x:e.x, y:e.y, r:170, t:0, life:0.8});
+    S.summon();
+  }
+}
+/* 救出の一幕: 淫魔たちが彼女を離さない。そばに居続けると解ける */
+function yamiCapTick(dt){
+  const B=G.B, C=B.yamiCap; if(!C||C.freed) return;
+  C.t+=dt;
+  const act=B.heroes.filter(h=>!h.out);
+  if(!C.seen && act.some(h=>Math.hypot(h.x-C.x,h.y-C.y)<520)){
+    C.seen=true;
+    yamiStory('see');
+    setBanner('渦の縁の一幕','闇を纏った誰かが、三体に囲まれて、抵抗もできずにいる','#a77dff');
+    sayLine('feat.yamiSee',1,0,'……あれ、だれ? っていうか、あれ、たすけないと!');
+    codexMet('yamiboss');
+  }
+  /* 掴んでいる三体は、その場から離れない */
+  for(const e of C.imps){
+    if(e.dead) continue;
+    e.x+=(C.x+Math.cos(e.holdA+C.t*0.4)*32-e.x)*Math.min(1,dt*4);
+    e.y+=(C.y+Math.sin(e.holdA+C.t*0.4)*24-e.y)*Math.min(1,dt*4);
+    e.state='idle';
+  }
+  const alive=C.imps.filter(e=>!e.dead).length;
+  const near=act.filter(h=>Math.hypot(h.x-C.x,h.y-C.y)<BAL.YAMI_SAVE_R).length;
+  if(alive===0 || near>0) C.save+=dt*(alive===0?2.2:near*0.8);
+  else C.save=Math.max(0,C.save-dt*0.4);
+  if(Math.random()<dt*5) parts(C.x+rand(-22,22), C.y-rand(0,22), 1, ['#ff9ec2','#a77dff','#fff'], 50, 0.7);
+  if(C.save>=BAL.YAMI_SAVE_T){
+    C.freed=true; yamiState().saved=1; saveMeta();
+    for(const e of C.imps) if(!e.dead) killEnemy(e);
+    B.fx.push({kind:'darkring', x:C.x, y:C.y, r:200, t:0, life:1.2});
+    parts(C.x,C.y-14,40,['#a77dff','#fff','#ff9ec2'],220,0.9);
+    yamiStory('free');
+    setBanner('助け出した','闇の子はフラフラと浮かび上がり、腰の引けたまま、逃げるように奥へ消えた','#a77dff');
+    sayLine('feat.yamiFree',1,0,'……あ、いっちゃった。おれい、くらい……');
+    sayPartyOrLine(B.heroes[leaderIdx()],'feat.yamiFree','……あ、いっちゃった');
+    B.nYamiSave=(B.nYamiSave||0)+1;
+  }
+}
+/* ヒロインとしてのヤミコ ------------------------------------------------ */
+/* 周りの光を吸う。ただし吸っているだけなので、えっちな目に遭っている間は漏れて光る */
+function yamiLeak(h){
+  if(!h||h.id!=='yamiko') return 0;
+  let v=0;
+  v+=Math.min(1,(h.heatLv||0)/3)*0.5;
+  v+=Math.min(1,(h.sensit||0)/120)*0.3;
+  if(h.climaxT>0) v=1;
+  if(h.pinned||attachCount(h)>0) v=Math.max(v,0.55);
+  if(h.charmBind) v=Math.max(v,0.7);
+  return Math.min(1,v);
+}
+function yamiDarkAt(x,y){
+  const B=G.B; if(!B||!B.heroes) return 0;
+  let v=0;
+  for(const h of B.heroes){
+    if(h.out||!(HEROES[h.id]||{}).dark) continue;
+    const d=Math.hypot(x-h.x,y-h.y); if(d>=BAL.YAMI_DARK_R) continue;
+    v=Math.max(v,(1-d/BAL.YAMI_DARK_R)*BAL.YAMI_DARK_EAT*(1-yamiLeak(h)*BAL.YAMI_LEAK));
+  }
+  return v;
+}
+/* 闇渡り: 暗い所へなら跳べる。囲まれた時と、遠い目当てへ向かう時に使う */
+function yamiStep(p){
+  const B=G.B;
+  let best=null, bs=1e9;
+  for(let k=0;k<16;k++){
+    const a=k*TAU/16, d=rand(BAL.YAMI_STEP_R*0.5,BAL.YAMI_STEP_R);
+    const q=snapFloor(clampMapX(p.x+Math.cos(a)*d,40), clampMapY(p.y+Math.sin(a)*d,40), false, 3);
+    if(!q||!reachableAt(q.x,q.y,false)) continue;
+    if(lightAt(q.x,q.y)>BAL.YAMI_STEP_DARK) continue;   // 明るい所へは跳べない
+    const sc=nearEnemyCount(q.x,q.y,150,true)+nearEnemyCount(q.x,q.y,60,true)*2;
+    if(sc<bs){ bs=sc; best=q; }
+  }
+  if(!best) return false;
+  parts(p.x,p.y-14,20,['#2a1a3e','#a77dff'],160,0.6);
+  B.fx.push({kind:'darkring', x:p.x, y:p.y, r:70, t:0, life:0.5});
+  p.x=best.x; p.y=best.y; p.vx=p.vy=0; p.path=null; p.ifr=Math.max(p.ifr,0.4);
+  parts(p.x,p.y-14,20,['#a77dff','#fff'],160,0.6);
+  sfx(260,90,0.22,'triangle',0.06);
+  return true;
+}
+/* 強がりが崩れる: 追い詰められると、すぐ助けを乞う */
+function yamiBegTick(p,dt){
+  const B=G.B;
+  const d=distressOf(p);
+  if(d>=BAL.YAMI_BEG && B.time-(p.begSaid===undefined?-99:p.begSaid)>BAL.YAMI_BEG_CD){
+    p.begSaid=B.time;
+    sayLine('feat.yamiBeg',2,0,'……っ、たすけて。ほんとに、むり');
+    floatTxt(p.x,p.y-56,'……たすけて','#a77dff',12,1.4);
+  }
+}
+function yamiWeapons(p,dt,atkMult){
+  const B=G.B;
+  /* 闇の刃: 前を広く薙ぐ(敵だった頃と同じ形。ずっと小さい) */
+  if(p.wp.dblade>0){
+    p.dbladeT=(p.dbladeT||0)-dt*atkMult;
+    if(p.dbladeT<=0){
+      const evo=p.evo.eclipse>0, lvR=p.wp.dblade, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      p.dbladeT=(evo?0.7:0.95)*Math.pow(0.92,lv-1)*ov.cd;
+      const range=(evo?150:96+9*lv)*areaMult(p)*ov.area, dmg=(evo?24:11+4.4*(lv-1))*ov.dmg;
+      p.whipAnim=0.16; p.whipDir=p.face; p.whipR=range; p.whipDark=true;
+      let hit=false;
+      for(const e of B.enemies){ if(e.dead||e.dormant) continue;
+        const ex=e.x-p.x, ey=e.y-(p.y-10);
+        const inArc=evo?Math.hypot(ex,ey)<range+e.r:(ex*p.whipDir>0 && Math.hypot(ex,ey)<range+e.r);
+        if(inArc){ damageEnemy(e,dmg); hit=true; if(evo) e.stun=Math.max(e.stun||0,0.25); } }
+      if(hit){ sfx(190,80,0.1,'sawtooth',0.05); parts(p.x+(p.whipDir||1)*range*0.5,p.y-10,6,['#a77dff','#2a1a3e'],120,0.4); if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN); }
+    }
+  }
+  /* 闇の輪: 自分の周りを回る闇 */
+  if(p.wp.dring>0){
+    const evo=p.evo.umbra>0, lvR=p.wp.dring, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+    p.dringAng=(p.dringAng||0)+dt*2.0;
+    const R=(evo?92:50+7*lv)*areaMult(p)*ov.area, dmg=(evo?8:3.6+1.4*(lv-1))*ov.dmg;
+    p.dringR=R; p.dringT=(p.dringT||0)-dt*atkMult;
+    if(p.dringT<=0){
+      p.dringT=0.3*ov.cd;
+      for(const e of B.enemies){ if(e.dead||e.dormant||e.item) continue;
+        const d2=Math.hypot(e.x-p.x,(e.y-10)-(p.y-10));
+        if(Math.abs(d2-R)<20+e.r){ damageEnemy(e,dmg);
+          if(evo){ const a=Math.atan2(p.y-e.y,p.x-e.x); e.x+=Math.cos(a)*22; e.y+=Math.sin(a)*22; collideMap(e,e.r*0.75,canFly(e.id)); } } }
+    }
+  } else p.dringR=0;
+  /* 闇の穿ち: 遠くの一体を貫く */
+  if(p.wp.dspear>0){
+    p.dspearT=(p.dspearT||0)-dt*atkMult;
+    if(p.dspearT<=0){
+      const evo=p.evo.gloom>0, lvR=p.wp.dspear, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      const ts=nearestEnemies(1, (evo?760:520)*(1+0.12*(p.ps.reach||0)));
+      if(!ts.length) p.dspearT=0.15;
+      else{
+        p.dspearT=(1.5-0.10*(lv-1))*ov.cd;
+        const t=ts[0], a=Math.atan2(t.y-(p.y-14),t.x-p.x), dmg=(14+6*(lv-1))*ov.dmg*(evo?1.4:1);
+        B.bullets.push({x:p.x, y:p.y-14, vx:Math.cos(a)*560, vy:Math.sin(a)*560, dmg, pierce:(evo?3:1)+(p.ps.pierce||0), life:1.4, last:null, dark:true});
+        sfx(320,140,0.14,'triangle',0.05);
+        if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN);
+      }
+    }
+  }
+  /* 影の招き: 闇から影を呼んで戦わせる(味方) */
+  if(p.wp.dcall>0){
+    p.dcallT=(p.dcallT||0)-dt*atkMult;
+    if(p.dcallT<=0){
+      const lvR=p.wp.dcall, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      p.dcallT=(4.5-0.3*(lv-1))*ov.cd;
+      B.shades=B.shades||[];
+      if(B.shades.length<4+dupN(p)){
+        const a=rand(TAU);
+        B.shades.push({x:p.x+Math.cos(a)*40, y:p.y+Math.sin(a)*40, t:0, life:6+lv*0.6, dmg:(5+2.2*(lv-1))*ov.dmg, cd:0, hi:p.hi});
+        parts(p.x,p.y-10,10,['#2a1a3e','#a77dff'],100,0.5);
+      }
+    }
+  }
+  /* 影渡りの余波: 跳んだ跡で闇が弾ける(パッシブ的に効く) */
+  if(p.wp.dstep>0 && (p.stepFx||0)>0){
+    const lvR=p.wp.dstep, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+    const R=(70+9*lv)*areaMult(p)*ov.area, dmg=(12+5*(lv-1))*ov.dmg;
+    for(const e of B.enemies){ if(e.dead||e.dormant||e.item) continue;
+      if(Math.hypot(e.x-p.stepX,e.y-p.stepY)<R+e.r){ damageEnemy(e,dmg); e.stun=Math.max(e.stun||0,0.3); } }
+    B.fx.push({kind:'darkring', x:p.stepX, y:p.stepY, r:R, t:0, life:0.5});
+    p.stepFx=0;
+  }
+}
+/* 影(味方)の毎フレーム */
+function shadesTick(dt){
+  const B=G.B; if(!B.shades||!B.shades.length) return;
+  for(const s of B.shades){
+    s.t+=dt; if(s.t>=s.life) continue;
+    const ts=nearEnemiesR({x:s.x,y:s.y}, 1, 260);
+    const t=ts[0];
+    if(t){ const dx=t.x-s.x, dy=t.y-s.y, d=Math.hypot(dx,dy)||1;
+      if(d>28){ s.x+=dx/d*150*dt; s.y+=dy/d*150*dt; }
+      s.cd-=dt;
+      if(s.cd<=0 && d<40){ s.cd=0.8; const ci0=B.ci; B.ci=s.hi; damageEnemy(t,s.dmg); B.ci=ci0;
+        parts(s.x,s.y-6,4,['#a77dff','#2a1a3e'],80,0.3); } }
+    else{ const h=B.heroes[s.hi]; if(h&&!h.out){ const dx=h.x-s.x, dy=h.y-s.y, d=Math.hypot(dx,dy)||1; if(d>60){ s.x+=dx/d*160*dt; s.y+=dy/d*160*dt; } } }
+  }
+  B.shades=B.shades.filter(s=>s.t<s.life);
+}
 /* v5.0 「基本ルミナ」: 素性に follow が書かれていれば、その子が近くにいる限り相方と見なす */
 function partnerFor(p){
   const B=G.B, HD=HEROES[p.id]||{};
@@ -3637,6 +3969,7 @@ function updateGoalSolo(p){
     else if(q.kind==='seal') w=B.seals[q.key]?0:2.4;
     else if(q.kind==='core') w=B.coreWar?BAL.CORE_WORTH:(B.wantExit?BAL.EXIT_WORTH_WANT:2.6);   // v2.2 向かう気になったら最優先 / v4.0 戦い始めたら戻る力
     else if(q.kind==='lantern') w=lanternWant(p)?BAL.LANTERN_WANT*darkLevel():0;   // v4.0 暗いほど灯りに寄りたい(そばに居ると発情が溜まると知っていても)
+    else if(q.kind==='yamicap') w=(B.yamiCap&&!B.yamiCap.freed)?3.4:0;   // v5.0 見て見ぬふりはしない
     if(leaving && q.kind!=='stairs' && q.kind!=='seal' && q.kind!=='core' && q.kind!=='spring') w*=0.3;
     add('poi',q.kind,q.x,q.y,w,q,q.key);
   }
@@ -3953,6 +4286,38 @@ function skillTick(dt){
         p.x=best.x; p.y=best.y; p.vx=p.vy=0; p.path=null; p.ifr=Math.max(p.ifr,0.6); p.fwingAnim=0.3; p.fwingX=x0; p.fwingY=y0; useSkill(p,'blaze'); }
     }
   }
+  if(p.id==='yamiko'){
+    // 黄昏の招き: 瀕死で闇から三体の影を呼び、肩代わりさせる
+    if(skillReady(p,'duskcall') && p.hp<p.maxHp*0.35){
+      B.shades=B.shades||[];
+      for(let i=0;i<3;i++){ const a=i*TAU/3+rand(0.4);
+        B.shades.push({x:p.x+Math.cos(a)*46, y:p.y+Math.sin(a)*46, t:0, life:6, dmg:16*(1+0.05*p.level), cd:0, hi:p.hi}); }
+      p.ifr=Math.max(p.ifr,1.4);
+      for(const e of B.enemies){ if(e.dead||e.dormant||e.item) continue; const dx=e.x-p.x, dy=e.y-p.y, d=Math.hypot(dx,dy)||0.001;
+        if(d<180){ e.stun=Math.max(e.stun||0,e.boss?0.5:1.1); if(MONSTERS[e.id]&&MONSTERS[e.id].spd>0&&!MONSTERS[e.id].guardian){ e.x+=dx/d*60; e.y+=dy/d*60; collideMap(e,e.r*0.75,canFly(e.id)); } } }
+      B.fx.push({kind:'darkring',x:p.x,y:p.y,r:180,t:0,life:1.0}); G.shake=Math.min(9,G.shake+5); sfx(140,60,0.7,'sawtooth',0.09);
+      setBanner('黄昏の招き','闇から三つ、彼女の代わりに立つものが出てくる','#a77dff');
+      useSkill(p,'duskcall'); parts(p.x,p.y-14,36,['#2a1a3e','#a77dff','#fff'],220,0.9);
+    }
+    // 夜の帳: 闇が弾けて拘束を断ち、周りの目を潰す
+    if(skillReady(p,'nightveil') && (attachCount(p)>=2 || p.pinned) && !p.charmBind && p.hypnoLv<2){
+      for(const sl of attachedSlots(p)) detachLimb(sl,{fling:true});
+      for(const sl of suckSlots(p)) detachSucker(sl,{fling:true});
+      if(p.pinned){ p.pinned=false; p.pinBy=null; p.pinEscape=0; p.struggle=0; if(B.pinSceneHi===B.ci) B.pinScene=null; }
+      for(const e of B.enemies){ if(e.dead||e.dormant||e.item) continue; const dx=e.x-p.x, dy=e.y-p.y, d=Math.hypot(dx,dy)||0.001;
+        if(d<140){ e.stun=Math.max(e.stun||0,e.boss?0.7:1.6); e.blindT=Math.max(e.blindT||0,3.0);
+          if(MONSTERS[e.id]&&MONSTERS[e.id].spd>0&&!MONSTERS[e.id].guardian){ e.x+=dx/d*80; e.y+=dy/d*80; collideMap(e,e.r*0.75,canFly(e.id)); } } }
+      p.ifr=Math.max(p.ifr,1.0); p.stamina=Math.min(p.staminaMax,p.stamina+18); useSkill(p,'nightveil');
+      B.fx.push({kind:'darkring',x:p.x,y:p.y,r:140,t:0,life:0.8});
+      parts(p.x,p.y-14,40,['#2a1a3e','#a77dff','#fff'],240,0.9); G.shake=Math.min(8,G.shake+5);
+    }
+    // 影渡り: 囲まれたら、闇の濃い所へ溶けて抜ける
+    if(skillReady(p,'shadowstep') && B.time>=(p.blinkRetry||0) && attachCount(p)===0 && !p.pinned && !p.charmBind && p.climaxT<=0 && (nearEnemyCount(p.x,p.y,130)>=5 || (p.press||0)>=1.2)){
+      p.blinkRetry=B.time+0.5;
+      const x0=p.x, y0=p.y;
+      if(yamiStep(p)){ p.stepFx=1; p.stepX=x0; p.stepY=y0; useSkill(p,'shadowstep'); }
+    }
+  }
   if(p.id==='kuu'){
     // 静止の一点: 瀕死で、周りをまるごと止める。自分の護りではなく、二人の足と弾を配る
     if(skillReady(p,'stasis') && p.hp<p.maxHp*0.32){
@@ -3999,7 +4364,7 @@ function skillTick(dt){
 }
 /* v2.3 いまの武器から見た、おおまかな秒間火力(戦う/引き撃ち/逃げるの判断に使う) */
 function heroDpsEst(p){
-  const BASE={bolt:14,orb:10,nova:16,whip:14,rain:13,cross:13,sanct:15,blade:14,thunder:14,holy:9,chain:13,spirit:12,shield:9, fsword:17,fring:12,fburst:15,fpillar:14,fwing:13, ineedle:9,ifield:6,ibloom:10,iorbit:9,iecho:12};
+  const BASE={bolt:14,orb:10,nova:16,whip:14,rain:13,cross:13,sanct:15,blade:14,thunder:14,holy:9,chain:13,spirit:12,shield:9, fsword:17,fring:12,fburst:15,fpillar:14,fwing:13, ineedle:9,ifield:6,ibloom:10,iorbit:9,iecho:12, dblade:18,dring:11,dspear:19,dcall:10,dstep:8};
   let d=0; for(const k in BASE){ const lv=p.wp[k]||0; if(lv<=0) continue; const ov=wpOver(lv); const evo=Object.keys(EVOS).some(e=>EVOS[e].base===k && p.evo[e]>0); d+=BASE[k]*(1+0.35*(Math.min(BAL.WP_EVO_LV,lv)-1))*ov.dmg/ov.cd*(evo?1.8:1); }
   return Math.max(8, d*(p.dmgMult||1)*(1+0.08*(p.ps.haste||0))*(1+0.4*(p.ps.dup||0)));
 }
@@ -4591,9 +4956,13 @@ function beginCapture(src,cause){
   cause=cause||'hp';
   B.captures=B.captures||[]; B.captures.push({hi:B.ci, id:h.id, by, cause, t:B.time});
   B.capturedBy=by; B.captureCause=cause;
-  const bubL={stamina:'ちから、が……はいらな……', charm:'だって……はなれたく、な……', hp:'そんな……っ'};
-  const bubF={stamina:'……っ、火が、出な……い……', charm:'……離れ、られ……ない', hp:'こんな、の……っ'};
-  const bub=h.id==='freila'?bubF:bubL;
+  const CAP_BUB={
+    lumina:{stamina:'ちから、が……はいらな……', charm:'だって……はなれたく、な……', hp:'そんな……っ'},
+    freila:{stamina:'……っ、火が、出な……い……', charm:'……離れ、られ……ない', hp:'こんな、の……っ'},
+    kuu:{stamina:'……こおら、ない……', charm:'……はなれ、たく、ない……', hp:'……とけ、る……'},
+    yamiko:{stamina:'……闇が、うすい……', charm:'……いい。もう、いい……', hp:'……っ、待っ、て……'},
+  };
+  const bub=CAP_BUB[h.id]||CAP_BUB.lumina;
   heroBubble(h, bub[cause]||bub.hp, true, 3);
   S.capture(); G.shake=Math.min(10,G.shake+6);
   const others=B.heroes.filter(x=>x!==h && !x.out);
@@ -4723,6 +5092,7 @@ function floorLight(){ const B=G.B; return 1+Math.min(BAL.DARK_FLOOR_MAX, B?(B.f
 /* ヒロインの光: 素性の半径 × 階の灯り × (相方が近ければ増光) */
 function heroLightR(h){
   const B=G.B, HD=HEROES[h.id]||{}; let r=(HD.lightR||260)*floorLight();
+  if(HD.dark) r*=yamiLeak(h);   // v5.0 闇の子は普段まったく光らない。えっちな目に遭っている間だけ、吸った分が漏れる
   if(B&&B.heroes.length>1){ let dm=1e9; for(const o of B.heroes){ if(o===h||o.out) continue; const d=Math.hypot(o.x-h.x,o.y-h.y); if(d<dm) dm=d; }
     if(dm<BAL.DARK_PAIR_R) r*=1+BAL.DARK_PAIR_K; }   // v5.0 いちばん近い仲間との距離で見る(三人でも正しく効く)
   if(h.climaxT>0||h.hypnoLv>=2) r*=0.85;   // 光が弱る
@@ -4780,6 +5150,7 @@ function lightAtRaw(x,y){
   { const pr=bondPair(); if(pr){ const d=segDist(x,y,pr[0].x,pr[0].y,pr[1].x,pr[1].y); if(d<BAL.BOND_R) v=Math.max(v,(1-d/BAL.BOND_R)*0.9); } }   // v4.1 絆の灯り
   v=Math.max(v,partySeeAt(x,y));   // v5.0 壁を挟まなければ、相手の居る所は見えている
   if(iceAt(x,y)>0.5) v=Math.max(v,BAL.ICE_LIGHT);   // v5.0 いちばん暗い子が引いた道だけ、夜が更けても薄く見えている
+  { const eat=yamiDarkAt(x,y); if(eat>0) v*=1-eat; }   // v5.0 ヤミコは光を吸う(えっちな目に遭っている間だけ、漏れて光る)
   for(const q of B.enemies){ if(q.dead||q.id!=='lurecap'||q.revealed) continue; const d=Math.hypot(x-q.x,y-q.y); if(d<170) v=Math.max(v,(1-d/170)*0.82); }   // v4.1 媚茸は本当に光っている(だから釣られる)
   if(B.event){ const d=Math.hypot(x-B.event.x,y-B.event.y); if(d<260) v=Math.max(v,(1-d/260)*0.9); }
   for(const z of B.zones){ if(!z.fire) continue; const d=Math.hypot(x-z.x,y-z.y); if(d<z.r*1.3) v=Math.max(v,(1-d/(z.r*1.3))*0.8); }
@@ -6059,7 +6430,7 @@ function pickupsUpdate(dt){
     h2.t+=dt;
     // v3.0 ハートは触れた子が取る。ただし相手の体力がずっと薄いなら譲る(HEART_YIELD)
     for(const p of hs){ if(Math.hypot(h2.x-p.x,h2.y-(p.y-10))<20){ const o=partnerOf(p); if(o && p.hp/p.maxHp>o.hp/o.maxHp+BAL.HEART_YIELD && p.hp/p.maxHp>0.6 && Math.hypot(o.x-h2.x,o.y-h2.y)<260){ sayPartyAs(p.hi,'heartYield',1,12); continue; }
-      h2.dead=true; p.hp=Math.min(p.maxHp,p.hp+30); floatTxt(p.x,p.y-58,'+30','#7ee89a',13,1); heroBubble(p,p.id==='freila'?'……助かる':'かいふく♪'); S.heart(); break; } }
+      h2.dead=true; p.hp=Math.min(p.maxHp,p.hp+30); floatTxt(p.x,p.y-58,'+30','#7ee89a',13,1); heroBubble(p,{freila:'……助かる', kuu:'……ん', yamiko:'……もらう'}[p.id]||'かいふく♪'); S.heart(); break; } }
   }
   B.hearts=B.hearts.filter(h=>!h.dead);
   for(const pk of B.picks){   // v1.8 地形の資源: 触れれば拾う
@@ -6488,7 +6859,7 @@ function partnerOf(p){ const B=G.B; let best=null, bd=1e9; for(const h of B.hero
 function heroOf(k){ const B=G.B; const own=(UPG[k]&&UPG[k].owner)||'lumina'; return (B&&B.heroes&&B.heroes.find(h=>h.id===own))||(B&&B.hero); }
 function heroSkills(p){ return (HEROES[p.id]||HEROES.lumina).skills; }
 function sceneForHero(h,kind,id){
-  const T=(h&&h.id==='freila'&&typeof SCENES_F!=='undefined')?SCENES_F:((h&&h.id==='kuu'&&typeof SCENES_K!=='undefined')?SCENES_K:null);   // v5.0 話者ごとの場面
+  const T=(h&&h.id==='freila'&&typeof SCENES_F!=='undefined')?SCENES_F:((h&&h.id==='kuu'&&typeof SCENES_K!=='undefined')?SCENES_K:((h&&h.id==='yamiko'&&typeof SCENES_Y!=='undefined')?SCENES_Y:null));   // v5.0 話者ごとの場面
   if(T){ const t=T[kind]||{}; const r=t[id]||t.default; if(r) return r; }
   return sceneFor(kind,id);
 }
@@ -6573,7 +6944,9 @@ function battleTick(dt){
   // 敵弾(刻印師の呪弾): 直進し、彼女に当たれば淫紋
   for(const b of B.ebullets){
     b.t+=dt; b.x+=b.vx*dt; b.y+=b.vy*dt;
-    for(let i=0;i<B.heroes.length;i++){ const h=B.heroes[i]; if(h.out||b.dead) continue; if(Math.hypot(b.x-h.x,b.y-(h.y-14))<b.r+h.r*0.8 && h.freezeT<=0){ B.ci=i; b.dead=true; runeHit(b); } }   // v3.0 誰に当たったか
+    for(let i=0;i<B.heroes.length;i++){ const h=B.heroes[i]; if(h.out||b.dead) continue; if(Math.hypot(b.x-h.x,b.y-(h.y-14))<b.r+h.r*0.8 && h.freezeT<=0){ B.ci=i; b.dead=true;
+      if(b.kind==='dark'){ hurtHero(b.dmg||20, {id:'yamiboss', x:b.x, y:b.y, dmg:b.dmg||20}, {pierce:true}); parts(b.x,b.y,14,['#2a1a3e','#a77dff','#fff'],150,0.6); }   // v5.0 闇の穿ち: 快感ではなく体力を削る
+      else runeHit(b); } }   // v3.0 誰に当たったか
   }
   B.ci=leaderIdx();
   if(B.ebullets.length) B.ebullets=B.ebullets.filter(b=>!b.dead&&b.t<b.life);
@@ -6584,6 +6957,8 @@ function battleTick(dt){
   coreWarTick(dt);                   // v4.0 魔核戦に入ったか
   { const ci0=B.ci; for(const h of B.heroes){ if(h.id!=='freila'||h.out) continue; B.ci=h.hi; dryTick(h,dt); } B.ci=ci0; }   // v4.0 フレイラが床を焼くか
   { const ci0=B.ci; for(const h of B.heroes){ if(h.id!=='kuu'||h.out) continue; B.ci=h.hi; iceTick(h,dt); } B.ci=ci0; }        // v5.0 クウが道を凍らせるか
+  { const ci0=B.ci; for(const h of B.heroes){ if(h.id!=='yamiko'||h.out) continue; B.ci=h.hi; yamiBegTick(h,dt); } B.ci=ci0; }  // v5.0 ヤミコの強がりが崩れる
+  yamiCapTick(dt); shadesTick(dt);   // v5.0 救出の一幕 / 呼ばれた影
   if(!B.heroes.some(h=>h.id==='kuu'&&!h.out)) for(const h of B.heroes){ h.iceOrb=null; h.iceEcho=null; }   // v5.0 クウが捕まると、みんなの氷が一斉に消える
   for(const k in B.itemCd){ if(B.itemCd[k]>0) B.itemCd[k]-=dt; }
   eachHero(()=>trapsTick(dt));

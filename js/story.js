@@ -568,6 +568,7 @@ function storyLineHtml(l){
   if(x.s==='lumina') return `<div class="sl"><b class="who">ルミナ</b>「${e(x.t)}」</div>`;
   if(x.s==='freila') return `<div class="sl"><b class="who f">フレイラ</b>「${e(x.t)}」</div>`;   // v3.0
   if(x.s==='kuu') return `<div class="sl"><b class="who k">クウ</b>「${e(x.t)}」</div>`;   // v5.0
+  if(x.s==='yamiko') return `<div class="sl"><b class="who y">ヤミコ</b>「${e(x.t)}」</div>`;   // v5.0
   if(x.s==='town') return `<div class="sl"><b class="who t">街の人</b>「${e(x.t)}」</div>`;
   if(x.s==='voice') return `<div class="sl"><b class="who v">声</b>「${e(x.t)}」</div>`;
   return `<div class="sn">${e(x.t)}</div>`;

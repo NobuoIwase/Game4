@@ -320,6 +320,22 @@ idは汎用カタログ準拠。効果はすべて数値・挙動レベルで表
   `storyTick`: 落ち着いている時(拘束・発情・魔物30体超でない)に 38〜58 秒ごと、その階層の独り言を吹き出しで。降り口で `descend`、魔核の間を見つけた時に `finalEncounter`(1戦1度)。結果画面: clear=`ending`、reset=`reset`。
 - 表示: `#storybox`(盤面の上、タップか時間で閉じる)。ホームの「物語」画面は序章と到達済みの階層の導入、魔核討伐後は結末を載せる。
 
+### 3-40. v5.0 (E) ヤミコ — 三段で仲間になる者
+
+- **筋の状態機械** (`META.yami={st,era,saved}` / `yamiAdvance(runNote)`): 0=まだ / 1=眠っている / 2=囲まれている / 3=参戦済み。`endBattle` の `partyJoinCheck` の直前で一段進める。
+  - 0→1: `runNote==='clear'` かつ **クウが roster に居る**(ユーザー指定の「クウが加入してから最初の魔核を突破した回」)
+  - 1→2: その回の `clear`
+  - 2→3: `Y.saved` が立った回の `clear` で `partyJoin('yamiko','rescued')`
+  - **敗北では段が進まない**(`capture` は素通り)。
+- **一段目 眠り** (`spawnYamiBoss`/`yamiBossTick`): 最終階層のみ、魔核から240〜420px に `MONSTERS.yamiboss` を置く。`asleep` の間は行動せず、`YAMI_WAKE`(260px)で起きる。起きたら `YAMI_MELT_CD`(7秒)ごとに `YAMI_MELT_T`(1.1秒)闇へ溶けて、ヒロインの周り120〜260pxへ回り込む(溶けている間は当たらない)。技は闇の刃(半径210・±1.1rad の薙ぎ)/闇の輪(半径150)/闇の穿ち(いちばん遠いヒロインへ `kind:'dark'` の弾。`runeHit` ではなく `hurtHero`)/影の招き(その階層の `affinity` から3体)。**すべて `hurtHero` の体力ダメージで、快感系は一切入れない**(ユーザー指定「エロではなく体力を削る」)。
+- **二段目 救出** (`spawnYamiCaptive`/`yamiCapTick`): 心臓から300〜520pxに `B.yamiCap` を置き、`imp`/`succubus`/`succuqueen` を `yamiHold` 付きで3体、その場に縛って配置。`POI_DEF.yamicap`(「囲まれている誰か」)として目当ての候補に入り、重み 3.4(宝箱2.6より上、救出より下)。`YAMI_SAVE_R`(120px)に誰か居れば `save` が溜まり、`YAMI_SAVE_T`(3.5秒)で解放。三体を倒せば倍速。解放で `META.yami.saved=1`。絵は `drawYamiCap`(押さえつけられた四枚の翼・仰け反った身体・欠けたヘイロー・漏れる光の粒・救出の進みの弧)。
+- **三段目 ヒロイン** (`HEROES.yamiko`): `hpMul 1.06 / dmgMul 1.00 / armor 1 / stamMul 0.92`、`lightR 120 / lightK 0.55` だが **`dark:true` なので `heroLightR` に `yamiLeak(h)` が掛かる**——普段は完全に 0。`start:{dblade:5,dring:5}` と `startPs:{ward:2,haste:1,reach:1,pierce:1}`(新フィールド。`newHero` が読む)で**最初から育っている**代わりに `pickPenalty:0.45` でレベルアップの札に出にくい。
+- **光を吸う** (`yamiDarkAt`/`yamiLeak`): `lightAtRaw` の末尾で `v*=1-yamiDarkAt(x,y)`。吸う強さは `YAMI_DARK_EAT`(0.55)×距離減衰×`(1-leak*YAMI_LEAK)`。`yamiLeak` は 発情Lv/3×0.5 + 敏感/120×0.3、絶頂で1.0、拘束・押し倒しで下限0.55、魅了拘束で0.7。**えっちな目に遭うほど、闇が漏れて周りが明るくなる**。
+- **闇渡り** (`yamiStep`): 16方位×`YAMI_STEP_R`(520)の候補から、`lightAt<YAMI_STEP_DARK`(0.45)の暗い所だけを選び、いちばん敵の薄い所へ跳ぶ。奥義 `shadowstep` の実体でもあり、跳んだ跡に `p.stepFx` を立てて武器「影渡りの余波」が弾ける。
+- **助けを乞う** (`yamiBegTick`): `distressOf(p)` が `YAMI_BEG`(0.55)を超えたら `YAMI_BEG_CD`(9秒)ごとに `feat.yamiBeg`。**姉ぶりが崩れる瞬間を、機構として持たせた**。
+- **合流の朝を誰の分か分ける** (`joinMorning`): `storySeen.join` の単一フラグを `join_<id>` へ。`STORY_V30.party.joinBy` に freila/kuu/yamiko の場面を分けて持つ。`runReset` の間引きは `join` で始まる全キーを残し、`loadMeta` に旧フラグの移行を1行。**直さないと三人目の朝にフレイラとの出会いが再生される**。
+- **声**: `js/lines_yamiko.js`(`LINES_Y`、187キー)・`js/scenes_yamiko.js`(`SCENES_Y`。普段の姉ぶりが崩れて敬語になる落差)・`js/codex_yamiko.js`(`CODEX_Y`、墨の走り書き。自分が嬲られた種の所だけ字が乱れる)。`STORY_V30.yami` に wake/see/free/join の四幕、`yamiStory(key)` が1戦に一度ずつ出す。
+
 ### 3-39. v5.0 (D) クウ — 氷の見習い天使
 
 - **素性** (`HEROES.kuu`): `hpMul 0.94 / dmgMul 0.86 / armor 0 / spdMul 1.06 / stamMul 0.78`(新フィールド。`newHero` が `staminaMax` に掛ける)、`lightR 150 / lightK 0.72`(三人でいちばん暗い)、`braveAdd 0`(巣窟では必ず外で待つ側)、`heatShy:true`(熱いヒロインから離れる)、`follow:'lumina'`(相方の指名)。`HEROES.freila` には `hot:true` を足した。`pref` は `spring 0.45 / hotspring 0.35`(暑がりが「湯に浸からない」として見える)、`pool 1.35 / lantern 1.25`。
