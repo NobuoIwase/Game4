@@ -90,7 +90,7 @@ const BAL={
   DRY_ATK:1.15, DRY_DEF:0.90,        // 乾ききった地形(自分で焼いた床を含む)
   DRY_STAM:0.25,                     // 乾かすのに使うスタミナの割合
   DRY_R0:120, DRY_R_K:340,           // 乾かす半径(使ったスタミナに比例して伸びる)
-  DRY_CD:24, DRY_STAM_MIN:0.45,      // 使う間隔と、これだけスタミナが無いと使わない
+  DRY_CD:24, DRY_STAM_MIN:0.45, DRY_MAX:20,   // 使う間隔 / これだけスタミナが無いと使わない / 一つの階層に残る焼き跡の上限
   DRY_WANT_WET:0.45,                 // 周りがこれだけ濡れていたら使う気になる
   DRY_SLIME_HP:0.85, DRY_SLIME_SPD:0.85,   // 乾いた床の上では、ヌルヌル系が弱る
   DRY_EVAP_R:560, DRY_EVAP_N:6, DRY_EVAP_RATE:1.75, DRY_EVAP_LIFE:15,   // 巣窟で焼いた時: 蒸発した媚薬が外まで広がる
@@ -494,7 +494,7 @@ const MONSTERS={
   },
   /* ---- v4.0 魔核の専用ミニオン(カードではない。魔核が産む) ---- */
   coreling:{
-    name:'核の落とし子', role:'魔核の眷属・吸い上げ', cost:0, unlock:-1, tier:'small', guardian:true,
+    name:'核の落とし子', role:'魔核の眷属・吸い上げ', cost:0, unlock:-1, tier:'fodder', guardian:true,
     hp:34, spd:158, r:9, dmg:3, xp:6,
     desc:'魔核の根がちぎれて生まれた、桃色の幼い塊。自分の意思を持たず、まっすぐ彼女へ這い寄って手足に巻きつく。巻きついている間、吸い上げたものを根伝いに親へ送り返す——親の傷が塞がっていく。',
     trait:'速い。巻きつくと魔核の傷が塞がる。個体は脆い',

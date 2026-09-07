@@ -3333,7 +3333,7 @@ function updateGoal(p){
   // v4.0 見えた物を伝えた直後は、いつもの間隔を待たずに「近くで相談」を呼ぶ(敵が薄い時だけ)
   const news=!!(P.sight && B.time-P.sight.at<BAL.SHARE_T && B.time-(P.sightT||-99)>BAL.SHARE_CD);
   if((talkable||news) && !P.gatherDone && (news || B.time-(P.gatherT||-99)>BAL.GATHER_CD) && !partyGathered() && !partyDanger()){
-    if(news){ P.sightT=B.time; P.sightUse=P.sight; P.sight=null; B.nNewsGather=(B.nNewsGather||0)+1; }
+    if(news){ P.sightT=B.time; P.sightUse=P.sight; P.sightUseT=B.time; P.sight=null; B.nNewsGather=(B.nNewsGather||0)+1; }
     const c=partyCenter(); P.gather={until:B.time+BAL.GATHER_T, x:c.x, y:c.y}; P.gatherT=B.time;
     const gg={kind:'gather', sub:'gather', x:c.x, y:c.y, ref:null, key:'gather', d:0, worth:1.3, score:1.3};
     P.goal=gg; P.owner=active[0]; P.until=P.gather.until;
@@ -3344,6 +3344,7 @@ function updateGoal(p){
     return p.goal;
   }
   // v4.0 集まって相談: 報せた物が候補にあるなら、それを推す(伝えた甲斐がある)
+  if(P.sightUse && B.time-(P.sightUseT||0)>BAL.SHARE_T*1.5) P.sightUse=null;   // 集まれなかった報せは古びる
   if(P.sightUse && gathered){
     const sg=P.sightUse; let pick=null, pd=1e9;
     for(const x of props){ const d=Math.hypot(x.g.x-sg.x,x.g.y-sg.y); if(d<200 && d<pd){ pd=d; pick=x; } }
@@ -4437,8 +4438,18 @@ function lightsTick(dt){
     else h.darkT=0;
   }
 }
-/* 明るさ 0..1。1=昼のように見える */
+/* 明るさ 0..1。1=昼のように見える。
+   目当ての採点・ジェムの選別・視界の記憶から何百回も呼ぶので、1フレーム・1タイル単位で覚えておく */
+let _laT=-1; const _laM=new Map();
 function lightAt(x,y){
+  const B=G.B; if(!B) return 1;
+  if(B.time!==_laT){ _laT=B.time; _laM.clear(); }
+  const k=(((x/32)|0)*4096)+((y/32)|0);
+  let v=_laM.get(k);
+  if(v===undefined){ v=lightAtRaw(x,y); _laM.set(k,v); }
+  return v;
+}
+function lightAtRaw(x,y){
   const B=G.B; if(!B) return 1;
   let v=1-darkLevel();
   for(const h of B.heroes){ if(h.out) continue; const r=heroLightR(h)*(HEROES[h.id]&&HEROES[h.id].lightK||1); const d=Math.hypot(x-h.x,y-h.y); if(d<r) v=Math.max(v,1-d/r); }
@@ -4648,7 +4659,8 @@ function freilaDry(p){
   p.stamina-=use; p.dryCd=B.time+BAL.DRY_CD;
   const r=BAL.DRY_R0+BAL.DRY_R_K*(use/p.staminaMax)/BAL.DRY_STAM;
   const d={x:p.x, y:p.y, r, t:B.time};
-  B.dry.push(d); dryList().push({x:d.x, y:d.y, r:d.r}); saveMeta();
+  B.dry.push(d); if(B.dry.length>BAL.DRY_MAX) B.dry.shift();
+  const L=dryList(); L.push({x:d.x, y:d.y, r:d.r}); while(L.length>BAL.DRY_MAX) L.shift(); saveMeta();   // 同じ階層に何日も通っても際限なく積もらない
   B.fx.push({kind:'dryburst', x:p.x, y:p.y, r, t:0, life:0.9});
   for(let i=0;i<26;i++){ const a=rand(TAU), rr=rand(r); parts(p.x+Math.cos(a)*rr, p.y+Math.sin(a)*rr, 1, ['#ff7a3a','#ffd76a','#ffb060'], 120, 0.7); }
   G.shake=Math.min(9,G.shake+4); sfx(220,700,0.5,'sawtooth',0.07);
@@ -4687,6 +4699,10 @@ function dryEvapCheck(p,d){
 function dryTick(p,dt){
   const B=G.B;
   if(p.id!=='freila'||p.out) return;
+  if(nearEnemyCount(p.x,p.y,260,false)>0){   // 足元の質を口に出す(火が立つか、立たないか)
+    if(wetAt(p.x,p.y)>0.7) sayLine('feat.wet',0,40,'濡れている。火が立たない');
+    else if(dryAt(p.x,p.y)>0.5) sayLine('feat.dryGood',0,40,'乾いた。ここなら通る');
+  }
   if(B.time<(p.dryCd||0)) return;
   if(p.stamina<p.staminaMax*BAL.DRY_STAM_MIN||p.exhausted) return;
   if(attachCount(p)>0||p.pinned||p.charmBind||p.climaxT>0||p.hypnoLv>=2) return;
@@ -4705,7 +4721,7 @@ function dryTick(p,dt){
    自分よりはっきり悪ければ、寄って、群がっている魔物を先に撃つ */
 function distressOf(h){
   if(!h||h.out) return 0;
-  const B=G.B; let v=0;
+  let v=0;
   v+=attachCount(h)*0.55;
   if(h.pinned) v+=1.7;
   if(h.charmBind) v+=1.0;
@@ -5180,7 +5196,8 @@ function pickupsUpdate(dt){
       gainXpAll(gm.v*(1+0.12*p.ps.growth)*xpSoft(p));   // ラーニングピアス / v2.1 高Lvほどジェムの経験値が薄い(引き継ぎの飽和)
       B.heroCoins+=gm.v*0.5;             // 彼女はコインも貯えている(夜明けの自己強化)
       S.gem();
-      parts(p.x,p.y-14,3,['#8fd3ff','#fff'],70,0.3);
+      parts(p.x,p.y-14,gm.v>=9?9:3,gm.v>=9?['#ff5d7a','#fff','#ffb0c0']:['#8fd3ff','#fff'],gm.v>=9?120:70,gm.v>=9?0.6:0.3);
+      if(gm.v>=9){ floatTxt(p.x,p.y-52,'赤ジェム +'+gm.v,'#ff5d7a',12,1.2); sayLine('feat.redgem',0,20,'あかいの、みっけ! きっと いいやつ!'); }   // v4.0 巣窟の奥の赤ジェム
       maybeLevelup();
       if(G.mode!=='battle') break;
     }

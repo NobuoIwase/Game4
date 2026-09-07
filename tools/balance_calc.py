@@ -11,7 +11,7 @@ PRESS_EN_MAX,PRESS_EN_REGEN,PRESS_UNIT=0.35,0.5,0.3
 NIGHT_STAT_LV,NIGHT_STAT_CAP=0.04,0.8
 NEED=lambda l:(6+l*3.2+l*l*0.18)*(1+0.05*max(0,l-20))
 XPSOFT=lambda l:1/(1+0.03*max(0,l-15))
-CORE_HP,CORE_HP_LV,CORE_HP_LV_CAP,CORE_DEF=28000,0.04,3.0,0.4   # v2.4: 26000→28000
+CORE_HP,CORE_HP_LV,CORE_HP_LV_CAP,CORE_DEF=22400,0.025,1.8,0.4   # v4.0: 28000→22400(厚みを下げ、世代ごとの技で押す)
 ESS_RATE,DESCEND_ESS,CLEAR_ESS,CAPTURE_ESS=0.30,40,120,45   # v3.1: 0.55→0.30 / 降下 40+15·(深さ-1) / 討伐 120+60·世代 / 捕獲 45
 ESS_SOFT,ESS_ERA_K,ORB_ERA_K,ORB_SOFT=700,0.12,0.10,80     # v3.1: 一日の撃破ぶんは SOFT·ln(1+x/SOFT) で逓減、世代ごとに +12%(オーブ +10%、オーブの逓減は 80)
 DESCEND_ESS_DEPTH,CLEAR_ESS_ERA=15,60
@@ -45,8 +45,8 @@ for lv in (20,35,45,60,75):
 print()
 print('## D. 世代(討伐回数)ごとの階層解放と難度(v3.1 実装値)')
 print('| 討伐回数(世代) | 開放階層 | 深さ倍率(魔物HP/与ダメ・EN天井) | 圧の上限 | 番兵の上限 | 魔核HP係数 | 魔核の被ダメ |'); print('|---|---|---|---|---|---|---|')
-NFLOORS,ERA_FLOORS0,ERA_DEPTH_K0,ERA_DEPTH_K=8,2,0.10,0.10
-CORE_ERA_HP0,CORE_ERA_HP_K,CORE_ERA_DEF0,CORE_ERA_DEF_K=0.30,0.28,0.75,0.05
+NFLOORS,ERA_FLOORS0,ERA_DEPTH_K0,ERA_DEPTH_K=8,2,0.05,0.10
+CORE_ERA_HP0,CORE_ERA_HP_K,CORE_ERA_DEF0,CORE_ERA_DEF_K=0.30,0.22,0.75,0.05
 SENT_ERA=[2,3,3,4,4,5,6]
 for c in range(0,9):
     floors=min(NFLOORS,ERA_FLOORS0+c)
@@ -73,3 +73,30 @@ print()
 print('読み方: 解放の総額は 魔物 15,294 + 陣形 1,580 + 夜側アイテム 2,390 + カード強化 約25,000 ≒ 44k。一日 460(第1層)〜4,600(世代5の討伐)なので、浅いうちは 40日分・深くなると 10日分の勘定になり、ならすと 30日前後。祭壇は全段で 848 オーブ(一日 12〜180)。')
 print()
 print('注: 逓減の S は「その日の長さ」に比例する(S=ESS_SOFT×秒/200)。上の表は 200 秒の一日を基準にした値で、早々に撤退して短い日を積んでも毎秒あたりの実入りは変わらない。')
+
+print()
+print('## G. v4.0 強化魔核 — 世代ごとに覚える技')
+print('| 世代 | 覚える技 | 素のHP(Lv1) | 備考 |'); print('|---|---|---|---|')
+SK={1:'落とし子の群れ(3〜5体・巻きつくと親が塞ぐ)',2:'大型の眷属(場に2体まで)',3:'広範囲絶頂光線(2.6秒の大溜め)',4:'発狂(半分で。広範囲媚薬ガスと薙ぎ)'}
+have=[]
+for era in range(0,7):
+    if era in SK: have.append(SK[era])
+    hp=CORE_HP*(CORE_ERA_HP0+CORE_ERA_HP_K*era)
+    print(f'| {era} | {SK.get(era,"(なし)")} | {hp:,.0f} | 累計 {len(have)} 種 |')
+print()
+print('## H. v4.0 暗闇 — 階層ごとの暗さと、集めた灯りの効き')
+print('| 階層 | 暗さ | 素の明るさ | ルミナの光半径(灯り0/最大) | フレイラ |'); print('|---|---|---|---|---|')
+DARK=[0.34,0.44,0.5,0.6,0.68,0.76,0.82,0.88]; FLOOR_MAX=0.75
+for i,d in enumerate(DARK):
+    print(f'| {i+1} | {d:.2f} | {1-d:.2f} | {330:.0f} / {330*(1+FLOOR_MAX):.0f} | {215:.0f} / {215*(1+FLOOR_MAX):.0f} |')
+print()
+print('## I. v4.0 フレイラの火 — 地形と相手の質')
+print('| 場面 | 与ダメ | 被ダメ |'); print('|---|---|---|')
+for nm,w,dry in [('浅瀬(濡れ1.0)',1.0,0),('温泉(0.85)',0.85,0),('湿った洞(0.65)',0.65,0),('苔(0.30)',0.30,0),('石畳(0)',0,0),('焼いた床',0,1.0)]:
+    atk=1+(0.78-1)*w+(1.15-1)*dry*(1-w); dfn=1+(1.22-1)*w+(0.90-1)*dry*(1-w)
+    print(f'| {nm} | ×{atk:.2f} | ×{dfn:.2f} |')
+print()
+print('| 相手 | 質 | 与ダメ係数 |'); print('|---|---|---|')
+for nm,q in [('スライム/水妖',1.0),('ナメクジ/蛭',0.9),('触手',0.5),('ゴブリン',-0.2),('小淫魔',-0.6),('胞子',-0.9),('羽虫/蜘蛛の巣',-1.0)]:
+    m=(1-0.30*q) if q>0 else (1+0.55*(-q))
+    print(f'| {nm} | {q:+.1f} | ×{m:.2f} |')

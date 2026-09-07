@@ -11,6 +11,7 @@ const EN_COLORS={
   vampi:['#c04a6a','#ffd76a','#fff'],
   goblin:['#8fd36a','#4a7a3a'], leech:['#ffb3a0','#d87a6a'],
   sentinel:['#9aa3c8','#5a6284'],
+  coreling:['#ffc2d8','#a03a62'],   // v4.0 核の落とし子
   tower:['#c98cff','#5a3a7a'],
   spore:['#c9ecff','#7fb8e0'], ghosthand:['#dfe4ff','#aab4e8'], eye:['#f0e8ff','#7a3ff2'],
   succubus:['#ff86b3','#5a1f3a'], web:['#ffb3cf','#fff'],
