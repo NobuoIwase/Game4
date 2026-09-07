@@ -203,8 +203,8 @@ const BAL={
 
   /* --- スタミナ / 抵抗 / 押し倒し --- */
   STAMINA_MAX:100,
-  STAMINA_REGEN:3.5,       // 非拘束時 /s
-  STAMINA_REGEN_HEAT:1,    // 発情中 /s
+  STAMINA_REGEN:2.0,       // 非拘束時 /s   // v5.7 3.5→2.0。何度絶頂しても満タンに戻るのを止める
+  STAMINA_REGEN_HEAT:0.4,  // 発情中 /s   // v5.7 1→0.4。熱を持っている間は、ほとんど戻らない
   STAMINA_RIP_COST:14,     // 引き剥がし1回
   STRUGGLE_MOVE_RATE:0.09, // 移動1pxあたりの抵抗ゲージ
   STRUGGLE_SHOT_GAIN:5,    // 攻撃1発あたり
@@ -231,8 +231,9 @@ const BAL={
   PLEAS_GAS:0,             // (v1.6) ガス雲は快感を直接は生まない——発情ゲージと敏感化だけ
   HEAT_GAS:9,              // ガス雲の中: 発情ゲージ /s(100で発情Lv+1)
   MUSK_CLOUD_CD:2.0, MUSK_CLOUD_R:56, MUSK_CLOUD_LIFE:5.5, MUSK_HEAT:8, MUSK_COND:1.7,   // 雄臭の雲(ゴブリンが歩きながら残す)
-  HYPNO_GAIN:[100,55,34],  // 閃光1回の催眠ゲージ: Ⅰは一発、Ⅱは2回、Ⅲは3回
-  HYPNO_DECAY:4,           // 催眠ゲージの減衰 /s
+  HYPNO_WILL_K:0.008,      // v5.7 意志による催眠の入りの鈍り。0.015 では意志50で×0.25になり、Ⅲに永久に届かなかった
+  HYPNO_GAIN:[100,58,48],  // 閃光1回の催眠ゲージ: Ⅰは一発、Ⅱは2回、Ⅲは2回   // v5.7 Ⅲが3発+減衰で実質届かなかった(実測でLv2止まり)
+  HYPNO_DECAY:3,           // 催眠ゲージの減衰 /s   // v5.7 4→3。閃光の間隔に対して速すぎ、二発目までに空になっていた
   WILL_CAP:20, WILL_CAP_GAIN:2, WILL_FAST_GAIN:1, WILL_SURVIVE_LOSS:1, GEN_SCALE:0.05,   // 抵抗の意志(敗北で固くなる)・世代ごとの素の成長
   BOSS_CD:60, CURSE_DAYS:2,   // ボス: 出撃間隔と、ボス敗北の呪いが跨ぐ日数
   PLEAS_BINDER:0.5,        // 絡みつき1体あたり /s(練度でスケール)
@@ -366,7 +367,15 @@ const BAL={
 
   /* --- 絶頂(v0.6) --- */
   CLIMAX_DUR:3.4,          // 絶頂の硬直時間: 脚が止まり、痙攣し、動けない
-  CLIMAX_STAM_COST:10,     // 絶頂1回のスタミナ消耗(連続絶頂はやがて力尽きる)
+  HERO_DMG_K:1.12,         // v5.7 スタミナを削ったぶん、ヒロイン側の火力を底上げして釣り合いを取る
+  CLOSE_R:240,             // v5.7 「近い」とみなす距離(フレイラの近接ボーナスの効く範囲)
+  CLIMAX_STAM_COST:12,     // 絶頂1回のスタミナ消耗(連続絶頂はやがて力尽きる)
+  /* v5.7 連続絶頂: 絶頂の最中も弄られ続ければ、また100に届く。届くたびに重ねて、
+     重なるほどスタミナを大きく持っていく。「何度いってもスタミナが満タン」を無くす芯 */
+  CHAIN_MAX:4,             // 一度の絶頂に重ねられる上限
+  CHAIN_RESET:58,          // 重ねた直後の快感(ここからまた登る)
+  CHAIN_DUR_K:0.55,        // 重ねるたびに伸びる硬直 = CLIMAX_DUR × これ
+  CHAIN_COST_K:0.9,        // n回目の消耗 = CLIMAX_STAM_COST × (1 + これ×n)
   REFRACT_T:6,             // 絶頂後の不応期(s)
   REFRACT_MULT:0.25,       // 不応期中の快感の入り
   SQUIRT_BASE:0.35,        // 潮吹き率 = BASE + 0.2×発情Lv + 0.12×敏感Lv
@@ -863,6 +872,10 @@ const HEROES={
            desc:'光の投射で戦う見習いの天使。元気で、少し怖がり' },
   freila:{ name:'フレイラ', col:'#ff7a5a', hair:'#c8434a', sprite:'freila', wps:['fsword','fring','fburst','fpillar','fwing'],
            start:{fsword:2,fring:1}, grow:['fsword','fring','fburst'], hpMul:1.12, spdMul:1.02, armor:1, fearMul:0.6, braveAdd:0.2, kiteMul:1.35, lightR:215, lightK:0.85,
+           /* v5.7 火力担当なのに与ダメの倍率が一つも無く、素のままだった。
+              火は届く所でしか働かない——近いほど強い、という形で近接を得意にする。
+              零距離で 1.22×1.55 = 約1.9倍、CLOSE_R の外では 1.22倍 */
+           dmgMul:1.22, closeK:0.55,
            skills:{ blaze:{ name:'焔の突進', icon:'➶', lv:22, cd:20, desc:'囲まれた時、炎になって最も空いている方へ突き抜け、通り道の魔物を焼いて止める。0.6秒無敵' },
                     ember:{ name:'熾火の壁', icon:'◎', lv:38, cd:35, desc:'二肢以上を掴まれるか押し倒された時、炎を噴いて全ての拘束を焼き切り、半径120の魔物を弾いて4秒間 近づく魔物を焦がす' },
                     phoenix:{ name:'不死鳥', icon:'✺', lv:52, cd:60, desc:'HPが30%を切った時、炎とともに立ち上がりHP35%回復・2秒無敵・周囲を焼く' } },

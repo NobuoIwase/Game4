@@ -60,7 +60,7 @@ function newHero(id){
     strafeDir:Math.random()<0.5?-1:1, strafeT:2,
     bubble:'', bubbleT:0, bubbleCd:0, aiLabel:'けいかい中', aiState:'',
     /* --- スタミナ / 四肢拘束 / 押し倒し --- */
-    staminaMax:(BAL.STAMINA_MAX-12*aStam+6*(LU.grit||0)+1.5*will)*(HD.stamMul||1),   // v5.0 素性のスタミナ倍率(クウは低い)
+    staminaMax:(BAL.STAMINA_MAX-12*aStam+6*(LU.grit||0)+0.6*will)*(HD.stamMul||1),   // v5.0 素性のスタミナ倍率(クウは低い)   // v5.7 意志の寄与 1.5→0.6。負けを重ねるほど池が倍になり、何度絶頂しても満タンに見えていた
     stamina:0,
     limbs:{armL:null, armR:null, legL:null, legR:null},
     suckers:{nipL:null, nipR:null, clit:null},   // 吸液羽虫の吸い付き
@@ -621,6 +621,23 @@ function applyPleasure(amount){
   if(h.freezeT>0){ h.frozenAcc+=amount; return; }   // 時間停止: 止まっている間は溜まるだけ
   const before=h.aphro;
   h.aphro=clamp(h.aphro+amount*h.sense*(1+BAL.SENSIT_AMP*sensLvOf(h)),0,100);
+  /* v5.7 連続絶頂: 達している最中も弄られ続ければ、また100に届く。
+     届くたびに硬直が伸び、重なるほどスタミナを持っていく。
+     絶頂が「済んだこと」ではなく「まだ続いていること」になる */
+  if(h.climaxT>0 && h.aphro>=100 && (h.chainN||0)<BAL.CHAIN_MAX && amount>0){
+    h.chainN=(h.chainN||0)+1;
+    h.aphro=BAL.CHAIN_RESET;
+    h.climaxT+=BAL.CLIMAX_DUR*BAL.CHAIN_DUR_K;
+    h.stamina=Math.max(0,h.stamina-BAL.CLIMAX_STAM_COST*(1+BAL.CHAIN_COST_K*h.chainN));
+    h.worn=(h.worn||0)+BAL.WORN_CLIMAX*0.6;
+    G.B.climaxN++; awardAil('climax');
+    floatTxt(h.x,h.y-64,'連続絶頂 ×'+(h.chainN+1),'#ff5d9e',13,1.2);
+    heroBubble(h,pickRand(['また、きて……とまって、とまってっ……','おわって、ない、のに……ぁ、ま、た……','むり、これ、むり……つづけて、こない、で……'])+'',true,3);
+    parts(h.x,h.y-18,14,['#ff9ec2','#ff5d9e','#fff'],150,0.7);
+    S.charm(); G.shake=Math.min(9,G.shake+3);
+    checkStaminaCollapse();
+    if(G.mode!=='battle'&&G.mode!=='levelup') return;
+  }
   if(h.denyT>0){
     // 寸止め: 99で栓をされる。溢れた分は身体に溜まる
     if(h.aphro>=99){ h.aphro=99; if(before>=99 && amount>0 && Math.random()<0.25) heroBubble(h,pickRand(['いか、せて……ちがう、いかせないで……','とまってる、のに……あつい、のが……','ぬけない……なんで、いけな……']),false,3); }
@@ -657,6 +674,7 @@ function releaseDeny(){
 function enterClimax(){
   const B=G.B, h=B.hero;
   if(h.climaxT>0) return;
+  h.chainN=0;   /* v5.7 重なりの数え直し */
   h.climaxT=BAL.CLIMAX_DUR*(h.deepClimax?BAL.DEEP_MULT:1);
   h.climaxPhase=0;
   h.vx=0; h.vy=0;
@@ -1036,7 +1054,7 @@ function applyHypno(src){
   h.dazeT=Math.max(h.dazeT,1.2);
   if(h.hypnoLv>=3){ h.hypnoT=BAL.HYPNO_LV_DUR; parts(h.x,h.y-20,8,['#b46cff','#fff'],90,0.5); return; }
   // 催眠ゲージ: Ⅰは一発で入り、Ⅱは2回、Ⅲは3回の閃光が要る。抵抗の意志の分だけ入りが鈍る
-  const gain=BAL.HYPNO_GAIN[Math.min(2,h.hypnoLv)]*(1-0.015*(h.will||0));
+  const gain=BAL.HYPNO_GAIN[Math.min(2,h.hypnoLv)]*Math.max(0.45,1-BAL.HYPNO_WILL_K*(h.will||0));   /* v5.7 意志で鈍るのは残すが、下限を置く(以前は意志50で×0.25まで落ち、Ⅲが原理上届かなかった) */
   h.hypnoG=(h.hypnoG||0)+gain;
   if(h.hypnoG<100){
     heroBubble(h,pickRand(['……あ、ひかっ……','……いま、なにか……','……なんだろ、め、が……']),false,2);
@@ -2789,6 +2807,12 @@ function damageEnemy(e,dmg){
   if(e.dead||e.dormant) return;
   { const B=G.B; if(B&&B.lights&&darkLevel()>0.05 && Math.random()<0.18) pushLight(e.x,e.y,150,BAL.DARK_MEM_T,0.85); }   // v4.0 光と炎が通った所は、しばらく見えている
   if(G.B&&G.B.hero.dmgMult) dmg*=G.B.hero.dmgMult;   // せいなる火力(自己強化)
+  /* v5.7 ヒロイン側の底上げ(スタミナを削ったぶんの釣り合い)と、素性ごとの火力。
+     フレイラは近いほど強い——火は届く所でしか働かない */
+  dmg*=BAL.HERO_DMG_K;
+  if(G.B){ const hh=G.B.hero, HD=HEROES[hh.id]||{};
+    if(HD.dmgMul) dmg*=HD.dmgMul;
+    if(HD.closeK){ const d0=Math.hypot(e.x-hh.x,e.y-hh.y); dmg*=1+HD.closeK*Math.max(0,1-d0/BAL.CLOSE_R); } }
   if(G.B&&G.B.hero.id==='freila') dmg*=freilaDmgMul(e);   // v4.0 火属性: 足元の湿り気と、相手の質
   { const dm=dryMonMul(e); if(dm) dmg/=dm.hp; }            // v4.0 焼いた床の上のヌルヌル系は、乾いて脆い
   if(iceAt(e.x,e.y)>0.5) dmg*=1+BAL.ICE_MON_VULN;         // v5.0 氷の上は脆い
