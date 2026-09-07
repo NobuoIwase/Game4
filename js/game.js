@@ -3565,7 +3565,7 @@ function yamiStage(){ return yamiState().st|0; }
 function yamiAdvance(runNote){
   const Y=yamiState(), era=eraNow();
   if(Y.st===0){
-    if(runNote==='clear' && META.party.roster.includes('kuu') && era>=BAL.YAMI_ERA){ Y.st=1; Y.era=era; }   // 討った翌朝から、渦の中心に横たわっている(渦が開くまでは現れない)
+    if(runNote==='clear' && META.party.roster.includes('kuu')){ Y.st=1; Y.era=era; }   // クウを迎えて最初に討った、その翌朝から。討った場所に横たわっている
   }else if(Y.st===1){
     if(runNote==='clear'){ Y.st=2; Y.era=era; }   // その回の魔核を討った次の回、淫魔たちに囲まれている
   }else if(Y.st===2){
@@ -3573,15 +3573,21 @@ function yamiAdvance(runNote){
   }
   saveMeta();
 }
-/* 渦の中心(最終階層)に、眠っている者を置く */
+/* v5.1 ヤミコが現れる階 = 前の周回で最下層だった階。彼女たちが魔核を討った、まさにその場所。
+   深淵が組み替わって下にもう一段生えたので、そこはもう底ではない。
+   「深淵の底」という名の階が底でなくなる——ループの主題が、いちばん目に見える形で出る所 */
+function yamiFloor(){ const B=G.B; return !!(B&&B.floor) && !B.floor.final && B.floor.depth===openFloors()-1; }
+/* その階の「いちばん深い所」= 降り口。最終階層で魔核が座っていたのと同じ役どころ */
+function yamiAnchor(){ const q=(G.map&&G.map.pois)?G.map.pois.find(o=>o.kind==='stairs'):null; return q||{x:0,y:0}; }
+/* 前回の最下層に、眠っている者を置く */
 function spawnYamiBoss(){
-  const B=G.B; if(yamiStage()!==1 || !B.floor.final || B.floor.depth<BAL.YAMI_DEPTH) return;   // 物語は「渦の中心」と言っている。そこ以外には置かない
-  const c=B.enemies.find(e=>e.id==='core');
+  const B=G.B; if(yamiStage()!==1 || !yamiFloor()) return;
+  const c=yamiAnchor(), R=BAL.YAMI_ANCHOR_R;
   let q=null;
-  for(let k=0;k<400&&!q;k++){ const a=rand(TAU), d=rand(240,420);
-    const x=(c?c.x:0)+Math.cos(a)*d, y=(c?c.y:0)+Math.sin(a)*d;
+  for(let k=0;k<400&&!q;k++){ const a=rand(TAU), d=rand(R[0],R[1]);
+    const x=c.x+Math.cos(a)*d, y=c.y+Math.sin(a)*d;
     const s=snapFloor(x,y,false,4); if(s&&reachableAt(s.x,s.y,false)) q=s; }
-  if(!q) q=snapFloor(c?c.x+300:300, c?c.y:0, false, 6)||{x:300,y:0};
+  if(!q) q=snapFloor(c.x+300, c.y, false, 6)||{x:c.x,y:c.y};
   const u=spawnUnit('yamiboss',q.x,q.y,{});
   if(!u) return;
   u.hp=u.maxHp=Math.round(MONSTERS.yamiboss.hp*(1+0.18*Math.max(0,eraNow()-6))*(1+0.05*Math.max(0,(B.hero.level||1)-1)));
@@ -3589,15 +3595,15 @@ function spawnYamiBoss(){
   u.wakeT=0; u.bladeCd=1.2; u.ringCd=4; u.spearCd=3; u.callCd=6; u.meltCd=5; u.meltT=0;
   B.yami=u;
 }
-/* 淫魔三種に囲まれている(救出の一幕) */
+/* 淫魔三種に囲まれている(救出の一幕)。ここも「前回の最下層」——一段ずつ、上がってくる */
 function spawnYamiCaptive(){
-  const B=G.B; if(yamiStage()!==2 || !B.floor.final || B.floor.depth<BAL.YAMI_DEPTH) return;
-  const c=B.enemies.find(e=>e.id==='core');
+  const B=G.B; if(yamiStage()!==2 || !yamiFloor()) return;
+  const c=yamiAnchor(), R=BAL.YAMI_CAP_R;
   let q=null;
-  for(let k=0;k<400&&!q;k++){ const a=rand(TAU), d=rand(300,520);
-    const x=(c?c.x:0)+Math.cos(a)*d, y=(c?c.y:0)+Math.sin(a)*d;
+  for(let k=0;k<400&&!q;k++){ const a=rand(TAU), d=rand(R[0],R[1]);
+    const x=c.x+Math.cos(a)*d, y=c.y+Math.sin(a)*d;
     const s=snapFloor(x,y,false,5); if(s&&reachableAt(s.x,s.y,false)) q=s; }
-  if(!q) q=snapFloor(c?c.x+400:400, c?c.y:0, false, 6)||{x:400,y:0};
+  if(!q) q=snapFloor(c.x+400, c.y, false, 6)||{x:c.x,y:c.y};
   B.yamiCap={x:q.x, y:q.y, t:0, save:0, seen:false, freed:false, imps:[]};
   const kinds=['imp','succubus','succuqueen'];
   for(let i=0;i<BAL.YAMI_SAVE_IMPS;i++){
