@@ -1519,14 +1519,14 @@ function aiUpdate(dt){
     charmwalk:'ふらふらと、ちかづいていく…', heatwalk:'熱にまけて、よろめき寄る…',
     hypno:'……電波に、あしが……', item:'おちてる品へ!', beg:'……おねだり、なんて……してない……',
     g_event:'光の柱へ!', g_chest:'たからばこへ!', g_boss:'おうさまの箱へ!', g_item:'おちてる品へ!', g_shrine:'祠へ', g_spring:'泉で休みに', g_pool:'清水であらいに',
-    g_stele:'石碑をよみに', g_stairs:'降り口へ', g_seal:'封印石を灯しに', g_core:'魔核へ——', g_lantern:'あかりへ', g_shroom:'光茸をとりに', g_nectar:'蜜の花へ', g_treasure:'沈んだ宝へ', g_explore:'たんさく中', g_gems:'ジェムをあつめる', hesitate:'まよっている……', think:'かんがえ中……', abort:'にげだす!', retreat:'逃げに徹する!', kite2:'引き撃ち', talk:'相談中……', assist:'仲間を助ける!', rescue:'救出する!', g_rescue:'仲間を救いに', g_cover:'仲間をかばう!'};
+    g_stele:'石碑をよみに', g_stairs:'降り口へ', g_seal:'封印石を灯しに', g_core:'魔核へ——', g_lantern:'あかりへ', g_shroom:'光茸をとりに', g_nectar:'蜜の花へ', g_treasure:'沈んだ宝へ', g_explore:'たんさく中', g_gems:'ジェムをあつめる', hesitate:'まよっている……', think:'かんがえ中……', abort:'にげだす!', retreat:'逃げに徹する!', kite2:'引き撃ち', talk:'相談中……', assist:'仲間を助ける!', rescue:'救出する!', g_rescue:'仲間を救いに', g_cover:'仲間をかばう!', core:'心臓から離れない', breakout:'……行き直す'};
   const BBL={flee:'にげなきゃ〜!', boss:'おっきいのこわい!!', dodge:'あれは…だめ、よけなきゃ!', gem:'キラキラかいしゅう♪', poi:'あそこまで、いってみる', explore:'こっちは、まだ見てない',
     heart:'ハートみっけ!', prop:'燭台こわして回復しなきゃ', chest:'たからばこだ〜!',
     kite:'このきょりキープ…', wait:'つぎはどこから…?', struggle:'はなれてよ〜っ!',
     charmwalk:'…なんで、あしが…', heatwalk:'…あつくて、なにも…',
     hypno:'……あっち、いかなきゃ……', item:'なにか、おちてる!', beg:'……ちがう……',
     g_event:'あのひかり、いってみる', g_chest:'たからばこだ〜!', g_boss:'おうさまの、たからばこ……!', g_item:'なにか、おちてる!', g_shrine:'ほこら、いこう', g_spring:'ちょっと、やすみたい……',
-    g_pool:'あらいたい……べたべた', g_stele:'なにか、かいてある', g_stairs:'……おりる。つぎへ', g_seal:'あれ、ともさなきゃ', g_core:'……あれが、しんぞう', g_lantern:'あかり、あったかそう……', g_shroom:'あのひかり、とろう', g_nectar:'はな……あまいにおい', g_treasure:'みずのなかに、なにか……', g_explore:'こっちは、まだ見てない', g_gems:'キラキラ、ぜんぶひろう♪', hesitate:'……どうしよ', think:'……うーん', abort:'やっぱ、むり!', retreat:'ぜんぶ、にげるっ!', kite2:'さがりながら、うつ!', talk:'どっち、いく?', assist:'いま、たすける!', rescue:'まって、いくから!', g_rescue:'いま、いく!', g_cover:'そっち、やばそう! いく!'};
+    g_pool:'あらいたい……べたべた', g_stele:'なにか、かいてある', g_stairs:'……おりる。つぎへ', g_seal:'あれ、ともさなきゃ', g_core:'……あれが、しんぞう', g_lantern:'あかり、あったかそう……', g_shroom:'あのひかり、とろう', g_nectar:'はな……あまいにおい', g_treasure:'みずのなかに、なにか……', g_explore:'こっちは、まだ見てない', g_gems:'キラキラ、ぜんぶひろう♪', hesitate:'……どうしよ', think:'……うーん', abort:'やっぱ、むり!', retreat:'ぜんぶ、にげるっ!', kite2:'さがりながら、うつ!', talk:'どっち、いく?', assist:'いま、たすける!', rescue:'まって、いくから!', g_rescue:'いま、いく!', g_cover:'そっち、やばそう! いく!', core:'はなれちゃ、だめ……', breakout:'……こっちじゃない'};
   if(p.dodging>0){ p.dodging-=dt; }
   p.aiLabel=LBL[state]||LBL.wait;
   if(state!==p.aiState){
@@ -1932,13 +1932,6 @@ function aiDecide(foc,dt){
       dx+=ax*1.5; dy+=ay*1.5;
     }
   }
-  // v4.0 魔核戦: 離れていたら詰め寄る(回復に走っている時と、拘束・迷いの最中は除く)
-  if(B.coreWar && B.core && state!=='struggle' && state!=='hesitate' && state!=='heart' && state!=='prop' && state!=='g_spring' && state!=='g_pool' && state!=='rescue' && state!=='g_rescue' && !p.charmBind){
-    const cd=Math.hypot(B.core.x-p.x,B.core.y-p.y);
-    if(cd>BAL.CORE_PULL_R){ const k=Math.min(1,(cd-BAL.CORE_PULL_R)/420)*BAL.CORE_PULL_K;
-      dx=dx*(1-k)+(B.core.x-p.x)/cd*k; dy=dy*(1-k)+(B.core.y-p.y)/cd*k;
-      if(cd>BAL.CORE_LEASH) sayLine('feat.coreBack',0,20,'はなれちゃ、だめ……もどる'); }
-  }
   // 学習した強敵の狙いを見たら、いま何をしていても横へ跳ぶのを優先する(捕まっている時以外)
   if(strong && state!=='struggle'){
     const m=Math.hypot(ddx,ddy)||1;
@@ -1969,6 +1962,23 @@ function aiDecide(foc,dt){
       const ex=(ne.x-p.x)/nd, ey=(ne.y-p.y)/nd;
       dx=dx*(1-k2)+ex*k2; dy=dy*(1-k2)+ey*k2;
       state='heatwalk';
+    }
+  }
+  /* v4.0 魔核戦: 離れていたら詰め寄る(回復・救出・拘束・迷いの最中は除く)。
+     v5.2 ここは **魅了と発情の波より後** に置くこと。前に置いていた頃は、
+     charmwalk が向きを丸ごと差し替え、heatwalk が最大9割まで混ぜてしまうので、
+     せっかくの引き寄せが毎回打ち消されていた(実測で中央値210px・最大808px)。
+     近い内(PULL_R まで)は自由に揺らがせて、綱(LEASH)へ近づくほど引き戻す——
+     ふらつく姿は残したまま、部屋を横切るところまでは行かせない */
+  if(B.coreWar && B.core && state!=='struggle' && state!=='hesitate' && state!=='heart' && state!=='prop' && state!=='g_spring' && state!=='g_pool' && state!=='rescue' && state!=='g_rescue' && !p.charmBind){
+    const cd=Math.hypot(B.core.x-p.x,B.core.y-p.y)||1;
+    if(cd>BAL.CORE_PULL_R){
+      const t=Math.min(1,(cd-BAL.CORE_PULL_R)/Math.max(1,BAL.CORE_LEASH-BAL.CORE_PULL_R));
+      let k=BAL.CORE_PULL_K*t;
+      if(cd>BAL.CORE_LEASH) k=Math.max(k,BAL.CORE_PULL_MAX);   // 綱の外では、ほぼ全部を引き戻しに使う
+      dx=dx*(1-k)+(B.core.x-p.x)/cd*k; dy=dy*(1-k)+(B.core.y-p.y)/cd*k;
+      if(k>0.6) state='core';                                   // 引き戻しが勝っている間は、そう表示する
+      if(cd>BAL.CORE_LEASH) sayLine('feat.coreBack',0,20,'はなれちゃ、だめ……もどる');
     }
   }
   // v3.0 パーティ: 相手から離れすぎない(PARTY_LEASH を超えるほど強く寄る)。重なりすぎたら少し離れる。相談の間は足を止める
@@ -6066,7 +6076,14 @@ function coreLeashOk(kind,sub,x,y){
   if(kind==='poi'&&(sub==='core'||sub==='spring'||sub==='pool')) return true;
   if(kind==='pick'&&sub==='nectar') return true;
   if(kind==='event'&&sub==='pool') return true;
-  return Math.hypot(x-B.core.x,y-B.core.y)<BAL.CORE_LEASH;
+  const d=Math.hypot(x-B.core.x,y-B.core.y);
+  /* v5.2 用のあるもの(体力・スタミナを取り戻す品)だけ、綱いっぱいまで許す。
+     宝箱やジェムのような「後でいい」ものは、心臓のそばにある時しか目当てにしない——
+     引き寄せだけ強くしても、目当てが遠ければ綱の先で行ったり来たりするだけになる */
+  const need=(kind==='heart')||(kind==='prop')||(kind==='item')
+           ||(kind==='pick'&&(sub==='shroom'||sub==='family'))
+           ||(kind==='poi'&&sub==='shrine');
+  return d < (need?BAL.CORE_LEASH:BAL.CORE_NEAR);
 }
 /* ================= v3.2 甘い褥の巣窟 =================
    壁際に食い込んだ大きな窪地。入口は喉道ひとつで、いちばん奥に王の宝箱がある。

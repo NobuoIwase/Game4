@@ -52,7 +52,7 @@ button:focus-visible{ outline:3px solid var(--blue); outline-offset:2px; }
 }
 .screen .inner{
   background:var(--panel); border:2px solid var(--line); border-radius:18px;
-  padding:20px 26px; max-width:min(860px,94vw); margin:auto;
+  padding:20px 26px; max-width:min(860px,94vw); margin:auto; box-sizing:border-box;   /* v5.2 幅に余白と枠を含める(でないと 94vw + padding で画面から 6px はみ出す) */
   box-shadow:0 10px 40px rgba(0,0,0,.6);
 }
 .screen .inner.wide{ width:min(860px,94vw); }
@@ -222,6 +222,36 @@ canvas#cv.arm{ cursor:crosshair; }
   color:#cfc8ea; text-align:left; white-space:pre-wrap; margin:8px 0;
 }
 .newbadge{ color:var(--pink); font-weight:bold; font-size:12px; }
+/* v5.2 研究所: 横3マスの格子と、マスを押して出す詳細 */
+.mgrid{ display:grid; grid-template-columns:repeat(3,1fr); gap:7px; margin:6px 0 14px; }
+.mcell{ background:var(--card); border:1.6px solid var(--card-line); border-radius:12px;
+  padding:7px 4px 6px; text-align:center; cursor:pointer; position:relative; overflow:hidden; }
+.mcell:hover{ border-color:var(--vio); }
+.mcell .nm{ font-weight:bold; font-size:11.5px; margin-top:2px; line-height:1.25; }
+.mcell .st{ font-size:10px; color:var(--gold); margin-top:1px; }
+.mcell .st.lock{ color:var(--dim); }
+.mcell .st.can{ color:var(--green); }
+.mcell.locked{ opacity:.62; }
+.mcell.fuse{ border-color:rgba(220,160,255,.6); }
+.mcell .cnr{ position:absolute; left:0; top:0; width:100%; height:3px; background:var(--tc,#888); opacity:.85; }
+.mcell .max{ position:absolute; right:5px; top:4px; font-size:9px; color:var(--gold); }
+/* 詳細のポップアップ */
+.msheet{ position:fixed; inset:0; z-index:70; display:flex; align-items:center; justify-content:center; padding:16px; }
+.msheet .back{ position:absolute; inset:0; background:rgba(6,4,16,.74); }
+.msheet .box{ position:relative; width:min(430px,94vw); max-height:84vh; overflow:auto;
+  background:var(--panel); border:1.8px solid var(--vio); border-radius:16px; padding:14px 16px 13px;
+  text-align:left; box-shadow:0 14px 44px rgba(0,0,0,.62); }
+.msheet .hd{ display:flex; align-items:center; gap:10px; }
+.msheet .hd .nm{ font-weight:bold; font-size:16px; }
+.msheet .rl{ font-size:11px; color:var(--dim); margin-top:1px; }
+.msheet .stats{ display:flex; gap:12px; margin:10px 0 6px; font-size:12px; color:var(--body); flex-wrap:wrap; }
+.msheet .stats b{ color:var(--gold); }
+.msheet .ds{ font-size:11.5px; color:var(--body); line-height:1.75; margin:6px 0; }
+.msheet .tr{ font-size:11px; color:var(--blue); line-height:1.7; margin:4px 0 8px; }
+.msheet .req{ font-size:11px; color:#d8b0ff; margin:4px 0 8px; }
+.msheet .act{ display:flex; gap:8px; align-items:center; margin-top:8px; }
+.msheet .act button{ flex:1; }
+.msheet .note{ font-size:11px; color:var(--dim); }
 /* v1.1: 図鑑・観測記録(読み物) */
 .codex-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:8px; margin:10px 0; }
 .ccard{ background:var(--card); border:1.6px solid var(--card-line); border-radius:12px; padding:8px 6px; text-align:center; cursor:pointer; position:relative; }

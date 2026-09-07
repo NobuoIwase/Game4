@@ -7,6 +7,7 @@ const $=id=>document.getElementById(id);
 
 const UI={
   root:null, selForm:'scatter', retreatArm:0,
+  labSel:null,          // v5.2 研究所で詳細を開いている魔物(再描画しても開いたまま残す)
 
   init(){
     this.root=$('screens');
@@ -97,6 +98,8 @@ const UI={
       case 'deckRem':
         META.deck=META.deck.filter(x=>x!==arg); saveMeta();
         this.show('deck'); break;
+      case 'labpick': this.labSel=arg; S.pick(); this.show('lab'); break;   // v5.2 マスを押して詳細を出す
+      case 'labclose': this.labSel=null; this.show('lab'); break;
       case 'unlock':{
         const m=MONSTERS[arg];
         if(META.essence>=m.unlock && !(META.cards[arg]&&META.cards[arg].owned)){
@@ -244,6 +247,7 @@ const UI={
     const prevScr=this.root.querySelector('.screen');
     const keepScroll=sameScreen&&prevScr?prevScr.scrollTop:0;
     G.screen=name;
+    if(name!=='lab') this.labSel=null;   /* v5.2 研究所を離れたら、開いていた詳細は畳む */
     G.mode='home';
     G.B=null;
     this.hideStory();
@@ -361,43 +365,79 @@ const UI={
       <div class="row"><button data-act="go" data-arg="home">← もどる</button><button class="gold" data-act="battle">▶ このデッキで出撃</button></div>`;
   },
 
+  /* v5.2 研究所: 雑魚→中型→大型→ボスの順に、横3マスの格子で並べる。
+     マスを押すと詳細が出て、そこから解放・強化・融合をする(格子は数字だけ、詳細は読み物)。
+     ポップアップは this.labSel を見て描くので、強化して再描画されても開いたまま残る */
+  labCell(id){
+    const m=MONSTERS[id], st=META.cards[id], t=tierOf(id);
+    const owned=!!(st&&st.owned), fuse=!!m.fusion;
+    let cls='mcell t-'+t, stat='', extra='';
+    if(owned){
+      const atMax=st.lv>=CARD_LV_MAX;
+      stat=`<div class="st">Lv${st.lv}</div>`;
+      if(atMax) extra='<span class="max">MAX</span>';
+      else{ const c=cardUpCost(id,st.lv); if(META.essence>=c) stat=`<div class="st can">Lv${st.lv} ▲</div>`; }
+    }else if(fuse){
+      cls+=' locked fuse';
+      const ok=m.fusion.every(f=>META.cards[f]&&META.cards[f].owned&&META.cards[f].lv>=3);
+      stat=`<div class="st ${ok&&META.essence>=m.fuseCost?'can':'lock'}">★ 融合</div>`;
+    }else{
+      cls+=' locked';
+      stat=`<div class="st ${META.essence>=m.unlock?'can':'lock'}">✦${m.unlock}</div>`;
+    }
+    return `<div class="${cls}" data-act="labpick" data-arg="${id}"><div class="cnr"></div>${extra}
+      <div data-icon="${id}" data-size="38"></div>
+      <div class="nm">${esc(m.name)}</div>${stat}</div>`;
+  },
+  labSheet(){
+    const id=this.labSel; if(!id||!MONSTERS[id]) return '';
+    const m=MONSTERS[id], st=META.cards[id], t=tierOf(id);
+    const owned=!!(st&&st.owned), fuse=!!m.fusion;
+    const mult=owned?cardLvMult(st.lv):cardLvMult(1);
+    let act='', req='';
+    if(owned){
+      if(st.lv>=CARD_LV_MAX) act='<span class="note" style="color:var(--gold)">これ以上は強くならない(MAX)</span>';
+      else{ const c=cardUpCost(id,st.lv);
+        act=`<button class="sub" data-act="upcard" data-arg="${id}" ${META.essence<c?'disabled':''}>強化 Lv${st.lv}→${st.lv+1} ✦${c}</button>`; }
+    }else if(fuse){
+      const ok=m.fusion.every(f=>META.cards[f]&&META.cards[f].owned&&META.cards[f].lv>=3);
+      req=`<div class="req">素材: ${m.fusion.map(f=>esc(MONSTERS[f].name)+' Lv3+').join(' × ')}${ok?' — 揃っている':' — まだ足りない'}</div>`;
+      act=`<button class="sub" data-act="fuse" data-arg="${id}" ${(!ok||META.essence<m.fuseCost)?'disabled':''}>融合 ✦${m.fuseCost}</button>`;
+    }else{
+      act=`<button class="sub" data-act="unlock" data-arg="${id}" ${META.essence<m.unlock?'disabled':''}>解放 ✦${m.unlock}</button>`;
+    }
+    return `<div class="msheet"><div class="back" data-act="labclose"></div><div class="box">
+      <div class="hd"><div data-icon="${id}" data-size="54"></div>
+        <div><div class="nm">${fuse?'★ ':''}${esc(m.name)} <span class="tierlbl t-${t}">${esc(TIER_NAMES[t])}</span></div>
+        <div class="rl">${esc(m.role)}${owned?' — Lv'+st.lv:''}</div></div></div>
+      <div class="stats"><span>HP <b>${Math.round(m.hp*mult.hp)}</b></span><span>攻 <b>${Math.round(m.dmg*mult.dmg)}</b></span>
+        <span>速 <b>${m.spd}</b></span><span>コスト <b>${owned?cardCost(id,st.lv):m.cost}</b></span></div>
+      <div class="ds">${esc(m.desc)}</div>
+      ${m.trait?`<div class="tr">▸ ${esc(m.trait)}</div>`:''}
+      ${req}
+      <div class="act">${act}<button data-act="labclose">とじる</button></div>
+      <div class="note" style="margin-top:6px">エッセンス ✦${Math.floor(META.essence)}</div>
+    </div></div>`;
+  },
   htmlLab(){
-    const rows=[];
+    const TORDER=['fodder','mid','large','boss'];
+    const byTier={};
     for(const id in MONSTERS){
-      const m=MONSTERS[id], st=META.cards[id];
-      if(m.item||m.guardian) continue;
-      if(st&&st.owned){
-        const atMax=st.lv>=CARD_LV_MAX;
-        const cost=atMax?0:cardUpCost(id,st.lv);
-        const mult=cardLvMult(st.lv);
-        rows.push(`<div class="lrow">
-          <div data-icon="${id}" data-size="40"></div>
-          <div class="info"><div class="nm">${esc(m.name)} <span class="tierlbl t-${tierOf(id)}">${esc(TIER_NAMES[tierOf(id)])}</span> <span style="color:var(--gold)">Lv${st.lv}</span></div>
-          <div class="ds">HP${Math.round(m.hp*mult.hp)} / 攻${Math.round(m.dmg*mult.dmg)} / コスト${cardCost(id,st.lv)} — ${esc(m.desc)}</div></div>
-          ${atMax?'<span style="color:var(--gold);font-size:11px">MAX</span>'
-            :`<button class="sub" data-act="upcard" data-arg="${id}" ${META.essence<cost?'disabled':''}>強化 ✦${cost}</button>`}
-        </div>`);
-      }else if(m.unlock>=0 && !m.fusion){
-        rows.push(`<div class="lrow" style="opacity:.8">
-          <div data-icon="${id}" data-size="40"></div>
-          <div class="info"><div class="nm">${esc(m.name)} <span class="tierlbl t-${tierOf(id)}">${esc(TIER_NAMES[tierOf(id)])}</span></div><div class="ds">${esc(m.desc)}</div></div>
-          <button class="sub" data-act="unlock" data-arg="${id}" ${META.essence<m.unlock?'disabled':''}>解放 ✦${m.unlock}</button>
-        </div>`);
-      }
-    }
-    const fuses=[];
-    for(const id of FUSION_IDS){
       const m=MONSTERS[id];
-      if(META.cards[id]&&META.cards[id].owned) continue;
-      const cost=MONSTERS[id].fuseCost;
-      const matsOk=m.fusion.every(f=>META.cards[f]&&META.cards[f].owned&&META.cards[f].lv>=3);
-      fuses.push(`<div class="lrow" style="border-color:rgba(220,160,255,.5)">
-        <div data-icon="${id}" data-size="40"></div>
-        <div class="info"><div class="nm">★ ${esc(m.name)}</div>
-        <div class="ds">${m.fusion.map(f=>esc(MONSTERS[f].name)+'Lv3+').join(' × ')} — ${esc(m.desc)}</div></div>
-        <button class="sub" data-act="fuse" data-arg="${id}" ${(!matsOk||META.essence<cost)?'disabled':''}>融合 ✦${cost}</button>
-      </div>`);
+      if(m.item||m.guardian) continue;
+      if(!(META.cards[id]&&META.cards[id].owned) && m.unlock<0 && !m.fusion) continue;   // 手に入らないものは並べない
+      (byTier[tierOf(id)]=byTier[tierOf(id)]||[]).push(id);
     }
+    const grids=TORDER.filter(t=>byTier[t]&&byTier[t].length).map(t=>{
+      const ids=byTier[t].slice().sort((a,b)=>{     // 所持 → 解放できる → まだ、の順
+        const oa=(META.cards[a]&&META.cards[a].owned)?0:1, ob=(META.cards[b]&&META.cards[b].owned)?0:1;
+        if(oa!==ob) return oa-ob;
+        return (MONSTERS[a].unlock||9999)-(MONSTERS[b].unlock||9999);
+      });
+      const n=ids.filter(id=>META.cards[id]&&META.cards[id].owned).length;
+      return `<h2 style="font-size:14px" class="tier-h t-${t}">${esc(TIER_NAMES[t])} <span style="font-size:11px;color:var(--dim)">(${n}/${ids.length})</span></h2>
+        <div class="mgrid">${ids.map(id=>this.labCell(id)).join('')}</div>`;
+    }).join('');
     const forms=Object.keys(FORMATIONS).map(fid=>{
       const f=FORMATIONS[fid], has=META.formations.includes(fid);
       return `<div class="lrow">
@@ -418,14 +458,14 @@ const UI={
     }).join('');
     return `
       <h2>✦ 研究所 <span style="font-size:12px;color:var(--gold)">エッセンス ${Math.floor(META.essence)}</span></h2>
-      <div class="list">${rows.join('')}</div>
-      <h2 style="font-size:14px">融合研究</h2>
-      <div class="list">${fuses.join('')||'<p>すべて融合済み。</p>'}</div>
+      <p style="font-size:11px;color:var(--dim);margin:2px 0 6px">マスを押すと、その魔物の詳細と強化が出る</p>
+      ${grids}
       <h2 style="font-size:14px">陣形(出現方法)</h2>
       <div class="list">${forms}</div>
       <h2 style="font-size:14px">夜側のアイテム <span style="font-size:11px;color:var(--dim);font-weight:normal">(戦闘中に画面をタップして置く)</span></h2>
       <div class="list">${items}</div>
-      <div class="row"><button data-act="go" data-arg="home">← もどる</button></div>`;
+      <div class="row"><button data-act="go" data-arg="home">← もどる</button></div>
+      ${this.labSheet()}`;
   },
 
   htmlAltar(){
