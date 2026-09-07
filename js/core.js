@@ -177,7 +177,7 @@ function defaultMeta(){
     v:3,
     essence:0, orbs:0,
     runs:0, captures:0,
-    gen:{ idx:1, battle:0, know:{} },     // 世代(潜行) / 潜行の日数 / 世代内の学習 {id:{met,cap}}
+    gen:{ idx:1, battle:0, know:{}, marks:0 },     // 世代(潜行) / 潜行の日数 / 世代内の学習 {id:{met,cap}} / v6.0 石段に刻んだ線(二連敗の回数・巻き戻しでも消えない)
     cards:{ slug:{owned:true,lv:1}, worm:{owned:true,lv:1}, ghost:{owned:true,lv:1} },
     deck:['slug','worm','ghost'],
     formations:['scatter'],
@@ -212,7 +212,7 @@ function loadMeta(){
       META=Object.assign(defaultMeta(), d);
       if(META.run && META.run.storySeen && META.run.storySeen.join){ META.run.storySeen.join_freila=1; delete META.run.storySeen.join; }   // v5.0 単一フラグからの移行
       META.v=3;
-      META.gen=Object.assign({idx:1,battle:0,know:{},zoneKnow:{}}, d.gen); META.gen.know=META.gen.know||{}; META.gen.zoneKnow=META.gen.zoneKnow||{};
+      META.gen=Object.assign({idx:1,battle:0,know:{},zoneKnow:{},marks:0}, d.gen); META.gen.know=META.gen.know||{}; META.gen.zoneKnow=META.gen.zoneKnow||{}; META.gen.marks=META.gen.marks|0;
       META.life=Object.assign(defaultMeta().life, d.life);
       for(const k of ['ailBy','capBy','capCause']) META.life[k]=Object.assign({}, (d.life||{})[k]||{});
       META.nightItems=Object.assign({mist:true}, d.nightItems||{});

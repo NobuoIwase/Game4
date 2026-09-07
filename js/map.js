@@ -89,7 +89,9 @@ function genMap(){
   const spotFree=(i,j,r)=>{
     if(Math.hypot(i-MAP_W/2,(j-MAP_H/2)*1.4)<13+r*0.4) return false;             // 出発点の周りは広く空ける
     if(i<8+r||j<7+r||i>MAP_W-8-r||j>MAP_H-7-r) return false;                      // 外周の岩には食い込ませない
-    return blobs.every(b=>Math.hypot(b.i-i,b.j-j)>b.r+r+5);                       // 塊の間は4タイル以上あける
+    if(!blobs.every(b=>Math.hypot(b.i-i,b.j-j)>b.r+r+5)) return false;             // 塊の間は4タイル以上あける
+    /* v6.0 設計テンプレートが先に取った場所には生えない(生成順を反転したので、ここが効く) */
+    return usedF.every(u=>Math.hypot(u.i-i,u.j-j)>u.r+r+3);
   };
   const pickSpot=(r)=>{ for(let t=0;t<140;t++){ const i=8+rnd()*(MAP_W-16), j=7+rnd()*(MAP_H-14); if(spotFree(i,j,r)){ const s={i,j,r}; blobs.push(s); formSpots.push({i:Math.round(i),j:Math.round(j),r:2}); return s; } } return null; };
   const pillarHall=(kind)=>{ const s=pickSpot(6); if(!s) return; const n=5+Math.floor(rnd()*5);
@@ -103,10 +105,12 @@ function genMap(){
       for(let w=-1;w<=1;w++) setW(Math.round(ci-Math.sin(a)*w), Math.round(cj+Math.cos(a)*w*0.75), SOLID_CLIFF); }
     formFeats.push({kind:'escarp', r:L*MAP_T*0.4, i:Math.round(s.i+Math.cos(a0)*L*0.5), j:Math.round(s.j+Math.sin(a0)*L*0.4)}); };
   const rockfall=()=>{ const s=pickSpot(6); if(!s) return; const a=rnd()*TAU;
-    for(let k=0;k<5;k++){ const dd=k*2.2; disk(s.i+Math.cos(a)*dd*1.3, s.j+Math.sin(a)*dd*0.85, Math.max(0.8,3.0-k*0.5), Math.max(0.7,2.2-k*0.36), SOLID_ROCK); } };
+    for(let k=0;k<5;k++){ const dd=k*2.2; disk(s.i+Math.cos(a)*dd*1.3, s.j+Math.sin(a)*dd*0.85, Math.max(0.8,3.0-k*0.5), Math.max(0.7,2.2-k*0.36), SOLID_ROCK); }
+    formFeats.push({kind:'rockfall', r:6*MAP_T, i:Math.round(s.i), j:Math.round(s.j)}); };   /* v6.0 数えられるように印を残す */
   const spine=()=>{ const s=pickSpot(6); if(!s) return; const a=rnd()*TAU, n=3+Math.floor(rnd()*3), flat=Math.abs(Math.cos(a))>0.5;
     for(let k=0;k<n;k++){ const dd=k*3.4-((n-1)*1.7); const rA=2.0+rnd()*1.6, rB=1.3+rnd()*0.9;
-      disk(s.i+Math.cos(a)*dd*1.3, s.j+Math.sin(a)*dd*0.85, flat?rA:rB, flat?rB:rA, rnd()<0.35?SOLID_CLIFF:SOLID_ROCK); } };
+      disk(s.i+Math.cos(a)*dd*1.3, s.j+Math.sin(a)*dd*0.85, flat?rA:rB, flat?rB:rA, rnd()<0.35?SOLID_CLIFF:SOLID_ROCK); }
+    formFeats.push({kind:'spine', r:6*MAP_T, i:Math.round(s.i), j:Math.round(s.j)}); };   /* v6.0 */
   const chambers=()=>{ const s=pickSpot(8); if(!s) return; const n=2+Math.floor(rnd()*2);
     for(let k=0;k<n;k++){
       const w=4+Math.floor(rnd()*4), h=3+Math.floor(rnd()*3);
@@ -118,21 +122,22 @@ function genMap(){
         else if(edge){ const door=(Math.abs(di)<=1&&Math.abs(dj)===h+1)||(Math.abs(dj)<=1&&Math.abs(di)===w+1); set(i,j,door?0:SOLID_ROCK); } } }
     formFeats.push({kind:'chamber', r:7*MAP_T, i:Math.round(s.i), j:Math.round(s.j)}); };
   const constriction=()=>{ const s=pickSpot(6); if(!s) return; const a=rnd()*TAU;
-    for(const sgn of [1,-1]) disk(s.i+Math.cos(a+Math.PI/2)*sgn*4.2*1.3, s.j+Math.sin(a+Math.PI/2)*sgn*4.2*0.85, 3.4, 2.4, SOLID_ROCK); };
-  {
-    const style=F.wall;   // 階層の壁様式で、生えている形が変わる
-    if(style==='brick'){ for(let k=0;k<3;k++) chambers(); for(let k=0;k<2;k++) escarp(); for(let k=0;k<3;k++) spine(); for(let k=0;k<2;k++) pillarHall(SOLID_ROCK); }
-    else if(style==='flesh'){ for(let k=0;k<4;k++) constriction(); for(let k=0;k<3;k++) spine(); for(let k=0;k<2;k++) pillarHall(SOLID_ROCK); for(let k=0;k<2;k++) rockfall(); }
-    else { for(let k=0;k<3;k++) pillarHall(rnd()<0.3?SOLID_CLIFF:SOLID_ROCK); for(let k=0;k<2;k++) escarp(); for(let k=0;k<3;k++) rockfall(); for(let k=0;k<4;k++) spine(); }
-  }
+    for(const sgn of [1,-1]) disk(s.i+Math.cos(a+Math.PI/2)*sgn*4.2*1.3, s.j+Math.sin(a+Math.PI/2)*sgn*4.2*0.85, 3.4, 2.4, SOLID_ROCK);
+    formFeats.push({kind:'narrow', r:5*MAP_T, i:Math.round(s.i), j:Math.round(s.j)}); };   /* v6.0 狭窄も数えられるように */
+  /* v6.0 ★岩の形は「設計された地形」の後に生やす(生成順の反転)。
+     v5.x までは岩を先に撒いてから設計テンプレートが空き地を探していたので、
+     水の細道(16×11タイルの空きが要る)は120回試して一度も置けず、実測で全12階層0回だった。
+     結果、階層の顔は壁様式(rock/brick/flesh)だけで決まり、3種類の地形しか存在しなかった。
+     順番を逆にして、設計テンプレートが先に場所を取る。岩はその残りにだけ生える。
+     実際の呼び出しは、この下の設計テンプレート群の後(rockForms())に移した。 */
   // ---- v2.0 設計された地形: 階層ごとの型を刻む(崖の一本道・水の細道・闘技場・迷路の袋小路・肉の喉道)
   const feat={shrines:[], pools:[], seals:[], exit:null, list:[]};   // list: v2.1 地形ごとの中心と半径(彼女がそこへ入った時の台詞に使う)
   const ZI=(z)=>Math.max(0,ZONE_IDS.indexOf(z));
   const farSpot=(minT)=>{ for(let t=0;t<200;t++){ const a=rnd()*TAU, dd=minT+rnd()*10; const i=Math.round(MAP_W/2+Math.cos(a)*dd*1.3), j=Math.round(MAP_H/2+Math.sin(a)*dd*0.8); if(i>8&&j>8&&i<MAP_W-8&&j<MAP_H-8) return {i,j}; } return {i:MAP_W-10,j:MAP_H/2|0}; };
   const usedF=[]; const freeSpot=(minT,rad)=>{ for(let t=0;t<120;t++){ const s=farSpot(minT); if(usedF.every(u=>Math.hypot(u.i-s.i,u.j-s.j)>u.r+rad+3)){ usedF.push({i:s.i,j:s.j,r:rad}); return s; } } return null; };
   const T2=(i,j)=>({x:tileCX(i),y:tileCY(j)});
-  for(const s of formSpots) usedF.push(s);                                                        // v3.2 岩の形の上に他の地形を置かない
-  for(const f of formFeats) feat.list.push(Object.assign({kind:f.kind,r:f.r},T2(f.i,f.j)));       // v3.2 台詞・ミニマップ用
+  /* v6.0 岩の形(formSpots/formFeats)は後から生えるので、ここでは何もしない。
+     usedF は設計テンプレートどうしの重なりを避けるためだけに使い、岩はその usedF を避ける */
   const protect=new Uint8Array(N);                                                                // v3.2 ここは掘って繋がない(入口をひとつに保つ)
   const protectRect=(i0,j0,i1,j1)=>{ for(let j=Math.max(0,Math.floor(j0));j<=Math.min(MAP_H-1,Math.ceil(j1));j++) for(let i=Math.max(0,Math.floor(i0));i<=Math.min(MAP_W-1,Math.ceil(i1));i++) if(solid[j*MAP_W+i]) protect[j*MAP_W+i]=1; };
   const protectRing=(ci,cj,r)=>{ for(let j=Math.floor(cj-r);j<=Math.ceil(cj+r);j++) for(let i=Math.floor(ci-r);i<=Math.ceil(ci+r);i++){ if(!inMap(i,j)) continue; if(Math.hypot(i-ci,j-cj)<=r && solid[j*MAP_W+i]) protect[j*MAP_W+i]=1; } };
@@ -296,10 +301,25 @@ function genMap(){
       for(let w=-5;w<=5;w++){ const i=Math.round(ci-Math.sin(a)*w), j=Math.round(cj+Math.cos(a)*w*0.75); if(i<3||j<3||i>=MAP_W-3||j>=MAP_H-3) continue; if(Math.abs(w)<=1) set(i,j,0); else if(Math.abs(w)<=4 && t>2) set(i,j,SOLID_ROCK); }
     }
   };
+  /* v6.0 岩の形。設計テンプレートが場所を取った後に、その残りへ生やす。
+     階層ごとに「何がどれだけ生えるか」を変える——壁様式だけで決めていたのを、階層で決める */
+  const rockForms=()=>{
+    const R=FLOOR_FORM[Math.min(FLOOR_FORM.length,Math.max(1,F.depth))-1];
+    /* ★その階の顔になる形を先に置く。空き地は有限なので、後回しにすると
+       「6本頼んだ狭窄が0本」のように、階の性格だけが静かに消える */
+    for(let k=0;k<(R.chamber||0);k++) chambers();
+    for(let k=0;k<(R.narrow||0);k++)  constriction();
+    for(let k=0;k<(R.escarp||0);k++)  escarp();
+    for(let k=0;k<(R.pillars||0);k++) pillarHall(rnd()<(R.cliffP||0)?SOLID_CLIFF:SOLID_ROCK);
+    for(let k=0;k<(R.spine||0);k++)   spine();
+    for(let k=0;k<(R.rockfall||0);k++) rockfall();
+  };
   {
     const fl2=F.depth;
-    const nRidge=fl2===3?2:1; for(let k=0;k<nRidge;k++) ridgePath();
-    if(fl2<=2){ causeway(); if(fl2===2) causeway(); }
+    const R=FLOOR_FORM[Math.min(FLOOR_FORM.length,Math.max(1,fl2))-1];
+    /* ★設計テンプレートを先に置く。ここで usedF を取るので、岩はここを避けて生える */
+    for(let k=0;k<(R.ridge||0);k++) ridgePath();
+    for(let k=0;k<(R.causeway||0);k++) causeway();   /* v6.0 階層1〜2の決め打ちをやめ、階層ごとの表で決める */
     if(F.puzzle==='seals'){ for(let k=0;k<3;k++) mazePocket(); }
     // 降り口/魔核の間: 遠くの広間
     const ex=freeSpot(F.final?26:22,F.final?14:10) || farSpot(22);
@@ -309,6 +329,9 @@ function genMap(){
     feat.exit=T2(ex.i,ex.j);
     feat.list.push(Object.assign({kind:'arena',r:(F.final?10:8)*MAP_T},T2(ex.i,ex.j)));
     lewdDen();
+    /* ★ここで初めて岩を生やす */
+    rockForms();
+    for(const f of formFeats) feat.list.push(Object.assign({kind:f.kind,r:f.r},T2(f.i,f.j)));   // 台詞・ミニマップ用
   }
   // 孤立した1タイルの壁は消す
   for(let j=2;j<MAP_H-2;j++) for(let i=2;i<MAP_W-2;i++){

@@ -15,14 +15,22 @@ function newHero(id){
   const LU=(META.lumina&&META.lumina.upg)||{};
   // 抵抗の意志(敗北で固くなる・生き延びると少し緩む)と、世代ごとの素の成長。夜側の強化が行き着いても「全く抵抗できない」には落ちない
   const will=Math.min(BAL.WILL_CAP,(META.lumina&&META.lumina.will)||0);
-  const gsc=1+BAL.GEN_SCALE*Math.min(10,Math.max(0,(META.gen.idx||1)-1));
+  const gsc=1+BAL.GEN_SCALE*Math.min(BAL.GEN_CAP,Math.max(0,(META.gen.idx||1)-1));   /* v6.0 頭打ちを世代10→22へ */
+  /* v6.0 ★階層ごとのヒロイン倍率。FLOORS には敵側の mon/en しか無く、彼女たちの側の階層倍率が
+     一つも無かった——これが「世代が進むと魔核が討てなくなる」の直接の原因(実測: 世代4で49.5%、
+     世代12で10.0%しか削れない)。深さは敵味方の両方に掛ける。
+     さらに、石段に刻んだ線(二連敗の回数)ぶんだけ、彼女たちは強くなって戻ってくる——
+     巻き戻しの外に残る痕が、そのまま強化になる。心臓の側からは、この帳簿は読めない */
+  const HF=(function(){ const F=(G.B&&G.B.floor)||(typeof curFloor==='function'?curFloor():null); return (F&&F.hero)||{hp:1,dmg:1,stam:1}; })();
+  const marks=Math.min(BAL.MARK_CAP,(META.gen&&META.gen.marks)|0);
+  const mkHp=1+BAL.MARK_HP*marks, mkDmg=1+BAL.MARK_DMG*marks;
   const h={
     x:0, y:0, vx:0, vy:0, r:10,
-    maxHp:Math.round(175*(1+0.18*gb)*(1+0.08*(LU.vital||0))*(1+0.03*will)*gsc*HD.hpMul), hp:0,
+    maxHp:Math.round(175*(1+0.18*gb)*(1+0.08*(LU.vital||0))*(1+0.03*will)*gsc*HD.hpMul*HF.hp*mkHp), hp:0,
     armor:Math.max(0, 7 + gb - aArmor + Math.floor((LU.guard||0)*0.5) + HD.armor),
     regen:(0.9+0.15*gb+0.08*(LU.bless||0))*(1-0.3*aRegen)*(HD.regenMul||1),   // v3.1 素性の回復係数
     baseSpeed:154*(1-0.06*aSpeed)*(1+0.02*(LU.swift||0))*HD.spdMul,
-    dmgMult:(1+0.06*(LU.zeal||0))*(1+0.02*will)*gsc*(HD.dmgMul||1),   // v3.1 素性の火力係数
+    dmgMult:(1+0.06*(LU.zeal||0))*(1+0.02*will)*gsc*(HD.dmgMul||1)*HF.dmg*mkDmg,   // v3.1 素性の火力係数(v6.0 階層倍率と石段の線)
     will, curse:null, curseAmp:0, curseAche:false,     // v1.6 抵抗の意志 / ボス敗北の呪い
     hypnoG:0, hypnoFloor:0, heatG:0, inMusk:false,     // v1.6 催眠ゲージ(呪いの下限) / 発情ゲージ(雲から) / 雄臭の雲の中
     id, name:HD.name, hi:0, out:false, captive:null, assist:null, thanksT:0, seenT:0, lineT:0, lowSaid:false,   // v3.0 素性 / 離脱(捕獲) / 救援 / 個別の台詞タイマー
@@ -61,7 +69,7 @@ function newHero(id){
     strafeDir:Math.random()<0.5?-1:1, strafeT:2,
     bubble:'', bubbleT:0, bubbleCd:0, aiLabel:'けいかい中', aiState:'',
     /* --- スタミナ / 四肢拘束 / 押し倒し --- */
-    staminaMax:(BAL.STAMINA_MAX-12*aStam+6*(LU.grit||0)+0.6*will)*(HD.stamMul||1),   // v5.0 素性のスタミナ倍率(クウは低い)   // v5.7 意志の寄与 1.5→0.6。負けを重ねるほど池が倍になり、何度絶頂しても満タンに見えていた
+    staminaMax:(BAL.STAMINA_MAX-12*aStam+6*(LU.grit||0)+0.6*will+BAL.MARK_STAM*marks)*(HD.stamMul||1)*HF.stam,   // v5.0 素性のスタミナ倍率(クウは低い)   // v5.7 意志の寄与 1.5→0.6 / v6.0 階層倍率と石段の線
     stamina:0,
     limbs:{armL:null, armR:null, legL:null, legR:null},
     suckers:{nipL:null, nipR:null, clit:null},   // 吸液羽虫の吸い付き
@@ -377,7 +385,11 @@ function endBattle(outcome){
   const floorBefore=META.run.floor||1;
   if(outcome==='capture'){
     META.run.fails=(META.run.fails||0)+1;
-    if(META.run.fails>=BAL.RUN_FAILS_RESET){ runReset(false); rotReset=true; decay=luminaDecay(); runNote='reset'; }   /* v5.0 彼女たちの側の巻き戻り: 覚えたことは残る */
+    if(META.run.fails>=BAL.RUN_FAILS_RESET){
+      /* v6.0 石段に線が一本増える。彼女たちは自分でこれを数えられ、そのぶん強くなって戻ってくる。
+         心臓の側からは読めない——巻き戻しの外に残る痕が、そのまま強化の帳簿になる */
+      META.gen.marks=((META.gen.marks|0)+1);
+      runReset(false); rotReset=true; decay=luminaDecay(); runNote='reset'; }   /* v5.0 彼女たちの側の巻き戻り: 覚えたことは残る */
     else runNote='retry';
   }else if(outcome==='descend'){
     META.run.fails=0; META.run.floor=Math.min(openFloors(),floorBefore+1); META.run.deepest=Math.max(META.run.deepest||1,META.run.floor); runNote='descend';
@@ -1337,7 +1349,10 @@ function condTick(h,dt){
   }
   // 絡みつき中の微快感(拘束役の練度でスケール)。憑依された腕は自分で自分を撫でる
   for(const sl of attachedSlots(h)){
-    const at=h.limbs[sl], m=at.mon;
+    /* v6.0 1002行と同じ穴。この輪の中の applyPleasure が絶頂を起こすと四肢が解け、
+       attachedSlots が返した直後の h.limbs[sl] が null になる。毎回引き直して確かめる */
+    const at=h.limbs[sl]; if(!at) continue;
+    const m=at.mon;
     if(!m||m.dead) continue;
     if(at.kind==='possess'){
       applyPleasure(1.2*unitPmul(m)*dt);
@@ -2787,7 +2802,7 @@ function spawnUnit(id, x, y, o){
   const pm=(o.mult||1)*night;
   const bossm=(MONSTERS[id].boss&&!MONSTERS[id].guardian)?(1+Math.min(BAL.BOSS_HP_LV_CAP,BAL.BOSS_HP_LV*Math.max(0,(B.hero?B.hero.level:1)-1))):1;   // v2.4 ボス級は彼女の Lv で厚くなる(魔核・番兵は各自)
   const F=B.floor||curFloor();   // v2.0 階層: 深いほど硬い。得意種はさらに硬い
-  const fhp=MONSTERS[id].guardian?1:F.mon.hp*(F.affinity.includes(id)?BAL.FLOOR_AFFINITY:1)*eraMul(), fdm=MONSTERS[id].guardian?1:F.mon.dmg*eraMul();   // v3.0 世代の深さ倍率
+  const fhp=MONSTERS[id].guardian?1:F.mon.hp*(F.affinity.includes(id)?BAL.FLOOR_AFFINITY:1)*eraMul(F.depth), fdm=MONSTERS[id].guardian?1:F.mon.dmg*eraMul(F.depth);   // v3.0 世代の深さ倍率(v6.0 深い階では二重取りを緩める)
   const u={
     id, x, y,
     hp:d.hp*elite*pm*flesh*fhp*bossm, maxHp:d.hp*elite*pm*flesh*fhp*bossm, spd:MONSTERS[id].spd, r:MONSTERS[id].r*(elite>1?1.2:1),
@@ -5590,7 +5605,9 @@ function mireEvaporate(m){
    傘がふくらんで数秒のあいだ柔らかい壁になる。押し出るまで濃い胞子の中。
    一度やられれば覚えて(trapKnow)、次からは輪を避けて歩く */
 function spawnRings(){
-  const B=G.B, dep=Math.max(1,Math.min(8,(B.floor&&B.floor.depth)||1));
+  /* v6.0 ここが Math.min(8,depth) で止めていたので、配列の9番目以降が黙って死んでいた。
+     spawnMires と同じ「配列の長さで止める」書き方に揃える */
+  const B=G.B, dep=Math.max(1,Math.min(BAL.MRING_N.length,(B.floor&&B.floor.depth)||1));
   const n=(BAL.MRING_N[dep-1]||1);
   B.rings=[];
   for(let i=0;i<n;i++){
@@ -6448,7 +6465,7 @@ function spawnDenGuard(){
   const u=spawnUnit(id,q.x,q.y,{enVal:0,gemMul:2.2});
   if(!u) return;
   u.denGuard=true;
-  u.maxHp=u.hp=Math.round(Math.max(u.maxHp*BAL.DEN_GUARD_HP, BAL.DEN_GUARD_MIN*F.mon.hp*(typeof eraMul==='function'?eraMul():1)));
+  u.maxHp=u.hp=Math.round(Math.max(u.maxHp*BAL.DEN_GUARD_HP, BAL.DEN_GUARD_MIN*F.mon.hp*(typeof eraMul==='function'?eraMul(F.depth):1)));
   u.dmg=(u.dmg||0)*BAL.DEN_GUARD_DMG; u.xp=(u.xp||0)*2.2;
   setBanner('褥の番人 — '+MONSTERS[id].name, (F.lewd&&F.lewd.guardSub)||'奥の主が、身を起こした','#ff6b81');
   const near=B.heroes.filter(h=>!h.out).sort((a,b)=>Math.hypot(a.x-q.x,a.y-q.y)-Math.hypot(b.x-q.x,b.y-q.y))[0];
