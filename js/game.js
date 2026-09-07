@@ -3169,7 +3169,13 @@ function fieldSpawnTick(dt){
 /* 骸の回廊: 倒れた魔物の骨が、しばらくして勝手に組み上がる */
 function boneTick(dt){
   const B=G.B; if(!B||!B.bones||!B.bones.length) return;
-  const F=B.floor||curFloor(); const cap=24;
+  /* ★上限は人数で決める。実測で世代4(2人・骸の回廊)だけが谷になり(削れた29%・討伐0/5)、
+     他の世代が 49〜60% だったのに対してここだけ突出して重かった。
+     骨兵は EN を使わず、拘束もせず、体力とスタミナだけを削る——
+     人数の少ない世代では、これが一方的な消耗戦になっていた */
+  const F=B.floor||curFloor();
+  const alive=B.heroes.reduce((a,h)=>a+(h.out?0:1),0);
+  const cap=Math.min(14, 4+4*alive);
   let n=0; for(const e of B.enemies) if(!e.dead && e.id==='bonesoldier') n++;
   for(let k=B.bones.length-1;k>=0;k--){
     const b=B.bones[k]; b.t+=dt;
