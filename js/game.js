@@ -1666,10 +1666,11 @@ function aiDecide(foc,dt){
     if(want!==p.aiMode){ p.aiMode=want; p.modeUntil=B.time+BAL.MODE_HOLD; p.escape=null; if(want==='flee') sayLine('retreat',1,8,'むり、にげる!'); else if(want==='kite') sayLine('kite',0,12); }
   }
   // v3.0 仲間のカバー: 掴まれている/押し倒されている相手へ寄り、その魔物を優先して撃つ(自分が自由な時)
-  { const o=partnerOf(p), cv=coverTarget(p);   // v4.0 拘束だけでなく「調子の悪さ」でも寄る
-    const grabbed=!!(o && (attachCount(o)>0 || o.pinned || o.charmBind));
+  { const cv=coverTarget(p);   // v4.0 拘束だけでなく「調子の悪さ」でも寄る
     const need=!!cv;
-    if(need && !p.assist) sayPartyAs(B.ci, o&&o.pinned?'assist.pin':(grabbed?'assist.grab':'assist.cover'),2,8);
+    /* v5.3 助けに行く相手は cv。台詞の選び方も名指しも cv に合わせる
+       (三人以上いると partnerOf の o とは別人のことがあり、別の子の状態で台詞を選んでいた) */
+    if(need && !p.assist) sayPartyAs(B.ci, cv.pinned?'assist.pin':((attachCount(cv)>0||cv.charmBind)?'assist.grab':'assist.cover'),2,8,cv);
     p.assist=need?cv:null; }
   let dx=0, dy=0, state='wait';
   // v2.1 降りる気になったら: 知っている降り口(開いていて、番兵が居ない)へ向かう力が、逃げ・牽制に混ざる。そばまで来たら踏みとどまって降りる
@@ -3566,7 +3567,7 @@ function goalValid(p,g){
    決めた直後は TALK_T 秒、脅威が薄ければ足を止めて言い合う(aiDecide の talk) */
 function goalPref(p,kind,sub){ const HD=HEROES[p.id]; if(!HD||!HD.pref) return 1; return HD.pref[sub]||HD.pref[kind]||1; }
 function goalKindKey(g){ if(!g) return 'explore'; if(g.kind==='poi'||g.kind==='pick') return g.sub; if(g.kind==='chest') return g.sub==='boss'?'boss':'chest'; return g.kind; }
-function pendingLine(hi,path,delay,prio){ const P=G.B&&G.B.party; if(!P) return; P.pending=P.pending||[]; P.pending.push({hi,path,at:G.B.time+(delay||0.9),prio:prio||1}); }
+function pendingLine(hi,path,delay,prio,who){ const P=G.B&&G.B.party; if(!P) return; P.pending=P.pending||[]; P.pending.push({hi,path,at:G.B.time+(delay||0.9),prio:prio||1,who}); }
 function partyShare(p,kind,x,y,force){
   const B=G.B, P=B.party, o=partnerOf(p); if(!o) return false;
   const far=Math.abs(x-o.x)>W/2 || Math.abs(y-o.y)>H/2;   // 相手の画面外の物だけ伝える(ボスは必ず)
@@ -3579,13 +3580,21 @@ function partyShare(p,kind,x,y,force){
 function partyExchange(key,sub){
   const B=G.B, P=B.party; if(!P||typeof LINES_P==='undefined'||!LINES_P.banter) return false;
   let pool=LINES_P.banter[key]; if(sub!==undefined && pool && !Array.isArray(pool)) pool=pool[sub]; if(!Array.isArray(pool)||!pool.length) return false;
-  const ex=pool[(Math.random()*pool.length)|0]; if(!Array.isArray(ex)) return false; let t=0; P.pending=P.pending||[];
-  for(const ln of ex){ const h=B.heroes.find(x=>x.id===ln.s); if(!h||h.out) continue; if(t===0) heroBubble(h,ln.t,true,1); else P.pending.push({hi:h.hi,txt:ln.t,at:B.time+t,prio:1}); t+=1.3; }
+  /* v5.3 話者が全員その場に居る掛け合いだけを使う。
+     以前は「居ない子の行を飛ばして、残りは喋る」だったので、相手の名前を呼ぶ台詞——
+     「フレイラ、いまの すごかった!」——が、フレイラが捕まって離脱した後にも出ていた。
+     掛け合いで呼ぶ名前は必ずもう一方の話者のものなので、全員居ることを条件にすれば足りる。
+     「フレイラの火、あったかいね〜」のような、その子でなければ意味のない台詞も、これで守れる */
+  const usable=pool.filter(ex=>Array.isArray(ex)&&ex.length&&ex.every(ln=>{
+    const h=B.heroes.find(x=>x.id===ln.s); return !!(h&&!h.out); }));
+  if(!usable.length) return false;
+  const ex=usable[(Math.random()*usable.length)|0]; let t=0; P.pending=P.pending||[];
+  for(const ln of ex){ const h=B.heroes.find(x=>x.id===ln.s); if(t===0) heroBubble(h,ln.t,true,1); else P.pending.push({hi:h.hi,txt:ln.t,at:B.time+t,prio:1}); t+=1.3; }
   return true;
 }
 function partyTick(dt){
   const B=G.B, P=B.party; if(!P) return;
-  if(P.pending&&P.pending.length){ const keep=[]; for(const q of P.pending){ if(B.time>=q.at){ const h=B.heroes[q.hi]; if(h&&!h.out){ if(q.path) sayPartyAs(q.hi,q.path,q.prio||1,0); else heroBubble(h,q.txt,true,q.prio||1); } } else keep.push(q); } P.pending=keep; }
+  if(P.pending&&P.pending.length){ const keep=[]; for(const q of P.pending){ if(B.time>=q.at){ const h=B.heroes[q.hi]; if(h&&!h.out){ if(q.path) sayPartyAs(q.hi,q.path,q.prio||1,0,q.who); else heroBubble(h,q.txt,true,q.prio||1); } } else keep.push(q); } P.pending=keep; }
   denRoleTick();   // v3.2 待つ/踏み込むの見張り
   P.tickT=(P.tickT||0)-dt; if(P.tickT>0) return; P.tickT=0.5;
   const active=B.heroes.filter(h=>!h.out); if(active.length<2) return;
@@ -4029,7 +4038,7 @@ function updateGoal(p){
     if(gathered){ const arr=active.find(h=>h.hi!==(P.gatherCaller>=0?P.gatherCaller:win.h.hi));   // 呼ばれて歩いてきた子が着いて一言
       if(arr){ pendingLine(arr.hi,'gather.arrive',0.2,1); t0=(arr.hi===win.h.hi)?1.7:0.9; } }   // 着いた子がそのまま言い出す時は、前の吹き出しが消えてから(同じ子の続けざまの台詞は潰れる)
     const said=t0>0?(pendingLine(win.h.hi,'propose.'+kind,t0,1),true):sayPartyAs(win.h.hi,'propose.'+kind,1,0);
-    if(said){ for(const x of props){ if(x===win) continue; pendingLine(x.h.hi, x.split?'split':(same?'same':(x.g.score>win.g.score?'yield':'agree')), t0+0.9, 1); } if((!same || gathered) && (gathered || partyGathered())) P.talkUntil=B.time+(gathered?Math.max(BAL.GATHER_TALK_T,t0+1.6):BAL.TALK_T); }   // 集まって話した時は言い終わるまで向き合う。離れたまま(集合できなかった)なら声だけ掛けて足は止めない(v3.1)
+    if(said){ for(const x of props){ if(x===win) continue; pendingLine(x.h.hi, x.split?'split':(same?'same':(x.g.score>win.g.score?'yield':'agree')), t0+0.9, 1, win.h); }   /* v5.3 「{o}が いうなら」の相手は、案が通った子 */ if((!same || gathered) && (gathered || partyGathered())) P.talkUntil=B.time+(gathered?Math.max(BAL.GATHER_TALK_T,t0+1.6):BAL.TALK_T); }   // 集まって話した時は言い終わるまで向き合う。離れたまま(集合できなかった)なら声だけ掛けて足は止めない(v3.1)
   }
   P.gatherDone=0;
   return p.goal;
@@ -4529,7 +4538,7 @@ function linesTick(dt){
   const pr=pressure();
   if(pr>=0.35 && B.pressSaid<1){ B.pressSaid=1; setBanner('深淵の圧が高まる','魔物が増え、夜側のENが伸びる','#ff86b3'); sayLine('pressure.mid',0,0,'なんか、ふえてきた……?'); }
   if(pr>=0.9 && B.pressSaid<2){ B.pressSaid=2; setBanner('深淵の圧','ここに長く居すぎた','#ff5d7a'); sayLine('pressure.high',1,0,'ここ、ながくいたらまずい……!'); }
-  if(p.hp<p.maxHp*0.5 && !p.lowSaid){ p.lowSaid=true; sayLine('hurtLow',1,0); const o=partnerOf(p); if(o) sayPartyAs(o.hi,'assist.low',2,10); } else if(p.hp>p.maxHp*0.72) p.lowSaid=false;
+  if(p.hp<p.maxHp*0.5 && !p.lowSaid){ p.lowSaid=true; sayLine('hurtLow',1,0); const o=partnerOf(p); if(o) sayPartyAs(o.hi,'assist.low',2,10,p); } else if(p.hp>p.maxHp*0.72) p.lowSaid=false;
   let near=0; for(const e of B.enemies){ if(!e.dead&&!e.dormant&&inSight(e,p)){ near++; if(e.boss) B.bossSeen=true; } }   // v2.4 ボスを見た(以後の武器選びはボスを想定)
   if(B.ci===leaderIdx()){ B.calmT=near===0?(B.calmT||0)+0.5:0; if(B.calmT>=4 && B.time>30){ B.calmT=0; sayLine('calm',0,45); } }   // v3.0 共有タイマーは代表だけ
 }
@@ -5079,7 +5088,7 @@ function beginCapture(src,cause){
     if(B.pinScene && B.pinSceneHi===B.ci) B.pinScene=null;
     B.bullets=B.bullets.filter(b=>b.hi!==B.ci);
     setBanner(h.name+'、捕まった!', others[0].name+'は救い出すか、置いて降りるか','#c98cff');
-    for(const o of others) sayPartyAs(o.hi,'captured.watch',3,0);
+    for(const o of others) sayPartyAs(o.hi,'captured.watch',3,0,h);   /* v5.3 名指しは「捕まった子」。この時点でもう out なので、明示しないと名前が出せない */
     B.party.goal=null; B.party.pending=[]; B.party.talkUntil=0; B.party.gather=null; B.party.gatherDone=0; B.party.denRole=null;   // v3.1 相談は中断(言いかけの台詞と足止めを捨てる) / v3.2 待つ役も解く
     return;
   }
@@ -6545,7 +6554,7 @@ function pickupsUpdate(dt){
   for(const h2 of B.hearts){
     h2.t+=dt;
     // v3.0 ハートは触れた子が取る。ただし相手の体力がずっと薄いなら譲る(HEART_YIELD)
-    for(const p of hs){ if(Math.hypot(h2.x-p.x,h2.y-(p.y-10))<20){ const o=partnerOf(p); if(o && p.hp/p.maxHp>o.hp/o.maxHp+BAL.HEART_YIELD && p.hp/p.maxHp>0.6 && Math.hypot(o.x-h2.x,o.y-h2.y)<260){ sayPartyAs(p.hi,'heartYield',1,12); continue; }
+    for(const p of hs){ if(Math.hypot(h2.x-p.x,h2.y-(p.y-10))<20){ const o=partnerOf(p); if(o && p.hp/p.maxHp>o.hp/o.maxHp+BAL.HEART_YIELD && p.hp/p.maxHp>0.6 && Math.hypot(o.x-h2.x,o.y-h2.y)<260){ sayPartyAs(p.hi,'heartYield',1,12,o); continue; }
       h2.dead=true; p.hp=Math.min(p.maxHp,p.hp+30); floatTxt(p.x,p.y-58,'+30','#7ee89a',13,1); heroBubble(p,{freila:'……助かる', kuu:'……ん', yamiko:'……もらう'}[p.id]||'かいふく♪'); S.heart(); break; } }
   }
   B.hearts=B.hearts.filter(h=>!h.dead);
@@ -6984,13 +6993,29 @@ function sceneForHero(h,kind,id){
   return sceneFor(kind,id);
 }
 function gainXpAll(v){ const B=G.B; for(const h of B.heroes) h.xp+=v; }
-/* パーティの台詞(js/lines_party.js の LINES_P)。path の先が {lumina:[..],freila:[..]} なら話者の声で、配列ならそのまま */
-function sayPartyAs(hi,path,prio,cd){
+/* v5.3 相手の名前。ヒロインそのもの・その番号・id のどれで渡してもよい。
+   渡されなかった時は、その場に居る「自分以外の一人」——二人だけならそれで決まる。
+   三人以上いて相手が指定されていなければ空を返し、呼びかけの台詞は使わせない */
+function partyName(who,speaker){
+  const B=G.B; if(!B) return '';
+  let id=who;
+  if(id&&typeof id==='object') id=id.id;
+  else if(typeof id==='number') { const t=B.heroes[id]; id=t&&t.id; }
+  if(!id){ const others=B.heroes.filter(x=>x!==speaker&&!x.out); if(others.length===1) id=others[0].id; }
+  return (id&&typeof HEROES!=='undefined'&&HEROES[id])?HEROES[id].name:'';
+}
+/* パーティの台詞(js/lines_party.js の LINES_P)。path の先が {lumina:[..],freila:[..]} なら話者の声で、配列ならそのまま。
+   v5.3 本文の「{o}」は相手の名前に置き換える。誰に向けた台詞かが決まらない時は、{o} を含む行を候補から外す
+   (三人以上いる場で、名指しを取り違えて「フレイラ、こっち!」と呼んでしまうのを防ぐ) */
+function sayPartyAs(hi,path,prio,cd,who){
   const B=G.B; if(!B||typeof LINES_P==='undefined') return false; const h=B.heroes[hi]; if(!h) return false;
   let o=LINES_P; for(const k of path.split('.')){ if(o==null) return false; o=o[k]; }
-  const arr=o&&(Array.isArray(o)?o:o[h.id]); if(!Array.isArray(arr)||!arr.length) return false;
+  let arr=o&&(Array.isArray(o)?o:o[h.id]); if(!Array.isArray(arr)||!arr.length) return false;
+  const nm=partyName(who,h);
+  if(!nm) arr=arr.filter(t=>t.indexOf('{o}')<0);
+  if(!arr.length) return false;
   cd=(cd===undefined)?6:cd; const key='P'+hi+':'+path; B.lineCd=B.lineCd||{}; if(B.lineCd[key]!==undefined && B.time-B.lineCd[key]<cd) return false;
-  B.lineCd[key]=B.time; heroBubble(h,arr[(Math.random()*arr.length)|0],(prio||0)>=2,prio||0); return true;
+  B.lineCd[key]=B.time; heroBubble(h,arr[(Math.random()*arr.length)|0].split('{o}').join(nm),(prio||0)>=2,prio||0); return true;
 }
 /* 二人が画面に収まる距離に保つ(離れすぎた分を寄せる。拘束されている子は動かさない) */
 function partyClamp(){
@@ -7012,7 +7037,7 @@ function rescueTick(dt){
 function rescueHero(c,by){
   const B=G.B; c.out=false; c.pinned=false; c.pinBy=null; c.pinEscape=0; c.struggle=0; c.captive=null; B.captures=(B.captures||[]).filter(x=>x.hi!==c.hi); /* 救い出した子の捕獲記録は消す */ c.hp=Math.max(c.hp,Math.round(c.maxHp*0.5)); c.stamina=Math.max(c.stamina,Math.round(c.staminaMax*0.6)); c.ifr=1.5; c.aiMode='fight'; c.goal=null; c.path=null; c.exhausted=false; c.thanksT=1.3;
   B.rescues=(B.rescues||0)+1; setBanner(c.name+'を救い出した!', by.name+'が縛めを解いた','#8fd3ff'); parts(c.x,c.y-14,30,['#fff','#8fd3ff','#ffd76a'],200,0.8); S.lvup();
-  sayPartyAs(by.hi,'rescue.done',3,0); B.party.goal=null;
+  sayPartyAs(by.hi,'rescue.done',3,0,c); B.party.goal=null;
   if(typeof STORY_V30!=='undefined' && STORY_V30.party && STORY_V30.party.rescue && !B.rescueStorySeen){ B.rescueStorySeen=true; UI.showStory(STORY_V30.party.rescue,{dur:5}); }
 }
 function battleTick(dt){
