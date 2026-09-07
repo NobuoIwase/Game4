@@ -47,10 +47,11 @@ const BAL={
   CAPTURE_ESS_BONUS:45,    // (v3.1 60→45)
 
   /* --- v4.0 暗闇 --- */
-  DARK_CAP:0.86,           // 暗幕の濃さの上限(プレイヤーには薄っすら見える)
+  DARK_CAP:0.88,           // 暗幕の濃さの上限(プレイヤーには薄っすら見える)
   DARK_MEM_T:11,           // 光・炎で照らされた所が視界に残る秒数
   DARK_MEM_MAX:44,         // 残す灯りの数の上限
-  DARK_PAIR_R:230, DARK_PAIR_K:0.3,   // 二人がこの距離まで近いと、互いの灯りが DARK_PAIR_K だけ広がる
+  DARK_PAIR_R:230, DARK_PAIR_K:0.12,  // v5.0 近いと少しだけ広がる(くっつく理由にはしない)
+  DARK_SEE_K:0.22,                    // v5.0 壁を挟まなければ互いの姿は見えている: 距離によらずこのぶん視界が効く
   DARK_ENEMY_R:76,         // 魔物の微光(察知範囲は変えない。暗くても居場所は分かる)
   DARK_FLOOR_MAX:0.75,     // 祠・燭台・光茸で増える「この階の灯り」の上限(ヒロインの光半径に掛かる)
   DARK_SHRINE:0.30, DARK_CANDLE:0.035, DARK_SHROOM:0.16,  // それぞれの寄与
@@ -58,7 +59,9 @@ const BAL={
   DARK_LAG:0.5,            // 暗いと、罠・雲・地形の境に気づく距離がこの割合まで縮む
   DARK_SEEN:0.3,           // 地図に残るのは、この明るさ以上で見た所だけ
   LANTERN_R:210, LANTERN_HEAT:3.4, LANTERN_SENS:0.9, LANTERN_N:[2,2,3,3,3,4,4,4],
-  LANTERN_WANT:1.35, LANTERN_HEAT_MAX:50, LANTERN_STAY:5.5, LANTERN_CD:26, DARK_FAR_SEE:900,   // 催淫灯篭: 明るいが、そばに居ると発情と敏感化が進む
+  LANTERN_WANT:0.42, LANTERN_HEAT_MAX:34, LANTERN_STAY:3.4, LANTERN_CD:52, DARK_FAR_SEE:900,   // v5.0 灯篭は「暗くて心細い時の休み場」程度。誘蛾灯にはしない
+  LANTERN_NEED_LIGHT:0.16,            // v5.0 この階で集めた灯りがこれ未満のうちだけ、休み場として寄る気になる
+  LANTERN_WARM_T:1.6,                 // そばで温まってから「ポカポカしてきた」と気づくまでの秒数
   /* --- v4.0 魔核戦の専念 --- */
   CORE_WAR_R:540,          // ここまで近づいたら「魔核戦」に入る(以後その日は解けない)
   CORE_LEASH:600,          // 魔核戦の間、そこから離れてよい距離(回復の用があれば例外)
@@ -85,16 +88,37 @@ const BAL={
   COVER_FOCUS_D:420,       // 相方に群がっている魔物を先に撃つ(距離から差し引く)
   /* --- v4.0 見えた物を伝えて、近寄って相談 --- */
   SHARE_T:14, SHARE_CD:24,   // 伝えた物が「新しい報せ」でいられる秒数 / 続けて集合を呼ばない間隔
+  /* --- v5.0 追い詰められたら切り上げる --- */
+  WORN_CLIMAX:0.9,         // 絶頂1回ぶんの「摩耗」
+  WORN_PIN:0.7, WORN_BOUND:0.25, WORN_CAPTURE:2.6,   // 押し倒し / 拘束1本 / 仲間の離脱
+  WORN_IDLE_K:0.55,        // 動けなかった秒数×これ
+  WORN_HEAT_LV:0.5, WORN_SENSIT:0.010, WORN_HYPNO:0.6,   // 発情段 / 敏感1あたり / 催眠段
+  WORN_EXIT:6.0,           // これを超えたら「もう切り上げて次へ」
+  WORN_DECAY:0.018,        // 何もされない間の回復(毎秒)
+  WORN_SAY:4.2,            // ここを越えたら弱音
   /* --- v4.0 フレイラの火属性と水弱点 --- */
   WET_ATK:0.78, WET_DEF:1.22,        // 濡れきった地形での、フレイラの与ダメと被ダメ
   DRY_ATK:1.15, DRY_DEF:0.90,        // 乾ききった地形(自分で焼いた床を含む)
-  DRY_STAM:0.25,                     // 乾かすのに使うスタミナの割合
-  DRY_R0:120, DRY_R_K:340,           // 乾かす半径(使ったスタミナに比例して伸びる)
-  DRY_CD:24, DRY_STAM_MIN:0.45, DRY_MAX:20,   // 使う間隔 / これだけスタミナが無いと使わない / 一つの階層に残る焼き跡の上限
+  DRY_STAM:0.42,                     // v5.0 一度に注ぎ込めるスタミナの割合(上限)。残っているだけ注ぐ
+  DRY_STAM_RES:0.12,                 // v5.0 これだけは残す(動けなくなるほどは焚かない)
+  DRY_AURA_R:210,                    // v5.0 身にまとう炎のエリアの半径。歩いた跡が乾いていく
+  DRY_DUR_K:52,                      // v5.0 効果時間 = 注いだスタミナの割合 × これ(18%で9.4秒、42%で21.8秒)
+  DRY_PAINT_CD:0.10,                 // 焼き付けの間隔(秒)
+  DRY_CD:24, DRY_STAM_MIN:0.30, DRY_MAX:2600,   // 使う間隔 / これだけスタミナが無いと使わない / 一つの階層に残る焼けたタイルの上限
   DRY_WANT_WET:0.45,                 // 周りがこれだけ濡れていたら使う気になる
   DRY_SLIME_HP:0.85, DRY_SLIME_SPD:0.85,   // 乾いた床の上では、ヌルヌル系が弱る
   DRY_EVAP_R:560, DRY_EVAP_N:6, DRY_EVAP_RATE:1.75, DRY_EVAP_LIFE:15,   // 巣窟で焼いた時: 蒸発した媚薬が外まで広がる
-  DRY_EVAP_HEAT:26,                  // 蒸発の瞬間、その場の二人に乗る発情
+  DRY_EVAP_HEAT:26, DRY_EVAP_CD:14,  // 蒸発の瞬間、その場の二人に乗る発情 / v5.0 続けざまに噴かないための間隔(秒)
+  /* --- v5.0 媚薬沼(水溜まりのように点在) --- */
+  MIRE_N:[3,4,4,5,5,6,6,7],          // 階層ごとの数
+  MIRE_R0:44, MIRE_R1:96,            // 沼の半径の幅
+  MIRE_HEAT:7.5, MIRE_SENS:2.8, MIRE_SLOW:0.55,   // 浸かっている間(深さ1あたり毎秒) / 足の重さ
+  MIRE_TENT:3, MIRE_TENT_R:78, MIRE_TENT_CD:4.6,  // 生えている触手の数 / 届く距離 / 掴み直しの間隔
+  MIRE_FEAR:2,                       // 沼そのものの嫌い方(避けて通る)
+  /* 蒸発: 沼の広さと深さに比例して、ぶわーっと外まで広がる */
+  MIRE_EVAP_K:7.4,                   // 広がる半径 = 沼の半径 × 深さ × これ
+  MIRE_EVAP_N:10,                    // 噴き出す雲の数(広さで増える)
+  MIRE_EVAP_RATE:1.9, MIRE_EVAP_LIFE:17, MIRE_EVAP_HEAT:34,
   /* --- v4.0 巣窟の報酬とループの演出 --- */
   DEN_CHESTS:3, DEN_REDGEM:5, DEN_REDGEM_V:14,   // 常設の宝箱の数 / 赤ジェムの数と価値(黄4より強い)
   LOOP_WIN_T:5.6,          // 魔核が根になってから渦が立つまで(結果画面へ移るまでの秒数)
@@ -256,9 +280,11 @@ const BAL={
   HESIT_ESC:0.22, SCARED_T:40,
   /* v3.0 深淵のループ: 初期の開放階層 ERA_FLOORS0、世代ごとの深さ倍率(+K0/世代、階層が増えなくなった後はさらに +K/世代)。魔核は世代0で薄い(CORE_ERA_HP0 倍)、世代ごとに厚く */
   /* v3.0 パーティ: 二人の距離が PARTY_LEASH を超えると寄る力、PARTY_MAXDX/DY を超えると引き戻す(画面外に出ない)。救出は RESCUE_R 内に RESCUE_T 秒。相談の間 TALK_T 秒は足を止める */
-  PARTY_LEASH:380, PARTY_MAXDX:740, PARTY_MAXDY:360, PARTY_SEP:34, RESCUE_R:60, RESCUE_T:3.0, TALK_T:1.3, ASSIST_R:120, HEART_YIELD:0.15, PARTY_HOLD:7, PARTY_TALK_CD:10,
+  PARTY_LEASH:620, PARTY_MAXDX:740, PARTY_MAXDY:360, PARTY_SEP:96, PARTY_SEP_K:0.85, RESCUE_R:60, RESCUE_T:3.0, TALK_T:1.3, ASSIST_R:120, HEART_YIELD:0.15, PARTY_HOLD:7, PARTY_TALK_CD:10,   // v5.0 くっつきすぎない: 寄る力は 620px から / 96px より近いと離れる
   /* v3.1 相談は近寄ってから: 決め直しの時、皆が重心から GATHER_R 以内に居なければ、脅威が薄い限り GATHER_T 秒を上限に歩み寄ってから話す。GATHER_DANGER_R 内に魔物が居れば集合は飛ばして即決。集合の間隔 GATHER_CD */
-  GATHER_R:48, GATHER_T:3.2, GATHER_DANGER_R:150, GATHER_DANGER_THREAT:0.5, GATHER_CD:8, GATHER_TALK_T:2.6,
+  /* v5.0 別々に行動: 互いが見えている(壁を挟まない)うちは、案が割れたら譲らず自分の目当てへ向かう */
+  SPLIT_MIN:0.55, SPLIT_SEP:260, SPLIT_R:560, SPLIT_T:14, SPLIT_THREAT:0.75, SPLIT_HP:0.55,
+  GATHER_R:84, GATHER_T:3.2, GATHER_DANGER_R:150, GATHER_DANGER_THREAT:0.5, GATHER_CD:8, GATHER_TALK_T:2.6,
   ERA_FLOORS0:2, ERA_DEPTH_K0:0.05, ERA_DEPTH_K:0.10, CORE_ERA_HP0:0.30, CORE_ERA_HP_K:0.22, CORE_ERA_DEF0:0.75, CORE_ERA_DEF_K:0.05, CORE_ERA0_LV_K:0.5, CORE_ERA0_LV_CAP:0.5, SENT_ERA:[2,3,3,4,4,5,6],   // v3.1 世代0の魔核はさらに薄く(HP×0.30・被ダメ0.75・Lv補正は半分で上限+50%): 一人のルミナが討てる。魔物の深さ倍率は毎世代+10%(討たれるごとに魔物も強く)
   /* v2.4 視界の記憶: SEEN_T 秒ごとに半径 SEEN_R×SEEN_RY の楕円を「見た」にする。探索点は未探索率×EXPLORE_UNSEEN_W − 距離×EXPLORE_DIST_W で選ぶ(SEEN_EXPLORE=0 で旧挙動)。BOSS_PICK=1 でボスを想定した武器選び */
   SEEN_T:0.25, SEEN_R:560, SEEN_RY:400, SEEN_EXPLORE:1, EXPLORE_UNSEEN_W:2.5, EXPLORE_DIST_W:0.4, EXPLORE_DONE:0.96, BOSS_PICK:1, BOSS_MEMORY_T:60,
@@ -515,6 +541,13 @@ const MONSTERS={
     desc:'人の背丈ほどの、柔らかい茸。動かない。近づくと柄がゆっくりしなって、傘が上からかぶさってくる。傘の裏の襞は温かく湿っていて、閉じ込めたものを撫でつづける。押し返せば抜けられるが、その間ずっと撫でられている。',
     trait:'動かない。近づくと傘をかぶせて閉じ込め、襞で撫でながら胞子を溜める',
   },
+  /* ---- v5.0 媚薬沼の触手(カードではない。沼の縁に生えている) ---- */
+  miretent:{
+    name:'沼の触手', role:'地形・繋留', cost:0, unlock:-1, tier:'fodder', guardian:true,
+    hp:1, spd:0, r:10, dmg:0, xp:0,
+    desc:'媚薬の溜まりの縁に生えた、細くて長い触手。沼から離れられないので、届く範囲まで来た足首にだけ巻きつく。締めも噛みもせず、ただ沼の方へ引く。',
+    trait:'沼の縁から伸びて脚に繋留。引かれた先には沼がある',
+  },
   /* ---- v4.0 魔核の専用ミニオン(カードではない。魔核が産む) ---- */
   coreling:{
     name:'核の落とし子', role:'魔核の眷属・吸い上げ', cost:0, unlock:-1, tier:'fodder', guardian:true,
@@ -590,15 +623,15 @@ const POI_DEF={
    一日=一階層。降り口に着けば次の階層へ(その日は終わり)。捕まれば同じ階層に再挑戦、二連敗で入口へ戻る(世代が変わり経験を失う。手記だけ残る)。
    最終階層は魔核を倒せば目的達成。深いほど夜側のENが多く、魔物も硬い(mon)。affinity=その階層で HP×1.2 になる種 */
 const FLOORS=[
-  { id:'f1', name:'入口の洞',   sub:'苔と水の浅い洞。まだ光が届く',          depth:1, dark:0.34, zoneW:{moss:5,damp:3,water:1,ruin:1,flower:1}, wall:'rock',  en:{start:1.0,base:1.0,regen:1.0,max:1.0},     mon:{hp:1.0,dmg:1.0},   affinity:['slug','worm','goblin','hand','lurecap'], col:'#8fd3ff', lewd:{name:'蜜の窪地', sub:'甘い蜜が溜まる窪み。床がぬめり、手が伸びる。奥に王の宝箱', guard:'slugqueen', beam:'climax', guardSub:'蜜に浸かった女王が、窪みの底で待っている'} },
-  { id:'f2', name:'水鏡の洞',   sub:'浅瀬と湿った洞。足を取られる',          depth:2, dark:0.44, zoneW:{damp:4,water:4,moss:2,hotspring:1},        wall:'rock',  en:{start:1.1,base:1.15,regen:1.15,max:1.15}, mon:{hp:1.15,dmg:1.05}, affinity:['slime','mistslime','leech','slimeking','worm','suiyou'], col:'#7fe0ff', lewd:{name:'湯けむりの隠れ湯', sub:'湯気の濃い隠れ湯。火照りが止まらない。奥に王の宝箱', guard:'suiyou', beam:'hypno', guardSub:'湯の中から、白い腕がいくつも伸びている'} },
-  { id:'f3', name:'蜜の花園',   sub:'花と温泉。甘い匂いが濃い',              depth:3, dark:0.5, zoneW:{flower:5,moss:2,hotspring:2,damp:1},        wall:'rock',  en:{start:1.2,base:1.3,regen:1.3,max:1.3},     mon:{hp:1.3,dmg:1.1},   affinity:['flower','moth','gas','imp','succubus','dreamtree','inyoku','lurecap','hugcap'], col:'#ffb3cf', lewd:{name:'花の褥', sub:'花びらが敷き詰められた褥。花粉が濃い。奥に王の宝箱', guard:'succubus', beam:'climax', guardSub:'花に埋もれて、寸止めの淫魔が眠っている'} },
-  { id:'f4', name:'沈んだ回廊', sub:'石畳の遺跡。封印石を灯さねば降り口は開かない', depth:4, dark:0.6, zoneW:{ruin:6,damp:2,water:1,moss:1},          wall:'brick', en:{start:1.3,base:1.5,regen:1.5,max:1.5},     mon:{hp:1.5,dmg:1.15},  affinity:['gazer','beamer','eye','runemage','tower','bossgazer','guardian'], puzzle:'seals', col:'#cbd5ff', lewd:{name:'淫紋の間', sub:'床いちめんに紋が刻まれた間。踏むほど身体が疼く。奥に王の宝箱', guard:'guardian', beam:'hypno', guardSub:'紋の中心に、遺跡の番人が据わっている'} },
-  { id:'f5', name:'肉の巣',     sub:'壁も床も脈打つ。深淵の心臓に近い',    depth:5, dark:0.68, zoneW:{flesh:5,nest:3,flower:1,damp:1},           wall:'flesh', en:{start:1.5,base:1.75,regen:1.75,max:1.75}, mon:{hp:1.75,dmg:1.25}, affinity:['gtent','hand','pot','worm','slugqueen','succuqueen','gobking','vampi','mouth','hugcap'], col:'#ff6b81', lewd:{name:'肉の褥', sub:'脈打つ肉の褥。横になれば、もう起きられない。奥に王の宝箱', guard:'gtent', beam:'climax', guardSub:'褥の奥から、太い触手が幾本も生えている'} },
+  { id:'f1', name:'入口の洞',   sub:'苔と水の浅い洞。まだ光が届く',          depth:1, dark:0.46, zoneW:{moss:5,damp:3,water:1,ruin:1,flower:1}, wall:'rock',  en:{start:1.0,base:1.0,regen:1.0,max:1.0},     mon:{hp:1.0,dmg:1.0},   affinity:['slug','worm','goblin','hand','lurecap'], col:'#8fd3ff', lewd:{name:'蜜の窪地', sub:'甘い蜜が溜まる窪み。床がぬめり、手が伸びる。奥に王の宝箱', guard:'slugqueen', beam:'climax', guardSub:'蜜に浸かった女王が、窪みの底で待っている'} },
+  { id:'f2', name:'水鏡の洞',   sub:'浅瀬と湿った洞。足を取られる',          depth:2, dark:0.55, zoneW:{damp:4,water:4,moss:2,hotspring:1},        wall:'rock',  en:{start:1.1,base:1.15,regen:1.15,max:1.15}, mon:{hp:1.15,dmg:1.05}, affinity:['slime','mistslime','leech','slimeking','worm','suiyou'], col:'#7fe0ff', lewd:{name:'湯けむりの隠れ湯', sub:'湯気の濃い隠れ湯。火照りが止まらない。奥に王の宝箱', guard:'suiyou', beam:'hypno', guardSub:'湯の中から、白い腕がいくつも伸びている'} },
+  { id:'f3', name:'蜜の花園',   sub:'花と温泉。甘い匂いが濃い',              depth:3, dark:0.62, zoneW:{flower:5,moss:2,hotspring:2,damp:1},        wall:'rock',  en:{start:1.2,base:1.3,regen:1.3,max:1.3},     mon:{hp:1.3,dmg:1.1},   affinity:['flower','moth','gas','imp','succubus','dreamtree','inyoku','lurecap','hugcap'], col:'#ffb3cf', lewd:{name:'花の褥', sub:'花びらが敷き詰められた褥。花粉が濃い。奥に王の宝箱', guard:'succubus', beam:'climax', guardSub:'花に埋もれて、寸止めの淫魔が眠っている'} },
+  { id:'f4', name:'沈んだ回廊', sub:'石畳の遺跡。封印石を灯さねば降り口は開かない', depth:4, dark:0.70, zoneW:{ruin:6,damp:2,water:1,moss:1},          wall:'brick', en:{start:1.3,base:1.5,regen:1.5,max:1.5},     mon:{hp:1.5,dmg:1.15},  affinity:['gazer','beamer','eye','runemage','tower','bossgazer','guardian'], puzzle:'seals', col:'#cbd5ff', lewd:{name:'淫紋の間', sub:'床いちめんに紋が刻まれた間。踏むほど身体が疼く。奥に王の宝箱', guard:'guardian', beam:'hypno', guardSub:'紋の中心に、遺跡の番人が据わっている'} },
+  { id:'f5', name:'肉の巣',     sub:'壁も床も脈打つ。深淵の心臓に近い',    depth:5, dark:0.76, zoneW:{flesh:5,nest:3,flower:1,damp:1},           wall:'flesh', en:{start:1.5,base:1.75,regen:1.75,max:1.75}, mon:{hp:1.75,dmg:1.25}, affinity:['gtent','hand','pot','worm','slugqueen','succuqueen','gobking','vampi','mouth','hugcap'], col:'#ff6b81', lewd:{name:'肉の褥', sub:'脈打つ肉の褥。横になれば、もう起きられない。奥に王の宝箱', guard:'gtent', beam:'climax', guardSub:'褥の奥から、太い触手が幾本も生えている'} },
   /* v3.0 追加の階層(世代=魔核の討伐回数で開く) */
-  { id:'f6', name:'骸の回廊',   sub:'骨を積んだ煉瓦の回廊。番人が多い',      depth:6, dark:0.76, zoneW:{ruin:5,flesh:2,damp:2,nest:1},           wall:'brick', en:{start:1.6,base:2.0,regen:2.0,max:2.0},     mon:{hp:2.0,dmg:1.35},  affinity:['guardian','sentinel','gazer','beamer','ghost','ghosthand','eye','runemage'], col:'#d9d2ff', lewd:{name:'骸の寝台', sub:'骨で組んだ寝台。横たえられた者の形に凹んでいる。奥に王の宝箱', guard:'guardian', beam:'hypno', guardSub:'寝台の主が、骨の椅子から立ち上がる'} },
-  { id:'f7', name:'星の湖底',   sub:'星明かりの湖。浅瀬と水妖',              depth:7, dark:0.82, zoneW:{water:5,damp:3,moss:1,hotspring:1},         wall:'rock',  en:{start:1.7,base:2.3,regen:2.3,max:2.3},     mon:{hp:2.3,dmg:1.45},  affinity:['suiyou','slime','mistslime','leech','slimeking','inyoku','moth','succubus'], col:'#9fd8ff', lewd:{name:'星の浅瀬', sub:'星が映る浅瀬。水が腕の形になって待っている。奥に王の宝箱', guard:'suiyou', beam:'hypno', guardSub:'星を映す水が、腕の形に立ち上がる'} },
-  { id:'f8', name:'深淵の底',   sub:'肉と紋。もっとも深い所',                depth:8, dark:0.88, zoneW:{flesh:5,nest:2,ruin:2,flower:1},           wall:'flesh', en:{start:1.9,base:2.6,regen:2.6,max:2.6},     mon:{hp:2.6,dmg:1.55},  affinity:['gtent','hand','pot','mouth','succuqueen','gobking','vampi','core','runemage'], col:'#ff5d9a', lewd:{name:'底の褥', sub:'紋の刻まれた肉の褥。深淵の底で、二人ぶんの窪みが待つ。奥に王の宝箱', guard:'mouth', beam:'climax', guardSub:'底の肉が裂けて、大きな口がひらく'} },
+  { id:'f6', name:'骸の回廊',   sub:'骨を積んだ煉瓦の回廊。番人が多い',      depth:6, dark:0.82, zoneW:{ruin:5,flesh:2,damp:2,nest:1},           wall:'brick', en:{start:1.6,base:2.0,regen:2.0,max:2.0},     mon:{hp:2.0,dmg:1.35},  affinity:['guardian','sentinel','gazer','beamer','ghost','ghosthand','eye','runemage'], col:'#d9d2ff', lewd:{name:'骸の寝台', sub:'骨で組んだ寝台。横たえられた者の形に凹んでいる。奥に王の宝箱', guard:'guardian', beam:'hypno', guardSub:'寝台の主が、骨の椅子から立ち上がる'} },
+  { id:'f7', name:'星の湖底',   sub:'星明かりの湖。浅瀬と水妖',              depth:7, dark:0.86, zoneW:{water:5,damp:3,moss:1,hotspring:1},         wall:'rock',  en:{start:1.7,base:2.3,regen:2.3,max:2.3},     mon:{hp:2.3,dmg:1.45},  affinity:['suiyou','slime','mistslime','leech','slimeking','inyoku','moth','succubus'], col:'#9fd8ff', lewd:{name:'星の浅瀬', sub:'星が映る浅瀬。水が腕の形になって待っている。奥に王の宝箱', guard:'suiyou', beam:'hypno', guardSub:'星を映す水が、腕の形に立ち上がる'} },
+  { id:'f8', name:'深淵の底',   sub:'肉と紋。もっとも深い所',                depth:8, dark:0.90, zoneW:{flesh:5,nest:2,ruin:2,flower:1},           wall:'flesh', en:{start:1.9,base:2.6,regen:2.6,max:2.6},     mon:{hp:2.6,dmg:1.55},  affinity:['gtent','hand','pot','mouth','succuqueen','gobking','vampi','core','runemage'], col:'#ff5d9a', lewd:{name:'底の褥', sub:'紋の刻まれた肉の褥。深淵の底で、二人ぶんの窪みが待つ。奥に王の宝箱', guard:'mouth', beam:'climax', guardSub:'底の肉が裂けて、大きな口がひらく'} },
 ];
 /* v3.0 深淵のループ: era=魔核を討たれた回数。開いている階層 = ERA_FLOORS0 + era(上限 FLOORS.length)。最深の開いた階層が最終階層(魔核)。
    era が階層数の上限を超えても深さ倍率(eraMul)は伸び続ける */

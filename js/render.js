@@ -13,6 +13,7 @@ const EN_COLORS={
   sentinel:['#9aa3c8','#5a6284'],
   coreling:['#ffc2d8','#a03a62'],   // v4.0 核の落とし子
   lurecap:['#9fe8c8','#c85682'], hugcap:['#f0e0bc','#b89468'],   // v4.1 きのこ
+  miretent:['#e08ac0','#8a3a62'],   // v5.0 沼の触手
   tower:['#c98cff','#5a3a7a'],
   spore:['#c9ecff','#7fb8e0'], ghosthand:['#dfe4ff','#aab4e8'], eye:['#f0e8ff','#7a3ff2'],
   succubus:['#ff86b3','#5a1f3a'], web:['#ffb3cf','#fff'],
@@ -172,28 +173,21 @@ function drawCoreRoots(g,cr){
   }
   g.restore();
 }
-/* v4.0 フレイラが焼いた床: 乾いてひび割れ、うっすら焦げた輪。日を跨いでも残る */
-function drawDry(g,d){
-  const t=(G.B?G.B.time:0), r=d.r;
-  if(Math.abs(d.x-G.cam.x)>W/2+r || Math.abs(d.y-G.cam.y)>H/2+r) return;
-  g.save(); g.translate(d.x,d.y);
-  const gr=g.createRadialGradient(0,0,r*0.15,0,0,r);
-  gr.addColorStop(0,'rgba(120,72,40,0.34)'); gr.addColorStop(0.62,'rgba(96,58,34,0.20)'); gr.addColorStop(1,'rgba(80,48,28,0)');
-  g.fillStyle=gr; g.beginPath(); g.ellipse(0,0,r,r*0.78,0,0,TAU); g.fill();
-  // ひび割れ(位置は円の中心から決まるので毎フレーム同じ)
-  const n=9, sd=(d.x*0.013+d.y*0.017);
-  g.strokeStyle='rgba(58,34,20,0.42)'; g.lineWidth=1.6;
-  for(let i=0;i<n;i++){ const a=i*TAU/n+Math.sin(sd+i)*0.5, L=r*(0.35+0.5*Math.abs(Math.sin(sd*3+i*2.1)));
-    g.beginPath(); g.moveTo(Math.cos(a)*r*0.12,Math.sin(a)*r*0.09);
-    g.lineTo(Math.cos(a+0.18)*L*0.6,Math.sin(a+0.18)*L*0.45);
-    g.lineTo(Math.cos(a-0.1)*L,Math.sin(a-0.1)*L*0.78); g.stroke(); }
-  // 焼いた直後は、まだ熾がちらつく
-  if(d.t!==undefined && t-d.t<8){ const k=1-(t-d.t)/8;
-    g.globalAlpha=k*0.45; g.strokeStyle='#ff8a44'; g.lineWidth=2;
-    g.beginPath(); g.ellipse(0,0,r*0.95,r*0.74,0,0,TAU); g.stroke();
-    g.globalAlpha=1;
-    for(let i=0;i<4;i++){ const a=t*0.7+i*1.6, rr=r*(0.3+0.5*((t*0.2+i*0.25)%1));
-      g.fillStyle='rgba(255,150,70,'+(k*0.5).toFixed(2)+')'; g.beginPath(); g.arc(Math.cos(a)*rr,Math.sin(a)*rr*0.78,1.8,0,TAU); g.fill(); } }
+/* v5.0 フレイラの炎のエリア: 身にまとった熱の輪。歩いた跡の床は、地形チップごと焦げて残る */
+function drawDryAura(g,A){
+  const B=G.B, p=B.heroes[A.hi]; if(!p||p.out) return;
+  const t=B.time, k=Math.max(0,1-A.t/A.dur);
+  g.save(); g.translate(p.x,p.y);
+  const gr=g.createRadialGradient(0,0,A.r*0.15,0,0,A.r);
+  gr.addColorStop(0,'rgba(255,140,60,'+(0.16*k).toFixed(3)+')');
+  gr.addColorStop(0.6,'rgba(255,110,40,'+(0.10*k).toFixed(3)+')');
+  gr.addColorStop(1,'rgba(255,90,30,0)');
+  g.fillStyle=gr; g.beginPath(); g.ellipse(0,0,A.r,A.r*0.8,0,0,TAU); g.fill();
+  g.strokeStyle='rgba(255,150,70,'+(0.35*k+0.15*Math.abs(Math.sin(t*4))).toFixed(3)+')'; g.lineWidth=2.6;
+  g.beginPath(); g.ellipse(0,0,A.r*(0.97+0.03*Math.sin(t*3)),A.r*0.8*(0.97+0.03*Math.sin(t*3)),0,0,TAU); g.stroke();
+  for(let i=0;i<7;i++){ const a=t*1.2+i*TAU/7, rr=A.r*(0.75+0.2*Math.sin(t*2+i));
+    g.fillStyle='rgba(255,'+(150+((i*17)%60))+',70,'+(0.35*k).toFixed(2)+')';
+    g.beginPath(); g.arc(Math.cos(a)*rr,Math.sin(a)*rr*0.8,2.2+1.6*Math.abs(Math.sin(t*3+i)),0,TAU); g.fill(); }
   g.restore();
 }
 function drawStain(g,st){
@@ -347,6 +341,14 @@ function drawFx(g,f){
     g.beginPath(); g.ellipse(f.x,f.y-40*(1-pr),f.r*(0.6+0.5*pr),f.r*(0.4+0.3*pr),0,0,TAU); g.fill();
     g.globalAlpha=a*0.8; g.strokeStyle='#b89468'; g.lineWidth=3;
     g.beginPath(); g.ellipse(f.x,f.y,f.r*(0.4+0.7*pr),f.r*(0.3+0.5*pr),0,0,TAU); g.stroke();
+  }else if(f.kind==='mireburst'){   // v5.0 沼が干上がる: 水面がめくれて一気に立ちのぼる
+    const a=1-pr;
+    g.globalAlpha=a*0.75; g.fillStyle='#ff9ec2';
+    g.beginPath(); g.ellipse(f.x,f.y,f.r*(1-pr*0.7),f.r*0.78*(1-pr*0.7),0,0,TAU); g.fill();
+    g.globalAlpha=a*0.5; g.strokeStyle='#fff'; g.lineWidth=3;
+    for(let i=0;i<8;i++){ const th=i*TAU/8; g.beginPath();
+      g.moveTo(f.x+Math.cos(th)*f.r*0.6, f.y+Math.sin(th)*f.r*0.45);
+      g.lineTo(f.x+Math.cos(th)*f.r*(0.9+1.6*pr), f.y+Math.sin(th)*f.r*(0.7+1.2*pr)-40*pr); g.stroke(); }
   }else if(f.kind==='dryburst'){   // v4.0 フレイラが床を焼いた: 熱の輪が外へ抜ける
     const a=1-pr;
     g.globalAlpha=a*0.7; g.strokeStyle='#ffb060'; g.lineWidth=7*(1-pr*0.6); g.shadowColor='#ff7a3a'; g.shadowBlur=18;
@@ -1054,6 +1056,7 @@ function drawEnemy(g,e){
 /* 種族ごとの本体描画(drawEnemy から分離。描き込みモードではオフスクリーンで陰影を重ねる) */
 function drawBody(g,e){
   if(e.id==='core') drawCore(g,e);
+  else if(e.id==='miretent') drawMiretentBody(g,e);
   else if(e.id==='lurecap') drawLurecap(g,e);
   else if(e.id==='hugcap') drawHugcap(g,e);
   else if(e.id==='coreling') drawCoreling(g,e);
@@ -2535,6 +2538,56 @@ function drawSentinel(g,e){
   g.restore();
 }
 /* v2.0 魔核: 最深部の心臓。濡れた肉の塊、太い根、縦に裂けた目。脈動(pulseT)で膨らみ、鞭(whipT)で根が彼女へ伸びる */
+/* v5.0 媚薬沼: 桃色に濁った甘い水溜まり。縁からえっちな触手が生えていて、近づくと伸びてくる */
+function drawMireTent(g,m,tn,t){
+  const bx=Math.cos(tn.a)*m.r*0.82, by=Math.sin(tn.a)*m.r*0.6;
+  const wav=Math.sin(t*2.2+tn.ph), L=m.r*(0.55+0.30*wav)+BAL.MIRE_TENT_R*tn.reach*0.55;
+  const ex=bx+Math.cos(tn.a)*L, ey=by+Math.sin(tn.a)*L*0.8-8;
+  g.strokeStyle='rgba(196,74,132,0.92)'; g.lineWidth=5.2; g.lineCap='round';
+  g.beginPath(); g.moveTo(bx,by);
+  g.quadraticCurveTo(bx+Math.cos(tn.a+0.7)*L*0.6, by+Math.sin(tn.a+0.7)*L*0.4-6, ex, ey); g.stroke();
+  g.strokeStyle='rgba(255,170,210,0.55)'; g.lineWidth=1.6;
+  g.beginPath(); g.moveTo(bx,by);
+  g.quadraticCurveTo(bx+Math.cos(tn.a+0.7)*L*0.6, by+Math.sin(tn.a+0.7)*L*0.4-6, ex, ey); g.stroke();
+  g.fillStyle=tn.reach>0.2?'#ffd0e4':'#e08ac0';
+  g.beginPath(); g.ellipse(ex,ey,3.4,2.6,tn.a,0,TAU); g.fill();
+  for(let k=1;k<=3;k++){ const u=k/4, px=bx+(ex-bx)*u, py=by+(ey-by)*u;
+    g.fillStyle='rgba(255,190,225,0.5)'; g.beginPath(); g.arc(px+Math.cos(tn.a+1.6)*2.2,py+Math.sin(tn.a+1.6)*1.8,1.3,0,TAU); g.fill(); }
+}
+/* v5.0 図鑑の絵姿: 沼から生えた一本の触手(沼の縁も少しだけ描く) */
+function drawMiretentBody(g,e){
+  const R=e.r||10, t=(G.B?G.B.time:0)*1.6+(e.ph||0);
+  g.fillStyle='rgba(120,32,74,0.55)'; g.beginPath(); g.ellipse(0,R*0.7,R*1.5,R*0.52,0,0,TAU); g.fill();
+  g.fillStyle='rgba(200,86,130,0.42)'; g.beginPath(); g.ellipse(0,R*0.7,R*1.1,R*0.36,0,0,TAU); g.fill();
+  const ex=Math.sin(t)*R*0.8, ey=-R*2.0;
+  g.strokeStyle='#c44a84'; g.lineWidth=R*0.48; g.lineCap='round';
+  g.beginPath(); g.moveTo(0,R*0.6); g.quadraticCurveTo(-R*0.7,-R*0.7,ex,ey); g.stroke();
+  g.strokeStyle='rgba(255,170,210,0.5)'; g.lineWidth=R*0.16;
+  g.beginPath(); g.moveTo(0,R*0.6); g.quadraticCurveTo(-R*0.7,-R*0.7,ex,ey); g.stroke();
+  g.fillStyle='#ffd0e4'; g.beginPath(); g.ellipse(ex,ey,R*0.34,R*0.26,0,0,TAU); g.fill();
+  for(let k=1;k<=3;k++){ const u=k/4, px=(-R*0.7)*2*u*(1-u)+ex*u*u, py=R*0.6*(1-u)*(1-u)+(-R*0.7)*2*u*(1-u)+ey*u*u;
+    g.fillStyle='rgba(255,190,225,0.55)'; g.beginPath(); g.arc(px+R*0.2,py,R*0.13,0,TAU); g.fill(); }
+}
+function drawMire(g,m){
+  const t=m.t;
+  if(Math.abs(m.x-G.cam.x)>W/2+m.r*2 || Math.abs(m.y-G.cam.y)>H/2+m.r*2) return;
+  g.save(); g.translate(m.x,m.y);
+  for(let i=0;i<m.tents.length;i++){ const tn=m.tents[i]; if(Math.sin(tn.a)>0) continue; drawMireTent(g,m,tn,t); }
+  const grad=g.createRadialGradient(0,0,m.r*0.1,0,0,m.r);
+  grad.addColorStop(0,'rgba(255,158,200,0.80)'); grad.addColorStop(0.55,'rgba(206,86,150,0.72)'); grad.addColorStop(1,'rgba(120,40,90,0.62)');
+  g.fillStyle=grad; g.beginPath(); g.ellipse(0,0,m.r,m.r*0.78,0,0,TAU); g.fill();
+  g.strokeStyle='rgba(90,28,66,0.6)'; g.lineWidth=2.4; g.beginPath(); g.ellipse(0,0,m.r,m.r*0.78,0,0,TAU); g.stroke();
+  g.fillStyle='rgba(255,220,240,0.30)';
+  g.beginPath(); g.ellipse(-m.r*0.28,-m.r*0.26,m.r*0.36,m.r*0.14,-0.4,0,TAU); g.fill();
+  for(let i=0;i<4;i++){ const ph=((t*0.35+i*0.27)%1), a=i*1.9+t*0.15;
+    g.fillStyle='rgba(255,200,230,'+((1-ph)*0.55).toFixed(2)+')';
+    g.beginPath(); g.arc(Math.cos(a)*m.r*0.5,Math.sin(a)*m.r*0.36-ph*4,1.6+ph*2.6,0,TAU); g.fill(); }
+  g.fillStyle='rgba(70,16,48,'+(0.16+0.30*m.depth).toFixed(2)+')';
+  g.beginPath(); g.ellipse(0,m.r*0.05,m.r*0.55,m.r*0.40,0,0,TAU); g.fill();
+  for(let i=0;i<m.tents.length;i++){ const tn=m.tents[i]; if(Math.sin(tn.a)<=0) continue; drawMireTent(g,m,tn,t); }
+  glow(g,0,0,m.r*1.5,'255,110,180',0.10+0.08*Math.sin(t*1.6));
+  g.restore();
+}
 /* v4.1 菌輪: 床に小さな茸が輪になって生えている。踏み込むと一斉にふくらんで、柔らかい壁になる */
 function drawRing(g,R){
   const t=(G.B?G.B.time:0);
@@ -2997,7 +3050,7 @@ function drawHUD(g){
   drawMinimap(g);
   g.fillText('enemies:'+B.enemies.length+' fps:'+Math.round(G.fps)+(TS>1?' x'+TS:''), 12, H-6);
   g.textAlign='right'; g.fillStyle='rgba(255,255,255,0.3)'; g.font='bold 10px '+FONT;
-  g.fillText('v4.1 深淵 — きのこ', W-12, H-6);
+  g.fillText('v5.0 深淵 — 沼と炎', W-12, H-6);
 }
 function drawCards(g){
   const B=G.B, c=B.lvCards; if(!c) return;
@@ -3298,8 +3351,9 @@ function draw(){
   if(inBattle){
     const B=G.B, p=B.hero;
     drawLight(g,p.x,p.y);
-    if(B.dry) for(const d of B.dry) drawDry(g,d);   // v4.0 フレイラが焼いた床(日を跨いで残る)
     if(B.rings) for(const R of B.rings) drawRing(g,R);   // v4.1 菌輪
+    if(B.mires) for(const m of B.mires) drawMire(g,m);   // v5.0 媚薬沼
+    if(B.dryAura) drawDryAura(g,B.dryAura);        // v5.0 フレイラの炎のエリア(焼けた床は地形チップに焼き込まれる)
     if(B.coreRoots) drawCoreRoots(g,B.coreRoots);  // v4.0 魔核の跡: 根 → 赤黒い渦
     for(const st of B.stains) drawStain(g,st);
     for(const tr of B.trails) drawTrail(g,tr);

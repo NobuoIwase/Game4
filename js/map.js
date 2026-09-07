@@ -741,6 +741,17 @@ function renderChunk(ci,cj){
     if(s===SOLID_ROCK) g.drawImage(TILE_ATLAS,v*T,wallRow*T,T,T,x,y,T,T);
     else if(s===SOLID_CLIFF) g.drawImage(TILE_ATLAS,v*T,CLIFF_ROW*T,T,T,x,y,T,T);
     else g.drawImage(TILE_ATLAS,v*T,z*T,T,T,x,y,T,T);
+    if(s===0 && G.map.dryT && G.map.dryT[j*MAP_W+i]){   // v5.0 フレイラが焼いた床: チップそのものが焦げる
+      g.fillStyle='rgba(58,32,16,0.52)'; g.fillRect(x,y,T,T);
+      g.fillStyle='rgba(120,72,36,0.26)'; g.fillRect(x,y,T,T);
+      const hv=hash2(i*7+3,j*5+11);
+      g.strokeStyle='rgba(30,16,8,0.5)'; g.lineWidth=1;
+      for(let c=0;c<2;c++){ const a=(hv*6.28+c*2.1), sx=x+T*0.5+Math.cos(a)*T*0.34, sy=y+T*0.5+Math.sin(a)*T*0.34;
+        g.beginPath(); g.moveTo(x+T*0.5,y+T*0.5); g.lineTo(sx,sy); g.stroke(); }
+      g.fillStyle='rgba(210,150,80,0.20)';
+      for(let c=0;c<2;c++){ const hx=x+((hv*1000+c*37)%T), hy=y+((hv*1700+c*53)%T); g.fillRect(hx,hy,2,2); }
+      // 焼けた縁のちらつきは描かない(静止画として焼くため)
+    }
     if(s===0){
       const zn=ZONE_IDS[z];
       // 地形の境目: 浜(浅瀬)・肉の縁(巣)・泥(湿地)・石の縁(温泉/石畳)
@@ -914,6 +925,7 @@ function drawMinimap(g){
   for(const q of G.map.pois){ if(!M.known[q.key]) continue; g.fillStyle=q.kind==='shrine'?(M.visited[q.key]?'#9a9ab0':'#ffd76a'):(q.kind==='spring'?'#8fd3ff':(q.kind==='pool'?'#7fe0ff':(q.kind==='stele'?'#cbd5ff':(q.kind==='stairs'?'#ffffff':(q.kind==='lantern'?'#ff9ed2':(q.kind==='seal'?((B.seals&&B.seals[q.key])?'#ffe9b0':'#c98cff'):'#ff6b81')))))); g.fillRect(tx(q.x)-2,ty(q.y)-2,4,4); }
   for(const c of B.chests){ g.fillStyle='#ffe9b0'; g.fillRect(tx(c.x)-1,ty(c.y)-1,3,3); }
   for(const e of B.enemies){ if(e.boss&&!e.dead){ g.fillStyle='#ff5d7a'; g.fillRect(tx(e.x)-2,ty(e.y)-2,4,4); } }
+  if(B.mires) for(const m of B.mires){ if(m.dry) continue; g.fillStyle='rgba(200,90,150,0.85)'; g.fillRect(tx(m.x)-1,ty(m.y)-1,2,2); }   // v5.0 媚薬沼
   for(const pk of B.picks){ if(pk.dead||!pk.known) continue; g.fillStyle=pk.kind==='shroom'?'#9fe8c8':(pk.kind==='family'?'#ffe1a8':(pk.kind==='nectar'?'#ffb3cf':'#ffd76a')); g.fillRect(tx(pk.x)-1,ty(pk.y)-1,2,2); }   // v1.8 知っている資源
   if(p.goal){ const gl=p.goal; g.strokeStyle='rgba(255,233,176,0.55)'; g.lineWidth=1; g.setLineDash([2,2]); g.beginPath(); g.moveTo(tx(p.x),ty(p.y)); g.lineTo(tx(gl.x),ty(gl.y)); g.stroke(); g.setLineDash([]);
     g.strokeStyle='#ffe9b0'; g.beginPath(); g.arc(tx(gl.x),ty(gl.y),3.5+Math.sin(performance.now()*0.006),0,TAU); g.stroke(); }   // v1.8 目当て

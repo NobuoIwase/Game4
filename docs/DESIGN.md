@@ -25,6 +25,11 @@
                      ├ 与ダメ90ごと/異常付与ごと → オーブ片
                      └ HP0 → 捕獲(オーブ大) / 5:00生存 → 彼女の勝ち(エッセンスボーナス)
 世代: 4戦で経験リセット(世代内は装備・HP・護りを継承して強くなる)
+
+v5.0 巻き戻りには向きがある:
+  魔核を討つ    → 魔核が時を戻す  → 深淵+1層・心臓が厚く技を一つ覚える / 彼女たちはこの世代の知識を失う
+  二晩つづけて負け → 彼女たちが戻る → 魔核は何も知らない(強くならない) / 知識は残り、仲間が来る
+  どちらでも世界(焼いた床・湿り)は初日に戻る。残るのは手記と、彼女たちの中身だけ
 ```
 
 飼い慣らしのジレンマ: 魔物を撒くほど経済は回るが、彼女に経験値を与えて育ててしまう。
@@ -314,6 +319,35 @@ idは汎用カタログ準拠。効果はすべて数値・挙動レベルで表
 - 出し方: 初回出撃=序章+第1層導入(`META.run.storySeen.prologue`)。階層の導入は潜行中1度(`storySeen['f'+depth]`、`runReset` で消える)。敗北の翌朝(`run.fails>0`)は再挑戦の変奏(`§` 区切りから1つ)。
   `storyTick`: 落ち着いている時(拘束・発情・魔物30体超でない)に 38〜58 秒ごと、その階層の独り言を吹き出しで。降り口で `descend`、魔核の間を見つけた時に `finalEncounter`(1戦1度)。結果画面: clear=`ending`、reset=`reset`。
 - 表示: `#storybox`(盤面の上、タップか時間で閉じる)。ホームの「物語」画面は序章と到達済みの階層の導入、魔核討伐後は結末を載せる。
+
+### 3-37. v5.0 (H) 巻き戻りの向き — 誰が時を戻したかで、残るものが違う
+
+- **二つの巻き戻り**。`endBattle` の分岐はそのままだが、`runReset(wipeKnow)` に引数が付いた。
+  - `outcome==='clear'`(魔核を討った) → `META.era+1` して `runReset(true)`。**魔核が時を巻き戻す**ので、`META.gen.know / zoneKnow / trapKnow / dryLesson` は書き換えられる。手記(`META.codex`)と祭壇の永続強化だけが残る。
+  - `outcome==='capture'` が `RUN_FAILS_RESET`(2)回続いた → `runReset(false)`。**彼女たちの側が巻き戻る**ので、era は動かず、覚えたことはそのまま残る。仲間が来るのもこちら(`partyJoinCheck('reset')`)。
+- **世界は両方とも巻き戻る**。`dryClearAll()` はどちらでも走り、焼いた床も湿りも初日に戻る。残る/消えるの線は「世界の状態」と「彼女たちの中身」の間に引いた。
+- **深淵が硬くなるのは組み替わりの分だけ**。魔核の体力と番兵の体力に掛かっていた `(META.gen.idx-1)` 係数を外し、`eraNow()`(＝討たれた回数)に寄せた。**捕まって巻き戻っただけでは魔核は太らない**(「魔核は何も知らない」)。ヒロイン側の世代成長 `gsc`(`GEN_SCALE` 5%/世代・10世代打ち止め)は `gen.idx` のままなので、負けが込むほど相対的に楽になる——それが狙い。
+- **矛盾の処理**。仲間が居る状態で魔核が巻き戻すと「仲間が居るのに知識だけ消える」ことになる。これは**時間の巻き戻しではなく現実の書き換え**として扱う——書き換えられた側は書き換えられたことに気づけないので、二人は「はじめから、強い相手に二人で挑むつもりだった」ところから始まる(`STORY_V30.era.loopIntro`)。外に残るのは祠の石段の丸(討った数)だけ。
+- **文章**: `STORY.reset` / `STORY_V30.reset` は「覚えている側の朝」に書き直し、`STORY_V30.era.loopIntro` に現実改変の段を足し、`party.join` に「二晩ぶん覚えている」というフレイラが来る理由を足した。結果画面の帯(`js/ui.js`)も二方向で文言を分けた。
+
+### 3-36. v5.0 (B) 炎のエリアと媚薬沼
+
+- **炎のエリア** (`freilaDry` / `dryAuraTick`): 円を一発置く方式をやめ、**身にまとって歩く**方式に。注ぐスタミナは `min(DRY_STAM 42%, 残量 − DRY_STAM_RES 12%)`、効果時間 `dur = DRY_DUR_K(52) × 注いだ割合`(42%で21.8秒、発動下限 `DRY_STAM_MIN` 30% なら 9.4秒)。`B.dryAura={hi,t,dur,r:DRY_AURA_R(210),paint,tiles,evap}` を持ち、`DRY_PAINT_CD`(0.1秒)ごとに `dryPaint` で足元のタイルを焼き付け、灯りも落とす。
+- **タイル化した乾き**: `META.dry[gen+floor]` はタイル index の配列(上限 `DRY_MAX` 2600)。`dryInit()` が `M.dryT`(`Uint8Array(MAP_W*MAP_H)`)に展開し、`dryAt(x,y)` は O(1)。`wetAt` は `max(zoneWet, 沼なら0.9) × (1−dryAt)`。`dryPaint` は触ったチャンクのキャッシュを捨てて再描画させる。
+- **焼けたマップチップ** (`renderChunk`): 乾いたタイルは床チップの上に炭色(0.52)+ 焦げ茶(0.26)を敷き、`hash2` から出したひび2本と熾火2点を置く。ミニマップにも出る。
+- **媚薬沼** (`spawnMires`/`mireAt`/`miresTick`): 階層ごとに `MIRE_N`(3〜7)個、開始地点から360px以上・沼どうし260px以上離して置く。半径 `MIRE_R0..R1`(44〜96)、深さは半径から 0.45〜1.0。浸かると発情 `MIRE_HEAT`(7.5)/秒・敏感 `MIRE_SENS`(2.8)/秒(深さ比例)、`slow` を `MIRE_SLOW`(0.55)秒ぶん張り直す。縁の触手(1〜`MIRE_TENT` 3本)は `MIRE_TENT_R`(78)以内で `MIRE_TENT_CD`(4.6秒)ごとに `attachMonster` の `tether`。**目当ての採点**では沼の中の物を 0.55倍(深さ0.75超なら0.30倍)に割り引く。
+- **沼の触手は実在の種** (`MONSTERS.miretent`): 合成オブジェクトを渡すと `detachLimb` の `MONSTERS[mon.id].spd` と `codexMet` が壊れるので、`guardian:true`(カード化しない)の種として登録し、据わった個体の一覧にも入れた。図鑑(`codex_v20.js` / `codex_freila.js`)と絵(`drawMiretentBody`)付き。
+- **沼の蒸発** (`mireEvaporate`): 炎のエリアが触れると `m.dry=true`、噴き出す半径 `R = r × depth × MIRE_EVAP_K(7.4)`、雲は `MIRE_EVAP_N(10) × depth` 個を R の 0.3〜1.0 に撒き、中央にも一つ。濃さ `SENSIT_GAS × MIRE_EVAP_RATE(1.9) × depth`、寿命 17秒。**広さと深さで、広がる量も影響も変わる**。`dryLesson` が立ち、以後は沼のそばで焼かなくなる。
+- **巣窟の蒸発は一度だけ**: `dryEvapCheck` は毎フレームの焼き付けから呼ばれるので、`A.evap` フラグと `DRY_EVAP_CD`(14秒)で連発を止めた(入れる前は3秒で26回噴いていた)。
+
+### 3-35. v5.0 (A) 距離と、それぞれの判断
+
+- **適切な距離** (`aiSteer`): 寄る力は `PARTY_LEASH` 620px から。`PARTY_SEP`(96px)より近いと `PARTY_SEP_K`(0.85)で離れる。この離れる力を `sepX/sepY` に切り出し、**相談で足を止める分岐(`dx*=0.05`)の後に足し戻す**——重なったまま喋らない。`GATHER_R` も 48→84 に緩めた。
+- **別々に行動** (`partySplitOk` / `updateGoal`): 案が割れた時、勝った方以外は、`SPLIT_MIN`(0.55)以上の点があり、共有の目当てから `SPLIT_SEP`(260px)以上離れていて、`partySplitOk` が通れば**自分の目当てへ行く**(`h.splitG` / `h.splitUntil` = `SPLIT_T` 14秒)。`partySplitOk` は「互いが `SPLIT_R`(560px)以内」「`losClear` で壁を挟まない」「どちらも体力 `SPLIT_HP`(55%)以上・拘束なし・脅威 `SPLIT_THREAT`(0.75)未満」「魔核戦・巣窟の役分担・降りる決断中でない」。壁を挟んで光が切れれば次の判定で合流する。台詞は `LINES_P.split`。
+- **相手が見える光** (`partySeeAt`): `lightAtRaw` に「相手との視線が通っていれば、相手の居る所は `DARK_SEE_K`(0.22)の明るさ」を足す。**距離ではなく遮蔽で決まる**。
+- **催淫灯篭の脱・誘蛾灯** (`lanternWant` / `lanternTick`): 判定を「足元の明るさ」から **`B.floorLight < LANTERN_NEED_LIGHT`(0.16)**(＝この階でまだ灯りを拾っていない)へ。足元は自分が光っているので `lightAt(p.x,p.y)` は常に 1 で、以前の条件は成立し得なかった。目当ての重み `LANTERN_WANT × darkLevel` は 0.34(宝箱2.6・祠2.2)。到着すると `feat.lanternWarm`(安心)→ `LANTERN_WARM_T`(1.6秒)で `feat.lantern`(ポカポカ)→ `LANTERN_STAY`(3.4秒)で `feat.lanternLeave` と `giveUpOn`、`LANTERN_CD`(52秒)。
+- **浅い層も暗く**: `FLOORS[].dark` を 0.46/0.55/0.62/0.70/0.76/0.82/0.86/0.90 に(以前は 0.34 始まり)。`DARK_CAP` は 0.88。
+- **摩耗と切り上げ** (`wornOf`/`partyWorn`/`wornTick`): 発情Lv×0.5・敏感×0.010・催眠Lv×0.6・拘束数×0.25・押し倒し0.7 に、絶頂ごと +0.9 が積む `h.worn` を足したもの。**動けない間**(押し倒し・拘束・絶頂・魅了拘束・凍結)は `WORN_IDLE_K`(0.55)/秒で増え、自由な間は `WORN_DECAY`(0.018)/秒で抜ける。仲間が捕まっていれば `WORN_CAPTURE`(2.6)。`WORN_SAY`(4.2)で一言、**`WORN_EXIT`(6.0)を超えると `exitTick` が `why='worn'` で降りる決断**(宝箱より先に、次の階へ)。
 
 ### 3-34. v4.1 きのこ
 

@@ -236,12 +236,13 @@ function startBattle(){
     seenT:0, bossSeen:!!(META.run&&META.run.bossSeen), exploreSaid:false,                          // v2.4 視界の記憶 / この run でボスを見た(武器選びに使う)
     lights:[], lanterns:[], floorLight:0,                                                          // v4.0 暗闇: 残る灯り / 催淫灯篭 / その階で得た灯り
     coreWar:false, core:null,                                                                      // v4.0 魔核戦に入ったか / その個体
+    wornSaid:false,                                                                                // v5.0 すり減りの弱音
     bond:false, bondT:0, rings:[],                                                                 // v4.1 家族茸の絆の灯り / 菌輪
+    mires:[], dryAura:null,                                                                        // v5.0 媚薬沼 / フレイラの乾燥オーラ
     dry:[], evapT:-99, coreRoots:null,                                                             // v4.0 フレイラが焼いた床(日を跨いで残る) / 媚薬が蒸発した時刻 / 魔核の跡(根→渦)
   };
   genMap();               // 地形(世代×階層で変わる)
   G.B.lanterns=G.map.pois.filter(q=>q.kind==='lantern').map(q=>({x:q.x,y:q.y,key:q.key,said:false}));   // v4.0 催淫灯篭(光源であり罠でもある)
-  G.B.dry=dryList().map(d=>({x:d.x,y:d.y,r:d.r,t:-99}));   // v4.0 前の日にフレイラが焼いた床(世代が組み替わるまで残る)
   initSeen();             // v2.4 見た範囲の記憶(同じ階層への再挑戦は覚えている)
   for(let i=1;i<heroes.length;i++){ const q=snapFloor(44*i,8*i,false,4)||{x:44*i,y:8*i}; heroes[i].x=q.x; heroes[i].y=q.y; }   // v3.0 二人目以降は横に並ぶ
   { const F=G.B.floor; G.B.exitLocked=(F.puzzle==='seals');
@@ -253,6 +254,8 @@ function startBattle(){
   spawnDen();             // v3.2 巣窟の報酬と仕掛け
   spawnWildShrooms();     // v4.1 洞そのものとして生えている茸(媚茸・抱き茸)
   spawnRings();           // v4.1 菌輪
+  spawnMires();           // v5.0 媚薬沼(水溜まりのように点在)
+  dryInit();              // v5.0 焼けた床(タイル単位。前の日の分を復元)
   // 描き込みスプライトの事前焼き(デッキの種族×位相を最初の数十フレームで焼いておく)
   G.gfxLv=2; G.kCap=2; G.prebake=[];
   if(typeof resetSpriteCache==='function') resetSpriteCache();   // 前の戦闘の焼き絵(別デッキ・別倍率)は捨てる
@@ -343,13 +346,13 @@ function endBattle(outcome){
   const floorBefore=META.run.floor||1;
   if(outcome==='capture'){
     META.run.fails=(META.run.fails||0)+1;
-    if(META.run.fails>=BAL.RUN_FAILS_RESET){ runReset(); rotReset=true; decay=luminaDecay(); runNote='reset'; }
+    if(META.run.fails>=BAL.RUN_FAILS_RESET){ runReset(false); rotReset=true; decay=luminaDecay(); runNote='reset'; }   /* v5.0 彼女たちの側の巻き戻り: 覚えたことは残る */
     else runNote='retry';
   }else if(outcome==='descend'){
     META.run.fails=0; META.run.floor=Math.min(openFloors(),floorBefore+1); META.run.deepest=Math.max(META.run.deepest||1,META.run.floor); runNote='descend';
     if(B.heroes.some(h=>h.out)) META.run.leftBehind=true;   // v3.0 一人を置いて降りた
   }else if(outcome==='clear'){
-    META.run.clears=(META.run.clears||0)+1; META.era=(META.era|0)+1; runReset(); rotReset=true; decay=luminaDecay(); runNote='clear';   // v3.0 深淵が組み替わる(世代+1: 階層が増え、魔核が太る)
+    META.run.clears=(META.run.clears||0)+1; META.era=(META.era|0)+1; runReset(true); rotReset=true; decay=luminaDecay(); runNote='clear';   // v3.0 深淵が組み替わる(世代+1: 階層が増え、魔核が太る) / v5.0 魔核が巻き戻すので、彼女たちは何も知らない朝に立つ
   }
   // v3.1 参戦の判定: 深淵が一度組み替わった後(世代≥1)に二連敗で入口へ戻された朝、次のヒロインが来る(保険: リセット3回 / 一人のまま世代4)
   const joinId=partyJoinCheck(runNote);
@@ -371,12 +374,14 @@ function endBattle(outcome){
     curseGone:(oldCurse&&!META.curse&&!newCurse)?BOSS_CURSES[oldCurse.id]:null});
 }
 
-/* v2.0 潜行のリセット: 入口へ戻り、世代が変わる(経験・知識を失う。手記と永続強化は残る) */
-function runReset(){
+/* v2.0 潜行のリセット: 入口へ戻り、世代が変わる(経験を失う。手記と永続強化は残る)
+   v5.0 巻き戻りの向き: 魔核を討たれた時は魔核が時を巻き戻すので、彼女たちの覚えたことは書き換えられる(wipeKnow)。
+        彼女たちが捕まって巻き戻る時、巻き戻すのは彼女たちの側——魔核は何も知らないままで、覚えたことはそのまま残る */
+function runReset(wipeKnow){
   META.run.floor=1; META.run.fails=0; META.run.day=1; META.run.hero=null; META.run.heroes={}; META.run.seen={}; META.run.bossSeen=false;   // v2.1 引き継ぎも消える / v2.4 見た範囲とボスの記憶も
   META.gen.battle=0; META.gen.idx++;
   META.rot={dmg:0, ail:0, captures:0, battles:0};
-  META.gen.know={}; META.gen.zoneKnow={}; META.gen.trapKnow={}; META.gen.dryLesson=0;   // 世代が変わると、覚えたことも忘れる(手記に書いた分だけ残る)
+  if(wipeKnow){ META.gen.know={}; META.gen.zoneKnow={}; META.gen.trapKnow={}; META.gen.dryLesson=0; }   // 魔核が巻き戻した時だけ、覚えたことも書き換えられる(手記に書いた分だけ残る)
   dryClearAll();   // v4.0 フレイラが焼いた床も、組み替わりで元の湿った洞へ戻る
   { const o=META.run.storySeen||{}; const n={prologue:o.prologue, join:o.join}; for(const k in o) if(k.startsWith('loop')) n[k]=o[k]; META.run.storySeen=n; }   // 階層の導入はまた出る(序章・合流・世代の朝は出ない)
 }
@@ -640,7 +645,7 @@ function enterClimax(){
   h.squirted=h.deepClimax||Math.random()<Math.min(0.95, BAL.SQUIRT_BASE+0.2*h.heatLv+0.12*sensLvOf(h));
   // 見られながらの絶頂は「撮影」される
   if(h.watchedT>0){ B.filmed++; META.life.filmed=(META.life.filmed||0)+1; codexMark('eye','climax'); floatTxt(h.x,h.y-70,'撮影された','#c98cff',11,1.4); }
-  B.climaxN++;
+  B.climaxN++; h.worn=(h.worn||0)+BAL.WORN_CLIMAX;   // v5.0 何度も達させられるほど、切り上げたくなる
   codexClimax();
   if(h.inMusk && h.heatLv>0 && h.muskCond>=8) conditionMusk();   // 雄臭の雲の中、発情したまま達すると匂いと結びつく
   heroBubble(h,'や、だめ、いま……きちゃ……あ、ぁあああっ——!',true,3);
@@ -755,10 +760,10 @@ function detachLimb(slot, opt){
     const heldSlot=LIMBS.find(sl=>sl!==slot && h.limbs[sl] && h.limbs[sl].mon===mon);
     if(heldSlot){ mon.limb=heldSlot; }
     else{
-      mon.state = mon.id==='flower' ? 'open' : ((mon.id==='gtent'||mon.id==='core'||mon.id==='mouth'||mon.id==='sentinel') ? 'idle' : 'chase');
+      mon.state = mon.id==='flower' ? 'open' : ((mon.id==='gtent'||mon.id==='core'||mon.id==='mouth'||mon.id==='sentinel'||mon.id==='miretent') ? 'idle' : 'chase');
       mon.limb=null;
       const p=limbAnchor(h,slot);
-      if(mon.id!=='flower' && mon.id!=='gtent' && mon.id!=='web' && mon.id!=='core' && mon.id!=='mouth' && mon.id!=='sentinel'){   // 据わった個体はその場から動かない
+      if(mon.id!=='flower' && mon.id!=='gtent' && mon.id!=='web' && mon.id!=='core' && mon.id!=='mouth' && mon.id!=='sentinel' && mon.id!=='miretent'){   // 据わった個体はその場から動かない(v5.0 沼の触手は沼から生えている)
         mon.x=p.x+rand(-8,8); mon.y=p.y+rand(-4,4);
       }
     }
@@ -766,7 +771,7 @@ function detachLimb(slot, opt){
       mon.stun=1.2;
       mon.hp-=mon.maxHp*(mon.id==='core'?BAL.CORE_FLING:(mon.id==='sentinel'?0.08:(mon.boss?0.05:0.35)));   // ボスは振りほどかれても大きくは削れない(呑み込みで自滅しない)。v2.2 魔核は0.5%(根を千切っても心臓は削れない)、番兵は8%
       const a=rand(TAU);
-      if(MONSTERS[mon.id].spd>0){ mon.x+=Math.cos(a)*30; mon.y+=Math.sin(a)*30; collideMap(mon,mon.r*0.75,canFly(mon.id)); }   // 据わった個体(魔核・口)は飛ばされない
+      if(MONSTERS[mon.id] && MONSTERS[mon.id].spd>0){ mon.x+=Math.cos(a)*30; mon.y+=Math.sin(a)*30; collideMap(mon,mon.r*0.75,canFly(mon.id)); }   // 据わった個体(魔核・口・沼の触手)は飛ばされない
       parts(mon.x,mon.y,8,['#fff','#c98cff'],140,0.5);
       if(mon.hp<=0) killEnemy(mon);
     }
@@ -878,7 +883,7 @@ function checkStaminaCollapse(){
 function enterPin(mon){
   const B=G.B, h=B.hero;
   if(h.charmBind) releaseCharmBind(false);   // 押し倒しは魅了拘束を上書きする
-  h.pinned=true; h.pinBy=mon||null;
+  h.pinned=true; h.pinBy=mon||null; h.worn=(h.worn||0)+BAL.WORN_PIN;   // v5.0 押し倒された分の摩耗
   h.pinT=BAL.PIN_PULSE_T; h.pinEscape=0;
   h.vx=0; h.vy=0;
   let sid=mon?mon.id:'default';
@@ -1894,11 +1899,12 @@ function aiDecide(foc){
     }
   }
   // v3.0 パーティ: 相手から離れすぎない(PARTY_LEASH を超えるほど強く寄る)。重なりすぎたら少し離れる。相談の間は足を止める
+  let sepX=0, sepY=0;   /* v5.0 「くっつきすぎない」力は、足を止めて話している間も効かせる(重ならずに向き合って立つ) */
   { const waiting=!!(B.party&&B.party.denRole&&B.party.denRole.wait===p.hi);   // v3.2 外で待つ役は引っぱられない(自分で口の前を歩いて間合いを取る)
     const o=waiting?null:partnerOf(p); if(o){ const ddx=o.x-p.x, ddy=o.y-p.y, dd=Math.hypot(ddx,ddy)||1;
       if(dd>BAL.PARTY_LEASH){ const w=Math.min(1.4,(dd-BAL.PARTY_LEASH)/200); dx+=ddx/dd*w; dy+=ddy/dd*w; }
-      else if(dd<BAL.PARTY_SEP && attachCount(p)===0){ dx-=ddx/dd*0.45; dy-=ddy/dd*0.45; } } }
-  if(B.party && B.time<B.party.talkUntil && attachCount(p)===0 && threat<0.6){ dx*=0.05; dy*=0.05; state='talk'; const o=partnerOf(p); if(o && Math.abs(o.x-p.x)>6) p.face=o.x>p.x?1:-1; }   // v3.1 話す間は相手の方を向く
+      else if(dd<BAL.PARTY_SEP && attachCount(p)===0 && !p.assist){ const k=BAL.PARTY_SEP_K*(1-dd/BAL.PARTY_SEP); sepX=-ddx/dd*k; sepY=-ddy/dd*k; dx+=sepX; dy+=sepY; } } }   // v5.0 くっつきすぎない(かばう時は除く)
+  if(B.party && B.time<B.party.talkUntil && attachCount(p)===0 && threat<0.6){ dx=dx*0.05+sepX; dy=dy*0.05+sepY; state='talk'; const o=partnerOf(p); if(o && Math.abs(o.x-p.x)>6) p.face=o.x>p.x?1:-1; }   // v3.1 話す間は相手の方を向く(v5.0 離れる力だけは残す)
   p.steerX=dx; p.steerY=dy; p.steerState=state; p.threatV=threat;   // v3.1 脅威の見積もりを残す(集合の判定に使う)
 }
 
@@ -2468,7 +2474,7 @@ function spawnUnit(id, x, y, o){
   if(id==='suiyou'){ u.sub=false; u.grabCd=0; }
   if(id==='mouth'){ u.grabCd=1.5; u.lickT=0; }
   if(id==='guardian'){ u.castCd=3; u.aimT=0; u.lookA=0; }
-  if(id==='core'){ u.whipCd=2; u.whipT=0; u.pulseCd=5; u.pulseT=0; u.spawnCd=4; u.lookA=0; { const e0=eraNow()===0, lvK=BAL.CORE_HP_LV*(e0?BAL.CORE_ERA0_LV_K:1), lvCap=e0?BAL.CORE_ERA0_LV_CAP:BAL.CORE_HP_LV_CAP; u.hp=u.maxHp=Math.round(BAL.CORE_HP*(BAL.CORE_ERA_HP0+BAL.CORE_ERA_HP_K*eraNow())*(1+0.08*Math.max(0,(META.gen.idx||1)-1))*(1+Math.min(lvCap,lvK*Math.max(0,heroLv-1)))); } u.era=eraNow(); /* v3.1 世代0は Lv 補正も半分 */ u.r=Math.round(MONSTERS.core.r*(0.68+0.08*Math.min(4,u.era))); }   // v3.0 世代0は薄く小さく(見た目も弱く)、討たれるごとに厚く大きく   // v2.2 引き継いだLvが高いほど厚い(最大×4.5)
+  if(id==='core'){ u.whipCd=2; u.whipT=0; u.pulseCd=5; u.pulseT=0; u.spawnCd=4; u.lookA=0; { const e0=eraNow()===0, lvK=BAL.CORE_HP_LV*(e0?BAL.CORE_ERA0_LV_K:1), lvCap=e0?BAL.CORE_ERA0_LV_CAP:BAL.CORE_HP_LV_CAP; u.hp=u.maxHp=Math.round(BAL.CORE_HP*(BAL.CORE_ERA_HP0+BAL.CORE_ERA_HP_K*eraNow())*(1+Math.min(lvCap,lvK*Math.max(0,heroLv-1))));   /* v5.0 魔核が太るのは「自分が討たれた回数」だけ。彼女たちが捕まって時が戻っても、魔核は何も知らない */ } u.era=eraNow(); /* v3.1 世代0は Lv 補正も半分 */ u.r=Math.round(MONSTERS.core.r*(0.68+0.08*Math.min(4,u.era))); }   // v3.0 世代0は薄く小さく(見た目も弱く)、討たれるごとに厚く大きく   // v2.2 引き継いだLvが高いほど厚い(最大×4.5)
   // 地形の恩恵: 湿地で粘る種のHP、巣の魔物のHP。速度は毎フレーム今いる地形で決まる(spd0 が素の速度)
   u.spd0=u.spd; u.zone=zoneAt(x,y); u.item=!!MONSTERS[id].item;   // 設置物は押し合いで動かない
   if(id==='suiyou') u.sub=(u.zone==='water'||u.zone==='damp');   // v2.0 水妖は水の中で待つ
@@ -3331,12 +3337,25 @@ function partyCenter(){ const B=G.B; let cx=0,cy=0,n=0; for(const h of B.heroes)
 function partyGathered(){ const B=G.B, c=partyCenter(); if(!c||c.n<2) return true; for(const h of B.heroes){ if(h.out) continue; if(Math.hypot(h.x-c.x,h.y-c.y)>BAL.GATHER_R) return false; } return true; }
 function partyDanger(){ const B=G.B; if(B.heroes.some(h=>h.out)) return true;   // v3.1 誰かが捕まっているなら相談どころではない(救出が先。3人以上でも救出の案を潰さない)
   for(const h of B.heroes){ if(h.out) continue; if(attachCount(h)>0 || h.pinned || h.hp<h.maxHp*0.4 || (h.threatV||0)>=BAL.GATHER_DANGER_THREAT || nearEnemyCount(h.x,h.y,BAL.GATHER_DANGER_R,false)>0) return true; } return false; }
+/* v5.0 別々に行動してよいか: 互いの光が届く(壁を挟まない)・危なくない・魔核戦や巣窟の役分担の最中でない */
+function partySplitOk(p){
+  const B=G.B, o=partnerOf(p); if(!o||o.out) return false;
+  if(B.coreWar || (B.party&&B.party.denRole) || B.wantExit) return false;   /* 魔核戦・巣窟の役・降りると決めた後は、離れずに動く */
+  for(const h of [p,o]){ if(h.out||h.pinned||attachCount(h)>0||h.hp<h.maxHp*BAL.SPLIT_HP||(h.threatV||0)>=BAL.SPLIT_THREAT) return false; }   /* どちらかが苦しければ合流する */
+  if(Math.hypot(p.x-o.x,p.y-o.y)>BAL.SPLIT_R) return false;
+  return losClear(p.x,p.y-10,o.x,o.y-10,false);   /* 壁を挟むと互いの光が消える。そうなったら別行動はやめる */
+}
 function updateGoal(p){
   const B=G.B, P=B.party, active=B.heroes.filter(h=>!h.out);
   if(P && P.gather && (active.length<2 || B.time>P.gather.until+1)){ P.gather=null; P.gatherDone=0; }   // v3.1 流れた集合(誰かが捕まった・戦いが長引いた)は、後で「いま集まった」と数えない
   if(!P || active.length<2) return updateGoalSolo(p);
   if(P.denRole && p.hi===P.denRole.wait && denOf()) return denWaitGoal(p);   // v3.2 外で待つ役は、自分の立ち位置を持つ
   if(P.goal && P.owner && !P.owner.out && goalValid(P.owner,P.goal) && B.time<P.until){
+    if(p!==P.owner && p.splitG && B.time<(p.splitUntil||0) && goalValid(p,p.splitG) && partySplitOk(p)){   /* v5.0 別行動の間は自分の目当てを続ける */
+      if(p.splitG.ref && p.splitG.kind!=='explore' && p.splitG.kind!=='event'){ p.splitG.x=p.splitG.ref.x; p.splitG.y=p.splitG.ref.y; }
+      p.goal=p.splitG; p.goalT=B.time+BAL.GOAL_RETHINK; return p.goal;
+    }
+    if(p.splitG){ p.splitG=null; p.splitUntil=0; }
     if(p.goal!==P.goal){ p.goal=P.goal; p.goalT=B.time+BAL.GOAL_RETHINK; }
     else if(P.goal.ref && P.goal.kind!=='explore' && P.goal.kind!=='event'){ P.goal.x=P.goal.ref.x; P.goal.y=P.goal.ref.y; }
     return p.goal;
@@ -3382,7 +3401,15 @@ function updateGoal(p){
   }
   P.goal=win.g; P.owner=win.h; P.until=B.time+(same?BAL.GOAL_RETHINK:BAL.PARTY_HOLD);
   denAssignRole(win,active);   // v3.2 巣窟が目当てなら、入る役と待つ役を決める
-  for(const x of props){ if(P.denRole && x.h.hi===P.denRole.wait) continue; x.h.goal=P.goal; x.h.goalT=B.time+BAL.GOAL_RETHINK; }
+  for(const x of props){ if(P.denRole && x.h.hi===P.denRole.wait) continue;
+    /* v5.0 互いが見えているなら、譲らず自分の目当てへ。壁を挟んだり危なくなれば、また一緒に動く */
+    if(x!==win && !same) B.nSplitTry=(B.nSplitTry||0)+1;
+    if(x!==win && !same && x.g.kind!=='rescue' && P.goal.kind!=='rescue' && x.g.score>=BAL.SPLIT_MIN
+       && Math.hypot(x.g.x-P.goal.x,x.g.y-P.goal.y)>BAL.SPLIT_SEP && partySplitOk(x.h)){
+      x.split=true; x.h.goal=x.g; x.h.goalT=B.time+BAL.GOAL_RETHINK; x.h.splitG=x.g; x.h.splitUntil=B.time+BAL.SPLIT_T;
+      B.nSplitGo=(B.nSplitGo||0)+1; continue;
+    }
+    x.h.goal=P.goal; x.h.goalT=B.time+BAL.GOAL_RETHINK; x.h.splitG=null; x.h.splitUntil=0; }
   B.nDecide=(B.nDecide||0)+1; if(!same) B.nSplit=(B.nSplit||0)+1;
   if((B.time-P.decidedT>BAL.PARTY_TALK_CD && P.goal.kind!=='explore') || gathered){   // 集まったのなら(探索でも)必ず一言交わす
     P.decidedT=B.time; const kind=goalKindKey(P.goal);
@@ -3390,7 +3417,7 @@ function updateGoal(p){
     if(gathered){ const arr=active.find(h=>h.hi!==(P.gatherCaller>=0?P.gatherCaller:win.h.hi));   // 呼ばれて歩いてきた子が着いて一言
       if(arr){ pendingLine(arr.hi,'gather.arrive',0.2,1); t0=(arr.hi===win.h.hi)?1.7:0.9; } }   // 着いた子がそのまま言い出す時は、前の吹き出しが消えてから(同じ子の続けざまの台詞は潰れる)
     const said=t0>0?(pendingLine(win.h.hi,'propose.'+kind,t0,1),true):sayPartyAs(win.h.hi,'propose.'+kind,1,0);
-    if(said){ for(const x of props){ if(x===win) continue; pendingLine(x.h.hi, same?'same':(x.g.score>win.g.score?'yield':'agree'), t0+0.9, 1); } if((!same || gathered) && (gathered || partyGathered())) P.talkUntil=B.time+(gathered?Math.max(BAL.GATHER_TALK_T,t0+1.6):BAL.TALK_T); }   // 集まって話した時は言い終わるまで向き合う。離れたまま(集合できなかった)なら声だけ掛けて足は止めない(v3.1)
+    if(said){ for(const x of props){ if(x===win) continue; pendingLine(x.h.hi, x.split?'split':(same?'same':(x.g.score>win.g.score?'yield':'agree')), t0+0.9, 1); } if((!same || gathered) && (gathered || partyGathered())) P.talkUntil=B.time+(gathered?Math.max(BAL.GATHER_TALK_T,t0+1.6):BAL.TALK_T); }   // 集まって話した時は言い終わるまで向き合う。離れたまま(集合できなかった)なら声だけ掛けて足は止めない(v3.1)
   }
   P.gatherDone=0;
   return p.goal;
@@ -3402,7 +3429,8 @@ function updateGoalSolo(p){
   const cands=[];
   if(B.dbgCands) B.lastCands=null;   // 検証用: 目当ての候補を覗く(B.dbgCands=true の時だけ)
   const anyCaptive=B.heroes.some(c=>c.out&&c.captive&&c!==p);   // v3.2 仲間が捕まっている間は、寄り道の価値を落とす(木の実を拾いに行かない)
-  const add=(kind,sub,x,y,worth,ref,key)=>{ worth*=goalPref(p,kind,sub); if(anyCaptive && kind!=='rescue') worth*=BAL.RESCUE_FOCUS; if(!coreLeashOk(kind,sub,x,y)) return; /* v4.0 魔核戦の間は寄り道しない */ if(worth<=0 || !passAt(x,y,false) || nearKnownTrap(x,y) || ringAvoid(x,y)) return;   /* v4.1 覚えた菌輪の中は目当てにしない */ if(ref && gaveUp(ref)) return; /* v2.1 諦めた目標は外す */ if(crestKnow()>=1 && B.traps.some(tr=>tr.armed && Math.hypot(tr.x-x,tr.y-y)<tr.r+40)) return; /* 知っている紋の罠の上は目当てにしない */ const d=Math.hypot(x-p.x,y-p.y); const fz=zoneFear(zoneAt(x,y)), fm=fz>=3?0.5:(fz>=2?0.7:(fz>=1?0.9:1));
+  const add=(kind,sub,x,y,worth,ref,key)=>{ worth*=goalPref(p,kind,sub); if(anyCaptive && kind!=='rescue') worth*=BAL.RESCUE_FOCUS; if(!coreLeashOk(kind,sub,x,y)) return; /* v4.0 魔核戦の間は寄り道しない */ if(worth<=0 || !passAt(x,y,false) || nearKnownTrap(x,y) || ringAvoid(x,y)) return;   /* v4.1 覚えた菌輪の中は目当てにしない */
+    { const mi=mireAt(x,y); if(mi) worth*=(mi.depth>0.75?0.30:0.55); }   /* v5.0 媚薬沼の中の物は割り引く(深いほど嫌う) */ if(ref && gaveUp(ref)) return; /* v2.1 諦めた目標は外す */ if(crestKnow()>=1 && B.traps.some(tr=>tr.armed && Math.hypot(tr.x-x,tr.y-y)<tr.r+40)) return; /* 知っている紋の罠の上は目当てにしない */ const d=Math.hypot(x-p.x,y-p.y); const fz=zoneFear(zoneAt(x,y)), fm=fz>=3?0.5:(fz>=2?0.7:(fz>=1?0.9:1));
     const lm=(darkLevel()>0.05 && kind!=='rescue' && kind!=='wait')?(BAL.DARK_GOAL_K+(1-BAL.DARK_GOAL_K)*lightAt(x,y)):1;   // v4.0 暗い所は気が進まない(行かないわけではない)
     cands.push({kind,sub,x,y,ref,key,d,worth,score:worth*fm*lm/(1+d/600)}); };   // v2.2 嫌な地形の中の目当ては割り引く(価値そのものは入る判断に使うので残す)
   const hpR=p.hp/p.maxHp, stR=p.stamina/p.staminaMax;
@@ -3657,7 +3685,7 @@ function spawnSentinels(){
   for(let i=0;i<n;i++){
     const a=B.sentRing.phase+i*TAU/n;
     const e=spawnUnit('sentinel',st.x+Math.cos(a)*BAL.SENTINEL_RING,st.y+Math.sin(a)*BAL.SENTINEL_RING*0.7,{});
-    e.slotA=i*TAU/n; e.hp=e.maxHp=Math.round(BAL.SENTINEL_HP*(1+0.35*(F.depth-1))*(1+0.08*Math.max(0,(META.gen.idx||1)-1)));
+    e.slotA=i*TAU/n; e.hp=e.maxHp=Math.round(BAL.SENTINEL_HP*(1+0.35*(F.depth-1))*(1+0.08*eraNow()));   /* v5.0 深淵が硬くなるのは組み替わり(魔核の敗北)の分だけ */
   }
 }
 function exitGuarded(){ const B=G.B; return !!B && B.enemies.some(e=>e.id==='sentinel'&&!e.dead); }
@@ -3757,6 +3785,35 @@ function heroDpsEst(p){
   let d=0; for(const k in BASE){ const lv=p.wp[k]||0; if(lv<=0) continue; const ov=wpOver(lv); const evo=Object.keys(EVOS).some(e=>EVOS[e].base===k && p.evo[e]>0); d+=BASE[k]*(1+0.35*(Math.min(BAL.WP_EVO_LV,lv)-1))*ov.dmg/ov.cd*(evo?1.8:1); }
   return Math.max(8, d*(p.dmgMult||1)*(1+0.08*(p.ps.haste||0))*(1+0.4*(p.ps.dup||0)));
 }
+
+/* ================= v5.0 摩耗(すり減り) =================
+   軽くいじられたくらいでは動じないが、絶頂・押し倒し・拘束・催眠が積み重なって
+   「動けない時間」が伸びてくると、宝箱を諦めて次の階層へ切り上げる。
+   何もされない時間が続けば少しずつ戻る */
+function wornOf(h){
+  if(!h) return 0;
+  let v=(h.worn||0);
+  v+=(h.heatLv||0)*BAL.WORN_HEAT_LV;
+  v+=(h.sensit||0)*BAL.WORN_SENSIT;
+  v+=(h.hypnoLv||0)*BAL.WORN_HYPNO;
+  v+=attachCount(h)*BAL.WORN_BOUND;
+  if(h.pinned) v+=BAL.WORN_PIN;
+  return v;
+}
+function partyWorn(){ const B=G.B; let m=0; for(const h of B.heroes){ if(h.out){ m+=BAL.WORN_CAPTURE; continue; } m=Math.max(m,wornOf(h)); } return m; }
+function wornTick(dt){
+  const B=G.B;
+  for(const h of B.heroes){
+    if(h.out) continue;
+    const stuck=(h.pinned||attachCount(h)>0||h.climaxT>0||h.charmBind||h.freezeT>0);
+    if(stuck) h.worn=(h.worn||0)+dt*BAL.WORN_IDLE_K;                 // 動けなかった時間そのものが摩耗になる
+    else h.worn=Math.max(0,(h.worn||0)-dt*BAL.WORN_DECAY);
+  }
+  if(B.ci!==leaderIdx()) return;
+  const w=partyWorn();
+  if(w>=BAL.WORN_SAY && !B.wornSaid){ B.wornSaid=true; sayLine('feat.worn',1,0,'……ちょっと、きつくなってきた'); }
+  else if(w<BAL.WORN_SAY*0.6) B.wornSaid=false;
+}
 /* ================= v2.1 降りる判断 =================
    降り口を知っていても、まだ見ていない所や拾える物があるうちは降りない。深淵の圧が高まる / HPが薄い / 目当てが探索しか無くなって久しい
    のどれかで「降りよう」に切り替わる(戻らない)。最終階層(降り口なし)では働かない */
@@ -3769,12 +3826,13 @@ function exitTick(dt){
   else if(hpR<BAL.EXIT_HP && B.time>40) why='hp';
   else if(B.idleGoalT>=BAL.EXIT_IDLE_T && B.time>90) why='done';
   else if(BAL.SMART_AI && (B.fleeT||0)>=BAL.FLEE_EXIT_T && B.time>40 && !B.floor.final) why='flee';   // v2.3 逃げ続けても終わらない → 降り口を探して降りる
+  else if(partyWorn()>=BAL.WORN_EXIT && B.time>50) why='worn';   // v5.0 何度も絶頂させられ、動けない時間が伸びてきた → 宝箱は諦めて次へ
   if(!why) return;
   const fin=!!B.floor.final; const st=G.map.pois.find(o=>o.kind===(fin?'core':'stairs')); if(!st) return;
   B.wantExit=true; B.wantExitWhy=why; p.goal=null; p.goalT=0;
-  const SUB={press:'魔物が増えてきた——長居はまずい', hp:fin?'体力が薄い——決めに行く':'体力が薄い——ここは離れる', done:fin?'見るところは見た——魔核へ':'見るところは見た——次へ', flee:'逃げ続けても終わらない——降り口を探す'};
+  const SUB={press:'魔物が増えてきた——長居はまずい', hp:fin?'体力が薄い——決めに行く':'体力が薄い——ここは離れる', done:fin?'見るところは見た——魔核へ':'見るところは見た——次へ', flee:'逃げ続けても終わらない——降り口を探す', worn:fin?'これ以上は保たない——決めに行く':'これ以上は保たない——切り上げる'};
   if(fin){ setBanner('彼女は魔核へ向かう気になった', SUB[why],'#ff6b81'); sayLine('wantExit',1,0,'……いこう。まかくの、ところへ'); }
-  else{ setBanner('彼女は降りる気になった', SUB[why],'#8fd3ff'); if(why==='flee') sayLine('fleeExit',1,0,'にげながら、おりぐちさがす!'); else sayLine('wantExit',1,0,why==='done'?'もう、みるとこないし。おりよ!':'……そろそろ、おりなきゃ'); }
+  else{ setBanner('彼女は降りる気になった', SUB[why],'#8fd3ff'); if(why==='flee') sayLine('fleeExit',1,0,'にげながら、おりぐちさがす!'); else if(why==='worn') sayLine('feat.wornExit',1,0,'もう、むり……たからばこは、いい。おりる'); else sayLine('wantExit',1,0,why==='done'?'もう、みるとこないし。おりよ!':'……そろそろ、おりなきゃ'); }
 }
 /* v2.1 場面に合わせた台詞: 地形に入った / 圧が高まった / 体力が薄い / 一息 */
 function linesTick(dt){
@@ -4447,9 +4505,25 @@ function floorLight(){ const B=G.B; return 1+Math.min(BAL.DARK_FLOOR_MAX, B?(B.f
 /* ヒロインの光: 素性の半径 × 階の灯り × (相方が近ければ増光) */
 function heroLightR(h){
   const B=G.B, HD=HEROES[h.id]||{}; let r=(HD.lightR||260)*floorLight();
-  if(B&&B.heroes.length>1){ const o=B.heroes.find(x=>x!==h&&!x.out); if(o && Math.hypot(o.x-h.x,o.y-h.y)<BAL.DARK_PAIR_R) r*=1+BAL.DARK_PAIR_K; }
+  if(B&&B.heroes.length>1){ const o=B.heroes.find(x=>x!==h&&!x.out); if(o && Math.hypot(o.x-h.x,o.y-h.y)<BAL.DARK_PAIR_R) r*=1+BAL.DARK_PAIR_K; }   // v5.0 近いと少しだけ(くっつく理由にはしない)
   if(h.climaxT>0||h.hypnoLv>=2) r*=0.85;   // 光が弱る
   return r;
+}
+/* v5.0 互いの姿は「壁を挟まなければ」見えている。距離で縛らないので、別々に歩ける。
+   見えている相手の周りは、こちらからも薄く分かる(DARK_SEE_K) */
+function partySeeAt(x,y){
+  const B=G.B; if(!B||B.heroes.length<2) return 0;
+  let v=0;
+  for(const h of B.heroes){
+    if(h.out) continue;
+    const d=Math.hypot(x-h.x,y-h.y); if(d>=260) continue;
+    for(const o of B.heroes){
+      if(o===h||o.out) continue;
+      if(!losClear(o.x,o.y-10,h.x,h.y-10,false)) continue;   // 壁の向こうなら見えない
+      v=Math.max(v,(1-d/260)*BAL.DARK_SEE_K); break;
+    }
+  }
+  return v;
 }
 /* 残す灯り: 光や炎が通った所は DARK_MEM_T 秒ほど見えている */
 function pushLight(x,y,r,life,k){
@@ -4485,6 +4559,7 @@ function lightAtRaw(x,y){
   if(B.lanterns) for(const q of B.lanterns){ const d=Math.hypot(x-q.x,y-q.y); if(d<BAL.LANTERN_R) v=Math.max(v,(1-d/BAL.LANTERN_R)*0.95); }
   if(B.lights) for(const q of B.lights){ const d=Math.hypot(x-q.x,y-q.y); if(d<q.r){ const fade=1-q.t/q.life; v=Math.max(v,(1-d/q.r)*q.k*fade); } }
   { const pr=bondPair(); if(pr){ const d=segDist(x,y,pr[0].x,pr[0].y,pr[1].x,pr[1].y); if(d<BAL.BOND_R) v=Math.max(v,(1-d/BAL.BOND_R)*0.9); } }   // v4.1 絆の灯り
+  v=Math.max(v,partySeeAt(x,y));   // v5.0 壁を挟まなければ、相手の居る所は見えている
   for(const q of B.enemies){ if(q.dead||q.id!=='lurecap'||q.revealed) continue; const d=Math.hypot(x-q.x,y-q.y); if(d<170) v=Math.max(v,(1-d/170)*0.82); }   // v4.1 媚茸は本当に光っている(だから釣られる)
   if(B.event){ const d=Math.hypot(x-B.event.x,y-B.event.y); if(d<260) v=Math.max(v,(1-d/260)*0.9); }
   for(const z of B.zones){ if(!z.fire) continue; const d=Math.hypot(x-z.x,y-z.y); if(d<z.r*1.3) v=Math.max(v,(1-d/(z.r*1.3))*0.8); }
@@ -4492,6 +4567,91 @@ function lightAtRaw(x,y){
 }
 
 
+
+/* ================= v5.0 媚薬沼 =================
+   水溜まりのように点々と溜まった、桃色に濁った甘い沼。縁からえっちな触手が生えていて、
+   そばを通れば脚を取りに来る。浸かるほど発情と敏感化が進み、足も重い。
+   フレイラの炎が触れると、溜まっていたものが一気に蒸発して——広さと深さのぶんだけ、外まで噴き出す */
+function spawnMires(){
+  const B=G.B, dep=Math.max(1,Math.min(BAL.MIRE_N.length,(B.floor&&B.floor.depth)||1));
+  const n=BAL.MIRE_N[dep-1]||3;
+  B.mires=[];
+  for(let i=0;i<n;i++){
+    let q=null;
+    for(let k=0;k<80&&!q;k++){
+      const a=rand(TAU), d=rand(360,1600);
+      const c=snapFloor(clampMapX(B.hero.x+Math.cos(a)*d,80), clampMapY(B.hero.y+Math.sin(a)*d,80), false, 3);
+      if(!c||!reachableAt(c.x,c.y,false)) continue;
+      if(B.mires.some(m=>Math.hypot(m.x-c.x,m.y-c.y)<260)) continue;
+      q=c;
+    }
+    if(!q) continue;
+    const r=rand(BAL.MIRE_R0,BAL.MIRE_R1), depth=0.45+0.55*((r-BAL.MIRE_R0)/(BAL.MIRE_R1-BAL.MIRE_R0));
+    const tents=[];
+    const nt=1+((Math.random()*BAL.MIRE_TENT)|0);
+    for(let t=0;t<nt;t++){ const a=rand(TAU); tents.push({a, ph:rand(TAU), cd:rand(0,3), reach:0}); }
+    B.mires.push({x:q.x, y:q.y, r, depth, tents, seen:false, dry:false, t:rand(9)});
+  }
+}
+function mireAt(x,y){ const B=G.B; if(!B||!B.mires) return null; for(const m of B.mires){ if(m.dry) continue; if(Math.hypot(x-m.x,(y-m.y)/0.78)<m.r) return m; } return null; }
+function miresTick(dt){
+  const B=G.B; if(!B.mires||!B.mires.length) return;
+  for(const m of B.mires){
+    m.t+=dt; if(m.dry) continue;
+    for(const h of B.heroes){
+      if(h.out) continue;
+      const d=Math.hypot(h.x-m.x,(h.y-m.y)/0.78);
+      const ci0=B.ci; B.ci=h.hi;
+      if(d<m.r){   // 浸かっている
+        addHeatG(BAL.MIRE_HEAT*m.depth*dt); applySensit(BAL.MIRE_SENS*m.depth*dt);
+        h.slow=Math.max(h.slow||0, BAL.MIRE_SLOW*m.depth);
+        if(Math.random()<dt*3) parts(h.x+rand(-12,12), h.y-rand(0,10), 1, ['#ff9ec2','#e08ac0','#fff'], 40, 0.7);
+        if(!m.seen){ m.seen=true; sayLine('feat.mire',1,0,'うわ、ぬまだ……! あまい、においする'); }
+      }
+      // 縁の触手: 近づくと伸びてくる
+      for(const tn of m.tents){
+        tn.cd-=dt*(d<BAL.MIRE_TENT_R+m.r?1:0.3);
+        const tx=m.x+Math.cos(tn.a)*m.r*0.82, ty=m.y+Math.sin(tn.a)*m.r*0.6;
+        const td=Math.hypot(h.x-tx,h.y-ty);
+        tn.reach=Math.max(0, tn.reach-dt*2.2);
+        if(tn.cd<=0 && td<BAL.MIRE_TENT_R && !h.out){
+          tn.cd=BAL.MIRE_TENT_CD; tn.reach=1;
+          if(attachMonster({id:'miretent', x:tx, y:ty, r:10, hp:1, maxHp:1, dead:false, mire:true},'tether',{r:BAL.MIRE_TENT_R,needMul:0.8,legFirst:true})){
+            applySensit(4); addHeatG(9);
+            parts(tx,ty,10,['#ff9ec2','#c85682','#fff'],110,0.7);
+            sayLine('feat.mireTent',2,0,'ぬまから、て……っ、あし、つかま……!');
+          }
+        }
+      }
+      B.ci=ci0;
+    }
+  }
+}
+/* 沼の蒸発: 溜まっていたものが一気に立ちのぼり、広さと深さに比例して外まで噴き出す */
+function mireEvaporate(m){
+  const B=G.B; if(m.dry) return;
+  m.dry=true;
+  const R=m.r*m.depth*BAL.MIRE_EVAP_K, n=Math.max(4,Math.round(BAL.MIRE_EVAP_N*m.depth));
+  B.fx.push({kind:'evap', x:m.x, y:m.y, r:R, t:0, life:1.6});
+  B.fx.push({kind:'mireburst', x:m.x, y:m.y, r:m.r, t:0, life:0.9});
+  G.shake=Math.min(14,G.shake+7); sfx(320,110,1.0,'sine',0.09);
+  setBanner('沼が蒸発した','溜まっていた甘い霧が、一気に外まで噴き出す','#ff5d9a');
+  for(let i=0;i<n;i++){
+    const a=i*TAU/n+rand(0.5), rr=R*(0.3+0.7*Math.random());
+    const q=snapFloor(m.x+Math.cos(a)*rr, m.y+Math.sin(a)*rr, false, 3)||{x:m.x+Math.cos(a)*rr, y:m.y+Math.sin(a)*rr};
+    spawnCloud(q.x, q.y, 150+120*m.depth, BAL.MIRE_EVAP_LIFE, BAL.SENSIT_GAS*BAL.MIRE_EVAP_RATE*m.depth, 'gas');
+  }
+  spawnCloud(m.x, m.y, m.r*2.2, BAL.MIRE_EVAP_LIFE, BAL.SENSIT_GAS*BAL.MIRE_EVAP_RATE*m.depth, 'gas');
+  for(const h of B.heroes){
+    if(h.out) continue;
+    const d=Math.hypot(h.x-m.x,h.y-m.y); if(d>R) continue;
+    const ci0=B.ci; B.ci=h.hi;
+    addHeatG(BAL.MIRE_EVAP_HEAT*m.depth*(1-d/R*0.5)); applySensit(9*m.depth);
+    sayPartyOrLine(h,'feat.evap','しまった……! こんなに、ひろがって……!');
+    B.ci=ci0;
+  }
+  META.gen.dryLesson=(META.gen.dryLesson|0)+1; saveMeta();
+}
 /* ================= v4.1 菌輪(きんりん) =================
    床に小さな茸が輪になって生えている。踏み越えて中へ入ると一斉に胞子を噴き、
    傘がふくらんで数秒のあいだ柔らかい壁になる。押し出るまで濃い胞子の中。
@@ -4623,27 +4783,38 @@ function bondTick(dt){   // 一人の時の落とし灯り
 /* 暗さで鈍る: 罠や雲や地形の境に気づく距離の係数(0.5〜1) */
 function darkSense(x,y){ const l=lightAt(x,y); return BAL.DARK_LAG+(1-BAL.DARK_LAG)*Math.min(1,l*1.35); }
 /* 催淫灯篭: 明るいが、そばに居ると発情と敏感化が進む */
+/* v5.0 灯篭: 着いた時は「明るいから安心」。しばらく居て初めて「あれ、あつい……?」と気づく。
+   誘蛾灯のように引っぱるのではなく、暗くて心細い時に休みに寄って、温まって離れる */
 function lanternTick(dt){
   const B=G.B; if(!B.lanterns||!B.lanterns.length) return;
   for(const h of B.heroes){
     if(h.out){ h.lantT=0; continue; }
     let near=null, nd=1e9;
     for(const q of B.lanterns){ const d=Math.hypot(q.x-h.x,q.y-h.y); if(d<nd){ nd=d; near=q; } }
-    if(!near||nd>BAL.LANTERN_R*0.62){ h.lantT=Math.max(0,(h.lantT||0)-dt*0.5); continue; }
+    if(!near||nd>BAL.LANTERN_R*0.62){ h.lantT=Math.max(0,(h.lantT||0)-dt*0.5); h.lantSaid=0; continue; }
     const k=1-nd/(BAL.LANTERN_R*0.62), ci0=B.ci; B.ci=h.hi;
     addHeatG(BAL.LANTERN_HEAT*k*dt); applySensit(BAL.LANTERN_SENS*k*dt);
-    if(!near.said && nd<70){ near.said=true; sayLine('feat.lantern',1,0,'あかるい……けど、なんか、あつくなる'); }
     h.lantT=(h.lantT||0)+dt;
-    if(h.lantT>=BAL.LANTERN_STAY){   // 温もっていたら切り上げる(離れないと発情が止まらない)
-      h.lantT=0; h.lantCd=B.time+BAL.LANTERN_CD;
-      if(h.goal&&h.goal.kind==='poi'&&h.goal.sub==='lantern'){ h.goal=null; h.goalT=0; }
+    if(!h.lantSaid && nd<86){ h.lantSaid=1; sayLine('feat.lanternWarm',1,0,'あかるい……ここなら、だいじょうぶ'); }        // 着いた: 安心
+    else if(h.lantSaid===1 && h.lantT>=BAL.LANTERN_WARM_T){ h.lantSaid=2; sayLine('feat.lantern',1,0,'……あれ? なんか、からだ、ぽかぽかして'); }   // 温まって、やっと気づく
+    if(h.lantT>=BAL.LANTERN_STAY){   // 温もったら切り上げる
+      h.lantT=0; h.lantSaid=0; h.lantCd=B.time+BAL.LANTERN_CD;
+      if(h.goal&&h.goal.kind==='poi'&&h.goal.sub==='lantern'){ h.goal=null; h.goalT=0; giveUpOn(h.goal); }
       sayLine('feat.lanternLeave',0,26,'……ここ、ながく居たら だめなやつだ');
     }
     B.ci=ci0;
   }
 }
 /* 灯篭へ寄りたいか: 暗い階で、まだ火照っていなくて、直前に離れたばかりでないとき */
-function lanternWant(p){ const B=G.B; return darkLevel()>0.3 && p.heatLv<1 && (p.aphro||0)<BAL.LANTERN_HEAT_MAX && !(B.time<(p.lantCd||0)); }
+/* v5.0 灯篭へ寄る条件を締めた: 「いま足元が暗くて心細い」時の休み場であって、灯りそのものが目的ではない。
+   暗い階で、足元が実際に暗く、まだ火照っておらず、直前に離れたばかりでもない時だけ */
+function lanternWant(p){
+  const B=G.B;
+  if(darkLevel()<=0.3 || p.heatLv>=1) return false;
+  if((p.aphro||0)>=BAL.LANTERN_HEAT_MAX || (p.sensit||0)>=70) return false;
+  if(B.time<(p.lantCd||0)) return false;
+  return (B.floorLight||0)<BAL.LANTERN_NEED_LIGHT;   /* v5.0 この階でまだ灯りを拾えていない時だけ寄りたくなる(拾った後は用がない)。目当てとしての重みも小さいので、宝箱や祠を差し置いて吸い寄せられはしない */
+}
 /* 灯りを得た(祠・燭台・光茸): その階のあいだ二人の光が増える */
 function gainFloorLight(kind,x,y){
   const B=G.B; if(!B) return;
@@ -4773,17 +4944,40 @@ function corelingTick(e,dt,d,dx,dy){
 function dryKey(){ return 'g'+((META.gen&&META.gen.idx)||1)+'f'+((META.run&&META.run.floor)||1); }
 function dryList(){ META.dry=META.dry||{}; const k=dryKey(); return (META.dry[k]=META.dry[k]||[]); }
 function dryClearAll(){ META.dry={}; }   // ループ(世代の組み替え)で焼き跡も消える
-/* 乾かした所か(0..1)。焼いた円の中ほど強い */
+/* v5.0 焼けた床はタイル単位で持つ(G.map.dryT)。マップチップそのものが焦げるので、どこを焼いたか一目で分かる。
+   META には焼けたタイルの番号だけを残すので、日を跨いでも同じ形で戻る */
+function dryInit(){
+  const M=G.map; if(!M) return;
+  M.dryT=new Uint8Array(MAP_W*MAP_H);
+  const L=dryList(); for(const k of L){ if(k>=0&&k<M.dryT.length) M.dryT[k]=255; }
+}
 function dryAt(x,y){
-  const B=G.B; if(!B||!B.dry||!B.dry.length) return 0;
-  let v=0;
-  for(const d of B.dry){ const dd=Math.hypot(x-d.x,y-d.y); if(dd<d.r) v=Math.max(v, 1-dd/d.r*0.55); }
-  return Math.min(1,v);
+  const M=G.map; if(!M||!M.dryT) return 0;
+  const i=tileI(x), j=tileJ(y); if(!inMap(i,j)) return 0;
+  return M.dryT[j*MAP_W+i]/255;
+}
+/* 焼き付ける: 中心から半径 r のタイルを焦がす。塗れた所だけチャンクを焼き直す */
+function dryPaint(x,y,r){
+  const M=G.map; if(!M||!M.dryT) return 0;
+  const L=dryList(), cap=BAL.DRY_MAX;
+  const i0=tileI(x-r), i1=tileI(x+r), j0=tileJ(y-r), j1=tileJ(y+r);
+  let n=0; const dirty={};
+  for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++){
+    if(!inMap(i,j)) continue;
+    const k=j*MAP_W+i; if(M.dryT[k]) continue;
+    if(Math.hypot(tileCX(i)-x, tileCY(j)-y)>r) continue;
+    M.dryT[k]=255; n++;
+    if(L.length<cap) L.push(k);
+    dirty[chunkKey(Math.floor(i/CHUNK),Math.floor(j/CHUNK))]=1;
+  }
+  if(n){ for(const ck in dirty) M.chunks.delete(ck); M.mini=null; }
+  return n;
 }
 /* その場の湿り気(0 乾いている 〜 1 濡れきっている)。焼いた床は湿り気を消す */
 function wetAt(x,y){
   const z=zoneAt(x,y), w=(typeof ZONE_WET!=='undefined'&&ZONE_WET[z]!==undefined)?ZONE_WET[z]:0.2;
-  return Math.max(0, w*(1-dryAt(x,y)));
+  const m=mireAt(x,y);
+  return Math.max(0, Math.max(w, m?0.9:0)*(1-dryAt(x,y)));
 }
 /* フレイラの与ダメ倍率: 足元の湿り気 × 相手の質 */
 function freilaDmgMul(e){
@@ -4813,30 +5007,50 @@ function wetAround(p){
   for(let i=0;i<8;i++){ const a=i*TAU/8; for(const r of [70,170]){ s+=wetAt(p.x+Math.cos(a)*r,p.y+Math.sin(a)*r); n++; } }
   return n?s/n:0;
 }
-/* 焼く: スタミナを 25% 使い、使った量に応じた半径の床を乾かす。日を跨いでも残る */
+/* v5.0 焼く: 炎のエリアを自分の周りに展開し、歩いた跡を乾かしていく。
+   効果時間は使ったスタミナの割合で決まる(25%なら14秒)。焼けた床は日を跨いでも残る */
 function freilaDry(p){
-  const B=G.B, use=p.staminaMax*BAL.DRY_STAM;
-  if(p.stamina<use) return false;
+  const B=G.B;
+  const want=p.staminaMax*BAL.DRY_STAM;
+  const use=Math.min(want, Math.max(0, p.stamina-p.staminaMax*BAL.DRY_STAM_RES));   /* v5.0 残っている分だけ注ぎ込む: 元気なほど長く燃える */
+  if(use<p.staminaMax*0.08) return false;
   p.stamina-=use; p.dryCd=B.time+BAL.DRY_CD;
-  const r=BAL.DRY_R0+BAL.DRY_R_K*(use/p.staminaMax)/BAL.DRY_STAM;
-  const d={x:p.x, y:p.y, r, t:B.time};
-  B.dry.push(d); if(B.dry.length>BAL.DRY_MAX) B.dry.shift();
-  const L=dryList(); L.push({x:d.x, y:d.y, r:d.r}); while(L.length>BAL.DRY_MAX) L.shift(); saveMeta();   // 同じ階層に何日も通っても際限なく積もらない
-  B.fx.push({kind:'dryburst', x:p.x, y:p.y, r, t:0, life:0.9});
-  for(let i=0;i<26;i++){ const a=rand(TAU), rr=rand(r); parts(p.x+Math.cos(a)*rr, p.y+Math.sin(a)*rr, 1, ['#ff7a3a','#ffd76a','#ffb060'], 120, 0.7); }
+  const dur=BAL.DRY_DUR_K*(use/p.staminaMax);
+  B.dryAura={hi:p.hi, t:0, dur, r:BAL.DRY_AURA_R, paint:0, tiles:0};
+  B.fx.push({kind:'dryburst', x:p.x, y:p.y, r:BAL.DRY_AURA_R, t:0, life:0.9});
+  for(let i=0;i<24;i++){ const a=rand(TAU), rr=rand(BAL.DRY_AURA_R); parts(p.x+Math.cos(a)*rr, p.y+Math.sin(a)*rr, 1, ['#ff7a3a','#ffd76a','#ffb060'], 120, 0.7); }
   G.shake=Math.min(9,G.shake+4); sfx(220,700,0.5,'sawtooth',0.07);
-  floatTxt(p.x,p.y-56,'——乾かした','#ffb060',13,1.5);
+  floatTxt(p.x,p.y-56,'——炎のエリア '+dur.toFixed(0)+'秒','#ffb060',13,1.6);
+  setBanner('炎のエリア','フレイラの周りが乾く。歩いた跡が、そのまま彼女の土俵になる','#ffb060');
   const ci0=B.ci; B.ci=p.hi; sayLine('feat.dry',2,0,'……この床、乾かす'); B.ci=ci0;
   B.nDry=(B.nDry||0)+1;
-  dryEvapCheck(p,d);   // 巣窟や澱みで焼いた: 媚薬が蒸発して外まで広がる
   return true;
+}
+/* オーラの毎フレーム: 足元を焼き広げ、触れた媚薬沼と巣窟を蒸発させる */
+function dryAuraTick(dt){
+  const B=G.B, A=B.dryAura; if(!A) return;
+  const p=B.heroes[A.hi];
+  if(!p||p.out){ B.dryAura=null; return; }
+  A.t+=dt;
+  if(A.t>=A.dur){ B.dryAura=null; floatTxt(p.x,p.y-56,'炎が鎮まった','#c89050',11,1.2); return; }
+  A.paint-=dt;
+  if(A.paint<=0){
+    A.paint=BAL.DRY_PAINT_CD;
+    A.tiles+=dryPaint(p.x,p.y,A.r);
+    if(Math.random()<0.5){ const a=rand(TAU), rr=rand(A.r*0.5,A.r); parts(p.x+Math.cos(a)*rr,p.y+Math.sin(a)*rr,1,['#ff7a3a','#ffb060'],70,0.6); }
+    pushLight(p.x,p.y,A.r*1.1,BAL.DARK_MEM_T*0.7,0.9);
+    // 触れた沼は蒸発する(回避できない広がり)
+    if(B.mires) for(const m of B.mires){ if(m.dry) continue; if(Math.hypot(p.x-m.x,p.y-m.y)<A.r+m.r) mireEvaporate(m); }
+    if(!A.evap && dryEvapCheck(p,{x:p.x,y:p.y,r:A.r})) A.evap=true;   /* v5.0 巣窟・澱みに掛かっていれば、そこも蒸発。一つのエリアにつき一度だけ */
+  }
 }
 /* 焼いた円が巣窟か澱みに掛かっていたら、媚薬が蒸発して外へ噴き出す(通常より強い) */
 function dryEvapCheck(p,d){
   const B=G.B;
+  if(B.time-(B.evapT||-99)<BAL.DRY_EVAP_CD) return false;   /* v5.0 続けざまには噴かない */
   let hit=false;
   for(let i=0;i<12&&!hit;i++){ const a=i*TAU/12; for(const rr of [0, d.r*0.5, d.r*0.9]){ const z=zoneAt(d.x+Math.cos(a)*rr, d.y+Math.sin(a)*rr); if(z==='lewd'||z==='haze'){ hit=true; break; } } }
-  if(!hit) return;
+  if(!hit) return false;
   B.evapT=B.time;
   setBanner('媚薬が蒸発した','熱で膨らんだ甘い霧が、褥の外まで噴き出す','#ff5d9a');
   B.fx.push({kind:'evap', x:d.x, y:d.y, r:BAL.DRY_EVAP_R, t:0, life:1.4});
@@ -4855,6 +5069,7 @@ function dryEvapCheck(p,d){
   }
   // これも学習する: 次からは巣窟や澱みの近くで焼かない
   META.gen.dryLesson=(META.gen.dryLesson|0)+1; saveMeta();
+  return true;
 }
 /* 焼く判断(フレイラのAI): 濡れた所で戦っていて、スタミナに余裕があり、巣窟の近くでなければ */
 function dryTick(p,dt){
@@ -4864,6 +5079,7 @@ function dryTick(p,dt){
     if(wetAt(p.x,p.y)>0.7) sayLine('feat.wet',0,40,'濡れている。火が立たない');
     else if(dryAt(p.x,p.y)>0.5) sayLine('feat.dryGood',0,40,'乾いた。ここなら通る');
   }
+  if(B.dryAura) return;   // 展開中はそのまま歩いて塗り広げる
   if(B.time<(p.dryCd||0)) return;
   if(p.stamina<p.staminaMax*BAL.DRY_STAM_MIN||p.exhausted) return;
   if(attachCount(p)>0||p.pinned||p.charmBind||p.climaxT>0||p.hypnoLv>=2) return;
@@ -4873,6 +5089,7 @@ function dryTick(p,dt){
   const L=denOf();
   if(L && lesson && Math.hypot(p.x-L.x,p.y-L.y)<Math.max(L.rx,L.ry)+BAL.DRY_EVAP_R*0.5) return;
   const z=zoneAt(p.x,p.y); if(lesson && (z==='lewd'||z==='haze')) return;
+  if(B.mires && (META.gen.dryLesson|0)>0){ for(const m of B.mires){ if(!m.dry && Math.hypot(p.x-m.x,p.y-m.y)<BAL.DRY_AURA_R+m.r) return; } }   // v5.0 一度やらかしたら、沼のそばでは焼かない
   if(nearEnemyCount(p.x,p.y,300,false)<2 && p.hp>p.maxHp*0.8) return;   // 戦う理由がある時に使う
   freilaDry(p);
 }
@@ -5906,6 +6123,7 @@ function battleTick(dt){
   eachHero(()=>poiTick(dt));   // 祠・泉・門(v3.0 ヒロインごと)
   denTick(dt);                 // v3.2 巣窟の魔法陣・媚薬の花・壁の光線・番人(1フレームに1度)
   lightsTick(dt); lanternTick(dt); bondTick(dt); ringsTick(dt);   // v4.0 灯りの寿命と催淫灯篭 / v4.1 絆の灯り・菌輪
+  wornTick(dt); miresTick(dt); dryAuraTick(dt);   // v5.0 すり減り / 媚薬沼 / 炎のエリア
   coreWarTick(dt);                   // v4.0 魔核戦に入ったか
   { const ci0=B.ci; for(const h of B.heroes){ if(h.id!=='freila'||h.out) continue; B.ci=h.hi; dryTick(h,dt); } B.ci=ci0; }   // v4.0 フレイラが床を焼くか
   for(const k in B.itemCd){ if(B.itemCd[k]>0) B.itemCd[k]-=dt; }
