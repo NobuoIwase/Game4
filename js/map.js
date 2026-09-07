@@ -619,10 +619,10 @@ function placeNear(px,py,dx,dy,m,fly){
 
 /* ================= 描画: マップチップ・チャンク ================= */
 let TILE_ATLAS=null;
-const TILE_VARS=4, ROCK_ROW=ZONE_IDS.length, CLIFF_ROW=ZONE_IDS.length+1, BRICK_ROW=ZONE_IDS.length+2, FLESH_ROW=ZONE_IDS.length+3;   // 地形帯の行の後に 岩/崖/煉瓦/肉壁
+const TILE_VARS=4, ROCK_ROW=ZONE_IDS.length, CLIFF_ROW=ZONE_IDS.length+1, BRICK_ROW=ZONE_IDS.length+2, FLESH_ROW=ZONE_IDS.length+3, MIRE_ROW=ZONE_IDS.length+4;   // 地形帯の行の後に 岩/崖/煉瓦/肉壁/媚薬沼
 function makeTileAtlas(){
   const T=MAP_T;
-  TILE_ATLAS=document.createElement('canvas'); TILE_ATLAS.width=T*TILE_VARS; TILE_ATLAS.height=T*(ZONE_IDS.length+4);
+  TILE_ATLAS=document.createElement('canvas'); TILE_ATLAS.width=T*TILE_VARS; TILE_ATLAS.height=T*(ZONE_IDS.length+5);
   const g=TILE_ATLAS.getContext('2d');
   const R=(seed)=>{ let sd=seed*9973+17; return ()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; }; };
   const paint=(row,v,fn)=>{ const ox=v*T, oy=row*T, rnd=R(row*11+v+1); g.save(); g.beginPath(); g.rect(ox,oy,T,T); g.clip(); fn(ox,oy,rnd); g.restore(); };
@@ -725,6 +725,21 @@ function makeTileAtlas(){
     g.strokeStyle='rgba(255,150,190,0.22)'; g.lineWidth=1; { const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y); g.quadraticCurveTo(x+rnd()*14-7,y+rnd()*14-7,x+rnd()*20-10,y+rnd()*20-10); g.stroke(); }
     { const x=ox+rnd()*T, y=oy+rnd()*T, r=3+rnd()*2; dot(x,y,r,'rgba(190,80,120,0.55)'); dot(x-r*0.3,y-r*0.35,r*0.35,'rgba(255,210,230,0.6)'); }
   });
+  /* v5.8 媚薬沼のチップ。えちえちエリアと同じくマップチップとして焼く。
+     桃色に濁った液面・沈んだ澱み・浮いている粒・水面のうねり。
+     動くもの(泡・触手・照り)は render.js が上に重ねる。 */
+  for(let v=0;v<TILE_VARS;v++) paint(MIRE_ROW,v,(ox,oy,rnd)=>{
+    g.fillStyle='#8e2f60'; g.fillRect(ox,oy,T,T);
+    g.fillStyle='rgba(206,86,150,0.85)'; g.fillRect(ox,oy,T,T);
+    for(let k=0;k<3;k++){ g.fillStyle='rgba(120,34,84,0.42)'; g.beginPath(); g.ellipse(ox+rnd()*T,oy+rnd()*T,7+rnd()*7,4+rnd()*4,rnd()*3,0,TAU); g.fill(); }
+    g.strokeStyle='rgba(255,190,225,0.28)'; g.lineWidth=1.2;
+    for(let k=0;k<2;k++){ const x=ox+rnd()*T, y=oy+rnd()*T, w=6+rnd()*8;
+      g.beginPath(); g.moveTo(x-w,y); g.quadraticCurveTo(x-w/2,y-2.6,x,y); g.quadraticCurveTo(x+w/2,y+2.6,x+w,y); g.stroke(); }
+    for(let k=0;k<2;k++){ const x=ox+rnd()*T, y=oy+rnd()*T, r=1.6+rnd()*2.2;
+      dot(x,y,r,'rgba(255,170,215,0.60)'); dot(x-r*0.3,y-r*0.35,r*0.4,'rgba(255,240,248,0.75)'); }
+    g.fillStyle='rgba(255,220,240,0.22)'; g.beginPath(); g.ellipse(ox+rnd()*T,oy+rnd()*T,9+rnd()*5,3+rnd()*2,rnd()*3,0,TAU); g.fill();
+    if(rnd()<0.55) dot(ox+rnd()*T,oy+rnd()*T,1.1,'rgba(255,255,255,0.7)');
+  });
 }
 makeTileAtlas();
 const CHUNK=8;   // タイル数(8×32=256px)
@@ -761,6 +776,19 @@ function renderChunk(ci,cj){
         g.beginPath(); g.moveTo(x+T*0.5,y+T*0.5); g.lineTo(sx,sy); g.stroke(); }
       g.fillStyle='rgba(255,255,255,0.10)';
       { const hx=x+((hv*900)%(T*0.6)), hy=y+((hv*1300)%(T*0.6)); g.fillRect(hx,hy,T*0.34,T*0.22); }
+    }
+    /* v5.8 媚薬沼: 液面そのものをマップチップとして焼く(えちえちエリアと同じ扱い)。
+       深いタイルほど濃く沈む。縁は次のループで桃色に光らせる。 */
+    if(s===0 && G.map.mireT && G.map.mireT[j*MAP_W+i]){
+      const dep=G.map.mireT[j*MAP_W+i]/255;
+      g.drawImage(TILE_ATLAS,v*T,MIRE_ROW*T,T,T,x,y,T,T);
+      g.fillStyle='rgba(70,16,48,'+(0.10+0.34*dep).toFixed(3)+')'; g.fillRect(x,y,T,T);
+      /* 縁: 沼でない側に濃い岸を置いて、桃色の水際を一本引く(甘い褥の縁と同じ作り) */
+      const mt=(ii,jj)=>(inMap(ii,jj)&&!solidIJ(ii,jj)&&G.map.mireT[jj*MAP_W+ii])?1:0;
+      if(!mt(i,j-1)){ g.fillStyle='#5c1440'; g.fillRect(x,y,T,5); g.fillStyle='rgba(255,170,225,0.75)'; g.fillRect(x,y,T,2); }
+      if(!mt(i,j+1)){ g.fillStyle='#5c1440'; g.fillRect(x,y+T-5,T,5); g.fillStyle='rgba(255,170,225,0.55)'; g.fillRect(x,y+T-2,T,2); }
+      if(!mt(i-1,j)){ g.fillStyle='#5c1440'; g.fillRect(x,y,5,T); g.fillStyle='rgba(255,170,225,0.60)'; g.fillRect(x,y,2,T); }
+      if(!mt(i+1,j)){ g.fillStyle='#5c1440'; g.fillRect(x+T-5,y,5,T); g.fillStyle='rgba(255,170,225,0.60)'; g.fillRect(x+T-2,y,2,T); }
     }
     if(s===0){
       const zn=ZONE_IDS[z];
@@ -958,7 +986,7 @@ function drawMinimap(g){
   for(const q of G.map.pois){ if(!M.known[q.key]) continue; g.fillStyle=q.kind==='shrine'?(M.visited[q.key]?'#9a9ab0':'#ffd76a'):(q.kind==='spring'?'#8fd3ff':(q.kind==='pool'?'#7fe0ff':(q.kind==='stele'?'#cbd5ff':(q.kind==='stairs'?'#ffffff':(q.kind==='lantern'?'#ff9ed2':(q.kind==='seal'?((B.seals&&B.seals[q.key])?'#ffe9b0':'#c98cff'):'#ff6b81')))))); g.fillRect(tx(q.x)-2,ty(q.y)-2,4,4); }
   for(const c of B.chests){ g.fillStyle='#ffe9b0'; g.fillRect(tx(c.x)-1,ty(c.y)-1,3,3); }
   for(const e of B.enemies){ if(e.boss&&!e.dead){ g.fillStyle='#ff5d7a'; g.fillRect(tx(e.x)-2,ty(e.y)-2,4,4); } }
-  if(B.mires) for(const m of B.mires){ if(m.dry) continue; g.fillStyle=m.iced?'rgba(200,235,255,0.9)':'rgba(200,90,150,0.85)'; g.fillRect(tx(m.x)-1,ty(m.y)-1,2,2); }   // v5.0 媚薬沼(凍ったものは薄氷の色)
+  if(B.mires) for(const m of B.mires){ if(m.dry) continue; const ms=Math.max(2,Math.round(m.r/34)*2); g.fillStyle=m.iced?'rgba(200,235,255,0.9)':'rgba(200,90,150,0.85)'; g.fillRect(tx(m.x)-ms/2,ty(m.y)-ms/2,ms,ms); }   // v5.0 媚薬沼(凍ったものは薄氷の色)。v5.8 大きさぶんの点で描く
   if(B.yamiCap && !B.yamiCap.freed){ g.fillStyle='#c9aaff'; g.fillRect(tx(B.yamiCap.x)-2,ty(B.yamiCap.y)-2,4,4); }   // v5.0 囲まれている誰か
   for(const pk of B.picks){ if(pk.dead||!pk.known) continue; g.fillStyle=pk.kind==='shroom'?'#9fe8c8':(pk.kind==='family'?'#ffe1a8':(pk.kind==='nectar'?'#ffb3cf':'#ffd76a')); g.fillRect(tx(pk.x)-1,ty(pk.y)-1,2,2); }   // v1.8 知っている資源
   if(p.goal){ const gl=p.goal; g.strokeStyle='rgba(255,233,176,0.55)'; g.lineWidth=1; g.setLineDash([2,2]); g.beginPath(); g.moveTo(tx(p.x),ty(p.y)); g.lineTo(tx(gl.x),ty(gl.y)); g.stroke(); g.setLineDash([]);

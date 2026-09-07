@@ -2724,22 +2724,28 @@ function drawMiretentBody(g,e){
   for(let k=1;k<=3;k++){ const u=k/4, px=(-R*0.7)*2*u*(1-u)+ex*u*u, py=R*0.6*(1-u)*(1-u)+(-R*0.7)*2*u*(1-u)+ey*u*u;
     g.fillStyle='rgba(255,190,225,0.55)'; g.beginPath(); g.arc(px+R*0.2,py,R*0.13,0,TAU); g.fill(); }
 }
+/* v5.8 液面そのものはマップチップが描く(map.js の MIRE_ROW)。
+   ここで重ねるのは動くものだけ——照り・泡・水面のうねり・縁から伸びる触手。
+   えちえちエリアと同じ「地形はチップ／生きている物はスプライト」の分け方に揃えた */
 function drawMire(g,m){
   const t=m.t;
+  if(m.dry||m.iced) return;
   if(Math.abs(m.x-G.cam.x)>W/2+m.r*2 || Math.abs(m.y-G.cam.y)>H/2+m.r*2) return;
   g.save(); g.translate(m.x,m.y);
   for(let i=0;i<m.tents.length;i++){ const tn=m.tents[i]; if(Math.sin(tn.a)>0) continue; drawMireTent(g,m,tn,t); }
-  const grad=g.createRadialGradient(0,0,m.r*0.1,0,0,m.r);
-  grad.addColorStop(0,'rgba(255,158,200,0.80)'); grad.addColorStop(0.55,'rgba(206,86,150,0.72)'); grad.addColorStop(1,'rgba(120,40,90,0.62)');
-  g.fillStyle=grad; g.beginPath(); g.ellipse(0,0,m.r,m.r*0.78,0,0,TAU); g.fill();
-  g.strokeStyle='rgba(90,28,66,0.6)'; g.lineWidth=2.4; g.beginPath(); g.ellipse(0,0,m.r,m.r*0.78,0,0,TAU); g.stroke();
-  g.fillStyle='rgba(255,220,240,0.30)';
+  g.save();
+  g.beginPath(); g.ellipse(0,0,m.r*0.94,m.r*0.94*0.78,0,0,TAU); g.clip();   /* チップの縁からはみ出さない */
+  g.fillStyle='rgba(255,220,240,'+(0.14+0.06*Math.sin(t*0.9)).toFixed(3)+')';
   g.beginPath(); g.ellipse(-m.r*0.28,-m.r*0.26,m.r*0.36,m.r*0.14,-0.4,0,TAU); g.fill();
-  for(let i=0;i<4;i++){ const ph=((t*0.35+i*0.27)%1), a=i*1.9+t*0.15;
+  g.strokeStyle='rgba(255,190,225,0.22)'; g.lineWidth=1.4;                   /* ゆっくり広がるうねり */
+  for(let i=0;i<2;i++){ const ph=((t*0.28+i*0.5)%1), rr=m.r*(0.15+0.8*ph);
+    g.globalAlpha=(1-ph)*0.5; g.beginPath(); g.ellipse(0,0,rr,rr*0.78,0,0,TAU); g.stroke(); }
+  g.globalAlpha=1;
+  const nb=2+Math.round(3*m.depth);                                          /* 深い沼ほど泡が多い */
+  for(let i=0;i<nb;i++){ const ph=((t*0.35+i*0.27)%1), a=i*1.9+t*0.15;
     g.fillStyle='rgba(255,200,230,'+((1-ph)*0.55).toFixed(2)+')';
     g.beginPath(); g.arc(Math.cos(a)*m.r*0.5,Math.sin(a)*m.r*0.36-ph*4,1.6+ph*2.6,0,TAU); g.fill(); }
-  g.fillStyle='rgba(70,16,48,'+(0.16+0.30*m.depth).toFixed(2)+')';
-  g.beginPath(); g.ellipse(0,m.r*0.05,m.r*0.55,m.r*0.40,0,0,TAU); g.fill();
+  g.restore();
   for(let i=0;i<m.tents.length;i++){ const tn=m.tents[i]; if(Math.sin(tn.a)<=0) continue; drawMireTent(g,m,tn,t); }
   glow(g,0,0,m.r*1.5,'255,110,180',0.10+0.08*Math.sin(t*1.6));
   g.restore();

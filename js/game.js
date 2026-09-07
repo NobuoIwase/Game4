@@ -2074,6 +2074,7 @@ function aiDecide(foc,dt){
      やむを得ない時(いま目当てがその沼の中にある/逃げている最中)は弱める。 */
   if(B.mires && B.mires.length && !p.pinned && state!=='struggle'){
     const fleeing=(state==='abort'||state==='retreat'||state==='flee');
+    const burning=!!(B.dryAura && B.dryAura.hi===p.hi && (META.gen.dryLesson|0)>0);   /* v5.8 炎をまとって歩いている(一度こぼした後) */
     for(const m of B.mires){
       if(m.dry||m.iced) continue;
       const rx=p.x-m.x, ry=(p.y-m.y)/0.78, rd=Math.hypot(rx,ry)||1;
@@ -2083,9 +2084,13 @@ function aiDecide(foc,dt){
         continue;
       }
       if(p.goal && mireAt(p.goal.x,p.goal.y)===m) continue;   /* その沼の中に用がある時だけは避けない */
-      const near=m.r*BAL.MIRE_AVOID_R;
+      /* v5.8 炎をまとっている間は、触れただけで沼が蒸発して外まで撒き散らす。
+         だから炎の届く距離ぶん、大きく回り込む。焚く判断のほうを直しても、
+         焚いた後に沼のほうへ歩いて行けば同じことになる——足のほうも直す。 */
+      let near=m.r*BAL.MIRE_AVOID_R, kk=BAL.MIRE_AVOID_K;
+      if(burning){ near=Math.max(near,(BAL.DRY_AURA_R+m.r)*BAL.DRY_MIRE_AVOID); kk=BAL.DRY_MIRE_AVOID_K; }
       if(rd<near){
-        const w=BAL.MIRE_AVOID_K*(1-rd/near)*(0.6+0.4*m.depth)*(BAL.MIRE_FEAR*0.5)*(fleeing?BAL.MIRE_FLEE_MUL:1);
+        const w=kk*(1-rd/near)*(0.6+0.4*m.depth)*(BAL.MIRE_FEAR*0.5)*(fleeing?BAL.MIRE_FLEE_MUL:1);
         const tx=-ry/rd, ty=rx/rd, sgn=(tx*dx+ty*dy)>=0?1:-1;
         dx+=(rx/rd*0.5 + tx*sgn)*w;
         dy+=(ry/rd*0.5 + ty*sgn)*w*0.78;
@@ -5394,14 +5399,90 @@ function spawnMires(){
       q=c;
     }
     if(!q) continue;
-    const r=rand(BAL.MIRE_R0,BAL.MIRE_R1), depth=0.45+0.55*((r-BAL.MIRE_R0)/(BAL.MIRE_R1-BAL.MIRE_R0));
+    /* v5.8 大きさは三通りから引く。小さな溜まりは回り込めるが、
+       大沼はまんなかまで触手が届かない——届かない所がいちばん深い、という形になる */
+    const SZ=BAL.MIRE_SIZE, wSum=SZ.reduce((s,o)=>s+o.w,0);
+    let pick=SZ[0], acc=rand(wSum);
+    for(const o of SZ){ acc-=o.w; if(acc<=0){ pick=o; break; } }
+    const r=rand(pick.r[0],pick.r[1]);
+    const depth=pick.d[0]+(pick.d[1]-pick.d[0])*((r-pick.r[0])/Math.max(1,pick.r[1]-pick.r[0]));
     const tents=[];
-    const nt=1+((Math.random()*BAL.MIRE_TENT)|0);
+    const nt=pick.t[0]+((Math.random()*(pick.t[1]-pick.t[0]+1))|0);
     for(let t=0;t<nt;t++){ const a=rand(TAU); tents.push({a, ph:rand(TAU), cd:rand(0,3), reach:0}); }
-    B.mires.push({x:q.x, y:q.y, r, depth, tents, seen:false, dry:false, iced:false, t:rand(9)});
+    B.mires.push({x:q.x, y:q.y, r, depth, size:SZ.indexOf(pick), tents, seen:false, dry:false, iced:false, t:rand(9)});
+  }
+  mireInit();
+}
+/* v5.8 沼をマップチップに焼く。えちえちエリアと同じく地形として持たせる——
+   絵と当たり判定が同じタイルを見るので、見えている縁がそのまま踏んではいけない縁になる。
+   mireT=深さ(0〜255) / mireIdx=どの沼か(添字+1)。蒸発・氷結でタイルごと消える */
+function mireInit(){
+  const M=G.map, B=G.B; if(!M||!B) return;
+  M.mireT=new Uint8Array(MAP_W*MAP_H);
+  M.mireIdx=new Uint8Array(MAP_W*MAP_H);
+  const dirty=new Set();
+  if(B.mires) for(let n=0;n<B.mires.length;n++){
+    mirePaint(B.mires[n],n);
+    mireTiles(B.mires[n],(i,j)=>dirty.add(chunkKey(Math.floor(i/CHUNK),Math.floor(j/CHUNK))));
+  }
+  /* 先に焼いたチャンクのうち、沼が掛かった分だけ捨てる(出発点まわりの焼き置きは活かす) */
+  if(M.chunks) for(const ck of dirty) M.chunks.delete(ck);
+  M.mini=null;
+}
+function mireTiles(m,fn){
+  const i0=tileI(m.x-m.r), i1=tileI(m.x+m.r), j0=tileJ(m.y-m.r*0.78), j1=tileJ(m.y+m.r*0.78);
+  for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++){
+    if(!inMap(i,j)||solidIJ(i,j)) continue;
+    const dx=tileCX(i)-m.x, dy=(tileCY(j)-m.y)/0.78;
+    const d=Math.hypot(dx,dy); if(d>m.r) continue;
+    fn(i,j,d/m.r);
   }
 }
-function mireAt(x,y){ const B=G.B; if(!B||!B.mires) return null; for(const m of B.mires){ if(m.dry||m.iced) continue;   /* v5.0 凍った沼は静かに閉じている */ if(Math.hypot(x-m.x,(y-m.y)/0.78)<m.r) return m; } return null; }
+function mirePaint(m,n){
+  const M=G.map; if(!M||!M.mireT) return;
+  mireTiles(m,(i,j,q)=>{
+    const k=j*MAP_W+i;
+    /* 縁は浅く、まんなかが深い。踏み込むほど重くなるのが見た目でも分かる */
+    const dep=m.depth*(0.45+0.55*(1-q*q));
+    if(dep*255>M.mireT[k]){ M.mireT[k]=Math.max(1,Math.min(255,Math.round(dep*255))); M.mireIdx[k]=n+1; }
+  });
+}
+/* 沼が消えた(蒸発・氷結)時にタイルを剥がす。掛かったチャンクだけ焼き直す */
+function mireClear(m){
+  const M=G.map, B=G.B; if(!M||!M.mireT) return;
+  const dirty=new Set();
+  mireTiles(m,(i,j)=>{
+    const k=j*MAP_W+i;
+    M.mireT[k]=0; M.mireIdx[k]=0;
+    dirty.add(chunkKey(Math.floor(i/CHUNK),Math.floor(j/CHUNK)));
+  });
+  /* 重なっていた別の沼を塗り直す(重なりは滅多に無いが、消えた側だけ剥がす) */
+  if(B.mires) for(let n=0;n<B.mires.length;n++){ const o=B.mires[n]; if(o===m||o.dry||o.iced) continue;
+    if(Math.hypot(o.x-m.x,o.y-m.y)<o.r+m.r) mirePaint(o,n); }
+  if(M.chunks) for(const ck of dirty) M.chunks.delete(ck);
+  M.mini=null;
+}
+/* v5.8 沼の判定はマップチップを引く。描いている物と踏んでいる物が同じタイルになる */
+function mireAt(x,y){
+  const B=G.B, M=G.map; if(!B||!B.mires) return null;
+  if(M&&M.mireIdx){
+    const i=tileI(x), j=tileJ(y); if(!inMap(i,j)) return null;
+    const n=M.mireIdx[j*MAP_W+i]; if(!n) return null;
+    const m=B.mires[n-1];
+    return (m&&!m.dry&&!m.iced)?m:null;   /* v5.0 凍った沼は静かに閉じている */
+  }
+  for(const m of B.mires){ if(m.dry||m.iced) continue; if(Math.hypot(x-m.x,(y-m.y)/0.78)<m.r) return m; }
+  return null;
+}
+/* その場の沼の深さ(0〜1)。縁は浅く、まんなかが深い */
+function mireDepthAt(x,y){
+  const M=G.map; if(!M||!M.mireT) { const m=mireAt(x,y); return m?m.depth:0; }
+  const i=tileI(x), j=tileJ(y); if(!inMap(i,j)) return 0;
+  const n=M.mireIdx[j*MAP_W+i]; if(!n) return 0;
+  const B=G.B, m=B&&B.mires&&B.mires[n-1];
+  if(!m||m.dry||m.iced) return 0;
+  return M.mireT[j*MAP_W+i]/255;
+}
 function miresTick(dt){
   const B=G.B; if(!B.mires||!B.mires.length) return;
   for(const m of B.mires){
@@ -5410,9 +5491,10 @@ function miresTick(dt){
       if(h.out) continue;
       const d=Math.hypot(h.x-m.x,(h.y-m.y)/0.78);
       const ci0=B.ci; B.ci=h.hi;
-      if(d<m.r && !onIce(h)){   // 浸かっている(v5.0 氷の道の上なら沼に浸かっていない)
-        addHeatG(BAL.MIRE_HEAT*m.depth*dt); applySensit(BAL.MIRE_SENS*m.depth*dt);
-        h.slow=Math.max(h.slow||0, BAL.MIRE_SLOW*m.depth);
+      const dep=(mireAt(h.x,h.y)===m)?mireDepthAt(h.x,h.y):0;   /* v5.8 マップチップの深さで効く。縁は浅く、まんなかが重い */
+      if(dep>0 && !onIce(h)){   // 浸かっている(v5.0 氷の道の上なら沼に浸かっていない)
+        addHeatG(BAL.MIRE_HEAT*dep*dt); applySensit(BAL.MIRE_SENS*dep*dt);
+        h.slow=Math.max(h.slow||0, BAL.MIRE_SLOW*dep);
         if(Math.random()<dt*3) parts(h.x+rand(-12,12), h.y-rand(0,10), 1, ['#ff9ec2','#e08ac0','#fff'], 40, 0.7);
         if(!m.seen){ m.seen=true; sayLine('feat.mire',1,0,'うわ、ぬまだ……! あまい、においする'); }
       }
@@ -5439,6 +5521,7 @@ function miresTick(dt){
 function mireEvaporate(m){
   const B=G.B; if(m.dry) return;
   m.dry=true;
+  if(typeof mireClear==='function') mireClear(m);   /* v5.8 マップチップからも剥がす(液面が消える) */
   const R=m.r*m.depth*BAL.MIRE_EVAP_K, n=Math.max(4,Math.round(BAL.MIRE_EVAP_N*m.depth));
   B.fx.push({kind:'evap', x:m.x, y:m.y, r:R, t:0, life:1.6});
   B.fx.push({kind:'mireburst', x:m.x, y:m.y, r:m.r, t:0, life:0.9});
@@ -5849,8 +5932,21 @@ function dryAuraTick(dt){
     A.tiles+=dryPaint(p.x,p.y,A.r);
     if(Math.random()<0.5){ const a=rand(TAU), rr=rand(A.r*0.5,A.r); parts(p.x+Math.cos(a)*rr,p.y+Math.sin(a)*rr,1,['#ff7a3a','#ffb060'],70,0.6); }
     pushLight(p.x,p.y,A.r*1.1,BAL.DARK_MEM_T*0.7,0.9);
-    // 触れた沼は蒸発する(回避できない広がり)
-    if(B.mires) for(const m of B.mires){ if(m.dry) continue; if(Math.hypot(p.x-m.x,p.y-m.y)<A.r+m.r) mireEvaporate(m); }
+    /* 触れた沼は蒸発する。ただし一度こぼした後は、触れる前に自分で炎を落とす——
+       v5.8 焚く判断と足の向きを直しても、追い詰められれば沼のそばに立たされる。
+       その最後の一線で、彼女は残りの効果時間を捨てる。学習が必ず効く形にした */
+    if(B.mires) for(const m of B.mires){
+      if(m.dry||m.iced) continue;
+      if(Math.hypot(p.x-m.x,p.y-m.y)>=A.r+m.r) continue;
+      if((META.gen.dryLesson|0)>0){
+        B.dryAura=null; p.dryCd=B.time+BAL.DRY_CD*0.5;
+        floatTxt(p.x,p.y-56,'炎を落とした','#c89050',11,1.4);
+        for(let i=0;i<10;i++){ const a=rand(TAU), rr=rand(A.r*0.6); parts(p.x+Math.cos(a)*rr,p.y+Math.sin(a)*rr,1,['#7a5a44','#c89050'],60,0.6); }
+        const ci0=B.ci; B.ci=p.hi; sayLine('feat.dryDrop',2,10,'……沼だ。消す'); B.ci=ci0;
+        return;
+      }
+      mireEvaporate(m);
+    }
     if(!A.evap && dryEvapCheck(p,{x:p.x,y:p.y,r:A.r})) A.evap=true;   /* v5.0 巣窟・澱みに掛かっていれば、そこも蒸発。一つのエリアにつき一度だけ */
   }
 }
@@ -5940,7 +6036,7 @@ function icePaintLine(x0,y0,ux,uy,len,halfW){
   const hits=[]; for(const e of B.enemies){ if(e.dead||e.dormant||e.item) continue;
     if(segDist(e.x,e.y,x0,y0,ex,ey)<halfW+e.r) hits.push(e); }
   const mires=[]; if(B.mires) for(const m of B.mires){ if(m.dry||m.iced) continue;
-    if(segDist(m.x,m.y,x0,y0,ex,ey)<halfW+m.r*0.35){ m.iced=true; mires.push(m); } }
+    if(segDist(m.x,m.y,x0,y0,ex,ey)<halfW+m.r*0.35){ m.iced=true; mires.push(m); if(typeof mireClear==='function') mireClear(m); } }   /* v5.8 凍った液面はチップからも消える(氷の道が上書きする) */
   return {len:L, ex, ey, tiles:n, hits, mires};
 }
 function icePaintDisc(x,y,r){
@@ -6115,7 +6211,23 @@ function dryTick(p,dt){
   const L=denOf();
   if(L && lesson && Math.hypot(p.x-L.x,p.y-L.y)<Math.max(L.rx,L.ry)+BAL.DRY_EVAP_R*0.5) return;
   const z=zoneAt(p.x,p.y); if(lesson && (z==='lewd'||z==='haze')) return;
-  if(B.mires && (META.gen.dryLesson|0)>0){ for(const m of B.mires){ if(!m.dry && Math.hypot(p.x-m.x,p.y-m.y)<BAL.DRY_AURA_R+m.r) return; } }   // v5.0 一度やらかしたら、沼のそばでは焼かない
+  /* v5.8 沼のそばでは焚かない。
+     v5.0 の判定は「今いる場所から 炎の半径+沼の半径」だけを見ていた。
+     炎のエリアは展開したあとも十数秒ついて回るので、少し離れた所で焚いて、
+     そのまま歩いて沼を蒸発させる——という抜け道が残っていた。
+     焚く前に広く見て、進んでいく先も一緒に見る。一度こぼしていれば、その距離をさらに広げる。 */
+  if(B.mires && B.mires.length){
+    const keep=lesson?BAL.DRY_MIRE_LEARN:BAL.DRY_MIRE_KEEP;
+    const ax=p.x+(p.vx||0)*3.0, ay=p.y+(p.vy||0)*3.0;   /* 三秒ぶん先も見る */
+    for(const m of B.mires){
+      if(m.dry||m.iced) continue;
+      const R=(BAL.DRY_AURA_R+m.r)*keep;
+      if(Math.hypot(p.x-m.x,p.y-m.y)<R || Math.hypot(ax-m.x,ay-m.y)<R){
+        if(lesson){ const ci0=B.ci; B.ci=p.hi; sayLine('feat.dryNoMire',0,26,'……沼がある。ここでは焚かない'); B.ci=ci0; }
+        return;
+      }
+    }
+  }
   if(nearEnemyCount(p.x,p.y,300,false)<2 && p.hp>p.maxHp*0.8) return;   // 戦う理由がある時に使う
   freilaDry(p);
 }
