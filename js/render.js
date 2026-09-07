@@ -12,6 +12,7 @@ const EN_COLORS={
   goblin:['#8fd36a','#4a7a3a'], leech:['#ffb3a0','#d87a6a'],
   sentinel:['#9aa3c8','#5a6284'],
   coreling:['#ffc2d8','#a03a62'],   // v4.0 核の落とし子
+  lurecap:['#9fe8c8','#c85682'], hugcap:['#f0e0bc','#b89468'],   // v4.1 きのこ
   tower:['#c98cff','#5a3a7a'],
   spore:['#c9ecff','#7fb8e0'], ghosthand:['#dfe4ff','#aab4e8'], eye:['#f0e8ff','#7a3ff2'],
   succubus:['#ff86b3','#5a1f3a'], web:['#ffb3cf','#fff'],
@@ -333,6 +334,19 @@ function drawFx(g,f){
     g.lineWidth=4*(1-pr*0.4); g.globalAlpha=a; g.strokeStyle='#fff';
     g.beginPath(); g.moveTo(f.x,f.y); g.lineTo(f.x+Math.cos(f.ang)*f.len, f.y+Math.sin(f.ang)*f.len); g.stroke();
     g.restore();
+  }else if(f.kind==='ringpuff'){   // v4.1 菌輪: 輪の全部から一斉に噴く
+    const a=1-pr;
+    g.globalAlpha=a*0.5; g.fillStyle='#e8d0f0';
+    for(let i=0;i<10;i++){ const th=i*TAU/10+0.15, rr=f.r*(1+0.5*pr);
+      g.beginPath(); g.arc(f.x+Math.cos(th)*f.r, f.y+Math.sin(th)*f.r*0.78, 6+22*pr, 0, TAU); g.fill(); }
+    g.globalAlpha=a*0.35; g.strokeStyle='#e8d0f0'; g.lineWidth=4;
+    g.beginPath(); g.ellipse(f.x,f.y,f.r*(0.4+0.9*pr),f.r*0.78*(0.4+0.9*pr),0,0,TAU); g.stroke();
+  }else if(f.kind==='hugdrop'){   // v4.1 抱き茸: 傘が上から下りてくる
+    const a=1-pr;
+    g.globalAlpha=a*0.55; g.fillStyle='#d8bc90';
+    g.beginPath(); g.ellipse(f.x,f.y-40*(1-pr),f.r*(0.6+0.5*pr),f.r*(0.4+0.3*pr),0,0,TAU); g.fill();
+    g.globalAlpha=a*0.8; g.strokeStyle='#b89468'; g.lineWidth=3;
+    g.beginPath(); g.ellipse(f.x,f.y,f.r*(0.4+0.7*pr),f.r*(0.3+0.5*pr),0,0,TAU); g.stroke();
   }else if(f.kind==='dryburst'){   // v4.0 フレイラが床を焼いた: 熱の輪が外へ抜ける
     const a=1-pr;
     g.globalAlpha=a*0.7; g.strokeStyle='#ffb060'; g.lineWidth=7*(1-pr*0.6); g.shadowColor='#ff7a3a'; g.shadowBlur=18;
@@ -429,6 +443,26 @@ function drawPick(g,pk){
       g.fillStyle=c; g.beginPath(); g.ellipse(x,y-r*0.7,r,r*0.55,0,Math.PI,TAU); g.fill();
       g.fillStyle='rgba(255,255,255,0.7)'; g.beginPath(); g.arc(x-r*0.3,y-r*0.95,1.2,0,TAU); g.fill();
     }
+  }else if(pk.kind==='family'){
+    // v4.1 家族茸(光茸の亜種): 親茸の傘の下に、小さいのが三つ寄り添って生えている。同じ拍で息をする
+    const br=1+0.05*Math.sin(t*1.8);
+    g.fillStyle='rgba(8,8,26,0.32)'; g.beginPath(); g.ellipse(0,3,17,5.5,0,0,TAU); g.fill();
+    glow(g,0,-11,30,'255,225,168',0.30+0.12*Math.sin(t*1.8));
+    const kids=[[-8,1,3.6],[8,2,3.0],[1,3,2.6]];
+    for(let i=0;i<kids.length;i++){ const x=kids[i][0], y=kids[i][1], r=kids[i][2]*(1+0.06*Math.sin(t*1.8-0.5-i*0.4));
+      g.fillStyle='#e6e2d0'; g.fillRect(x-1,y-r*0.5,2,r*0.7+2);
+      g.fillStyle=['#ffe1a8','#ffd08c','#fff0c8'][i]; g.beginPath(); g.ellipse(x,y-r*0.6,r,r*0.6,0,Math.PI,TAU); g.fill();
+      g.fillStyle='rgba(255,255,255,0.75)'; g.beginPath(); g.arc(x-r*0.3,y-r*0.85,0.9,0,TAU); g.fill(); }
+    g.save(); g.translate(0,-4); g.scale(br,br);
+    g.fillStyle='#efe9d6'; g.fillRect(-2.2,-9,4.4,11);
+    g.fillStyle='#f7d79a'; g.beginPath(); g.ellipse(0,-9,12.5,7.5,0,Math.PI,TAU); g.fill();
+    g.fillStyle='rgba(214,168,110,0.55)'; g.beginPath(); g.ellipse(0,-8.6,12.5,3.0,0,0,Math.PI); g.fill();
+    g.strokeStyle='rgba(180,140,90,0.5)'; g.lineWidth=0.8;
+    for(let i=1;i<7;i++){ const x=-12.5+i*(25/7); g.beginPath(); g.moveTo(x,-9); g.lineTo(x*0.55,-6.2); g.stroke(); }
+    g.fillStyle='#fff6dc'; g.beginPath(); g.ellipse(-4,-12,4.2,2.2,-0.35,0,TAU); g.fill();
+    g.restore();
+    g.strokeStyle='rgba(255,225,168,'+(0.30+0.16*Math.sin(t*1.8)).toFixed(2)+')'; g.lineWidth=1;
+    for(let i=0;i<kids.length;i++){ g.beginPath(); g.moveTo(0,1); g.quadraticCurveTo(kids[i][0]*0.5,kids[i][1]+1.5,kids[i][0],kids[i][1]); g.stroke(); }
   }else if(pk.kind==='nectar'){
     g.fillStyle='rgba(8,8,26,0.3)'; g.beginPath(); g.ellipse(0,2,12,4,0,0,TAU); g.fill();
     g.strokeStyle='#4f8a4a'; g.lineWidth=2; g.beginPath(); g.moveTo(0,2); g.quadraticCurveTo(2,-8,0,-16); g.stroke();
@@ -1020,6 +1054,8 @@ function drawEnemy(g,e){
 /* 種族ごとの本体描画(drawEnemy から分離。描き込みモードではオフスクリーンで陰影を重ねる) */
 function drawBody(g,e){
   if(e.id==='core') drawCore(g,e);
+  else if(e.id==='lurecap') drawLurecap(g,e);
+  else if(e.id==='hugcap') drawHugcap(g,e);
   else if(e.id==='coreling') drawCoreling(g,e);
   else if(e.id==='inyoku') drawInyoku(g,e);
   else if(e.id==='suiyou') drawSuiyou(g,e);
@@ -2499,6 +2535,89 @@ function drawSentinel(g,e){
   g.restore();
 }
 /* v2.0 魔核: 最深部の心臓。濡れた肉の塊、太い根、縦に裂けた目。脈動(pulseT)で膨らみ、鞭(whipT)で根が彼女へ伸びる */
+/* v4.1 菌輪: 床に小さな茸が輪になって生えている。踏み込むと一斉にふくらんで、柔らかい壁になる */
+function drawRing(g,R){
+  const t=(G.B?G.B.time:0);
+  if(Math.abs(R.x-G.cam.x)>W/2+R.r*1.6 || Math.abs(R.y-G.cam.y)>H/2+R.r*1.6) return;
+  const shut=R.state==='shut', cool=R.state==='cool';
+  const sw=shut?Math.min(1,(BAL.RING_T-R.t)/0.35):0;         // ふくらむ
+  g.save(); g.translate(R.x,R.y);
+  // 輪の内側の菌糸(うっすら白い円)
+  g.fillStyle=shut?'rgba(226,192,234,0.30)':'rgba(210,220,215,0.13)';
+  g.beginPath(); g.ellipse(0,0,R.r,R.r*0.78,0,0,TAU); g.fill();
+  if(shut) glow(g,0,0,R.r*1.2,'226,192,234',0.16+0.08*Math.sin(t*5));
+  g.strokeStyle=shut?'rgba(232,208,240,0.7)':'rgba(198,212,200,0.42)'; g.lineWidth=shut?2.4:1.6;
+  g.setLineDash(shut?[]:[5,4]); g.beginPath(); g.ellipse(0,0,R.r,R.r*0.78,0,0,TAU); g.stroke(); g.setLineDash([]);
+  // 輪の茸
+  const n=R.caps;
+  for(let i=0;i<n;i++){
+    const a=i*TAU/n+0.15, x=Math.cos(a)*R.r, y=Math.sin(a)*R.r*0.78;
+    const base=cool?0.6:1.0, s=(base+sw*0.9)*(1+0.07*Math.sin(t*2+i));
+    g.fillStyle='rgba(8,8,26,0.30)'; g.beginPath(); g.ellipse(x,y+1,5*s,1.8*s,0,0,TAU); g.fill();
+    g.fillStyle='#efe6d2'; g.fillRect(x-1.5*s,y-5*s,3.0*s,6*s);
+    g.fillStyle=shut?'#e2c0ea':'#d8d0bc';
+    g.beginPath(); g.ellipse(x,y-5*s,6.6*s,4.2*s,0,Math.PI,TAU); g.fill();
+    g.fillStyle=shut?'rgba(190,140,205,0.75)':'rgba(160,150,130,0.55)';
+    g.beginPath(); g.ellipse(x,y-4.6*s,6.6*s,1.5*s,0,0,Math.PI); g.fill();
+    g.fillStyle='rgba(255,255,255,0.55)'; g.beginPath(); g.arc(x-2*s,y-6.2*s,1.0*s,0,TAU); g.fill();
+  }
+  if(shut){ g.strokeStyle='rgba(232,208,240,'+(0.35+0.25*Math.sin(t*6)).toFixed(2)+')'; g.lineWidth=3;
+    g.beginPath(); g.ellipse(0,0,R.r*1.02,R.r*0.8,0,0,TAU); g.stroke(); }
+  g.restore();
+}
+/* v4.1 媚茸: 見破られるまでは光茸そのもの。開くと傘が裏返り、桃色の襞と粘つく糸が見える */
+function drawLurecap(g,e){
+  const r=e.r, t=e.t, open=(e.state==='open'||e.revealed);
+  g.fillStyle='rgba(8,8,26,0.32)'; g.beginPath(); g.ellipse(0,2,r*1.3,r*0.45,0,0,TAU); g.fill();
+  if(!open){
+    // 光茸の擬態(drawPick の shroom と同じ形・同じ色)
+    glow(g,0,-8,24,'159,232,200',0.30+0.14*Math.sin(t*2.5));
+    const caps=[[-7,0,6,'#7fd8b8'],[5,1,5,'#9fe8c8'],[0,-3,7.5,'#b6f2da']];
+    for(let i=0;i<caps.length;i++){ const x=caps[i][0], y=caps[i][1], rr=caps[i][2], c=caps[i][3];
+      g.fillStyle='#d8d8e8'; g.fillRect(x-1.5,y-rr*0.6,3,rr*0.8+2);
+      g.fillStyle=c; g.beginPath(); g.ellipse(x,y-rr*0.7,rr,rr*0.55,0,Math.PI,TAU); g.fill();
+      g.fillStyle='rgba(255,255,255,0.7)'; g.beginPath(); g.arc(x-rr*0.3,y-rr*0.95,1.2,0,TAU); g.fill(); }
+    return;
+  }
+  // 裏返った傘。襞が外を向き、糸を引いている
+  const k=e.openT>0?Math.min(1,(2.2-e.openT)/0.35):1;
+  glow(g,0,-8,26,'255,158,194',0.34+0.14*Math.sin(t*4));
+  g.fillStyle='#c9b0a0'; g.fillRect(-2,-9,4,11);
+  g.save(); g.translate(0,-10); g.scale(1,-1*(0.3+0.7*k));   // 裏返し
+  g.fillStyle='#ff9ec2'; g.beginPath(); g.ellipse(0,0,r*1.25,r*0.85,0,Math.PI,TAU); g.fill();
+  g.strokeStyle='rgba(200,86,130,0.75)'; g.lineWidth=1.1;
+  for(let i=1;i<9;i++){ const x=-r*1.25+i*(r*2.5/9); g.beginPath(); g.moveTo(x,0); g.lineTo(x*0.5,-r*0.72); g.stroke(); }
+  g.restore();
+  for(let i=0;i<4;i++){ const a=t*1.4+i*1.6, ln=r*(0.8+0.5*Math.abs(Math.sin(t*2+i)));
+    g.strokeStyle='rgba(255,200,220,0.5)'; g.lineWidth=1;
+    g.beginPath(); g.moveTo(Math.cos(a)*r*0.5,-8); g.quadraticCurveTo(Math.cos(a)*r*0.9,-6,Math.cos(a)*ln,-2); g.stroke(); }
+}
+/* v4.1 抱き茸: 太い柄と、人ひとり分の大きな傘。近づくとしなって、傘が下りてくる */
+function drawHugcap(g,e){
+  const r=e.r, t=e.t;
+  const bend=e.bendT>0?(1-e.bendT/0.55):0;
+  const held=!!(G.B&&G.B.heroes.some(h=>attachedSlots(h).some(sl=>h.limbs[sl].mon===e)));
+  const lean=(held?1:bend)*0.9;
+  g.fillStyle='rgba(8,8,26,0.4)'; g.beginPath(); g.ellipse(0,4,r*1.5,r*0.5,0,0,TAU); g.fill();
+  // 柄(しなる)
+  g.strokeStyle='#e8dcc0'; g.lineWidth=r*0.55; g.lineCap='round';
+  g.beginPath(); g.moveTo(0,2); g.quadraticCurveTo(lean*r*0.5,-r*1.1,lean*r*1.5,-r*1.6); g.stroke();
+  g.strokeStyle='rgba(190,168,130,0.5)'; g.lineWidth=1;
+  g.beginPath(); g.moveTo(0,0); g.quadraticCurveTo(lean*r*0.5,-r*1.1,lean*r*1.5,-r*1.6); g.stroke();
+  // 傘
+  g.save(); g.translate(lean*r*1.5,-r*1.6); g.rotate(lean*0.55);
+  const grad=g.createLinearGradient(0,-r*0.9,0,r*0.2);
+  grad.addColorStop(0,'#f0e0bc'); grad.addColorStop(0.6,'#d8bc90'); grad.addColorStop(1,'#b89468');
+  g.fillStyle=grad; g.beginPath(); g.ellipse(0,0,r*1.85,r*1.15,0,Math.PI,TAU); g.fill();
+  // 傘の裏の襞(下から覗くと見える。温かく湿っている)
+  g.fillStyle='rgba(226,168,150,0.85)'; g.beginPath(); g.ellipse(0,0,r*1.85,r*0.42,0,0,Math.PI); g.fill();
+  g.strokeStyle='rgba(180,110,100,0.7)'; g.lineWidth=1.2;
+  for(let i=1;i<13;i++){ const x=-r*1.85+i*(r*3.7/13); g.beginPath(); g.moveTo(x,0); g.lineTo(x*0.4,r*0.4*(0.7+0.3*Math.sin(t*2+i))); g.stroke(); }
+  // 傘の上のいぼ
+  g.fillStyle='rgba(255,248,228,0.75)';
+  for(let i=0;i<6;i++){ const a=Math.PI+0.25+i*0.52; g.beginPath(); g.ellipse(Math.cos(a)*r*1.25,Math.sin(a)*r*0.8,r*0.16,r*0.10,0,0,TAU); g.fill(); }
+  g.restore();
+}
 /* v4.0 核の落とし子: 魔核の根がちぎれて生まれた、桃色の幼い塊。尾を引きずって這い寄る */
 function drawCoreling(g,e){
   const r=e.r, t=e.t, wob=Math.sin(t*7)*0.12;
@@ -3180,6 +3299,7 @@ function draw(){
     const B=G.B, p=B.hero;
     drawLight(g,p.x,p.y);
     if(B.dry) for(const d of B.dry) drawDry(g,d);   // v4.0 フレイラが焼いた床(日を跨いで残る)
+    if(B.rings) for(const R of B.rings) drawRing(g,R);   // v4.1 菌輪
     if(B.coreRoots) drawCoreRoots(g,B.coreRoots);  // v4.0 魔核の跡: 根 → 赤黒い渦
     for(const st of B.stains) drawStain(g,st);
     for(const tr of B.trails) drawTrail(g,tr);

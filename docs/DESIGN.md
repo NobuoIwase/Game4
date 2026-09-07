@@ -315,6 +315,17 @@ idは汎用カタログ準拠。効果はすべて数値・挙動レベルで表
   `storyTick`: 落ち着いている時(拘束・発情・魔物30体超でない)に 38〜58 秒ごと、その階層の独り言を吹き出しで。降り口で `descend`、魔核の間を見つけた時に `finalEncounter`(1戦1度)。結果画面: clear=`ending`、reset=`reset`。
 - 表示: `#storybox`(盤面の上、タップか時間で閉じる)。ホームの「物語」画面は序章と到達済みの階層の導入、魔核討伐後は結末を載せる。
 
+### 3-34. v4.1 きのこ
+
+- **家族茸** (`PICK_DEF.family`): `spawnPick('family')` を階に `PICK_FAMILY_N`(1)株、zone は光茸と同じ moss。取ると経験値 `FAMILY_XP`(0.20)と `B.bond=true`。`lightAtRaw` に「二人を結ぶ線分からの距離が `BOND_R`(130)以内なら明るさ 0.9 まで」を足す(`segDist`)。一人の時は `bondTick` が `BOND_SOLO_CD`(2.4秒)ごとに足元へ `BOND_SOLO_R`(170)・寿命 `BOND_SOLO_LIFE`(30秒)の灯りを落とす。取った瞬間に二人の間を6点に分けて照らす。
+- **遠くから見える**(v4.0 の抜けの修正): 光茸と家族茸は `inSight` に加えて `DARK_FAR_SEE`(900px)以内なら画面外でも `known` になる。仕様の「燭台・光キノコ・祠は遠くからでも見えて」に合わせた。
+- **媚茸** (`lurecap`, `lurecapTick`): `state:'lure'` の間は `drawPick` の光茸とまったく同じ絵で、`lightAtRaw` に「未発覚の媚茸から170px以内は明るさ0.82まで」を足す——**本当に光っている**ので釣られる。目当ての採点では `add('lure','shroom',...)` として `LURE_WORTH`(1.25)で候補に入る(表示は「光茸」)。`LURE_R`(48)以内で `state='open'`、`cling` で脚に巻きつき、発情 `LURE_HEAT`(22)・敏感 `LURE_SENS`(6)・半径120の胞子雲。`lureLooksReal()` は `!revealed && knowLv('lurecap')<2` なので、**理解まで学習すると候補から消える**(`goalValid` も落ちる)。`TRAP_SPECIES` にも入れたので、そばのジェムも諦める。
+- **抱き茸** (`hugcap`, `hugcapTick`): 動かない大型。`HUG_R`(86)以内で `bendT=0.55` の予兆(柄がしなる)→ 予兆中に52px以上動いていなければ `cling`(`needMul` `HUG_NEED`=1.55)。**掴んでいる間の処理は「四肢に絡みつき中」の分岐**に置いた(そこで `continue` するため、種別 tick には来ない)。そこで茸は `homeX/homeY` に固定し、彼女の方を傘の下へ 110px/秒 で引き寄せ、発情 `HUG_HEAT`(5.5/秒)・敏感 `HUG_SENS`(2.6/秒)・0.5秒ごとに貫通 `HUG_DOT`(0.9)、3秒で胞子雲。
+- **菌輪** (`spawnRings`/`ringsTick`/`drawRing`): 階層ごとに `RING_N`(1〜3)個、輪の全周が床である場所にだけ置く。`open` の輪の中心 72% に入ると `shut`(`RING_T`=5秒)へ移り、`RING_R*1.35` の濃い胞子雲(`RING_RATE`=1.45倍)、発情+14・敏感+5、`learnTrap('ring')`。閉じている間は中に居るだけで発情 `RING_HEAT`(9/秒)・敏感 `RING_SENS`(3.2/秒)、外へ出ようとすると `RING_PUSH`(150)で押し戻される。`RING_CD`(16秒)で開き直す。`ringKnown()`(trapKnow)が立つと `ringAvoid` が目当ての採点から輪の中を外し、近づくと `feat.ringKnown` を言う。
+- **野生の茸** (`spawnWildShrooms`): 媚茸 `WILD_LURE`(階層ごとに1〜4)と抱き茸 `WILD_HUG`(0〜2)を、夜側のENを使わずに洞の一部として生やす(カードとしても買える: unlock 400 / 820)。
+- **図鑑と場面**: `js/codex_v20.js` に媚茸・抱き茸(lore + 手記三段 + after)、`js/scenes_v20.js`/`js/scenes_freila.js` に押し倒しビートと抱き茸の敗北本文(二人ぶん)。
+- **ついでに直した既存の穴**: 行コメントに飲まれて動いていなかった 2 行 — `e.hasteT` の減算(**王の号令の加速が永久に切れなかった**)と、降り口に立った時の「……ここから、おりられる」。
+
 ### 3-33. v4.0 (F) 巣窟の報酬とループの演出
 
 - **報酬** (`spawnDen`): 王の宝箱は `L.deep`(最奥)。常設の宝箱は `DEN_CHESTS`(3)を楕円上の相対位置 [0.35,0.45] / [-0.10,-0.42] / [0.62,-0.30] に。赤ジェムは `DEN_REDGEM`(5)個を、口から奥へ螺旋に散らして `dropGem(x,y,DEN_REDGEM_V=14)`。`drawGem` は `v>=9` を赤(#ff5d7a・辺7.0)で描く(黄は v>=4)。全て `snapFloor` を通すので届く床の上。

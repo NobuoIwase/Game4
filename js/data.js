@@ -99,6 +99,13 @@ const BAL={
   DEN_CHESTS:3, DEN_REDGEM:5, DEN_REDGEM_V:14,   // 常設の宝箱の数 / 赤ジェムの数と価値(黄4より強い)
   LOOP_WIN_T:5.6,          // 魔核が根になってから渦が立つまで(結果画面へ移るまでの秒数)
   LOOP_ROOT_T:1.6, LOOP_WIND_T:3.2,              // 根だけになる → 巻き上がる → 渦
+  /* --- v4.1 きのこ --- */
+  LURE_R:48, LURE_CD:5.5, LURE_HEAT:22, LURE_SENS:6, LURE_CLOUD_R:120, LURE_CLOUD_LIFE:7,   // 媚茸: 掴む距離 / 掴み直しの間隔 / 掛かった時の発情と敏感 / 吹く胞子
+  LURE_WORTH:1.25,          // 光茸だと思っている間の「目当て」の価値(光茸 1.1 より少しだけ強く見える)
+  HUG_R:86, HUG_CD:7, HUG_HEAT:5.5, HUG_SENS:2.6, HUG_DOT:0.9, HUG_NEED:1.55,   // 抱き茸: かぶせる距離 / かぶせ直しの間隔 / 傘の中の発情・敏感・じわ削り / 振りほどきにくさ
+  RING_N:[1,1,2,2,2,3,3,3], RING_R:74, RING_T:5.0, RING_CD:16,   // 菌輪: 階層ごとの数 / 輪の半径 / 閉じている秒数 / 開き直すまで
+  RING_HEAT:9, RING_SENS:3.2, RING_RATE:1.45, RING_PUSH:150,      // 菌輪: 中に居る間の発情・敏感(毎秒) / 胞子の濃さ / 押し返す強さ
+  WILD_LURE:[1,2,2,2,3,3,3,4], WILD_HUG:[0,0,1,1,1,2,2,2],        // 洞そのものとして生える媚茸・抱き茸の数(夜側のENは使わない)
 
   /* --- v3.2 甘い褥の巣窟(えちえちエリア) --- */
   DEN_ENTER_HEAT:22, DEN_ENTER_SENS:14,       // 敷居をまたいだ瞬間、匂いに殴られる
@@ -264,6 +271,9 @@ const BAL={
   PRAY_DMG:0.04, PRAY_HP:0.03, PRAY_SPD:0.01, PRAY_HEAL:40,
   // v1.8 地形の資源・イベント・目当て
   PICK_SHROOM_N:4, PICK_SHROOM_RESPAWN:30, PICK_SHROOM_MAX:5,       // 光茸: 初期数/追加間隔(s)/上限
+  PICK_FAMILY_N:1, PICK_FAMILY_MAX:2, FAMILY_XP:0.20,               // v4.1 家族茸: 一階に1〜2株。経験値は光茸より少し薄い
+  BOND_R:130,                        // 絆の灯り: 二人を結ぶ帯の太さ
+  BOND_SOLO_CD:2.4, BOND_SOLO_R:170, BOND_SOLO_LIFE:30,   // 一人の時: 通ってきた道に、この間隔で長もちする灯りを落とす
   PICK_NECTAR_N:3, PICK_NECTAR_RESPAWN:25, PICK_NECTAR_MAX:4,       // 蜜の花
   PICK_TREASURE_CD:28, PICK_TREASURE_MAX:2,                         // 沈んだ宝: 出現間隔/上限
   POOL_CD:45, POOL_T:2.0, STELE_T:2.0,                              // 清水の再使用/浸かる時間、石碑を読む時間
@@ -492,6 +502,19 @@ const MONSTERS={
     desc:'深淵の心臓。肉の巣の最奥で脈打ち、鞭のような根で四肢を繋ぎ、脈動で快感を送り、床から手を生やす。倒せば彼女の目的は果たされる。',
     trait:'根の繋留/快感の脈動/手の召喚。討たれると深淵が組み替わる',
   },
+  /* ---- v4.1 きのこ ---- */
+  lurecap:{
+    name:'媚茸', role:'擬態罠・甘い胞子', cost:6, unlock:400, tier:'mid',
+    hp:52, spd:0, r:11, dmg:2, xp:7,
+    desc:'光茸そっくりに光る偽物。暗い所ほどよく目立つ。手が届く距離まで来ると傘が裏返り、粘つく襞が脚に巻きついて甘い胞子を吹きかける。一度見破られると、もう同じ手は効かない。',
+    trait:'光茸のふりをして待つ。触れると脚に巻きつき、媚薬の胞子。学習(理解)で見破られる',
+  },
+  hugcap:{
+    name:'抱き茸', role:'大型・傘の下', cost:11, unlock:820, tier:'large',
+    hp:210, spd:0, r:22, dmg:5, xp:20,
+    desc:'人の背丈ほどの、柔らかい茸。動かない。近づくと柄がゆっくりしなって、傘が上からかぶさってくる。傘の裏の襞は温かく湿っていて、閉じ込めたものを撫でつづける。押し返せば抜けられるが、その間ずっと撫でられている。',
+    trait:'動かない。近づくと傘をかぶせて閉じ込め、襞で撫でながら胞子を溜める',
+  },
   /* ---- v4.0 魔核の専用ミニオン(カードではない。魔核が産む) ---- */
   coreling:{
     name:'核の落とし子', role:'魔核の眷属・吸い上げ', cost:0, unlock:-1, tier:'fodder', guardian:true,
@@ -567,11 +590,11 @@ const POI_DEF={
    一日=一階層。降り口に着けば次の階層へ(その日は終わり)。捕まれば同じ階層に再挑戦、二連敗で入口へ戻る(世代が変わり経験を失う。手記だけ残る)。
    最終階層は魔核を倒せば目的達成。深いほど夜側のENが多く、魔物も硬い(mon)。affinity=その階層で HP×1.2 になる種 */
 const FLOORS=[
-  { id:'f1', name:'入口の洞',   sub:'苔と水の浅い洞。まだ光が届く',          depth:1, dark:0.34, zoneW:{moss:5,damp:3,water:1,ruin:1,flower:1}, wall:'rock',  en:{start:1.0,base:1.0,regen:1.0,max:1.0},     mon:{hp:1.0,dmg:1.0},   affinity:['slug','worm','goblin','hand'], col:'#8fd3ff', lewd:{name:'蜜の窪地', sub:'甘い蜜が溜まる窪み。床がぬめり、手が伸びる。奥に王の宝箱', guard:'slugqueen', beam:'climax', guardSub:'蜜に浸かった女王が、窪みの底で待っている'} },
+  { id:'f1', name:'入口の洞',   sub:'苔と水の浅い洞。まだ光が届く',          depth:1, dark:0.34, zoneW:{moss:5,damp:3,water:1,ruin:1,flower:1}, wall:'rock',  en:{start:1.0,base:1.0,regen:1.0,max:1.0},     mon:{hp:1.0,dmg:1.0},   affinity:['slug','worm','goblin','hand','lurecap'], col:'#8fd3ff', lewd:{name:'蜜の窪地', sub:'甘い蜜が溜まる窪み。床がぬめり、手が伸びる。奥に王の宝箱', guard:'slugqueen', beam:'climax', guardSub:'蜜に浸かった女王が、窪みの底で待っている'} },
   { id:'f2', name:'水鏡の洞',   sub:'浅瀬と湿った洞。足を取られる',          depth:2, dark:0.44, zoneW:{damp:4,water:4,moss:2,hotspring:1},        wall:'rock',  en:{start:1.1,base:1.15,regen:1.15,max:1.15}, mon:{hp:1.15,dmg:1.05}, affinity:['slime','mistslime','leech','slimeking','worm','suiyou'], col:'#7fe0ff', lewd:{name:'湯けむりの隠れ湯', sub:'湯気の濃い隠れ湯。火照りが止まらない。奥に王の宝箱', guard:'suiyou', beam:'hypno', guardSub:'湯の中から、白い腕がいくつも伸びている'} },
-  { id:'f3', name:'蜜の花園',   sub:'花と温泉。甘い匂いが濃い',              depth:3, dark:0.5, zoneW:{flower:5,moss:2,hotspring:2,damp:1},        wall:'rock',  en:{start:1.2,base:1.3,regen:1.3,max:1.3},     mon:{hp:1.3,dmg:1.1},   affinity:['flower','moth','gas','imp','succubus','dreamtree','inyoku'], col:'#ffb3cf', lewd:{name:'花の褥', sub:'花びらが敷き詰められた褥。花粉が濃い。奥に王の宝箱', guard:'succubus', beam:'climax', guardSub:'花に埋もれて、寸止めの淫魔が眠っている'} },
+  { id:'f3', name:'蜜の花園',   sub:'花と温泉。甘い匂いが濃い',              depth:3, dark:0.5, zoneW:{flower:5,moss:2,hotspring:2,damp:1},        wall:'rock',  en:{start:1.2,base:1.3,regen:1.3,max:1.3},     mon:{hp:1.3,dmg:1.1},   affinity:['flower','moth','gas','imp','succubus','dreamtree','inyoku','lurecap','hugcap'], col:'#ffb3cf', lewd:{name:'花の褥', sub:'花びらが敷き詰められた褥。花粉が濃い。奥に王の宝箱', guard:'succubus', beam:'climax', guardSub:'花に埋もれて、寸止めの淫魔が眠っている'} },
   { id:'f4', name:'沈んだ回廊', sub:'石畳の遺跡。封印石を灯さねば降り口は開かない', depth:4, dark:0.6, zoneW:{ruin:6,damp:2,water:1,moss:1},          wall:'brick', en:{start:1.3,base:1.5,regen:1.5,max:1.5},     mon:{hp:1.5,dmg:1.15},  affinity:['gazer','beamer','eye','runemage','tower','bossgazer','guardian'], puzzle:'seals', col:'#cbd5ff', lewd:{name:'淫紋の間', sub:'床いちめんに紋が刻まれた間。踏むほど身体が疼く。奥に王の宝箱', guard:'guardian', beam:'hypno', guardSub:'紋の中心に、遺跡の番人が据わっている'} },
-  { id:'f5', name:'肉の巣',     sub:'壁も床も脈打つ。深淵の心臓に近い',    depth:5, dark:0.68, zoneW:{flesh:5,nest:3,flower:1,damp:1},           wall:'flesh', en:{start:1.5,base:1.75,regen:1.75,max:1.75}, mon:{hp:1.75,dmg:1.25}, affinity:['gtent','hand','pot','worm','slugqueen','succuqueen','gobking','vampi','mouth'], col:'#ff6b81', lewd:{name:'肉の褥', sub:'脈打つ肉の褥。横になれば、もう起きられない。奥に王の宝箱', guard:'gtent', beam:'climax', guardSub:'褥の奥から、太い触手が幾本も生えている'} },
+  { id:'f5', name:'肉の巣',     sub:'壁も床も脈打つ。深淵の心臓に近い',    depth:5, dark:0.68, zoneW:{flesh:5,nest:3,flower:1,damp:1},           wall:'flesh', en:{start:1.5,base:1.75,regen:1.75,max:1.75}, mon:{hp:1.75,dmg:1.25}, affinity:['gtent','hand','pot','worm','slugqueen','succuqueen','gobking','vampi','mouth','hugcap'], col:'#ff6b81', lewd:{name:'肉の褥', sub:'脈打つ肉の褥。横になれば、もう起きられない。奥に王の宝箱', guard:'gtent', beam:'climax', guardSub:'褥の奥から、太い触手が幾本も生えている'} },
   /* v3.0 追加の階層(世代=魔核の討伐回数で開く) */
   { id:'f6', name:'骸の回廊',   sub:'骨を積んだ煉瓦の回廊。番人が多い',      depth:6, dark:0.76, zoneW:{ruin:5,flesh:2,damp:2,nest:1},           wall:'brick', en:{start:1.6,base:2.0,regen:2.0,max:2.0},     mon:{hp:2.0,dmg:1.35},  affinity:['guardian','sentinel','gazer','beamer','ghost','ghosthand','eye','runemage'], col:'#d9d2ff', lewd:{name:'骸の寝台', sub:'骨で組んだ寝台。横たえられた者の形に凹んでいる。奥に王の宝箱', guard:'guardian', beam:'hypno', guardSub:'寝台の主が、骨の椅子から立ち上がる'} },
   { id:'f7', name:'星の湖底',   sub:'星明かりの湖。浅瀬と水妖',              depth:7, dark:0.82, zoneW:{water:5,damp:3,moss:1,hotspring:1},         wall:'rock',  en:{start:1.7,base:2.3,regen:2.3,max:2.3},     mon:{hp:2.3,dmg:1.45},  affinity:['suiyou','slime','mistslime','leech','slimeking','inyoku','moth','succubus'], col:'#9fd8ff', lewd:{name:'星の浅瀬', sub:'星が映る浅瀬。水が腕の形になって待っている。奥に王の宝箱', guard:'suiyou', beam:'hypno', guardSub:'星を映す水が、腕の形に立ち上がる'} },
@@ -586,7 +609,8 @@ const curFloorIdx=()=>Math.min(openFloors()-1,Math.max(0,((META.run&&META.run.fl
 const curFloor=()=>{ const F=FLOORS[curFloorIdx()]; return Object.assign({}, F, {final: F.depth>=openFloors()}); };   // v3.0 最終階層は世代で動く
 /* v1.8 地形の資源(拾い物): 地形帯ごとに生える/沈んでいる。彼女は必要に応じて目当てにする */
 const PICK_DEF={
-  shroom:  { name:'光茸',     zone:'moss',   desc:'拾うと経験値。光で 900px 内の場所を知る。v4.0 二人の間を照らし、その階のあいだ灯りが増える' },
+  shroom:  { name:'光茸',     zone:'moss',   desc:'拾うと経験値。光で 900px 内の場所を知る。v4.0 その階のあいだ二人の光が増える' },
+  family:  { name:'家族茸',   zone:'moss',   desc:'v4.1 光茸の亜種。親茸のまわりに小さいのが寄り添って生えている。取ると【絆の灯り】——その階のあいだ、二人を結ぶ道がずっと照らされる(一人なら、通ってきた道に灯りが落ちる)' },
   nectar:  { name:'蜜の花',   zone:'flower', desc:'スタミナ+45・HP+10%。花粉で敏感化+8' },
   treasure:{ name:'沈んだ宝', zone:'water',  desc:'必要経験値の35%とコイン。浅瀬で足を取られながら拾う' },
 };
@@ -621,12 +645,14 @@ const SPEC_THREAT={
   slug:1, goblin:0, leech:1, worm:1, ghost:0, slime:0, gas:1, imp:1, flower:2, mistslime:1, gtent:2,
   hand:1, serpent:2, moth:1, pot:2, slugqueen:2, dreamtree:2, vampi:2,
   spore:1, ghosthand:2, eye:1, succubus:3, gazer:3, beamer:3, bossgazer:3, web:2, tower:2,
-  slimeking:2, runemage:3, succuqueen:3, gobking:2, inyoku:1, suiyou:2, mouth:2, guardian:3, core:3, sentinel:2 };
+  slimeking:2, runemage:3, succuqueen:3, gobking:2, inyoku:1, suiyou:2, mouth:2, guardian:3, core:3, sentinel:2,
+  lurecap:2, hugcap:2, coreling:1 };   // v4.0/v4.1
 const SPEC_DANGER={ flower:130, gtent:90, slug:55, worm:55, gas:60, slime:110, leech:60,
   hand:50, serpent:120, moth:70, pot:95, slugqueen:80, dreamtree:125,
   gazer:70, beamer:60, bossgazer:130, succubus:110, ghosthand:90, spore:60, eye:40, web:90, tower:60,
-  slimeking:120, runemage:150, succuqueen:120, gobking:130, inyoku:70, suiyou:100, mouth:90, guardian:150, core:260, sentinel:120 };
-const TRAP_SPECIES=new Set(['flower','pot','web','dreamtree','mouth','guardian']);   // 知っていれば、そばのジェムは諦める
+  slimeking:120, runemage:150, succuqueen:120, gobking:130, inyoku:70, suiyou:100, mouth:90, guardian:150, core:260, sentinel:120,
+  lurecap:60, hugcap:120, coreling:45 };   // v4.0/v4.1
+const TRAP_SPECIES=new Set(['flower','pot','web','dreamtree','mouth','guardian','hugcap','lurecap']);   // 知っていれば、そばのジェムは諦める(v4.1 きのこの罠も)
 const KNOW_NAMES=['未知','認識','理解','熟知'];
 const CARD_LV_MAX=5;
 const cardLvMult=lv=>({ hp:1+0.08*(lv-1), dmg:1+0.10*(lv-1) });   // Lvは主に頭数で強くなる

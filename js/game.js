@@ -236,6 +236,7 @@ function startBattle(){
     seenT:0, bossSeen:!!(META.run&&META.run.bossSeen), exploreSaid:false,                          // v2.4 視界の記憶 / この run でボスを見た(武器選びに使う)
     lights:[], lanterns:[], floorLight:0,                                                          // v4.0 暗闇: 残る灯り / 催淫灯篭 / その階で得た灯り
     coreWar:false, core:null,                                                                      // v4.0 魔核戦に入ったか / その個体
+    bond:false, bondT:0, rings:[],                                                                 // v4.1 家族茸の絆の灯り / 菌輪
     dry:[], evapT:-99, coreRoots:null,                                                             // v4.0 フレイラが焼いた床(日を跨いで残る) / 媚薬が蒸発した時刻 / 魔核の跡(根→渦)
   };
   genMap();               // 地形(世代×階層で変わる)
@@ -250,6 +251,8 @@ function startBattle(){
   spawnInitialProps();
   spawnInitialPicks();    // v1.8 地形の資源(光茸・蜜の花・沈んだ宝)
   spawnDen();             // v3.2 巣窟の報酬と仕掛け
+  spawnWildShrooms();     // v4.1 洞そのものとして生えている茸(媚茸・抱き茸)
+  spawnRings();           // v4.1 菌輪
   // 描き込みスプライトの事前焼き(デッキの種族×位相を最初の数十フレームで焼いておく)
   G.gfxLv=2; G.kCap=2; G.prebake=[];
   if(typeof resetSpriteCache==='function') resetSpriteCache();   // 前の戦闘の焼き絵(別デッキ・別倍率)は捨てる
@@ -2440,6 +2443,8 @@ function spawnUnit(id, x, y, o){
   if(u.boss){ u.bstate='chase'; u.bt=3.2; u.cdx=0; u.cdy=0; }
   /* v1.0 追加種 */
   if(id==='hand'){ u.gropeCd=0; u.retreatT=0; }
+  if(id==='lurecap'){ u.state='lure'; u.revealed=false; u.lureCd=0; u.openT=0; }   // v4.1 光茸のふり
+  if(id==='hugcap'){ u.hugCd=2; u.bendT=0; u.hugT=0; u.homeX=u.x; u.homeY=u.y; }   // 根が張っているので動かない
   if(id==='serpent'){ u.biteCd=0; }
   if(id==='moth'){ u.orbitA=rand(TAU); u.orbitDir=Math.random()<0.5?-1:1; u.dustT=rand(0.6,1.6); u.swoopCd=rand(3,5); u.swoopT=0; u.cdx=0; u.cdy=0; }
   if(id==='pot'){ u.grabCd=1.5; u.eatN=0; }
@@ -2591,6 +2596,18 @@ function enemiesUpdate(dt){
 
     // 四肢に絡みつき/吸い付き中: ヒロインに追従するだけ
     if(e.state==='attached'){
+      if(e.id==='hugcap'){   // v4.1 抱き茸は根が張っているので動かない。傘の下へ彼女の方が引き寄せられる
+        e.x=(e.homeX!==undefined?e.homeX:e.x); e.y=(e.homeY!==undefined?e.homeY:e.y);
+        const dd=Math.hypot(p.x-e.x,p.y-e.y)||1;
+        if(dd>e.r*1.1){ p.x+=(e.x-p.x)/dd*110*dt; p.y+=(e.y-p.y)/dd*110*dt; }
+        addHeatG(BAL.HUG_HEAT*dt); applySensit(BAL.HUG_SENS*dt);
+        e.dotAcc=(e.dotAcc||0)+dt;
+        if(e.dotAcc>=0.5){ e.dotAcc-=0.5; hurtHero(BAL.HUG_DOT,e,{pierce:true,quiet:true,noKb:true}); }
+        e.hugT=(e.hugT||0)+dt;
+        if(e.hugT>3 && !e.puffed){ e.puffed=true; spawnCloud(e.x,e.y,150,8,BAL.SENSIT_GAS*1.1,'gas'); }
+        if(Math.random()<dt*5) parts(p.x+rand(-16,16),p.y-rand(0,26),1,['#e8d4b0','#ffd0a0','#fff'],40,0.6);
+        continue;
+      }
       const anch=e.suck?suckAnchor(p,e.suck):limbAnchor(p,e.limb);
       e.x=anch.x; e.y=anch.y;
       if(e.id==='inyoku'){ e.holdT=(e.holdT||0)-dt; if(e.holdT<=0 && e.limb){ detachLimb(e.limb,{}); e.swoopCd=rand(3,5); e.orbitA=rand(TAU); e.y-=40; } }   // v2.0 淫翼は数秒で離れて舞い戻る
@@ -2629,7 +2646,7 @@ function enemiesUpdate(dt){
       if(e.boss){ floatTxt(e.x,e.y-e.r-20,'まわりこんできた!','#ff6b81',11,1.2); }
       continue;
     }
-    e.zone=zoneAt(e.x,e.y); if(e.spd0!==undefined){ const dm=dryMonMul(e); e.spd=e.spd0*zoneMonSpd(e.zone,e.id)*((e.hasteT||0)>0?1.35:1)*(dm?dm.spd:1); }   // v4.0 焼いた床のヌルヌル系は鈍る if((e.hasteT||0)>0) e.hasteT-=dt;   // v2.4 王の号令で一時的に速い
+    e.zone=zoneAt(e.x,e.y); if(e.spd0!==undefined){ const dm=dryMonMul(e); e.spd=e.spd0*zoneMonSpd(e.zone,e.id)*((e.hasteT||0)>0?1.35:1)*(dm?dm.spd:1); }   /* v4.0 焼いた床のヌルヌル系は鈍る */ if((e.hasteT||0)>0) e.hasteT-=dt;   // v2.4 王の号令で一時的に速い
     if((e.burnT||0)>0){ e.burnT-=dt; e.burnTick=(e.burnTick||0)-dt; if(e.burnTick<=0){ e.burnTick=0.4; damageEnemy(e,3+0.08*p.level); if(Math.random()<0.5) parts(e.x,e.y-e.r*0.5,1,['#ff7a3a','#ffd76a'],40,0.4); } }   // v3.0 煉獄の剣の燃焼
     if(e.dead) continue;   // 燃え尽きた個体はこのフレームの行動をしない
     e.x=clampMapX(e.x,e.r); e.y=clampMapY(e.y,e.r);
@@ -2646,6 +2663,10 @@ function enemiesUpdate(dt){
       coreTick(e,dt,d,dx,dy);
     }else if(e.id==='coreling'){
       corelingTick(e,dt,d,dx,dy);
+    }else if(e.id==='lurecap'){
+      lurecapTick(e,dt,d,dx,dy);
+    }else if(e.id==='hugcap'){
+      hugcapTick(e,dt,d,dx,dy);
     }else if(e.id==='sentinel'){
       sentinelTick(e,dt,d,dx,dy);
     }else if(e.id==='dreamtree'){
@@ -3255,6 +3276,7 @@ function goalValid(p,g){
   if(g.kind==='chest') return B.chests.includes(g.ref) && !g.ref.taken;
   if(g.kind==='item') return B.items.includes(g.ref);
   if(g.kind==='pick') return B.picks.includes(g.ref) && !g.ref.dead;
+  if(g.kind==='lure') return !!(g.ref && !g.ref.dead && lureLooksReal(g.ref));   // v4.1 見破ったら用はない
   if(g.kind==='poi'){ const q=g.ref; if(!M.known[q.key]) return false;
     if(q.kind==='shrine') return !M.visited[q.key];
     if(q.kind==='spring') return p.hp<p.maxHp*0.7 && p.springCd<=0;
@@ -3380,7 +3402,7 @@ function updateGoalSolo(p){
   const cands=[];
   if(B.dbgCands) B.lastCands=null;   // 検証用: 目当ての候補を覗く(B.dbgCands=true の時だけ)
   const anyCaptive=B.heroes.some(c=>c.out&&c.captive&&c!==p);   // v3.2 仲間が捕まっている間は、寄り道の価値を落とす(木の実を拾いに行かない)
-  const add=(kind,sub,x,y,worth,ref,key)=>{ worth*=goalPref(p,kind,sub); if(anyCaptive && kind!=='rescue') worth*=BAL.RESCUE_FOCUS; if(!coreLeashOk(kind,sub,x,y)) return; /* v4.0 魔核戦の間は寄り道しない */ if(worth<=0 || !passAt(x,y,false) || nearKnownTrap(x,y)) return; if(ref && gaveUp(ref)) return; /* v2.1 諦めた目標は外す */ if(crestKnow()>=1 && B.traps.some(tr=>tr.armed && Math.hypot(tr.x-x,tr.y-y)<tr.r+40)) return; /* 知っている紋の罠の上は目当てにしない */ const d=Math.hypot(x-p.x,y-p.y); const fz=zoneFear(zoneAt(x,y)), fm=fz>=3?0.5:(fz>=2?0.7:(fz>=1?0.9:1));
+  const add=(kind,sub,x,y,worth,ref,key)=>{ worth*=goalPref(p,kind,sub); if(anyCaptive && kind!=='rescue') worth*=BAL.RESCUE_FOCUS; if(!coreLeashOk(kind,sub,x,y)) return; /* v4.0 魔核戦の間は寄り道しない */ if(worth<=0 || !passAt(x,y,false) || nearKnownTrap(x,y) || ringAvoid(x,y)) return;   /* v4.1 覚えた菌輪の中は目当てにしない */ if(ref && gaveUp(ref)) return; /* v2.1 諦めた目標は外す */ if(crestKnow()>=1 && B.traps.some(tr=>tr.armed && Math.hypot(tr.x-x,tr.y-y)<tr.r+40)) return; /* 知っている紋の罠の上は目当てにしない */ const d=Math.hypot(x-p.x,y-p.y); const fz=zoneFear(zoneAt(x,y)), fm=fz>=3?0.5:(fz>=2?0.7:(fz>=1?0.9:1));
     const lm=(darkLevel()>0.05 && kind!=='rescue' && kind!=='wait')?(BAL.DARK_GOAL_K+(1-BAL.DARK_GOAL_K)*lightAt(x,y)):1;   // v4.0 暗い所は気が進まない(行かないわけではない)
     cands.push({kind,sub,x,y,ref,key,d,worth,score:worth*fm*lm/(1+d/600)}); };   // v2.2 嫌な地形の中の目当ては割り引く(価値そのものは入る判断に使うので残す)
   const hpR=p.hp/p.maxHp, stR=p.stamina/p.staminaMax;
@@ -3408,6 +3430,12 @@ function updateGoalSolo(p){
     else if(q.kind==='lantern') w=lanternWant(p)?BAL.LANTERN_WANT*darkLevel():0;   // v4.0 暗いほど灯りに寄りたい(そばに居ると発情が溜まると知っていても)
     if(leaving && q.kind!=='stairs' && q.kind!=='seal' && q.kind!=='core' && q.kind!=='spring') w*=0.3;
     add('poi',q.kind,q.x,q.y,w,q,q.key);
+  }
+  for(const e of B.enemies){   // v4.1 媚茸: 見破るまでは光茸に見えている(暗い階ほど魅力的に映る)
+    if(e.dead||e.id!=='lurecap'||!lureLooksReal(e)) continue;
+    if(!e.seenPick && !inSight(e,p) && Math.hypot(e.x-p.x,e.y-p.y)>BAL.DARK_FAR_SEE) continue;
+    e.seenPick=true;
+    add('lure','shroom',e.x,e.y,BAL.LURE_WORTH*(leaving?0.3:1),e);
   }
   for(const pk of B.picks){
     if(pk.dead||!pk.known) continue; let w=0;
@@ -3587,7 +3615,8 @@ function poiTick(dt){
     if(q.kind==='stairs'){
       if(!B.wantExit && d<130 && M.known[q.key]) sayLine('stairsWait',0,30,'まだ、おりないよ。あとで!');   // v2.1 まだ降りない
       if(!B.exitLocked && !exitGuarded() && d<60 && !p.pinned && p.climaxT<=0 && attachCount(p)===0 && !p.charmBind){
-        if(B.ci===nearestHeroIdx(q.x,q.y)) B.exitT+=dt;   // v3.0 いちばん近い子だけが進める(二人で倍速にならない) if(B.exitT>0.3 && B.exitT<0.3+dt) heroBubble(p,'……ここから、おりられる',false,2);
+        if(B.ci===nearestHeroIdx(q.x,q.y)) B.exitT+=dt;   /* v3.0 いちばん近い子だけが進める(二人で倍速にならない) */
+        if(B.exitT>0.3 && B.exitT<0.3+dt) heroBubble(p,'……ここから、おりられる',false,2);
         if(B.exitT>=BAL.EXIT_STAND && G.mode==='battle') startDescend();
       }else if(d>=60 && !B.heroes.some(h=>!h.out&&h!==p&&Math.hypot(q.x-h.x,q.y-h.y)<60)) B.exitT=Math.max(0,B.exitT-dt*2);   // v3.0 相手が降り口に居るなら減らさない
     }
@@ -4455,9 +4484,141 @@ function lightAtRaw(x,y){
   for(const h of B.heroes){ if(h.out) continue; const r=heroLightR(h)*(HEROES[h.id]&&HEROES[h.id].lightK||1); const d=Math.hypot(x-h.x,y-h.y); if(d<r) v=Math.max(v,1-d/r); }
   if(B.lanterns) for(const q of B.lanterns){ const d=Math.hypot(x-q.x,y-q.y); if(d<BAL.LANTERN_R) v=Math.max(v,(1-d/BAL.LANTERN_R)*0.95); }
   if(B.lights) for(const q of B.lights){ const d=Math.hypot(x-q.x,y-q.y); if(d<q.r){ const fade=1-q.t/q.life; v=Math.max(v,(1-d/q.r)*q.k*fade); } }
+  { const pr=bondPair(); if(pr){ const d=segDist(x,y,pr[0].x,pr[0].y,pr[1].x,pr[1].y); if(d<BAL.BOND_R) v=Math.max(v,(1-d/BAL.BOND_R)*0.9); } }   // v4.1 絆の灯り
+  for(const q of B.enemies){ if(q.dead||q.id!=='lurecap'||q.revealed) continue; const d=Math.hypot(x-q.x,y-q.y); if(d<170) v=Math.max(v,(1-d/170)*0.82); }   // v4.1 媚茸は本当に光っている(だから釣られる)
   if(B.event){ const d=Math.hypot(x-B.event.x,y-B.event.y); if(d<260) v=Math.max(v,(1-d/260)*0.9); }
   for(const z of B.zones){ if(!z.fire) continue; const d=Math.hypot(x-z.x,y-z.y); if(d<z.r*1.3) v=Math.max(v,(1-d/(z.r*1.3))*0.8); }
   return Math.min(1,v);
+}
+
+
+/* ================= v4.1 菌輪(きんりん) =================
+   床に小さな茸が輪になって生えている。踏み越えて中へ入ると一斉に胞子を噴き、
+   傘がふくらんで数秒のあいだ柔らかい壁になる。押し出るまで濃い胞子の中。
+   一度やられれば覚えて(trapKnow)、次からは輪を避けて歩く */
+function spawnRings(){
+  const B=G.B, dep=Math.max(1,Math.min(8,(B.floor&&B.floor.depth)||1));
+  const n=(BAL.RING_N[dep-1]||1);
+  B.rings=[];
+  for(let i=0;i<n;i++){
+    let q=null;
+    for(let k=0;k<90&&!q;k++){ const a=rand(TAU), d=rand(430,1500);
+      const c=snapFloor(clampMapX(B.hero.x+Math.cos(a)*d,90), clampMapY(B.hero.y+Math.sin(a)*d,90), false, 4);
+      if(!c||!reachableAt(c.x,c.y,false)) continue;
+      let ok=true;   // 輪ぜんぶが床であること(壁に食い込ませない)
+      for(let s=0;s<10;s++){ const t=s*TAU/10; if(!passAt(c.x+Math.cos(t)*BAL.RING_R, c.y+Math.sin(t)*BAL.RING_R*0.78, false)){ ok=false; break; } }
+      if(ok) q=c;
+    }
+    if(!q) continue;
+    B.rings.push({x:q.x, y:q.y, r:BAL.RING_R, state:'open', t:0, cd:0, seen:false, caps:8+((Math.random()*4)|0)});
+  }
+}
+function ringAt(x,y){ const B=G.B; if(!B.rings) return null; for(const R of B.rings){ if(Math.hypot(x-R.x,(y-R.y)/0.78)<R.r) return R; } return null; }
+function ringsTick(dt){
+  const B=G.B; if(!B.rings||!B.rings.length) return;
+  for(const R of B.rings){
+    if(R.state==='shut'){ R.t-=dt; if(R.t<=0){ R.state='cool'; R.cd=BAL.RING_CD; } }
+    else if(R.state==='cool'){ R.cd-=dt; if(R.cd<=0) R.state='open'; }
+    for(const h of B.heroes){
+      if(h.out) continue;
+      const d=Math.hypot(h.x-R.x,(h.y-R.y)/0.78);
+      const ci0=B.ci; B.ci=h.hi;
+      if(R.state==='open' && d<R.r*0.72){   // 踏み込んだ: 一斉に噴いて、傘が閉じる
+        R.state='shut'; R.t=BAL.RING_T; R.seen=true;
+        spawnCloud(R.x,R.y,R.r*1.35,BAL.RING_T+5,BAL.SENSIT_GAS*BAL.RING_RATE,'gas');
+        B.fx.push({kind:'ringpuff', x:R.x, y:R.y, r:R.r, t:0, life:0.8});
+        addHeatG(14); applySensit(5); h.stumbleDur=Math.max(h.stumbleDur,0.5);
+        parts(R.x,R.y,26,['#e8d0f0','#ffd0e4','#fff'],150,0.9); sfx(200,90,0.4,'sine',0.07); G.shake=Math.min(7,G.shake+3);
+        learnTrap('ring');
+        sayLine('feat.ring',2,0,'わ、わっ……! きのこ、いっせいに……!');
+        B.nRing=(B.nRing||0)+1;
+      }
+      if(R.state!=='cool' && ringKnown() && d>R.r*1.05 && d<R.r*2.1) sayLine('feat.ringKnown',0,30,'ここ、わっかになってる。まわろ');   // 覚えた輪は避けて通る
+      if(R.state==='shut' && d<R.r*1.05){   // 中に居る間: 濃い胞子と、押し返してくる傘
+        addHeatG(BAL.RING_HEAT*dt); applySensit(BAL.RING_SENS*dt);
+        if(d>R.r*0.72){ const dd=Math.hypot(h.x-R.x,h.y-R.y)||1; h.vx-=(h.x-R.x)/dd*BAL.RING_PUSH*dt; h.vy-=(h.y-R.y)/dd*BAL.RING_PUSH*dt; }
+        if(Math.random()<dt*3) parts(h.x+rand(-14,14),h.y-rand(0,24),1,['#e8d0f0','#ffd0e4'],40,0.7);
+      }
+      B.ci=ci0;
+    }
+  }
+}
+/* 覚えた輪は避けて歩く(踏んだことがあるか、知識が進んでいれば) */
+function ringKnown(){ return (META.gen.trapKnow&&META.gen.trapKnow.ring)?1:0; }
+function ringAvoid(x,y){
+  const B=G.B; if(!B.rings||!ringKnown()) return false;
+  for(const R of B.rings){ if(R.state==='cool') continue; if(Math.hypot(x-R.x,(y-R.y)/0.78)<R.r*0.95) return true; }
+  return false;
+}
+/* ================= v4.1 きのこ =================
+   媚茸: 光茸そっくりに光って待つ。暗いほどよく目立ち、彼女は灯りだと思って寄っていく。
+         手が届く距離で傘が裏返り、粘つく襞が脚に巻きついて甘い胞子を吹く。
+         一度「理解」すれば、光り方の違いで見破れるようになる。
+   抱き茸: 動かない大型。近づくと柄がしなって傘をかぶせ、襞の中に閉じ込めて撫でつづける。 */
+function lureLooksReal(e){ return !e.revealed && knowLv('lurecap')<2; }   // 見破られていない間だけ、光茸に見える
+function lurecapTick(e,dt,d,dx,dy){
+  const B=G.B, p=B.hero;
+  e.lureCd=(e.lureCd||0)-dt;
+  if(!lureLooksReal(e) && d<170 && d>BAL.LURE_R) sayLine('feat.lureKnown',0,26,'……あれ、にせものだ。いろが ちがう');   // 見破っている(近寄らない)
+  if(e.openT>0){ e.openT-=dt; if(e.openT<=0) e.state='lure'; }
+  if(e.state==='lure' && d<BAL.LURE_R && e.lureCd<=0){
+    e.revealed=true; e.state='open'; e.openT=2.2; e.lureCd=BAL.LURE_CD;
+    codexMet('lurecap');
+    const got=attachMonster(e,'cling',{legFirst:true,needMul:0.9});
+    addHeatG(BAL.LURE_HEAT); applySensit(BAL.LURE_SENS);
+    spawnCloud(e.x,e.y-6,BAL.LURE_CLOUD_R,BAL.LURE_CLOUD_LIFE,BAL.SENSIT_GAS*1.15,'gas');
+    parts(e.x,e.y-8,20,['#ff9ec2','#9fe8c8','#fff'],150,0.8);
+    sfx(240,120,0.35,'sawtooth',0.07); G.shake=Math.min(6,G.shake+3);
+    floatTxt(e.x,e.y-30,'——にせもの','#ff9ec2',12,1.3);
+    sayLine('feat.lure',2,0,got?'えっ、ひかり……!? ちが、これ きのこじゃ……っ':'にせもの……! ひかってたのに……!');
+    B.nLure=(B.nLure||0)+1;
+  }
+}
+function hugcapTick(e,dt,d,dx,dy){
+  const B=G.B, p=B.hero;
+  e.hugCd=(e.hugCd||0)-dt;
+  e.hugT=0; e.puffed=false;   // 傘の中の処理は「絡みつき中」の分岐で(こちらは狙う側)
+  if(d<BAL.HUG_R && e.hugCd<=0 && !p.out){
+    e.hugCd=BAL.HUG_CD; e.bendT=0.55;   // 柄がしなる予兆
+    e.aimX=p.x; e.aimY=p.y;
+  }
+  if(e.bendT>0){
+    e.bendT-=dt;
+    if(e.bendT<=0){
+      const dd=Math.hypot(p.x-e.aimX,p.y-e.aimY);
+      if(dd<52 && d<BAL.HUG_R+30){   // 予兆の間に逃げていなければ、傘がかぶさる
+        codexMet('hugcap');
+        if(attachMonster(e,'cling',{needMul:BAL.HUG_NEED})){
+          B.hugFx=B.hugFx||[]; B.fx.push({kind:'hugdrop', x:p.x, y:p.y, r:e.r*2.6, t:0, life:0.5});
+          applySensit(5); p.stumbleDur=Math.max(p.stumbleDur,0.5);
+          sfx(150,70,0.4,'sine',0.07); G.shake=Math.min(7,G.shake+4);
+          sayLine('feat.hug',2,0,'うわ、かさ……! なか、あったかくて……っ');
+          B.nHug=(B.nHug||0)+1;
+        }
+      }else{ parts(e.x,e.y-e.r,8,['#e8d4b0','#c8a878'],80,0.5); }
+    }
+  }
+}
+/* v4.1 絆の灯り: 家族茸を取ると、その階のあいだ二人を結ぶ道がずっと照らされる。
+   一人の時は、通ってきた道に灯りが落ちる(帰り道が見える) */
+function segDist(px,py,ax,ay,bx,by){
+  const dx=bx-ax, dy=by-ay, L=dx*dx+dy*dy;
+  if(L<1) return Math.hypot(px-ax,py-ay);
+  let t=((px-ax)*dx+(py-ay)*dy)/L; t=t<0?0:(t>1?1:t);
+  return Math.hypot(px-(ax+dx*t), py-(ay+dy*t));
+}
+function bondPair(){
+  const B=G.B; if(!B||!B.bond) return null;
+  const a=B.heroes.find(h=>!h.out); if(!a) return null;
+  const b=B.heroes.find(h=>h!==a&&!h.out); if(!b) return null;
+  return [a,b];
+}
+function bondTick(dt){   // 一人の時の落とし灯り
+  const B=G.B; if(!B.bond) return;
+  if(bondPair()) return;
+  const p=B.heroes.find(h=>!h.out); if(!p) return;
+  B.bondT=(B.bondT||0)-dt;
+  if(B.bondT<=0){ B.bondT=BAL.BOND_SOLO_CD; pushLight(p.x,p.y,BAL.BOND_SOLO_R,BAL.BOND_SOLO_LIFE,0.8); }
 }
 /* 暗さで鈍る: 罠や雲や地形の境に気づく距離の係数(0.5〜1) */
 function darkSense(x,y){ const l=lightAt(x,y); return BAL.DARK_LAG+(1-BAL.DARK_LAG)*Math.min(1,l*1.35); }
@@ -5061,21 +5222,33 @@ function spawnPick(kind,x,y,known){
   const pk={kind,x:q.x,y:q.y,t:0,known:!!known,dead:false};
   B.picks.push(pk); return pk;
 }
+/* v4.1 洞に元から生えている茸。夜側のENは使わない(地形の一部)。
+   媚茸は暗い所ほど効くので、光の届きにくい隅に。抱き茸は道の脇に据わる */
+function spawnWildShrooms(){
+  const B=G.B, dep=Math.max(1,Math.min(8,(B.floor&&B.floor.depth)||1));
+  const nL=(BAL.WILD_LURE[dep-1]||1), nH=(BAL.WILD_HUG[dep-1]||0);
+  const spot=(minD)=>{ for(let k=0;k<90;k++){ const a=rand(TAU), d=rand(minD,minD+1100);
+      const q=snapFloor(clampMapX(B.hero.x+Math.cos(a)*d,60), clampMapY(B.hero.y+Math.sin(a)*d,60), false, 3);
+      if(q && reachableAt(q.x,q.y,false) && Math.hypot(q.x-B.hero.x,q.y-B.hero.y)>=minD) return q; } return null; };
+  for(let i=0;i<nL;i++){ const q=spot(420); if(!q) continue; const u=spawnUnit('lurecap',q.x,q.y,{enVal:0,gemMul:0.6}); if(u) u.wild=true; }
+  for(let i=0;i<nH;i++){ const q=spot(520); if(!q) continue; const u=spawnUnit('hugcap',q.x,q.y,{enVal:0,gemMul:0.8}); if(u) u.wild=true; }
+}
 function spawnInitialPicks(){
   for(let i=0;i<BAL.PICK_SHROOM_N;i++) spawnPick('shroom');
+  for(let i=0;i<BAL.PICK_FAMILY_N;i++) spawnPick('family');   // v4.1 家族茸(光茸の亜種)
   for(let i=0;i<BAL.PICK_NECTAR_N;i++) spawnPick('nectar');
   spawnPick('treasure');
 }
 function picksTick(dt){
   const B=G.B, T=B.pickT, p=B.hero;
-  const n={shroom:0,nectar:0,treasure:0}; for(const pk of B.picks) if(!pk.dead) n[pk.kind]++;
+  const n={shroom:0,nectar:0,treasure:0,family:0}; for(const pk of B.picks) if(!pk.dead) n[pk.kind]++;
   if(B.ci===leaderIdx()){   // v3.0 湧きのタイマーは一度だけ進める(ヒロインごとに呼ばれる)
   T.shroom-=dt;   if(T.shroom<=0){   T.shroom=BAL.PICK_SHROOM_RESPAWN;  if(n.shroom<BAL.PICK_SHROOM_MAX) spawnPick('shroom'); }
   T.nectar-=dt;   if(T.nectar<=0){   T.nectar=BAL.PICK_NECTAR_RESPAWN;  if(n.nectar<BAL.PICK_NECTAR_MAX) spawnPick('nectar'); }
   T.treasure-=dt; if(T.treasure<=0){ T.treasure=BAL.PICK_TREASURE_CD;   if(n.treasure<BAL.PICK_TREASURE_MAX) spawnPick('treasure'); }
   }
   // 見えたものは覚える(あとで目当てにできる)
-  for(const pk of B.picks){ if(!pk.dead && !pk.known && inSight(pk,p)){ pk.known=true; if(B.time-B.seeToastT>2.5){ B.seeToastT=B.time; floatTxt(pk.x,pk.y-30,'みつけた: '+PICK_DEF[pk.kind].name,'#8fd3ff',11,1.5); sayLine('pick.'+pk.kind,0,14); } } }   // v2.1 資源ごとの台詞
+  for(const pk of B.picks){ if(!pk.dead && !pk.known && (inSight(pk,p) || ((pk.kind==='shroom'||pk.kind==='family') && Math.hypot(pk.x-p.x,pk.y-p.y)<BAL.DARK_FAR_SEE))){ pk.known=true;   /* v4.1 光る茸は遠くからでも見える */ if(B.time-B.seeToastT>2.5){ B.seeToastT=B.time; floatTxt(pk.x,pk.y-30,'みつけた: '+PICK_DEF[pk.kind].name,'#8fd3ff',11,1.5); sayLine('pick.'+pk.kind,0,14); } } }   // v2.1 資源ごとの台詞
   for(const c of B.chests){ if(!c.known && inSight(c,p)){ c.known=true; floatTxt(c.x,c.y-30,'みつけた: 宝箱','#ffd76a',11,1.5); } }
   for(const it of B.items){ if(!it.known && inSight(it,p)) it.known=true; }
   if(B.ci===leaderIdx()) for(const k in B.poolCd){ if(B.poolCd[k]>0) B.poolCd[k]-=dt; }   // v3.0 一度だけ
@@ -5089,6 +5262,17 @@ function applyPick(pk){
     floatTxt(p.x,p.y-58,'光茸'+(n?' — '+n+'か所 見えた':''),'#9fe8c8',12,1.4);
     heroBubble(p,n?'……ひかりで、みえた。あっちに、なにかある':'ひかってる……きれい',false,1);
     gainFloorLight('shroom',pk.x,pk.y);   // v4.0 光茸: この階のあいだ明るく、二人の間の道も照らす
+    maybeLevelup();
+  }else if(pk.kind==='family'){
+    // v4.1 家族茸(光茸の亜種): 親茸と小さいのが寄り添って生えている。取ると二人を結ぶ道が、その階のあいだ照らされる
+    gainXpAll(p.xpNeed*BAL.FAMILY_XP);
+    B.bond=true; B.bondT=0;
+    parts(pk.x,pk.y-10,22,['#ffe1a8','#9fe8c8','#fff','#ffd0a0'],150,1.0); sfx(560,1200,0.45,'sine',0.06);
+    floatTxt(p.x,p.y-58,'家族茸 — 絆の灯り','#ffe1a8',13,1.8);
+    { const pr=B.heroes.filter(h=>!h.out); if(pr.length>1){ const a=pr[0], b=pr[1];
+        for(let t=0;t<=6;t++) pushLight(a.x+(b.x-a.x)*t/6, a.y+(b.y-a.y)*t/6, 190, BAL.DARK_MEM_T*2.4, 0.9); } }
+    sayLine('feat.family',2,0,'ちいさいの、くっついて はえてる……かぞく、みたい');
+    setBanner('絆の灯り','家族茸。二人を結ぶ道が、この階のあいだ照らされる','#ffe1a8');
     maybeLevelup();
   }else if(pk.kind==='nectar'){
     p.stamina=Math.min(p.staminaMax,p.stamina+45); p.hp=Math.min(p.maxHp,p.hp+p.maxHp*0.10); applySensit(8);
@@ -5721,7 +5905,7 @@ function battleTick(dt){
   if(B.ebullets.length) B.ebullets=B.ebullets.filter(b=>!b.dead&&b.t<b.life);
   eachHero(()=>poiTick(dt));   // 祠・泉・門(v3.0 ヒロインごと)
   denTick(dt);                 // v3.2 巣窟の魔法陣・媚薬の花・壁の光線・番人(1フレームに1度)
-  lightsTick(dt); lanternTick(dt);   // v4.0 灯りの寿命と催淫灯篭
+  lightsTick(dt); lanternTick(dt); bondTick(dt); ringsTick(dt);   // v4.0 灯りの寿命と催淫灯篭 / v4.1 絆の灯り・菌輪
   coreWarTick(dt);                   // v4.0 魔核戦に入ったか
   { const ci0=B.ci; for(const h of B.heroes){ if(h.id!=='freila'||h.out) continue; B.ci=h.hi; dryTick(h,dt); } B.ci=ci0; }   // v4.0 フレイラが床を焼くか
   for(const k in B.itemCd){ if(B.itemCd[k]>0) B.itemCd[k]-=dt; }
