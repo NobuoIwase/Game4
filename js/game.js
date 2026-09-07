@@ -5700,7 +5700,7 @@ function iceSetTile(k,dirty){
   dirty.add(chunkKey(Math.floor(i/CHUNK),Math.floor(j/CHUNK)));
   return true;
 }
-function iceFlush(dirty){ const M=G.map; if(!dirty.size) return; for(const ck of dirty) M.chunks.delete(ck); M.mini=null; }
+function iceFlush(dirty){ const M=G.map; if(!dirty.size) return; for(const ck of dirty) M.chunks.delete(ck); M.mini=null; }   // 地形チップとミニマップを焼き直す(毎フレームは走らせない)
 /* 線を凍らせる。壁で止まり、壁は塗らない。触れた魔物と沼を返す */
 function icePaintLine(x0,y0,ux,uy,len,halfW){
   const M=G.map, B=G.B; if(!M||!M.iceT) return null;

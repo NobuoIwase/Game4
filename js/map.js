@@ -908,12 +908,35 @@ function drawPoi(g,q){
   g.restore();
 }
 /* ミニマップ(左下): 地形色・壁・知っている場所・彼女・ボス */
+/* ミニマップ用: '#rrggbb' / '#rgb' を [r,g,b] に。同じ文字列は覚えておく */
+const MINI_RGB={};
+function miniRGB(col){
+  let v=MINI_RGB[col]; if(v) return v;
+  let h=String(col).trim();
+  if(h[0]==='#'){ h=h.slice(1); if(h.length===3) h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2]; }
+  const n=parseInt(h,16);
+  v=isNaN(n)?[255,0,255]:[n>>16&255,n>>8&255,n&255];
+  MINI_RGB[col]=v; return v;
+}
 function drawMinimap(g){
   if(!G.map||!G.B) return;
   const M=META.map||{}, B=G.B, p=B.hero;
   if(!G.map.mini){
     const c=document.createElement('canvas'); c.width=MAP_W; c.height=MAP_H; const cg=c.getContext('2d');
-    for(let j=0;j<MAP_H;j++) for(let i=0;i<MAP_W;i++){ const s=G.map.solid[j*MAP_W+i]; cg.fillStyle=s===SOLID_ROCK?(G.map.wall==='flesh'?'#2a0812':(G.map.wall==='brick'?'#1c1c28':'#14111f')):(s===SOLID_CLIFF?'#5a5478':ZONES[ZONE_IDS[G.map.zone[j*MAP_W+i]]].col); cg.fillRect(i,j,1,1); }
+    /* 焼き跡と氷はここで焼き込む(毎フレーム 8064 回まわさない)。塗るたび作り直すので、
+       1マス1回の fillRect ではなく ImageData 一枚で書く */
+    const rock=miniRGB(G.map.wall==='flesh'?'#2a0812':(G.map.wall==='brick'?'#1c1c28':'#14111f')), cliff=miniRGB('#5a5478');
+    const dryC=miniRGB('#4a2c18'), iceC=miniRGB('#9ed7f5');
+    const zc=ZONE_IDS.map(z=>miniRGB(ZONES[z].col));
+    const im=cg.createImageData(MAP_W,MAP_H), dd=im.data;
+    const DT=G.map.dryT, IT=G.map.iceT;
+    for(let k=0;k<MAP_W*MAP_H;k++){
+      const s=G.map.solid[k];
+      let col=s===SOLID_ROCK?rock:(s===SOLID_CLIFF?cliff:zc[G.map.zone[k]]);
+      if(s===0){ if(DT && DT[k]) col=dryC; if(IT && IT[k]) col=iceC; }
+      const o=k*4; dd[o]=col[0]; dd[o+1]=col[1]; dd[o+2]=col[2]; dd[o+3]=255;
+    }
+    cg.putImageData(im,0,0);
     G.map.mini=c;
   }
   const sc=1, mw=MAP_W*sc, mh=MAP_H*sc, x0=12, y0=H-mh-22-Math.round(typeof barCover==='number'?barCover:0);   // v1.9 横持ちでは戦闘バーの上に
@@ -935,10 +958,6 @@ function drawMinimap(g){
   for(const q of G.map.pois){ if(!M.known[q.key]) continue; g.fillStyle=q.kind==='shrine'?(M.visited[q.key]?'#9a9ab0':'#ffd76a'):(q.kind==='spring'?'#8fd3ff':(q.kind==='pool'?'#7fe0ff':(q.kind==='stele'?'#cbd5ff':(q.kind==='stairs'?'#ffffff':(q.kind==='lantern'?'#ff9ed2':(q.kind==='seal'?((B.seals&&B.seals[q.key])?'#ffe9b0':'#c98cff'):'#ff6b81')))))); g.fillRect(tx(q.x)-2,ty(q.y)-2,4,4); }
   for(const c of B.chests){ g.fillStyle='#ffe9b0'; g.fillRect(tx(c.x)-1,ty(c.y)-1,3,3); }
   for(const e of B.enemies){ if(e.boss&&!e.dead){ g.fillStyle='#ff5d7a'; g.fillRect(tx(e.x)-2,ty(e.y)-2,4,4); } }
-  if(G.map.iceT && G.map.iceN){   // v5.0 クウが引いた道は、ミニマップに残る
-    g.fillStyle='rgba(150,215,245,0.55)';
-    for(let j=0;j<MAP_H;j++) for(let i=0;i<MAP_W;i++) if(G.map.iceT[j*MAP_W+i]) g.fillRect(x0+i*sc,y0+j*sc,sc,sc);
-  }
   if(B.mires) for(const m of B.mires){ if(m.dry) continue; g.fillStyle=m.iced?'rgba(200,235,255,0.9)':'rgba(200,90,150,0.85)'; g.fillRect(tx(m.x)-1,ty(m.y)-1,2,2); }   // v5.0 媚薬沼(凍ったものは薄氷の色)
   if(B.yamiCap && !B.yamiCap.freed){ g.fillStyle='#c9aaff'; g.fillRect(tx(B.yamiCap.x)-2,ty(B.yamiCap.y)-2,4,4); }   // v5.0 囲まれている誰か
   for(const pk of B.picks){ if(pk.dead||!pk.known) continue; g.fillStyle=pk.kind==='shroom'?'#9fe8c8':(pk.kind==='family'?'#ffe1a8':(pk.kind==='nectar'?'#ffb3cf':'#ffd76a')); g.fillRect(tx(pk.x)-1,ty(pk.y)-1,2,2); }   // v1.8 知っている資源

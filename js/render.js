@@ -16,6 +16,9 @@ const EN_COLORS={
   miretent:['#e08ac0','#8a3a62'],   // v5.0 沼の触手
   yamiboss:['#a77dff','#2a1a3e','#e8d8ff'],   // v5.0 渦の眠り手
   tower:['#c98cff','#5a3a7a'],
+  inyoku:['#f2a7c7','#c85a90'], suiyou:['#c8f0ff','#4696dc'],   // v2.0 淫翼・水妖
+  mouth:['#c2456f','#8a3458'], guardian:['#62627e','#4a4a62'],  // v2.0 肉壁の口・遺跡の番人
+  core:['#c2456f','#7a1f44','#3a0b20'],                          // v2.0 魔核
   spore:['#c9ecff','#7fb8e0'], ghosthand:['#dfe4ff','#aab4e8'], eye:['#f0e8ff','#7a3ff2'],
   succubus:['#ff86b3','#5a1f3a'], web:['#ffb3cf','#fff'],
   gazer:['#b46cff','#3a1f5a','#f4efff'], beamer:['#d8c8ff','#5a3a7a'], bossgazer:['#b46cff','#2a1a3e','#f4efff'],
@@ -3318,6 +3321,51 @@ function drawUpgIcon(g,k,x,y){
     g.beginPath(); g.moveTo(6,-9); g.lineTo(12,-5); g.lineTo(6,-1); g.stroke();
     g.strokeStyle='#bfeaff'; g.beginPath(); g.moveTo(-12,6); g.lineTo(12,6); g.stroke();
     g.beginPath(); g.moveTo(6,2); g.lineTo(12,6); g.lineTo(6,10); g.stroke();
+  /* v5.0 ヤミコの闇 */
+  }else if(id==='dblade'||id==='eclipse'){
+    g.shadowColor='#a77dff'; g.shadowBlur=10; g.lineCap='round';
+    g.strokeStyle='#2a1a3e'; g.lineWidth=6; g.beginPath(); g.moveTo(-13,8); g.quadraticCurveTo(0,-4,13,-9); g.stroke();
+    g.strokeStyle='#a77dff'; g.lineWidth=2.6; g.beginPath(); g.moveTo(-13,8); g.quadraticCurveTo(0,-4,13,-9); g.stroke();
+    if(id==='eclipse'){ g.strokeStyle='#e8d8ff'; g.lineWidth=1.6;
+      g.beginPath(); g.moveTo(-11,13); g.quadraticCurveTo(1,1,13,-4); g.stroke();
+      g.fillStyle='#2a1a3e'; g.beginPath(); g.arc(9,-9,5,0,TAU); g.fill();
+      g.strokeStyle='#e8d8ff'; g.lineWidth=1.2; g.beginPath(); g.arc(9,-9,5.6,0,TAU); g.stroke(); }
+  }else if(id==='dring'||id==='umbra'){
+    /* 輪は「太い線」で描く。くり抜くと札の下地まで消える */
+    g.shadowColor='#a77dff'; g.shadowBlur=10; const R=id==='umbra'?12:9.5;
+    g.strokeStyle='#2a1a3e'; g.lineWidth=id==='umbra'?7:5; g.beginPath(); g.arc(0,0,R,0,TAU); g.stroke();
+    g.shadowBlur=0; g.strokeStyle='#a77dff'; g.lineWidth=1.6;
+    g.beginPath(); g.arc(0,0,R+(id==='umbra'?3.5:2.5),0,TAU); g.stroke();
+    g.beginPath(); g.arc(0,0,R-(id==='umbra'?3.5:2.5),0,TAU); g.stroke();
+    if(id==='umbra'){ g.strokeStyle='#e8d8ff'; g.lineWidth=1.2; g.setLineDash([3,4]);
+      g.beginPath(); g.arc(0,0,18,0,TAU); g.stroke(); g.setLineDash([]); }
+  }else if(id==='dspear'||id==='gloom'){
+    g.shadowColor='#a77dff'; g.shadowBlur=9; g.lineCap='round';
+    g.strokeStyle='#2a1a3e'; g.lineWidth=5; g.beginPath(); g.moveTo(-13,9); g.lineTo(11,-8); g.stroke();
+    g.fillStyle='#a77dff'; g.beginPath(); g.moveTo(14,-11); g.lineTo(6,-9); g.lineTo(10,-2); g.closePath(); g.fill();
+    if(id==='gloom'){ g.strokeStyle='#e8d8ff'; g.lineWidth=1.4; g.globalAlpha=0.7;
+      for(const o of [-5,5]){ g.beginPath(); g.moveTo(-13+o,9+o*0.4); g.lineTo(9+o,-8+o*0.4); g.stroke(); } g.globalAlpha=1; }
+  }else if(id==='dcall'){
+    g.shadowColor='#a77dff'; g.shadowBlur=9;
+    g.fillStyle='#2a1a3e';
+    for(const [ox,oy,r0] of [[-8,3,7],[8,4,6],[0,-4,8]]){
+      g.beginPath(); g.arc(ox,oy,r0,Math.PI,0); g.lineTo(ox+r0,oy+r0); g.lineTo(ox-r0,oy+r0); g.closePath(); g.fill(); }
+    g.fillStyle='#a77dff';
+    for(const [ox,oy] of [[-10,2],[-6,2],[6,3],[10,3],[-2,-5],[2,-5]]){ g.beginPath(); g.arc(ox,oy,1.5,0,TAU); g.fill(); }
+  }else if(id==='dstep'){
+    /* 消えた影(淡い) → 点線 → 現れた影(濃い) */
+    const fig=(x,al,col)=>{ g.globalAlpha=al; g.fillStyle=col;
+      g.beginPath(); g.ellipse(x,3,4.5,7,0,0,TAU); g.fill();                 /* 胴 */
+      g.beginPath(); g.arc(x,-7,3.4,0,TAU); g.fill();                        /* 頭 */
+      g.globalAlpha=1; };
+    g.shadowColor='#a77dff'; g.shadowBlur=8;
+    fig(-10,0.35,'#a77dff');
+    fig(9,1,'#2a1a3e');
+    g.shadowBlur=0;
+    g.strokeStyle='#a77dff'; g.lineWidth=1.6; g.lineCap='round'; g.setLineDash([2.5,3]);
+    g.beginPath(); g.moveTo(-4,0); g.lineTo(3,0); g.stroke(); g.setLineDash([]);
+    g.strokeStyle='#e8d8ff'; g.lineWidth=1.3;
+    g.beginPath(); g.ellipse(9,1,7.5,11,0,0,TAU); g.stroke();
   }else if(id==='chain'||id==='hchain'){
     g.strokeStyle=id==='hchain'?'#ffe9a8':'#ffd76a'; g.lineWidth=2.6; g.shadowColor='#ffd76a'; g.shadowBlur=8;
     const n=id==='hchain'?3:1; for(let k2=0;k2<n;k2++){ const oy=(k2-(n-1)/2)*7; for(let i=-2;i<=2;i++){ g.beginPath(); g.ellipse(i*6,oy,3.4,2.2,i%2?0.4:-0.4,0,TAU); g.stroke(); } }
