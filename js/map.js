@@ -642,14 +642,24 @@ function placeNear(px,py,dx,dy,m,fly){
 
 /* ================= 描画: マップチップ・チャンク ================= */
 let TILE_ATLAS=null;
-const TILE_VARS=4, ROCK_ROW=ZONE_IDS.length, CLIFF_ROW=ZONE_IDS.length+1, BRICK_ROW=ZONE_IDS.length+2, FLESH_ROW=ZONE_IDS.length+3, MIRE_ROW=ZONE_IDS.length+4;   // 地形帯の行の後に 岩/崖/煉瓦/肉壁/媚薬沼
+/* v6.0 行の割り当てを表から作る。地形帯 → 壁の様式(WALL_IDS の順) → 崖 → 媚薬沼。
+   壁を足すときに触るのは data.js の WALLS だけで済むようにした */
+const TILE_VARS=4;
+const WALL_ROW0=ZONE_IDS.length;
+const WALL_ROW={}; WALL_IDS.forEach((w,k)=>{ WALL_ROW[w]=WALL_ROW0+k; });
+const CLIFF_ROW=WALL_ROW0+WALL_IDS.length, MIRE_ROW=CLIFF_ROW+1, ATLAS_ROWS=MIRE_ROW+1;
+const wallRowOf=(w)=>WALL_ROW[w]!==undefined?WALL_ROW[w]:WALL_ROW.rock;
+const wallDef=(w)=>WALLS[w]||WALLS.rock;
 function makeTileAtlas(){
   const T=MAP_T;
-  TILE_ATLAS=document.createElement('canvas'); TILE_ATLAS.width=T*TILE_VARS; TILE_ATLAS.height=T*(ZONE_IDS.length+5);
+  TILE_ATLAS=document.createElement('canvas'); TILE_ATLAS.width=T*TILE_VARS; TILE_ATLAS.height=T*ATLAS_ROWS;
   const g=TILE_ATLAS.getContext('2d');
   const R=(seed)=>{ let sd=seed*9973+17; return ()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; }; };
-  const paint=(row,v,fn)=>{ const ox=v*T, oy=row*T, rnd=R(row*11+v+1); g.save(); g.beginPath(); g.rect(ox,oy,T,T); g.clip(); fn(ox,oy,rnd); g.restore(); };
+  /* v6.0 seedRow: 別の行に、ある行と「まったく同じ乱数」で焼くための抜け道。
+     15階の sham(苔に見えるもの)が moss と一picture たりとも違わないために要る */
+  const paint=(row,v,fn,seedRow)=>{ const ox=v*T, oy=row*T, rnd=R((seedRow===undefined?row:seedRow)*11+v+1); g.save(); g.beginPath(); g.rect(ox,oy,T,T); g.clip(); fn(ox,oy,rnd); g.restore(); };
   const dot=(x,y,r,c)=>{ g.fillStyle=c; g.beginPath(); g.arc(x,y,r,0,TAU); g.fill(); };
+  const MOSS_ROW=ZONE_IDS.indexOf('moss');
   ZONE_IDS.forEach((z,row)=>{
     for(let v=0;v<TILE_VARS;v++) paint(row,v,(ox,oy,rnd)=>{
       g.fillStyle=ZONES[z].col; g.fillRect(ox,oy,T,T);
@@ -714,15 +724,159 @@ function makeTileAtlas(){
         g.strokeStyle='rgba(230,120,160,0.35)'; g.lineWidth=1; { const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y); g.quadraticCurveTo(x+rnd()*14-7,y+rnd()*14-7,x+rnd()*18-9,y+rnd()*18-9); g.stroke(); }
         for(let k=0;k<2;k++){ const x=ox+rnd()*T, y=oy+rnd()*T, r=2.5+rnd()*2.5; dot(x,y,r,'rgba(200,90,130,0.6)'); dot(x-r*0.35,y-r*0.35,r*0.4,'rgba(255,200,225,0.7)'); }
         { const x=ox+rnd()*T, y=oy+rnd()*T; g.fillStyle='rgba(40,6,20,0.55)'; g.beginPath(); g.ellipse(x,y,3.5,2.2,rnd()*3,0,TAU); g.fill(); g.fillStyle='rgba(255,150,190,0.35)'; g.beginPath(); g.ellipse(x,y-1.2,2.2,0.9,0,0,TAU); g.fill(); }
+      }else if(z==='mirror'){
+        /* 凪ぎの鏡: 情報量を落として「何も無い水面」に見せる。映り込みは render が上に重ねる */
+        for(let k=0;k<3;k++){ g.strokeStyle='rgba(255,255,255,0.10)'; g.lineWidth=1; const y=oy+3+k*4; g.beginPath(); g.moveTo(ox,y); g.lineTo(ox+T,y); g.stroke(); }
+        g.fillStyle='rgba(255,255,255,0.08)'; g.fillRect(ox+T*0.42,oy,6,T);
+        if(v===3){ const x=ox+T*0.5, y=oy+T*0.56; g.fillStyle='rgba(255,255,255,0.06)';
+          g.beginPath(); g.ellipse(x,y,3,5.5,0,0,TAU); g.fill();
+          g.strokeStyle='rgba(255,255,255,0.06)'; g.lineWidth=1.4; g.beginPath(); g.moveTo(x-4,y-3); g.lineTo(x+4,y-3); g.stroke(); }
+      }else if(z==='glyph'){
+        /* 紋の敷石: 敷石の上に未灯の紋。灯った状態はタイルに焼かず render が上乗せする */
+        g.strokeStyle='rgba(30,30,44,0.8)'; g.lineWidth=1.6; const s2=T/2, off=(v%2)*s2/2;
+        for(let i2=0;i2<=2;i2++){ g.beginPath(); g.moveTo(ox,oy+i2*s2); g.lineTo(ox+T,oy+i2*s2); g.stroke(); }
+        for(let j2=0;j2<2;j2++){ const o2=(j2%2)?off:(s2/2-off); for(let i2=0;i2<=2;i2++){ g.beginPath(); g.moveTo(ox+i2*s2+o2,oy+j2*s2); g.lineTo(ox+i2*s2+o2,oy+(j2+1)*s2); g.stroke(); } }
+        const cx=ox+T/2, cy=oy+T/2, drawGlyph=(dx,dy,col,lw)=>{
+          g.strokeStyle=col; g.lineWidth=lw;
+          g.beginPath(); g.arc(cx+dx,cy+dy,7,0,TAU); g.stroke();
+          g.beginPath(); for(let m=0;m<3;m++){ const a=-Math.PI/2+m*TAU/3; const px=cx+dx+Math.cos(a)*7, py=cy+dy+Math.sin(a)*7; if(m===0) g.moveTo(px,py); else g.lineTo(px,py); } g.closePath(); g.stroke();
+        };
+        drawGlyph(1,1,'rgba(0,0,0,0.35)',1);        /* 彫り込みの影(未灯) */
+        drawGlyph(0,0,'rgba(255,120,180,0.22)',1);
+        dot(cx,cy,1.2,'rgba(255,150,200,0.3)');
+      }else if(z==='silk'){
+        /* 糸の床: タイルを跨ぐ角度で張った糸。variant で密度を変える */
+        const n=3+v;
+        g.strokeStyle='rgba(255,200,220,0.42)'; g.lineWidth=0.9;
+        for(let k=0;k<n;k++){ const x0=ox+rnd()*T, x1=ox+rnd()*T; g.beginPath(); g.moveTo(x0,oy); g.lineTo(x1,oy+T); g.stroke();
+          if(k%2===0) dot((x0+x1)/2,oy+T/2,1.2,'rgba(255,240,248,0.7)'); }
+        for(let k=0;k<2;k++){ const y0=oy+rnd()*T, y1=oy+rnd()*T; g.beginPath(); g.moveTo(ox,y0); g.lineTo(ox+T,y1); g.stroke(); }
+      }else if(z==='frost'){
+        /* 霜の面: 放射する針の結晶。v===3 だけ踏み割れて下の濃い水が覗く */
+        const cx=ox+T*0.5+rnd()*6-3, cy=oy+T*0.5+rnd()*6-3;
+        g.fillStyle='rgba(230,245,255,0.5)';
+        for(let m=0;m<6;m++){ const a=m*TAU/6+rnd()*0.2, L=8+rnd()*5;
+          g.beginPath(); g.moveTo(cx,cy);
+          g.lineTo(cx+Math.cos(a)*L-Math.sin(a)*1.6, cy+Math.sin(a)*L+Math.cos(a)*1.6);
+          g.lineTo(cx+Math.cos(a)*L+Math.sin(a)*1.6, cy+Math.sin(a)*L-Math.cos(a)*1.6); g.closePath(); g.fill(); }
+        g.fillStyle='rgba(255,255,255,0.06)'; g.fillRect(ox,oy,T,T);
+        if(v===3){ g.fillStyle='rgba(30,70,110,0.5)'; g.beginPath(); g.ellipse(ox+T*0.62,oy+T*0.66,5,2.2,rnd()*3,0,TAU); g.fill();
+          g.strokeStyle='rgba(20,40,60,0.7)'; g.lineWidth=1.4;
+          g.beginPath(); g.moveTo(ox+4,oy+T*0.3); g.lineTo(ox+T*0.5,oy+T*0.55); g.lineTo(ox+T-3,oy+T*0.42); g.stroke(); }
+      }else if(z==='womb'){
+        /* 胎の肉: 同心の襞。variant で向きを4通り回す */
+        const a0=v*Math.PI/2, cx=ox+T*0.5-Math.cos(a0)*T*0.5, cy=oy+T*0.5-Math.sin(a0)*T*0.5;
+        for(const R2 of [8,13,18]){
+          g.fillStyle='rgba(40,6,20,0.4)'; g.beginPath(); g.arc(cx,cy,R2+2.2,a0-1.1,a0+1.1); g.arc(cx,cy,R2-1.4,a0+1.1,a0-1.1,true); g.closePath(); g.fill();
+          g.strokeStyle='rgba(210,110,150,0.5)'; g.lineWidth=3; g.beginPath(); g.arc(cx,cy,R2,a0-1.1,a0+1.1); g.stroke();
+          g.strokeStyle='rgba(255,210,230,0.5)'; g.lineWidth=1; g.beginPath(); g.arc(cx,cy,R2-1.2,a0-0.9,a0+0.9); g.stroke(); }
+      }else if(z==='stall'){
+        /* 時の澱: 同じ模様を三度ずらして重ねる=残像。見ているだけで「遅れている」と分かる絵 */
+        const c1x=rnd()*T, c1y=rnd()*T, c2x=rnd()*T, c2y=rnd()*T;
+        const l1x=rnd()*T, l1y=rnd()*T, l2x=rnd()*T, l2y=rnd()*T, la=rnd()*TAU, lb=rnd()*TAU;
+        const stamp=(dx,dy,al)=>{
+          dot(ox+c1x+dx,oy+c1y+dy,3,'rgba(150,140,180,'+al+')');
+          dot(ox+c2x+dx,oy+c2y+dy,3,'rgba(150,140,180,'+al+')');
+          g.strokeStyle='rgba(150,140,180,'+al+')'; g.lineWidth=1.4;
+          g.beginPath(); g.moveTo(ox+l1x+dx,oy+l1y+dy); g.lineTo(ox+l1x+dx+Math.cos(la)*7,oy+l1y+dy+Math.sin(la)*7); g.stroke();
+          g.beginPath(); g.moveTo(ox+l2x+dx,oy+l2y+dy); g.lineTo(ox+l2x+dx+Math.cos(lb)*7,oy+l2y+dy+Math.sin(lb)*7); g.stroke();
+        };
+        stamp(4,2,0.18); stamp(2,1,0.35); stamp(0,0,1.0);
+      }else if(z==='lethe'){
+        /* 忘れ水: 濁った variant ほど底を描かない(見えないほど深い) */
+        g.fillStyle='rgba(200,184,192,0.55)'; g.fillRect(ox,oy,T,T);
+        const ba=[0.4,0.28,0.16,0][v];
+        if(ba>0){ g.fillStyle='rgba(40,30,45,'+ba+')';
+          g.beginPath(); g.ellipse(ox+rnd()*T,oy+rnd()*T,9+rnd()*5,6+rnd()*3,rnd()*3,0,TAU); g.fill();
+          g.beginPath(); g.ellipse(ox+rnd()*T,oy+rnd()*T,7+rnd()*4,5+rnd()*3,rnd()*3,0,TAU); g.fill(); }
+        g.fillStyle='rgba(255,255,255,0.12)'; g.beginPath(); g.ellipse(ox+rnd()*T,oy+rnd()*T,14,5,0,0,TAU); g.fill();
+        g.strokeStyle='rgba(200,180,200,0.3)'; g.lineWidth=1; g.beginPath(); g.arc(ox+rnd()*T,oy+rnd()*T,6+rnd()*5,rnd()*TAU,rnd()*TAU+2.4); g.stroke();
       }
     });
   });
-  // 岩壁
-  for(let v=0;v<TILE_VARS;v++) paint(ROCK_ROW,v,(ox,oy,rnd)=>{
-    g.fillStyle='#2b2742'; g.fillRect(ox,oy,T,T);
-    for(let k=0;k<3;k++) dot(ox+rnd()*T,oy+rnd()*T,3+rnd()*4,'rgba(70,64,100,0.5)');
-    g.strokeStyle='rgba(18,14,30,0.8)'; g.lineWidth=1.3; for(let k=0;k<2;k++){ const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y); g.lineTo(x+rnd()*12-6,y+rnd()*12-6); g.lineTo(x+rnd()*14-7,y+rnd()*14-7); g.stroke(); }
-    for(let k=0;k<4;k++) dot(ox+rnd()*T,oy+rnd()*T,0.9,'rgba(120,110,160,0.5)');
+  /* v6.0 sham(苔に見えるもの)は moss と同じ乱数の種で、行だけ変えて焼く。
+     違いは光茸の灯の色ひとつ。col も同じなのでミニマップでも地形学習でも見分けられない */
+  { const shamRow=ZONE_IDS.indexOf('sham');
+    if(shamRow>=0 && MOSS_ROW>=0) for(let v=0;v<TILE_VARS;v++){
+      paint(shamRow,v,(ox,oy,rnd)=>{
+        g.fillStyle=ZONES.moss.col; g.fillRect(ox,oy,T,T);
+        g.fillStyle='rgba(255,255,255,'+(0.02+0.02*(v%2))+')'; g.fillRect(ox,oy,T,T);
+        for(let k=0;k<4;k++) dot(ox+rnd()*T,oy+rnd()*T,1.6+rnd()*2.4,'rgba(80,160,110,0.42)');
+        dot(ox+rnd()*T,oy+rnd()*T,1.6,'rgba(150,170,200,0.35)');
+        if(v===3){ const x=ox+8+rnd()*16, y=oy+8+rnd()*16; g.strokeStyle='rgba(200,180,240,0.6)'; g.lineWidth=1.2; g.beginPath(); g.moveTo(x,y); g.lineTo(x,y+4); g.stroke(); dot(x,y-1,3,'rgba(215,150,220,0.7)'); dot(x,y-1,4.5,'rgba(215,150,220,0.18)'); }
+      }, MOSS_ROW);
+    } }
+  /* v6.0 壁は WALL_IDS の順に焼く。描き方は id ごとの分岐だが、行番号も面の色も
+     ミニマップ色も data.js の WALLS が持つので、壁を足すときにここへ絵を1つ書くだけで済む */
+  const wallArt={
+    rock:(ox,oy,rnd)=>{
+      for(let k=0;k<3;k++) dot(ox+rnd()*T,oy+rnd()*T,3+rnd()*4,'rgba(70,64,100,0.5)');
+      g.strokeStyle='rgba(18,14,30,0.8)'; g.lineWidth=1.3; for(let k=0;k<2;k++){ const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y); g.lineTo(x+rnd()*12-6,y+rnd()*12-6); g.lineTo(x+rnd()*14-7,y+rnd()*14-7); g.stroke(); }
+      for(let k=0;k<4;k++) dot(ox+rnd()*T,oy+rnd()*T,0.9,'rgba(120,110,160,0.5)');
+    },
+    brick:(ox,oy,rnd,v)=>{
+      const bh=T/4; g.strokeStyle='rgba(12,12,22,0.9)'; g.lineWidth=1.4;
+      for(let r=0;r<4;r++){ const y=oy+r*bh; g.beginPath(); g.moveTo(ox,y+0.7); g.lineTo(ox+T,y+0.7); g.stroke(); const off=(r%2)*(T/4); for(let k=0;k<3;k++){ const x=ox+off+k*(T/2); if(x>ox&&x<ox+T){ g.beginPath(); g.moveTo(x,y); g.lineTo(x,y+bh); g.stroke(); } } }
+      g.fillStyle='rgba(255,255,255,0.05)'; for(let r=0;r<4;r++){ const off=(r%2)*(T/4); for(let k=-1;k<3;k++){ const x=ox+off+k*(T/2); g.fillRect(Math.max(ox,x+1),oy+r*bh+1,Math.min(T/2-2,ox+T-Math.max(ox,x+1)),2); } }
+      if(v>=2){ g.strokeStyle='rgba(10,10,18,0.8)'; g.lineWidth=1; const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y); g.lineTo(x+rnd()*10-5,y+rnd()*10-5); g.stroke(); }
+      for(let k=0;k<2;k++) dot(ox+rnd()*T,oy+rnd()*T,1.2,'rgba(110,150,120,0.35)');
+    },
+    flesh:(ox,oy,rnd)=>{
+      for(let k=0;k<3;k++){ g.fillStyle='rgba(110,30,60,0.55)'; g.beginPath(); g.ellipse(ox+rnd()*T,oy+rnd()*T,6+rnd()*6,4+rnd()*4,rnd()*3,0,TAU); g.fill(); }
+      g.strokeStyle='rgba(160,40,80,0.7)'; g.lineWidth=2.6; for(let k=0;k<2;k++){ const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y); g.bezierCurveTo(x+rnd()*24-12,y+rnd()*24-12,x+rnd()*28-14,y+rnd()*28-14,x+rnd()*32-16,y+rnd()*32-16); g.stroke(); }
+      g.strokeStyle='rgba(255,150,190,0.22)'; g.lineWidth=1; { const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y); g.quadraticCurveTo(x+rnd()*14-7,y+rnd()*14-7,x+rnd()*20-10,y+rnd()*20-10); g.stroke(); }
+      { const x=ox+rnd()*T, y=oy+rnd()*T, r=3+rnd()*2; dot(x,y,r,'rgba(190,80,120,0.55)'); dot(x-r*0.3,y-r*0.35,r*0.35,'rgba(255,210,230,0.6)'); }
+    },
+    /* 骨壁: 縦の太い骨と関節、その間を埋める闇、手前の細い肋骨。目地は一本も引かない(煉瓦と絵で別物にする) */
+    bone:(ox,oy,rnd,v)=>{
+      g.fillStyle='rgba(10,8,10,0.85)'; g.fillRect(ox,oy,T,T);
+      for(let k=0;k<3;k++){ const x=ox+5+k*((T-10)/2)+rnd()*2-1;
+        g.strokeStyle='rgba(220,210,185,0.55)'; g.lineWidth=5; g.beginPath(); g.moveTo(x,oy-2); g.lineTo(x+rnd()*3-1.5,oy+T+2); g.stroke();
+        dot(x-2,oy+3,3.5,'rgba(228,220,196,0.6)'); dot(x+2,oy+3,3.5,'rgba(228,220,196,0.6)');
+        dot(x-2,oy+T-3,3.5,'rgba(210,200,176,0.5)'); dot(x+2,oy+T-3,3.5,'rgba(210,200,176,0.5)'); }
+      g.strokeStyle='rgba(200,190,165,0.35)'; g.lineWidth=1.4;
+      for(let k=0;k<4;k++){ const y=oy+3+k*(T/4)+rnd()*3; g.beginPath(); g.moveTo(ox,y); g.quadraticCurveTo(ox+T/2,y+(rnd()*6-3),ox+T,y+(rnd()*4-2)); g.stroke(); }
+      if(v===3){ const ex=ox+T*0.34, ey=oy+T*0.4;
+        for(const sgn of [-1,1]){ g.fillStyle='rgba(6,4,6,0.9)'; g.beginPath(); g.ellipse(ex+sgn*7,ey,4,5,0,0,TAU); g.fill(); dot(ex+sgn*7,ey+1,1.2,'rgba(120,60,90,0.4)'); } }
+    },
+    /* 黒鏡の壁: 継ぎ目が無いことが売り。ヒビも粒も置かない */
+    obsidian:(ox,oy,rnd)=>{
+      g.save(); g.translate(ox,oy);
+      g.fillStyle='rgba(255,255,255,0.10)';
+      for(let k=0;k<2;k++){ const o=k*T*0.5+rnd()*T*0.25; g.beginPath(); g.moveTo(o,T); g.lineTo(o+T*0.58,0); g.lineTo(o+T*0.58+3,0); g.lineTo(o+3,T); g.closePath(); g.fill(); }
+      g.fillStyle='rgba(120,160,200,0.10)'; g.fillRect(0,T*0.66,T,T*0.34);
+      g.restore();
+    },
+    /* 氷壁: 中に何かが入っている。全体を薄くして向こうが透ける印象に */
+    ice:(ox,oy,rnd)=>{
+      g.save(); g.globalAlpha=0.82;
+      g.fillStyle='rgba(10,20,40,0.35)'; g.beginPath(); g.ellipse(ox+T*0.5+rnd()*4-2,oy+T*0.5,6,8,rnd()*0.6-0.3,0,TAU); g.fill();
+      const bx=ox+6+rnd()*(T-12);
+      for(let k=0;k<4;k++){ const y=oy+T-5-k*(T/4.4), r=1.0+k*0.4;
+        dot(bx+rnd()*3-1.5,y+2.2,r*0.9,'rgba(120,180,200,0.30)'); dot(bx+rnd()*3-1.5,y,r,'rgba(255,255,255,0.55)'); }
+      g.fillStyle='rgba(255,255,255,0.22)'; g.fillRect(ox+T*0.7,oy,4,T);
+      g.fillStyle='rgba(10,26,34,0.6)'; g.fillRect(ox,oy+T-3,T,3);
+      g.restore();
+    },
+    /* 層の壁: 横縞。世代が進むほど render が細かい帯を重ねる(彼女たちには読めない目盛り) */
+    strata:(ox,oy,rnd,v)=>{
+      const n=4+(v%3), h=T/n;
+      for(let k=0;k<n;k++){ g.fillStyle=(k%2)?'#2e2836':'#4a4250'; g.fillRect(ox,oy+k*h,T,h+0.5);
+        if(k>0){ g.strokeStyle='rgba(255,150,190,0.18)'; g.lineWidth=1; g.beginPath(); g.moveTo(ox,oy+k*h+0.5); g.lineTo(ox+T,oy+k*h+0.5); g.stroke(); } }
+    },
+    /* 心膜の壁: 絨毛は variant ごとに全部同じ向き。太い管が縦に貫き、光は心臓の側へ流れる(位相は render) */
+    caul:(ox,oy,rnd,v)=>{
+      const a=v*Math.PI/4, cx=Math.cos(a)*5, cy=Math.sin(a)*5;
+      g.strokeStyle='rgba(220,120,150,0.35)'; g.lineWidth=1;
+      for(let k=0;k<20;k++){ const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y); g.lineTo(x+cx,y+cy); g.stroke(); }
+      const tx=ox+T*0.32+rnd()*T*0.36;
+      g.strokeStyle='rgba(180,50,90,0.6)'; g.lineWidth=4; g.beginPath(); g.moveTo(tx,oy-2); g.bezierCurveTo(tx+4,oy+T*0.35,tx-4,oy+T*0.65,tx,oy+T+2); g.stroke();
+      g.strokeStyle='rgba(255,190,210,0.22)'; g.lineWidth=1.2; g.beginPath(); g.moveTo(tx-1,oy); g.bezierCurveTo(tx+3,oy+T*0.35,tx-5,oy+T*0.65,tx-1,oy+T); g.stroke();
+    },
+  };
+  WALL_IDS.forEach(w=>{
+    const row=WALL_ROW[w], base=WALLS[w].base, fn=wallArt[w]||wallArt.rock;
+    for(let v=0;v<TILE_VARS;v++) paint(row,v,(ox,oy,rnd)=>{ g.fillStyle=base; g.fillRect(ox,oy,T,T); fn(ox,oy,rnd,v); });
   });
   // 崖(高台の上面)
   for(let v=0;v<TILE_VARS;v++) paint(CLIFF_ROW,v,(ox,oy,rnd)=>{
@@ -730,23 +884,6 @@ function makeTileAtlas(){
     for(let k=0;k<3;k++) dot(ox+rnd()*T,oy+rnd()*T,2+rnd()*3,'rgba(110,100,150,0.35)');
     g.strokeStyle='rgba(40,34,60,0.6)'; g.lineWidth=1; const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y); g.lineTo(x+rnd()*10-5,y+rnd()*10-5); g.stroke();
     for(let k=0;k<2;k++) dot(ox+rnd()*T,oy+rnd()*T,1.3,'rgba(80,140,110,0.35)');
-  });
-  // 煉瓦の壁(沈んだ回廊): 暗い石積みと目地、欠け
-  for(let v=0;v<TILE_VARS;v++) paint(BRICK_ROW,v,(ox,oy,rnd)=>{
-    g.fillStyle='#262636'; g.fillRect(ox,oy,T,T);
-    const bh=T/4; g.strokeStyle='rgba(12,12,22,0.9)'; g.lineWidth=1.4;
-    for(let r=0;r<4;r++){ const y=oy+r*bh; g.beginPath(); g.moveTo(ox,y+0.7); g.lineTo(ox+T,y+0.7); g.stroke(); const off=(r%2)*(T/4); for(let k=0;k<3;k++){ const x=ox+off+k*(T/2); if(x>ox&&x<ox+T){ g.beginPath(); g.moveTo(x,y); g.lineTo(x,y+bh); g.stroke(); } } }
-    g.fillStyle='rgba(255,255,255,0.05)'; for(let r=0;r<4;r++){ const off=(r%2)*(T/4); for(let k=-1;k<3;k++){ const x=ox+off+k*(T/2); g.fillRect(Math.max(ox,x+1),oy+r*bh+1,Math.min(T/2-2,ox+T-Math.max(ox,x+1)),2); } }
-    if(v>=2){ g.strokeStyle='rgba(10,10,18,0.8)'; g.lineWidth=1; const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y); g.lineTo(x+rnd()*10-5,y+rnd()*10-5); g.stroke(); }
-    for(let k=0;k<2;k++) dot(ox+rnd()*T,oy+rnd()*T,1.2,'rgba(110,150,120,0.35)');
-  });
-  // 肉の壁(肉の巣): 暗い赤紫の組織に太い血管と膨らみ
-  for(let v=0;v<TILE_VARS;v++) paint(FLESH_ROW,v,(ox,oy,rnd)=>{
-    g.fillStyle='#3a0f22'; g.fillRect(ox,oy,T,T);
-    for(let k=0;k<3;k++){ g.fillStyle='rgba(110,30,60,0.55)'; g.beginPath(); g.ellipse(ox+rnd()*T,oy+rnd()*T,6+rnd()*6,4+rnd()*4,rnd()*3,0,TAU); g.fill(); }
-    g.strokeStyle='rgba(160,40,80,0.7)'; g.lineWidth=2.6; for(let k=0;k<2;k++){ const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y); g.bezierCurveTo(x+rnd()*24-12,y+rnd()*24-12,x+rnd()*28-14,y+rnd()*28-14,x+rnd()*32-16,y+rnd()*32-16); g.stroke(); }
-    g.strokeStyle='rgba(255,150,190,0.22)'; g.lineWidth=1; { const x=ox+rnd()*T, y=oy+rnd()*T; g.beginPath(); g.moveTo(x,y); g.quadraticCurveTo(x+rnd()*14-7,y+rnd()*14-7,x+rnd()*20-10,y+rnd()*20-10); g.stroke(); }
-    { const x=ox+rnd()*T, y=oy+rnd()*T, r=3+rnd()*2; dot(x,y,r,'rgba(190,80,120,0.55)'); dot(x-r*0.3,y-r*0.35,r*0.35,'rgba(255,210,230,0.6)'); }
   });
   /* v5.8 媚薬沼のチップ。えちえちエリアと同じくマップチップとして焼く。
      桃色に濁った液面・沈んだ澱み・浮いている粒・水面のうねり。
@@ -775,7 +912,7 @@ function renderChunk(ci,cj){
   for(let j=j0;j<j0+CHUNK;j++) for(let i=i0;i<i0+CHUNK;i++){
     if(!inMap(i,j)) continue;
     const x=(i-i0)*T, y=(j-j0)*T, v=Math.floor(hash2(i,j)*TILE_VARS), s=sol(i,j), z=zid(i,j);
-    const wallRow=G.map.wall==='brick'?BRICK_ROW:(G.map.wall==='flesh'?FLESH_ROW:ROCK_ROW);   // v2.0 階層の壁様式
+    const wallRow=wallRowOf(G.map.wall);   /* v6.0 壁様式は WALLS の表引き(v2.0 の三択 if を廃止) */
     if(s===SOLID_ROCK) g.drawImage(TILE_ATLAS,v*T,wallRow*T,T,T,x,y,T,T);
     else if(s===SOLID_CLIFF) g.drawImage(TILE_ATLAS,v*T,CLIFF_ROW*T,T,T,x,y,T,T);
     else g.drawImage(TILE_ATLAS,v*T,z*T,T,T,x,y,T,T);
@@ -840,7 +977,7 @@ function renderChunk(ci,cj){
     }else{
       // 壁・崖の立体感: 下が床なら「面」を描く。崖は縁の明かり
       const below=sol(i,j+1)===0 && inMap(i,j+1);
-      if(below){ const wf=G.map.wall==='brick'?['#15151f','rgba(140,140,180,0.35)']:(G.map.wall==='flesh'?['#22060f','rgba(230,120,160,0.4)']:['#17132a','rgba(120,110,160,0.35)']);
+      if(below){ const wf=wallDef(G.map.wall).face;
         g.fillStyle=s===SOLID_ROCK?wf[0]:'#2e2a46'; g.fillRect(x,y+T-9,T,9); g.fillStyle=s===SOLID_ROCK?wf[1]:'rgba(170,165,210,0.5)'; g.fillRect(x,y+T-9,T,1.5); }
       if(s===SOLID_CLIFF){ g.strokeStyle='rgba(170,165,210,0.55)'; g.lineWidth=1.5; if(sol(i,j-1)===0) { g.beginPath(); g.moveTo(x,y+0.75); g.lineTo(x+T,y+0.75); g.stroke(); } if(sol(i-1,j)===0){ g.beginPath(); g.moveTo(x+0.75,y); g.lineTo(x+0.75,y+T); g.stroke(); } if(sol(i+1,j)===0){ g.beginPath(); g.moveTo(x+T-0.75,y); g.lineTo(x+T-0.75,y+T); g.stroke(); } }
       else if(sol(i,j-1)===0){ g.fillStyle='rgba(140,130,180,0.28)'; g.fillRect(x,y,T,2); }
@@ -872,7 +1009,7 @@ function drawTiles(g){
     if(!cv){
       if(CHUNK_BUDGET>0){ cv=renderChunk(ci,cj); G.map.chunks.set(k,cv); CHUNK_BUDGET--; }
       else{ // まだ焼けていない: 地形色だけ
-        for(let j=cj*CHUNK;j<cj*CHUNK+CHUNK;j++) for(let i=ci*CHUNK;i<ci*CHUNK+CHUNK;i++){ if(!inMap(i,j)) continue; const s=G.map.solid[j*MAP_W+i]; g.fillStyle=s===SOLID_ROCK?'#2b2742':(s===SOLID_CLIFF?'#4c4666':ZONES[ZONE_IDS[G.map.zone[j*MAP_W+i]]].col); g.fillRect(i*T-MAP_HW,j*T-MAP_HH,T+0.5,T+0.5); }
+        for(let j=cj*CHUNK;j<cj*CHUNK+CHUNK;j++) for(let i=ci*CHUNK;i<ci*CHUNK+CHUNK;i++){ if(!inMap(i,j)) continue; const s=G.map.solid[j*MAP_W+i]; g.fillStyle=s===SOLID_ROCK?wallDef(G.map.wall).base:(s===SOLID_CLIFF?'#4c4666':ZONES[ZONE_IDS[G.map.zone[j*MAP_W+i]]].col); g.fillRect(i*T-MAP_HW,j*T-MAP_HH,T+0.5,T+0.5); }
         continue;
       }
     }
@@ -976,7 +1113,7 @@ function drawMinimap(g){
     const c=document.createElement('canvas'); c.width=MAP_W; c.height=MAP_H; const cg=c.getContext('2d');
     /* 焼き跡と氷はここで焼き込む(毎フレーム 8064 回まわさない)。塗るたび作り直すので、
        1マス1回の fillRect ではなく ImageData 一枚で書く */
-    const rock=miniRGB(G.map.wall==='flesh'?'#2a0812':(G.map.wall==='brick'?'#1c1c28':'#14111f')), cliff=miniRGB('#5a5478');
+    const rock=miniRGB(wallDef(G.map.wall).mini), cliff=miniRGB('#5a5478');
     const dryC=miniRGB('#4a2c18'), iceC=miniRGB('#9ed7f5');
     const zc=ZONE_IDS.map(z=>miniRGB(ZONES[z].col));
     const im=cg.createImageData(MAP_W,MAP_H), dd=im.data;

@@ -338,6 +338,7 @@ function titleFor(t, hero){
   return r;
 }
 function speciesTitleFor(monId, hero){
+  if(MONSTERS[monId] && MONSTERS[monId].base) monId=MONSTERS[monId].base;   /* v6.0 称号も base の種で付く */
   const nm=(MONSTERS[monId]||{}).name||monId;
   if(!hero || hero==='lumina') return (typeof SPECIES_TITLES!=='undefined' && SPECIES_TITLES[monId])||(nm+'の戦利品');
   const f=SPECIES_TITLE_FORM[hero];

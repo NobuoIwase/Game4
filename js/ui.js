@@ -655,7 +655,7 @@ const UI={
 
   /* ---------- 図鑑 ---------- */
   htmlCodex(){
-    const ids=Object.keys(MONSTERS).filter(id=>!MONSTERS[id].item && (!MONSTERS[id].guardian || (META.codex[id]&&META.codex[id].seen)));   // 魔核は出会ってから載る
+    const ids=Object.keys(MONSTERS).filter(id=>!MONSTERS[id].item && !MONSTERS[id].variant && (!MONSTERS[id].guardian || (META.codex[id]&&META.codex[id].seen)));   // 魔核は出会ってから載る(v6.0 熟れた個体は base の欄に合流する)
     const stageTxt=['見かけた','追記一','追記二','追記三'];
     const cards=ids.map(id=>{
       const m=MONSTERS[id], stg=codexStage(id);

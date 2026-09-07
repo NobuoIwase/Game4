@@ -1098,7 +1098,7 @@ function drawEnemy(g,e){
   let ent=null;
   if(gfxHd()){
     if(e.boss) drawEnemyShaded(g,e);
-    else { ent=drawEnemyCached(g,e); if(ent && MON_IRIS[e.id]) MON_IRIS[e.id](g,e); if(gfxLv()>=2 && MON_OVER[e.id]) MON_OVER[e.id](g,e); }
+    else { ent=drawEnemyCached(g,e); const aid=e.art||e.id; if(ent && MON_IRIS[aid]) MON_IRIS[aid](g,e); if(gfxLv()>=2 && MON_OVER[aid]) MON_OVER[aid](g,e); }
   }else drawBody(g,e);
 
   if((e.frozT||0)>0){   // v5.0 凍結: 青い氷に覆われ、結晶が立つ
@@ -1134,48 +1134,54 @@ function drawEnemy(g,e){
   g.restore();
 }
 /* 種族ごとの本体描画(drawEnemy から分離。描き込みモードではオフスクリーンで陰影を重ねる) */
+/* v6.0 上位個体(熟れた個体)は base で絵を引く。新しい絵は一枚も描かず、
+   体色・輪郭の発光・大きさだけを renderShaded が段に応じて足す。
+   ★art の引き回しは drawBody / renderShaded / spriteKey / MON_IRIS / MON_OVER の
+     全部で揃えること——一箇所でも取りこぼすと、上位個体だけ目玉が描かれない等の
+     静かな欠落になる(見た目では気づけない) */
 function drawBody(g,e){
-  if(e.id==='core') drawCore(g,e);
-  else if(e.id==='yamiboss') drawYamiBoss(g,e);
-  else if(e.id==='miretent') drawMiretentBody(g,e);
-  else if(e.id==='lurecap') drawLurecap(g,e);
-  else if(e.id==='hugcap') drawHugcap(g,e);
-  else if(e.id==='coreling') drawCoreling(g,e);
-  else if(e.id==='inyoku') drawInyoku(g,e);
-  else if(e.id==='suiyou') drawSuiyou(g,e);
-  else if(e.id==='mouth') drawMouth(g,e);
-  else if(e.id==='guardian') drawGuardian(g,e);
-  else if(e.id==='sentinel') drawSentinel(g,e);
-  else if(e.id==='slimeking') drawSlimeking(g,e);
-  else if(e.id==='runemage') drawRunemage(g,e);
-  else if(e.id==='succuqueen') drawSuccuqueen(g,e);
-  else if(e.id==='gobking') drawGobking(g,e);
-  else if(e.id==='slug') drawSlug(g,e);
-  else if(e.id==='ghost') drawGhost(g,e);
-  else if(e.id==='slime') drawSlime(g,e,false);
-  else if(e.id==='mistslime') drawSlime(g,e,true);
-  else if(e.id==='worm') drawWormG(g,e);
-  else if(e.id==='gas') drawGas(g,e);
-  else if(e.id==='imp') drawImp(g,e);
-  else if(e.id==='flower') drawFlower(g,e);
-  else if(e.id==='gtent') drawGtent(g,e);
-  else if(e.id==='goblin') drawGoblin(g,e);
-  else if(e.id==='leech') drawLeech(g,e);
-  else if(e.id==='hand') drawHand(g,e);
-  else if(e.id==='serpent') drawSerpent(g,e);
-  else if(e.id==='moth') drawMoth(g,e);
-  else if(e.id==='pot') drawPot(g,e);
-  else if(e.id==='slugqueen') drawQueen(g,e);
-  else if(e.id==='dreamtree') drawDreamtree(g,e);
-  else if(e.id==='tower') drawTower(g,e);
-  else if(e.id==='spore') drawSpore(g,e);
-  else if(e.id==='ghosthand') drawGhosthand(g,e);
-  else if(e.id==='eye') drawEye(g,e);
-  else if(e.id==='succubus') drawSuccubus(g,e);
-  else if(e.id==='web') drawWeb(g,e);
-  else if(e.id==='gazer') drawGazer(g,e);
-  else if(e.id==='beamer') drawBeamer(g,e);
-  else if(e.id==='bossgazer') drawBossgazer(g,e);
+  const aid=e.art||e.id;
+  if(aid==='core') drawCore(g,e);
+  else if(aid==='yamiboss') drawYamiBoss(g,e);
+  else if(aid==='miretent') drawMiretentBody(g,e);
+  else if(aid==='lurecap') drawLurecap(g,e);
+  else if(aid==='hugcap') drawHugcap(g,e);
+  else if(aid==='coreling') drawCoreling(g,e);
+  else if(aid==='inyoku') drawInyoku(g,e);
+  else if(aid==='suiyou') drawSuiyou(g,e);
+  else if(aid==='mouth') drawMouth(g,e);
+  else if(aid==='guardian') drawGuardian(g,e);
+  else if(aid==='sentinel') drawSentinel(g,e);
+  else if(aid==='slimeking') drawSlimeking(g,e);
+  else if(aid==='runemage') drawRunemage(g,e);
+  else if(aid==='succuqueen') drawSuccuqueen(g,e);
+  else if(aid==='gobking') drawGobking(g,e);
+  else if(aid==='slug') drawSlug(g,e);
+  else if(aid==='ghost') drawGhost(g,e);
+  else if(aid==='slime') drawSlime(g,e,false);
+  else if(aid==='mistslime') drawSlime(g,e,true);
+  else if(aid==='worm') drawWormG(g,e);
+  else if(aid==='gas') drawGas(g,e);
+  else if(aid==='imp') drawImp(g,e);
+  else if(aid==='flower') drawFlower(g,e);
+  else if(aid==='gtent') drawGtent(g,e);
+  else if(aid==='goblin') drawGoblin(g,e);
+  else if(aid==='leech') drawLeech(g,e);
+  else if(aid==='hand') drawHand(g,e);
+  else if(aid==='serpent') drawSerpent(g,e);
+  else if(aid==='moth') drawMoth(g,e);
+  else if(aid==='pot') drawPot(g,e);
+  else if(aid==='slugqueen') drawQueen(g,e);
+  else if(aid==='dreamtree') drawDreamtree(g,e);
+  else if(aid==='tower') drawTower(g,e);
+  else if(aid==='spore') drawSpore(g,e);
+  else if(aid==='ghosthand') drawGhosthand(g,e);
+  else if(aid==='eye') drawEye(g,e);
+  else if(aid==='succubus') drawSuccubus(g,e);
+  else if(aid==='web') drawWeb(g,e);
+  else if(aid==='gazer') drawGazer(g,e);
+  else if(aid==='beamer') drawBeamer(g,e);
+  else if(aid==='bossgazer') drawBossgazer(g,e);
   else drawBoss(g,e);
 }
 /* v1.3 描き込み: 本体を一度オフスクリーンに描き、暗い縁取り・左上からの光・右下の陰・ハイライトを重ねる */
@@ -1237,10 +1243,17 @@ function renderShaded(cg,e,R,S,oy,k){
     if(dx||dy){ SIL.globalCompositeOperation='destination-out'; SIL.drawImage(SHADE_CV,0,0,SP,SP,dx*k,dy*k,SP,SP); }
     SIL.globalCompositeOperation='source-in'; SIL.fillStyle=col; SIL.fillRect(0,0,SP,SP); SIL.globalCompositeOperation='source-over';
   };
-  sil(e.elite?OUTLINE_ELITE:(OUTLINE_COL[e.id]||OUTLINE_DEF),0,0);          // 色トレス線(1ワールドpx)
+  const aid=e.art||e.id, rk=(e.rank||0);
+  sil(e.elite?OUTLINE_ELITE:(OUTLINE_COL[aid]||OUTLINE_DEF),0,0);          // 色トレス線(1ワールドpx)
   for(const [dx,dy] of [[-1,0],[1,0],[0,-1],[0,1]]) cg.drawImage(SIL_CV,0,0,SP,SP,dx*k,dy*k,SP,SP);
+  /* v6.0 熟れた個体: 骨格は一切変えず、輪郭に桃の発光を回す(段が上がるほど太く)。
+     ★大きさで強さを表現しない——大きくした瞬間、上位個体が「別の種」に見えてしまう */
+  if(rk>0){ sil('rgba(255,179,207,'+(0.30+0.10*rk).toFixed(2)+')',0,0);
+    const w=1+rk; for(let dy=-w;dy<=w;dy++) for(let dx=-w;dx<=w;dx++){ if(dx*dx+dy*dy>w*w) continue; cg.drawImage(SIL_CV,0,0,SP,SP,dx*k,dy*k,SP,SP); } }
   cg.drawImage(SHADE_CV,0,0,SP,SP,0,0,SP,SP);
-  const k1=e.r<12?1.3:1.8, k2=k1*2.2, tr=TRANSLUCENT.has(e.id)?0.5:1;         // 左上からの光: 右下に帯
+  /* 体色を一段沈ませる(段ごとに −8%)。輪郭の桃と合わせて「同じ種の、濃い個体」に見せる */
+  if(rk>0){ sil('rgba(20,10,24,'+(0.08*rk).toFixed(2)+')',0,0); cg.drawImage(SIL_CV,0,0,SP,SP,0,0,SP,SP); }
+  const k1=e.r<12?1.3:1.8, k2=k1*2.2, tr=TRANSLUCENT.has(aid)?0.5:1;         // 左上からの光: 右下に帯
   sil(SHADOW_COL+(0.22*tr)+')',-k2,-k2*1.3); cg.drawImage(SIL_CV,0,0,SP,SP,0,0,SP,SP);   // 広く淡い
   sil(SHADOW_COL+(0.50*tr)+')',-k1,-k1*1.3); cg.drawImage(SIL_CV,0,0,SP,SP,0,0,SP,SP);   // 狭く硬い(セルの段)
   sil(RIM_COL,1,1.3);                          cg.drawImage(SIL_CV,0,0,SP,SP,0,0,SP,SP);   // 左上のリム
@@ -1260,11 +1273,11 @@ let FRAME_N=0;                                           // 描画フレーム�
 function gfxLv(){ return (META.settings&&META.settings.gfxAuto===false)?2:(G.gfxLv===undefined?2:G.gfxLv); }
 const VARI_SPECIES=new Set(['goblin','slug','moth']);   // 個体差で絵が変わる種族だけ鍵に vari を含める(他は3倍の焼き直しになるだけ)
 function spriteKey(e){
-  const lv=gfxLv();
+  const lv=gfxLv(), aid=e.art||e.id;   /* v6.0 絵は base で引く(上位個体は骨格を変えない) */
   let ph=Math.floor((((e.t+e.joff)%2)+2)%2*8); if(lv===0) ph&=~1;
-  const vr=(lv===0||!VARI_SPECIES.has(e.id))?0:(e.vari||0);
+  const vr=(lv===0||!VARI_SPECIES.has(aid))?0:(e.vari||0);
   let st='';
-  switch(e.id){
+  switch(aid){
     case 'worm': st=e.pounceT>0?'p':''; break;
     case 'inyoku': st=e.swoopT>0?'s':''; break;
     case 'suiyou': st=e.sub?'u':''; break;
@@ -1285,14 +1298,16 @@ function spriteKey(e){
     case 'gazer': st=(e.gzState||'')+Math.min(3,Math.floor((e.gzState==='aim'?clamp(1-(e.gzT||0)/BAL.GAZE_AIM,0,1):(e.gzState==='flash'?1:0))*4)); break;
     case 'beamer': st=(e.bmState||'')+(e.bmState==='aim'?Math.min(3,Math.floor(clamp(1-e.bmT/BAL.BEAM_AIM,0,1)*4)):0); break;
   }
-  return e.id+'|'+Math.round(e.r)+'|'+(e.elite?'E':'')+vr+'|'+st+'|'+ph+'|'+gfxK();
+  /* ★鍵には「絵を決めるもの」だけを入れる。id ではなく art と段(rank)で引く——
+     id を入れると上位個体ぶんだけ鍵が倍に膨れて、キャッシュが回らなくなる */
+  return aid+'|'+Math.round(e.r)+'|'+(e.elite?'E':'')+vr+'|'+(e.rank||0)+'|'+st+'|'+ph+'|'+gfxK();
 }
 let NO_IRIS=false;   // 焼き中は目玉の虹彩・瞳・照射触手の水晶を描かない(視線で鍵が8倍に膨れるので、MON_IRIS が毎フレーム生で重ねる)
 function bakeSprite(e,key,R,S){
   const k=gfxK();
   const cv=document.createElement('canvas'); cv.width=S*k; cv.height=S*k; const cg=cv.getContext('2d');
   const t0=e.t, jo=e.joff; e.t=Math.floor((((e.t+e.joff)%2)+2)%2*8)/8+0.0001; e.joff=0;
-  NO_IRIS=!!MON_IRIS[e.id];
+  NO_IRIS=!!MON_IRIS[e.art||e.id];
   try{ renderShaded(cg,e,R,S,R*1.4,k); } finally { NO_IRIS=false; }
   e.t=t0; e.joff=jo;
   const ent={cv,R,oy:R*1.4,S,k,fl:null,hit:FRAME_N};
@@ -2751,6 +2766,54 @@ function drawMire(g,m){
   g.restore();
 }
 /* v4.1 菌輪: 床に小さな茸が輪になって生えている。踏み込むと一斉にふくらんで、柔らかい壁になる */
+/* ================= v6.0 新しい床の「動く分」 =================
+   チップが焼くのは静止画。ここで重ねるのは、状態で変わるものだけ——
+   凪いだ面に映る姿・灯った紋・時の澱の残像・忘れ水の渦。
+   ★毎フレーム舐めるのは画面内のタイルだけに限る */
+function drawZoneV6(g){
+  const B=G.B, M=G.map; if(!B||!M||!M.zone) return;
+  const T=MAP_T, t=B.time;
+  const i0=Math.max(0,tileI(G.cam.x-W/2)-1), i1=Math.min(MAP_W-1,tileI(G.cam.x+W/2)+1);
+  const j0=Math.max(0,tileJ(G.cam.y-H/2)-1), j1=Math.min(MAP_H-1,tileJ(G.cam.y+H/2)+1);
+  const C=M.calmT, GL=M.glyphT;
+  const zMirror=ZONE_IDS.indexOf('mirror'), zGlyph=ZONE_IDS.indexOf('glyph'), zStall=ZONE_IDS.indexOf('stall'), zLethe=ZONE_IDS.indexOf('lethe');
+  g.save();
+  for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++){
+    const k=j*MAP_W+i; if(M.solid[k]) continue;
+    const z=M.zone[k], x=i*T-MAP_HW, y=j*T-MAP_HH;
+    if(z===zMirror && C){
+      /* 凪いでいるほど、天井と自分がはっきり映る。走れば波立って消える */
+      const cq=C[k]/255; if(cq<=0.12) continue;
+      g.globalAlpha=Math.min(0.5,cq*0.5);
+      g.fillStyle='rgba(150,200,255,0.16)'; g.fillRect(x,y,T,T);
+      if(cq>0.6){ g.strokeStyle='rgba(210,235,255,0.30)'; g.lineWidth=1;
+        const w=Math.sin(t*0.7+i*0.3+j*0.2)*1.6;
+        g.beginPath(); g.moveTo(x,y+T*0.5+w); g.lineTo(x+T,y+T*0.5-w); g.stroke(); }
+      g.globalAlpha=1;
+    }else if(z===zGlyph && GL && GL[k]){
+      /* 灯った紋は消えない。誰が灯したかで色を変える(自分の足跡が見える) */
+      const who=(GL[k]-1)|0, col=['255,150,200','255,170,120','160,220,255','200,160,255'][who%4];
+      const ph=0.55+0.25*Math.sin(t*2.0+i*0.7+j*0.5);
+      g.strokeStyle='rgba('+col+','+(0.42*ph).toFixed(3)+')'; g.lineWidth=1.6;
+      g.beginPath(); g.arc(x+T/2,y+T/2,9,0,TAU); g.stroke();
+      g.fillStyle='rgba('+col+','+(0.55*ph).toFixed(3)+')';
+      g.beginPath(); g.arc(x+T/2,y+T/2,2.2,0,TAU); g.fill();
+    }else if(z===zStall){
+      /* 時の澱: 床の模様が、実際に半拍おくれて動く */
+      const ph=(t*0.5+i*0.11+j*0.17)%1;
+      g.globalAlpha=0.10+0.10*Math.sin(ph*TAU);
+      g.fillStyle='rgba(170,160,205,1)';
+      g.fillRect(x+2+Math.sin(t*0.8+i)*2, y+2+Math.cos(t*0.8+j)*2, T-4, T-4);
+      g.globalAlpha=1;
+    }else if(z===zLethe){
+      /* 忘れ水: ゆっくり回る渦。中心へ吸われていく */
+      const a=t*0.35+i*0.4+j*0.3;
+      g.strokeStyle='rgba(230,215,230,0.20)'; g.lineWidth=1;
+      g.beginPath(); g.arc(x+T/2,y+T/2, 7+2*Math.sin(t*0.6+i), a, a+2.2); g.stroke();
+    }
+  }
+  g.restore();
+}
 function drawRing(g,R){
   const t=(G.B?G.B.time:0);
   if(Math.abs(R.x-G.cam.x)>W/2+R.r*1.6 || Math.abs(R.y-G.cam.y)>H/2+R.r*1.6) return;
@@ -3668,6 +3731,7 @@ function draw(){
   if(inBattle){
     const B=G.B, p=B.hero;
     drawLight(g,p.x,p.y);
+    drawZoneV6(g);   /* v6.0 鏡の映り・灯った紋・澱の残像・忘れ水の渦 */
     if(B.rings) for(const R of B.rings) drawRing(g,R);   // v4.1 菌輪
     if(B.mires) for(const m of B.mires) drawMire(g,m);   // v5.0 媚薬沼
     if(B.dryAura) drawDryAura(g,B.dryAura);        // v5.0 フレイラの炎のエリア(焼けた床は地形チップに焼き込まれる)

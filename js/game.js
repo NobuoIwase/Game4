@@ -194,6 +194,12 @@ function heroStat(h){
   if(h.slow>0) spd*=(h.curse==='slimeking'?0.42:0.55);   // 呪い『粘膜の記憶』: 粘液で更に鈍る
   if(h.zone==='water' && !onIce(h)) spd*=0.88;   // 浅瀬(v5.0 氷の上なら足を取られない)
   if(h.zone==='ruin') spd*=1.06;    // 石畳
+  /* v6.0 新しい床。糸は絡み、胎は沈み、絡めとられている間はほとんど進めない */
+  if(h.zone==='silk'  && !onIce(h)) spd*=0.86*(1+0.04*traitLv(h,'attachCalm'));
+  if(h.zone==='womb'  && !onIce(h)) spd*=BAL.WOMB_SPD*(1+0.05*traitLv(h,'sinkCalm'));
+  if((h.silkHold||0)>0) spd*=0.30;
+  if((h.frostHold||0)>0) spd*=0.12;   /* 装束が床に凍りついている間は、ほとんど動けない */
+  if(h.zone==='frost' && !onIce(h) && h.id!=='kuu') spd*=1-0.012*Math.min(BAL.FRO_CHILL_CAP,(h.chill||0))*(1-0.25*traitLv(h,'grindhabit'));
   if(onIce(h)) spd*=1+BAL.ICE_ALLY_SPD;   // v5.0 氷の道は速い(ただし曲がりきれない)
   if(h.iceBless>0) spd*=1.30;             // v5.0 静止の一点の加護
   if(h.heatLv>0) spd*=1-0.04*h.heatLv;
@@ -208,7 +214,7 @@ const areaMult=h=>1+0.10*(h.ps.area||0);      // ひろがるろうそく
 const dupN=h=>(h.ps.dup||0)+((h.iceBless>0)?1:0);   // ふたごの鏡(投射+1) / v5.0 静止の一点の加護でもう1発
 
 /* ================= v2.0 編成: ランダム / おまかせ(階層の得意種とカード練度を優先) ================= */
-function ownedIds(){ return Object.keys(MONSTERS).filter(id=>!MONSTERS[id].item && !MONSTERS[id].guardian && META.cards[id] && META.cards[id].owned); }
+function ownedIds(){ return Object.keys(MONSTERS).filter(id=>!MONSTERS[id].item && !MONSTERS[id].guardian && !MONSTERS[id].variant && META.cards[id] && META.cards[id].owned); }   /* v6.0 熟れた個体はカードにならない(場にだけ湧く) */
 function buildDeck(mode){
   const F=curFloor(), owned=ownedIds(), deck=[]; const byTier={};
   for(const id of owned){ const t=tierOf(id); (byTier[t]=byTier[t]||[]).push(id); }
@@ -308,7 +314,9 @@ function enMax(){ const F=(G.B&&G.B.floor)||curFloor(); return Math.round(Math.m
 const pressMax=()=>Math.min(BAL.PRESS_MAX+0.6, 1.2+0.2*eraNow());   // v3.0 圧の上限は世代で上がる(1.2→2.6)
 const coreDef=()=>Math.max(BAL.CORE_DEF, (BAL.CORE_ERA_DEF0||0.7)-BAL.CORE_ERA_DEF_K*eraNow());   // v3.1 世代0は 0.75
 function pressure(){ const B=G.B; if(!B) return 0; return Math.min(pressMax(), Math.max(0,B.time-BAL.PRESS_T0)/BAL.PRESS_T1); }
-function fieldCap(){ return Math.round(BAL.FIELD_CAP*(1+BAL.PRESS_CAP*pressure())); }
+/* v6.0 深い階ほど場の上限が下がる。空いた枠のぶんは「熟れた個体」が埋める——
+   同じ画面の重さで、頭数ではなく格が上がっていく */
+function fieldCap(){ const F=(G.B&&G.B.floor)||curFloor(); return Math.round(BAL.FIELD_CAP*(1+BAL.PRESS_CAP*pressure())*fieldCapF(F?F.depth:1)); }
 
 function endBattle(outcome){
   const B=G.B;
@@ -493,6 +501,9 @@ function codexOfH(hero,id){
 }
 function codexMark(id,key,n,hero){
   if(!id||!MONSTERS[id]||MONSTERS[id].item) return;
+  /* v6.0 熟れた個体は base の欄に合流する。図鑑に「同じ種の濃い個体」が別項目で並ぶと、
+     一種を知っていく手記という体裁が壊れる */
+  if(MONSTERS[id].base) id=MONSTERS[id].base;
   const c=codexOf(id); c[key]=(c[key]||0)+(n||1);
   const who=hero||((G.B&&G.B.hero)?G.B.hero.id:'lumina');
   const h=codexOfH(who,id); h[key]=(h[key]||0)+(n||1);
@@ -662,6 +673,10 @@ function applyPleasure(amount){
   const h=G.B.hero;
   if(h.refractT>0) amount*=BAL.REFRACT_MULT;   // 不応期: 達した直後は入りが鈍い
   amount*=1+BAL.CREST_AMP*(h.crestLv||0);      // 淫紋: 入りが増す
+  /* v6.0 床に灯した紋は、そのまま淫紋の濃さとして全ての入りに効く */
+  amount*=1+BAL.GLY_PLE*glyphStage();
+  /* v6.0 刻まれた性癖のぶん。増えるのは入りだけで、戦力は減らない */
+  amount*=1+0.06*(traitLv(h,'exhibit')+traitLv(h,'sigilJoy')+traitLv(h,'attachCalm')+traitLv(h,'bareHabit')+traitLv(h,'sinkCalm')+traitLv(h,'defyBliss'));
   amount*=1+(h.curseAmp||0);                    // 呪い『樹液の余熱』
   if(h.watchedT>0) amount*=1+BAL.WATCH_AMP;    // 視姦: 見られていると熱が逃げない
   if(h.freezeT>0){ h.frozenAcc+=amount; return; }   // 時間停止: 止まっている間は溜まるだけ
@@ -941,10 +956,20 @@ function addStruggle(amount){
   if(hh.hypnoLv>=3){ if(wf<=0) return; amount*=wf; } // 催眠Ⅲ: 抵抗という考えが浮かばない(意志の分だけ残る)
   else if(hh.hypnoLv>=2) amount*=0.35+wf*0.5;
   amount*=(1+0.02*(hh.will||0))*(hh.curse==='vampi'?0.85:1);
+  /* v6.0 「抗いの悦び」は戦力を削らない。もがきの力そのものも上がる */
+  amount*=1+0.06*traitLv(hh,'defyBliss')+0.05*traitLv(hh,'attachCalm');
+  /* v6.0 苔(に見えるもの): 出した力を、そのぶんの快感に変える。抗うほど深く軋む */
+  shamSoak(hh, amount*BAL.SHAM_STRUG);
+  /* v6.0 時の澱: 手は動いているのに、届くのが半拍おそい。快感の側は一拍も遅れない */
+  if(stallPush(hh, amount)) return;
+  struggleRaw(hh, amount);
+}
+function struggleRaw(hh, amount){
   const h=G.B.hero;
   if(restraintCount(h)===0||h.pinned||h.charmBind) return;
   if(h.stamina<=0||h.climaxT>0) return;
-  h.struggle+=amount*(h.heatLv>0?1-0.1*h.heatLv:1);
+  /* v6.0 灯した紋の段だけ、拘束が抜けにくくなる(淫紋が濃いほど手が離れない) */
+  h.struggle+=amount*(h.heatLv>0?1-0.1*h.heatLv:1)*(1-BAL.GLY_HOLD*glyphStage())*(1-(h.silkRip||0));
   const o=oldestRestraint(h);
   if(o && h.struggle>=o.at.need){
     h.struggle=0;
@@ -1132,6 +1157,23 @@ function forcedClimax(src){
   enterClimax();
 }
 /* 雄臭への発情: 匂いと快感が結びつく(永続の性癖) */
+/* v6.0 性癖の汎用の刻み口。musk と同じ作法(その子の手記に書き、共通の印も上げる)。
+   n は「あと何ぶん積んだか」で、TRAITS[key].need に届くごとに一段上がる */
+function markTrait(h,key,n){
+  const T=TRAITS[key]; if(!T||!h) return;
+  const HL=heroLife(h.id); HL.traits=HL.traits||{};
+  const need=T.need||3;
+  HL.traitP=HL.traitP||{};
+  HL.traitP[key]=(HL.traitP[key]||0)+(n||1);
+  const lv=Math.min(T.max, Math.floor(HL.traitP[key]/need));
+  if(lv<=(HL.traits[key]||0)) return;
+  HL.traits[key]=lv;
+  META.traits[key]=Math.max(META.traits[key]||0, lv);
+  setBanner('性癖が刻まれた — '+T.name+' '+ROMANS[lv], T.desc.split('。')[0], '#ff9ec2');
+  awardAil('trait');
+}
+/* 刻まれた段(その子のぶん)。快感の入りと、同じ責めへの慣れの両方に効く */
+function traitLv(h,key){ if(!h) return 0; const HL=heroLife(h.id); return ((HL&&HL.traits)?HL.traits[key]:0)|0; }
 function conditionMusk(){
   const B=G.B, h=B.hero;
   if(h.muskDone) return;
@@ -1149,7 +1191,12 @@ function conditionMusk(){
 }
 /* ゲイザー種の「眼」を列挙(単眼/多眼を同じ形で扱う) */
 function gazerEyes(e){
-  if(e.id==='gazer') return [{x:e.x, y:e.y-e.r, ang:e.gzAng||0, r:BAL.GAZE_R, spread:BAL.GAZE_ANG, state:e.gzState, t:e.gzT, tmax:BAL.GAZE_AIM}];
+  if(e.id==='gazer'){
+    const one=(a)=>({x:e.x, y:e.y-e.r, ang:a, r:BAL.GAZE_R, spread:BAL.GAZE_ANG, state:e.gzState, t:e.gzT, tmax:BAL.GAZE_AIM});
+    /* v6.0 双眼(熟れた個体): 扇が二枚。避けた先にもう一枚ある——逃げ場の角が減る */
+    if((e.rFans||0)>=2) return [one(e.gzAng||0), one((e.gzAng||0)+Math.PI*0.62)];
+    return [one(e.gzAng||0)];
+  }
   if(e.id==='bossgazer' && e.eyes){
     return e.eyes.map((ey,i)=>bossEyeSpec(e,ey,i));
   }
@@ -1167,6 +1214,164 @@ function inSector(ey,p){
   const da=Math.abs(((Math.atan2(dy,dx)-ey.ang+Math.PI*3)%TAU)-Math.PI);
   return da<ey.spread/2;
 }
+/* ================= v6.0 新しい地形の効き =================
+   八つの床。どれも「行為」ではなく「まだ抗っている心が軋む速さ」の側を動かす。
+   台帳(凪ぎ度・灯った紋)は G.map に持ち、状態が変わった瞬間だけチャンクを焼き直す
+   ——毎フレーム焼き直す作りは一つも入れない(v5.8 で沼が踏んだ穴と同じ)。 */
+function calmLedger(){ const M=G.map; if(!M) return null; if(!M.calmT) M.calmT=new Uint8Array(MAP_W*MAP_H).fill(255); return M.calmT; }
+function glyphLedger(){ const M=G.map; if(!M) return null; if(!M.glyphT) M.glyphT=new Uint8Array(MAP_W*MAP_H); return M.glyphT; }
+/* 灯した紋の段(0〜GLY_CAP)。全ての快感の入りと、拘束の抜けにくさに効く */
+function glyphStage(){ const B=G.B; if(!B) return 0; return Math.min(BAL.GLY_CAP, Math.floor((B.glyphN||0)/BAL.GLY_STEP)); }
+
+/* 凪ぎを割る: 速く通った跡は波立って、鏡が消える。誰が通っても割れる(魔物でも) */
+function calmBreak(x,y,v){
+  const C=calmLedger(); if(!C||v<BAL.MIR_CALM_V) return;
+  const i0=tileI(x), j0=tileJ(y), r=Math.ceil(BAL.MIR_CALM_R/MAP_T);
+  for(let dj=-r;dj<=r;dj++) for(let di=-r;di<=r;di++){
+    const i=i0+di, j=j0+dj; if(!inMap(i,j)) continue;
+    if(Math.hypot(di,dj)*MAP_T>BAL.MIR_CALM_R) continue;
+    C[j*MAP_W+i]=0;
+  }
+}
+/* 凪ぎが戻る。全面を毎フレーム舐めると重いので、彼女の周りの窓だけを見る */
+function calmTick(dt){
+  const B=G.B, C=calmLedger(); if(!C||!B) return;
+  /* 波立てるのは「速く通ったもの」全部。彼女でも魔物でも同じように鏡が割れる */
+  for(const h of B.heroes){ if(!h.out) calmBreak(h.x,h.y,Math.hypot(h.vx||0,h.vy||0)); }
+  for(const e of B.enemies){ if(!e.dead && !e.item) calmBreak(e.x,e.y,Math.hypot(e.vx||0,e.vy||0)); }
+  const add=Math.max(1,Math.round(BAL.MIR_CALM_BACK*255*dt));
+  for(const h of B.heroes){ if(h.out) continue;
+    const i0=tileI(h.x), j0=tileJ(h.y);
+    for(let dj=-9;dj<=9;dj++) for(let di=-12;di<=12;di++){
+      const i=i0+di, j=j0+dj; if(!inMap(i,j)) continue;
+      const k=j*MAP_W+i; if(C[k]<255) C[k]=Math.min(255,C[k]+add);
+    } }
+}
+function calmAt(x,y){ const C=G.map&&G.map.calmT; if(!C) return 1; const i=tileI(x), j=tileJ(y); return inMap(i,j)?C[j*MAP_W+i]/255:1; }
+
+function zoneV6Tick(h,dt,ice){
+  const B=G.B, z=h.zone; if(!B) return;
+  const sp=Math.hypot(h.vx||0,h.vy||0);
+
+  /* ---- 凪ぎの鏡: 静かな面に映った自分が、誰も見ていないのに視姦になる ---- */
+  if(z==='mirror'){
+    if(!ice && calmAt(h.x,h.y)>=BAL.MIR_ON){
+      learnZone('mirror',dt*0.30);
+      applyPleasure(BAL.MIR_PLE*dt); applySensit(BAL.MIR_SENS*dt);
+      h.mirrorT=(h.mirrorT||0)+dt;
+      if(h.mirrorT>7){ h.mirrorT=0; markTrait(h,'exhibit',1); }
+    }
+  }else h.mirrorT=0;
+
+  /* ---- 紋の敷石: 踏んだら灯る。灯った数がそのまま淫紋の濃さになる ---- */
+  if(z==='glyph' && !ice){
+    const G2=glyphLedger();
+    if(G2){ const i=tileI(h.x), j=tileJ(h.y);
+      if(inMap(i,j)){ const k=j*MAP_W+i;
+        if(!G2[k]){
+          G2[k]=(h.hi|0)+1; B.glyphN=(B.glyphN||0)+1;
+          if(G.map.chunks) G.map.chunks.delete(chunkKey(Math.floor(i/CHUNK),Math.floor(j/CHUNK)));
+          const st=glyphStage();
+          if(st>(B.glyphSt||0)){ B.glyphSt=st; learnZone('glyph',1); markTrait(h,'sigilJoy',1);
+            floatTxt(h.x,h.y-96,'紋が濃くなった('+st+'/'+BAL.GLY_CAP+')','#ff9ec2',12,2.0);
+            sayLine('feat.glyph',1,20,'踏むと……光る。踏まないように、行かなきゃ'); }
+        } } }
+    learnZone('glyph',dt*0.25);
+  }
+
+  /* ---- 糸の床: ゆっくり行けば長く撫でられ、急げば絡む。どちらを選んでも損をする ---- */
+  if(z==='silk' && !ice){
+    learnZone('silk',dt*0.35);
+    if(sp<BAL.SILK_V){ applySensit(BAL.SILK_SENS*dt); h.silkT=(h.silkT||0)+dt;
+      if(h.silkT>6){ h.silkT=0; markTrait(h,'attachCalm',1); } }
+    else { h.silkT=0;
+      if((h.silkHold||0)<=0 && (h.silkCd||0)<=0 && Math.random()<dt*0.5){
+        h.silkHold=BAL.SILK_TETHER; h.silkRip=BAL.SILK_RIP; h.silkCd=2.4; B.silkN=(B.silkN||0)+1;
+        floatTxt(h.x,h.y-90,'糸に絡んだ!','#ffc8dc',12,1.4);
+        heroBubble(h,'……っ、足が',false,1); } }
+  }else h.silkT=0;
+  if(h.silkHold>0){ h.silkHold=Math.max(0,h.silkHold-dt); if(h.silkHold<=0) h.silkRip=0; }
+  if(h.silkCd>0) h.silkCd=Math.max(0,h.silkCd-dt);
+
+  /* ---- 霜の面: 濡れたまま入れば貼りつき、剥がすたびに肌が出る。止まるほど縮こまる ---- */
+  if(z==='frost' && !ice && h.id!=='kuu'){
+    learnZone('frost',dt*0.40);
+    if((h.wet||0)>=BAL.FRO_WET){
+      h.frostT=(h.frostT||0)+dt;
+      if(h.frostT>=BAL.FRO_STICK && (h.frostHold||0)<=0){
+        h.frostStuck=true; h.frostT=-BAL.FRO_STICK*1.6; h.frostHold=BAL.FRO_HOLD;   /* 剥がしてしばらくは凍らない。そのあとまた貼りつく */
+        h.expo=Math.min(BAL.FRO_EXPO_CAP,(h.expo||0)+1);
+        applySensit(6); addHeatG(5);
+        floatTxt(h.x,h.y-96,'装束が床に凍りついた('+h.expo+'/'+BAL.FRO_EXPO_CAP+')','#bfeaff',12,2.2);
+        heroBubble(h,'い、いや……はがれ、ない',false,1.4);
+        markTrait(h,'bareHabit',1);
+      }
+    }else h.frostT=0;
+    const slowQ=0.35+0.65*(1-Math.min(1,sp/BAL.FRO_CHILL_V));
+    h.chill=Math.min(BAL.FRO_CHILL_CAP,(h.chill||0)+BAL.FRO_CHILL_K*slowQ*dt);
+    if((h.chill||0)>0.5){ applySensit((h.chill||0)*0.10*dt);
+      h.chillSec=(h.chillSec||0)+dt; if(h.chillSec>9){ h.chillSec=0; markTrait(h,'grindhabit',1); } }
+  }else{ h.frostT=0; h.frostStuck=false; h.chill=Math.max(0,(h.chill||0)-dt); }
+  if(h.frostHold>0) h.frostHold=Math.max(0,h.frostHold-dt);
+
+  /* ---- 胎の肉: 沈んで走れない。踏んでいるだけで熱が上がる ---- */
+  if(z==='womb' && !ice){ learnZone('womb',dt*0.45); addHeatG(BAL.WOMB_HEAT*dt);
+    h.wombT=(h.wombT||0)+dt; if(h.wombT>8){ h.wombT=0; markTrait(h,'sinkCalm',1); } }
+  else h.wombT=0;
+
+  /* ---- 時の澱: 抵抗だけが遅れて届く。快感・発情・拘束の判定は少しも遅れない ---- */
+  h.stallOn=(z==='stall'&&!ice);
+  if(h.stallOn) learnZone('stall',dt*0.35);
+  stallFlush(h,dt);
+
+  /* ---- 忘れ水: 覚えたことだけが溶ける。身体が覚えたことは溶けない ---- */
+  if(z==='lethe' && !ice){
+    letheWash(h,dt);
+    h.letheT=(h.letheT||0)+dt;
+    if(h.letheT>5){ h.letheT=0; heroBubble(h,'……あったかい。ここ、はじめて来た',false,1.2); markTrait(h,'hypnoObey',1); }
+  }else h.letheT=0;
+}
+
+/* 時の澱: もがき・攻撃・回避を BAL.STALL_LAG だけ遅らせる待ち行列。
+   ★遅らせるのは彼女が出した力だけ。入ってくる快感は一拍も遅れない——それがこの階の芯 */
+function stallPush(h,amt){
+  if(!h||!h.stallOn) return false;
+  (h.stallQ=h.stallQ||[]).push({t:(G.B?G.B.time:0)+BAL.STALL_LAG, a:amt});
+  if(G.B) G.B.stallN=(G.B.stallN||0)+1;
+  return true;
+}
+function stallFlush(h,dt){
+  const q=h.stallQ; if(!q||!q.length) return;
+  const now=G.B?G.B.time:0; let sum=0;
+  while(q.length && q[0].t<=now){ sum+=q.shift().a; }
+  if(sum>0) struggleRaw(h,sum);
+}
+
+/* 忘れ水: 種族の知識と罠の記憶だけを削る。
+   ★敏感化・発情の下限・性癖・淫紋・地形の避け(zoneKnow)は削らない。
+     記憶が消えて身体が残るから、同じ罠に何度でも掛かれる */
+function letheWash(h,dt){
+  const K=(META.gen&&META.gen.know)||null; if(!K) return;
+  const ids=Object.keys(K); if(!ids.length) return;
+  const id=ids[Math.floor(Math.random()*ids.length)], e=K[id];
+  if(e && typeof e==='object'){
+    if((e.met||0)>0) e.met=Math.max(0,e.met-BAL.LETHE_KNOW*dt);
+  }
+  const TK=(META.gen&&META.gen.trapKnow)||null;
+  if(TK){ const tk=Object.keys(TK); if(tk.length){ const t=tk[Math.floor(Math.random()*tk.length)];
+    TK[t]=Math.max(0,(TK[t]||0)-BAL.LETHE_TRAP*dt); if(TK[t]<=0) delete TK[t]; } }
+}
+
+/* 苔(に見えるもの): 彼女がその瞬間に出した力を吸って、そのぶんの快感に変える。
+   ★正しく抗うほど深く軋む。fear:0/innate:0 なので最後まで警戒できない */
+function shamSoak(h,force){
+  if(!h||h.zone!=='sham'||onIce(h)) return;
+  applyPleasure(force);
+  if(G.B) G.B.shamN=(G.B.shamN||0)+force;
+  h.shamT=(h.shamT||0)+force;
+  if(h.shamT>26){ h.shamT=0; heroBubble(h,'……なんで。ちゃんと、やってるのに',false,1.3); markTrait(h,'defyBliss',1); }
+}
+
 /* v1.2 状態異常: 寸止め/疼き/痺れ/視姦/時間停止/触手服/おねだり */
 function statesTick(h,dt){
   // 地形: 花園の花粉、温泉の湯気(回復するが火照る)
@@ -1191,12 +1396,20 @@ function statesTick(h,dt){
   /* v5.0 クウの氷の道の上では、地形の効き(発情・敏感・足)がまるごと効かない。
      生き物と仕掛け(床の手・触手・魔法陣・壁の光線・撒かれたガス)は氷では止まらない */
   const ice=onIce(h);
+  /* v6.0 濡れ具合(0〜1)。濡れる床で上がり、乾いた床でゆっくり引く。
+     フレイラの乾燥オーラの中では一気に乾く。霜の面の「貼りつき」の入力になる */
+  { const zw=(typeof ZONE_WET!=='undefined'&&ZONE_WET[h.zone]!==undefined)?ZONE_WET[h.zone]:0.2;
+    const AU=G.B.dryAura, AH=AU?G.B.heroes.find(x=>x.hi===AU.hi):null;
+    const dry=(AH && !AH.out && Math.hypot(h.x-AH.x,h.y-AH.y)<AU.r)?3.0:1;
+    const tgt=zw*(dry>1?0:1);
+    h.wet=(h.wet===undefined?tgt:h.wet)+(tgt-(h.wet||0))*Math.min(1,dt*(tgt>(h.wet||0)?0.55:0.18*dry)); }
   if(h.zone==='water' && !ice) learnZone('water',dt*0.5);        // 足を取られる
   if(h.zone==='flower' && !ice) learnZone('flower',dt*0.35);     // 花粉
   if(h.zone==='hotspring' && !ice) learnZone('hotspring',dt*0.35);
   if(h.zone==='flower' && !ice) applySensit(0.6*dt);
   if(h.zone==='hotspring' && !ice){ applySensit(1.2*dt); addHeatG(2*dt); h.hp=Math.min(h.maxHp,h.hp+h.regen*0.5*dt); }
   if(h.zone==='flesh' && !ice) addHeatG(BAL.FLESH_HEAT*dt);   // v2.0 肉の床: 脈がうつる
+  zoneV6Tick(h,dt,ice);   /* v6.0 鏡・紋・糸・霜・胎・澱・忘れ水・苔もどき */
   if(h.zone==='lewd'){   // v3.2 巣窟: 前室→沼→最奥と、奥ほど効きが強い。奥まで来たら引き返さない(前室でだけ「やっぱ無理」が出る)
     const dst=Math.max(0,Math.min(2,denStage(h.x,h.y)));
     if(!ice){ learnZone('lewd',dt*0.45); addHeatG(BAL.DEN_HEAT[dst]*dt); applySensit(BAL.DEN_SENS[dst]*dt); }
@@ -1539,8 +1752,12 @@ function aiUpdate(dt){
   const m=Math.hypot(dx,dy);
   const tvx=m>0.001?dx/m*st.speed:0;
   const tvy=m>0.001?dy/m*st.speed:0;
-  const k=Math.min(1,dt*6.5*foc*(onIce(p)?BAL.ICE_SLIDE_K:1));   // v5.0 氷の上は速いが、曲がりきれずに少し流れる
+  /* v6.0 霜の面は氷の道よりさらに滑る。加速も減速も鈍り、曲がりきれずに行き過ぎる。
+     ★クウだけは滑走を制御できる(自分の領分なので、逆に速い) */
+  const frost=(p.zone==='frost' && !onIce(p) && p.id!=='kuu');
+  const k=Math.min(1,dt*6.5*foc*(onIce(p)?BAL.ICE_SLIDE_K:1)*(frost?BAL.FRO_ACC:1));   // v5.0 氷の上は速いが、曲がりきれずに少し流れる
   p.vx+=(tvx-p.vx)*k; p.vy+=(tvy-p.vy)*k;
+  if(frost && m<=0.001){ const fk=Math.min(1,dt*6.5*BAL.FRO_FRIC); p.vx-=p.vx*fk; p.vy-=p.vy*fk; }   /* 止まろうとしても、止まりきれない */
   p.x+=p.vx*dt; p.y+=p.vy*dt;
   { const cx=p.x, cy=p.y; collideMap(p,p.r+2,false); if(Math.hypot(p.x-cx,p.y-cy)>0.5){ B.nWallHit=(B.nWallHit||0)+1; const vd=p.vx*(p.x-cx)+p.vy*(p.y-cy); if(vd<0){ p.vx*=0.5; p.vy*=0.5; } } }   // 壁・崖・マップの端(押し戻されたら勢いを殺す=跳ね返りで震えない)
   // 詰まり検知: 進みたいのに進めていない(壁の角など)→ 探索点へ経路で抜ける
@@ -2790,6 +3007,12 @@ function unitDef(id){
 }
 function spawnUnit(id, x, y, o){
   o=o||{};
+  /* v6.0 深いほど「熟れた個体」に差し替わる。★頭数ではなく格で押すのが深階の設計なので、
+     ここは召喚コストを増やさない(EN は呼んだ側の id で既に払われている)。
+     差し替えは種の同一性を壊さない——絵も本文も図鑑も base のまま */
+  if(!o.noRank && !MONSTERS[id].variant && !MONSTERS[id].boss && !MONSTERS[id].guardian && !MONSTERS[id].item){
+    const FD=(G.B&&G.B.floor)||curFloor(); id=rankPick(id, FD.depth);
+  }
   x=clampMapX(x,20); y=clampMapY(y,20);
   { const q=snapFloor(x,y,canFly(id),4); if(q){ x=q.x; y=q.y; } }   // 壁の中には出ない
   const B=G.B, d=unitDef(id);
@@ -2803,8 +3026,19 @@ function spawnUnit(id, x, y, o){
   const bossm=(MONSTERS[id].boss&&!MONSTERS[id].guardian)?(1+Math.min(BAL.BOSS_HP_LV_CAP,BAL.BOSS_HP_LV*Math.max(0,(B.hero?B.hero.level:1)-1))):1;   // v2.4 ボス級は彼女の Lv で厚くなる(魔核・番兵は各自)
   const F=B.floor||curFloor();   // v2.0 階層: 深いほど硬い。得意種はさらに硬い
   const fhp=MONSTERS[id].guardian?1:F.mon.hp*(F.affinity.includes(id)?BAL.FLOOR_AFFINITY:1)*eraMul(F.depth), fdm=MONSTERS[id].guardian?1:F.mon.dmg*eraMul(F.depth);   // v3.0 世代の深さ倍率(v6.0 深い階では二重取りを緩める)
+  /* ★熟れた個体は「別の種」にしない。数値だけ上の定義から取り、
+     u.id には base を入れる——挙動の分岐(e.id==='gtent' 等)が数十箇所あるので、
+     ここで id を変えると上位個体だけ挙動が既定に落ちる(見た目では気づけない)。
+     段ぶんの差(四肢の本数・扇の枚数・寸止めの長さ)は u.rank と下の値で足す */
+  const RV=MONSTERS[id].variant?RANK_BASE[id]:null;
+  const baseId=RV?RV.base:id;
   const u={
-    id, x, y,
+    id:baseId, x, y,
+    rid:RV?id:null,                     /* 熟れた個体の id(名札と観測記録だけが使う) */
+    art:baseId,                         /* 絵は base で引く(熟れた個体でも骨格は同じ) */
+    rank:RV?RV.rank:0,                  /* 段: 輪郭の発光と体色の沈みだけが変わる */
+    rLimbs:RV&&RV.limbs||0, rFans:RV&&RV.fans||0, rBeams:RV&&RV.beams||0,
+    rCaps:RV&&RV.caps||0, rDeny:RV&&RV.deny||0, rChoir:RV&&RV.choir||0,
     hp:d.hp*elite*pm*flesh*fhp*bossm, maxHp:d.hp*elite*pm*flesh*fhp*bossm, spd:MONSTERS[id].spd, r:MONSTERS[id].r*(elite>1?1.2:1),
     dmg:d.dmg*elite*pm*fdm, xp:Math.round(MONSTERS[id].xp*(1+0.1*(d.lv-1))*(elite>1?1.6:1)),
     enVal:o.enVal||0, gemMul:o.gemMul!==undefined?o.gemMul:1,
@@ -2813,6 +3047,9 @@ function spawnUnit(id, x, y, o){
     dormant:!!o.dormant, dormT:0, state:'chase', limb:null, seenT:0,
     vari:(Math.random()*3)|0,                 // 描き込みの個体差(顔・色)
   };
+  /* ここから下の種ごとの初期化は base の id で走らせる。
+     ★これを忘れると、熟れた個体だけが初期値を持たないまま場に出る */
+  id=baseId;
   if(id==='worm'){ u.pounceCd=rand(1,2); u.pounceT=0; }
   if(id==='slug'){ u.charmCd=0; }
   if(id==='leech'){ u.lvx=null; u.lvy=null; u.suck=null; }
@@ -2826,6 +3063,7 @@ function spawnUnit(id, x, y, o){
   if(id==='hand'){ u.gropeCd=0; u.retreatT=0; }
   if(id==='lurecap'){ u.state='lure'; u.revealed=false; u.lureCd=0; u.openT=0; }   // v4.1 光茸のふり
   if(id==='hugcap'){ u.hugCd=2; u.bendT=0; u.hugT=0; u.homeX=u.x; u.homeY=u.y; }   // 根が張っているので動かない
+  if(id==='hugcap' && (u.rCaps||0)>=2) u.hugCd=1.2;   /* v6.0 二重傘: 抜けた先にもう一枚。掴み直しが速い */
   if(id==='serpent'){ u.biteCd=0; }
   if(id==='moth'){ u.orbitA=rand(TAU); u.orbitDir=Math.random()<0.5?-1:1; u.dustT=rand(0.6,1.6); u.swoopCd=rand(3,5); u.swoopT=0; u.cdx=0; u.cdy=0; }
   if(id==='pot'){ u.grabCd=1.5; u.eatN=0; }
@@ -2891,6 +3129,9 @@ function damageEnemy(e,dmg){
     if(Math.random()<0.15) floatTxt(e.x,e.y-e.r-14,'……てかげん?','#ffb3cf',9,0.8);
   }
   e.hp-=dmg; e.hitFlash=0.12;
+  /* v6.0 苔(に見えるもの)の上では、与えた力そのものが快感に化けて返る。
+     ★正しく戦えば戦うほど深く軋む——15階の芯はこの一行 */
+  { const sh=G.B&&G.B.hero; if(sh&&!sh.out) shamSoak(sh, dmg*BAL.SHAM_DMG); }
   floatDmg(e.x,e.y-e.r-4,dmg);
   if(e.hp<=0){ killEnemy(e); return; }
   /* v5.6 仲間を掴んでいる魔物を撃つと、倒しきらなくても掴みが緩んで、やがて剥がれる。
@@ -3594,6 +3835,9 @@ function succubusTick(e,dt,d,dx,dy){
       applyDeny(e);
       B.fx.push({kind:'pulse', x:e.x, y:e.y-e.r, t:0, life:0.6, r:60, col:'#ff5d9e'});
       floatTxt(e.x,e.y-e.r-12,pickRand(['まだ、だめ♡','とめてあげる♡','おあずけ♡']),'#ff86b3',10,1.1);
+      /* v6.0 焦らしの熟手: 寸止めが長い。三・二・一と数えて聞かせてから、また止める */
+      if((e.rDeny||0)>0){ const p2=G.B.hero; if(p2){ p2.denyT=Math.max(p2.denyT||0, e.rDeny);
+        floatTxt(e.x,e.y-e.r-26,'さん……に……いち……','#ffc0d8',10,1.6); } }
     }
   }
 }
@@ -3606,7 +3850,8 @@ function webTick(e,dt,d){
   if(holding){ e.grabCd=2; return; }
   if(e.grabCd<=0 && d<e.r+p.r+4){
     let n=0;
-    for(let i=0;i<4;i++){ if(attachMonster(e,'tether',{r:36})) n++; else break; }
+    const nWeb=4;
+    for(let i=0;i<nWeb;i++){ if(attachMonster(e,'tether',{r:36})) n++; else break; }
     if(n>0){
       heroBubble(p,pickRand(['いと、が……ぜんぶ、からま……っ','ぬけない……ねばって……','あし、うで、うごかな……!?']),true,2);
       sfx(400,120,0.3,'sawtooth',0.06);
@@ -3683,6 +3928,11 @@ function beamerTick(e,dt,d,dx,dy){
       const rx=p.x-ox, ry=(p.y-14)-oy, along=clamp(rx*ux+ry*uy,0,BAL.BEAM_LEN);
       const pd=Math.hypot(rx-ux*along, ry-uy*along);
       B.fx.push({kind:'beam', x:ox, y:oy, ang:e.bmAng, len:BAL.BEAM_LEN, t:0, life:0.3});
+      /* v6.0 双条(熟れた個体): 片方を避けた先に、もう一本 */
+      if((e.rBeams||0)>=2){ const a2=e.bmAng+0.34;
+        B.fx.push({kind:'beam', x:ox, y:oy, ang:a2, len:BAL.BEAM_LEN, t:0, life:0.3});
+        const u2x=Math.cos(a2), u2y=Math.sin(a2), r2x=p.x-ox, r2y=(p.y-14)-oy, al2=clamp(r2x*u2x+r2y*u2y,0,BAL.BEAM_LEN);
+        if(Math.hypot(r2x-u2x*al2, r2y-u2y*al2)<BAL.BEAM_W/2+p.r*0.7 && !p.pinned && losClear(ox,oy,p.x,p.y-14,true)) forcedClimax(e); }
       sfx(1600,400,0.3,'sawtooth',0.07);
       if(pd<BAL.BEAM_W/2+p.r*0.7 && !p.pinned && losClear(ox,oy,p.x,p.y-14,true)) forcedClimax(e);
       else floatTxt(p.x,p.y-60,'かわした!','#ffd76a',10,0.9);
@@ -6917,7 +7167,7 @@ function chestGift(){
     if(fus.length){ pick=pickRand(fus); evolved=true; }
   }
   if(!pick){
-    const pool=Object.keys(MONSTERS).filter(id=>!MONSTERS[id].boss && !MONSTERS[id].fusion && !MONSTERS[id].item && !inHand(id));
+    const pool=Object.keys(MONSTERS).filter(id=>!MONSTERS[id].boss && !MONSTERS[id].fusion && !MONSTERS[id].item && !MONSTERS[id].variant && !inHand(id));
     if(!pool.length) return;
     pick=pickRand(pool);
   }
@@ -7263,9 +7513,18 @@ function heroSkills(p){ return (HEROES[p.id]||HEROES.lumina).skills; }
    押し倒しの本文は render 側の番人に弾かれて黙って出ていなかった。読む所で一度そろえる */
 function sceneNorm(r){ return Array.isArray(r) ? {beats:r} : r; }
 function sceneForHero(h,kind,id){
+  if(id && MONSTERS[id] && MONSTERS[id].base) id=MONSTERS[id].base;   /* v6.0 本文は base をそのまま継ぐ */
   const T=(h&&h.id==='freila'&&typeof SCENES_F!=='undefined')?SCENES_F:((h&&h.id==='kuu'&&typeof SCENES_K!=='undefined')?SCENES_K:((h&&h.id==='yamiko'&&typeof SCENES_Y!=='undefined')?SCENES_Y:null));   // v5.0 話者ごとの場面
-  if(T){ const t=T[kind]||{}; const r=t[id]||t.default; if(r) return sceneNorm(r); }
-  return sceneFor(kind,id);
+  let sc=null;
+  if(T){ const t=T[kind]||{}; const r=t[id]||t.default; if(r) sc=sceneNorm(r); }
+  if(!sc) sc=sceneFor(kind,id);
+  /* v6.0 堕ち帯による差し替え。同じ相手に同じように負けても、その夜までにどこまで
+     削られているかで締めの一行が変わる。★変わるのは行為ではなく、抗いの残り方 */
+  if(sc && sc.beats && typeof fallCoda==='function'){
+    const co=fallCoda((h&&h.id)||'lumina', kind, id);
+    if(co) sc=Object.assign({}, sc, {beats:sc.beats.concat([co]), band:(typeof fallTier==='function')?fallTier((h&&h.id)||'lumina'):null});
+  }
+  return sc;
 }
 function gainXpAll(v){ const B=G.B; for(const h of B.heroes) h.xp+=v; }
 /* v5.3 相手の名前。ヒロインそのもの・その番号・id のどれで渡してもよい。
@@ -7376,6 +7635,7 @@ function battleTick(dt){
   denTick(dt);                 // v3.2 巣窟の魔法陣・媚薬の花・壁の光線・番人(1フレームに1度)
   lightsTick(dt); lanternTick(dt); bondTick(dt); ringsTick(dt);   // v4.0 灯りの寿命と催淫灯篭 / v4.1 絆の灯り・菌輪
   wornTick(dt); miresTick(dt); dryAuraTick(dt);   // v5.0 すり減り / 媚薬沼 / 炎のエリア
+  calmTick(dt);   /* v6.0 凪ぎの鏡: 波立った面が静けさを取り戻していく */
   coreWarTick(dt);                   // v4.0 魔核戦に入ったか
   { const ci0=B.ci; for(const h of B.heroes){ if(h.id!=='freila'||h.out) continue; B.ci=h.hi; dryTick(h,dt); } B.ci=ci0; }   // v4.0 フレイラが床を焼くか
   { const ci0=B.ci; for(const h of B.heroes){ if(h.id!=='kuu'||h.out) continue; B.ci=h.hi; iceTick(h,dt); } B.ci=ci0; }        // v5.0 クウが道を凍らせるか

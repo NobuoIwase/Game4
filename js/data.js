@@ -360,6 +360,49 @@ const BAL={
   /* v5.0 別々に行動: 互いが見えている(壁を挟まない)うちは、案が割れたら譲らず自分の目当てへ向かう */
   SPLIT_MIN:0.55, SPLIT_SEP:260, SPLIT_R:560, SPLIT_T:14, SPLIT_THREAT:0.75, SPLIT_HP:0.55,
   GATHER_R:84, GATHER_T:3.2, GATHER_DANGER_R:150, GATHER_DANGER_THREAT:0.5, GATHER_CD:8, GATHER_TALK_T:2.6,
+  /* ================= v6.0 新しい地形の効き =================
+     「深いほどいやらしい」を数字で言うと、ここが階ごとに違う責め方の本体になる。
+     どれも『行為』ではなく『まだ抗っている心が軋む速さ』の側を動かす定数 */
+  MIR_CALM_R:60,       /* 凪ぎの鏡: この半径を速く通ると波立って凪ぎが割れる */
+  MIR_CALM_V:80,       /* 波立てる速さの閾値 */
+  MIR_CALM_BACK:0.28,  /* 凪ぎが戻る速さ(毎秒) */
+  MIR_ON:0.60,         /* これ以上凪いでいれば「映る」 */
+  /* ★敏感化は SENSIT_DECAY(1.1/秒)で自然に引いていく。ここに書く数字は「生の入り」なので、
+     1.1 を下回る値を書くと効きが丸ごと消える(死んだ定数になる)。
+     実測: MIR_SENS を設計どおり 0.9 にしていたら、12秒立ち続けて敏感化の増分が 0.0 だった。
+     以下の値はすべて「decay を差し引いた後に設計の速さが残る」ように上乗せしてある */
+  MIR_PLE:1.1, MIR_SENS:2.0,   /* 映っている間、誰も見ていなくても入る視線の快感と敏感化(実質 0.9/秒) */
+
+  GLY_STEP:60,         /* 紋の敷石: 灯した数がこれだけ増えるごとに一段(実測: 20 だと32秒で上限5に届いた) */
+  GLY_CAP:5,           /* 段の上限 */
+  GLY_PLE:0.07,        /* 一段につき快感の入りが+7% */
+  GLY_HOLD:0.05,       /* 一段につき拘束が抜けにくくなる(もがきの効きが-5%) */
+
+  SILK_V:80,           /* 糸の床: これ未満で歩くと擦れ、これ以上で走ると絡む */
+  SILK_SENS:2.7,       /* ゆっくり歩いた時の敏感化(毎秒。decay 差し引きで実質 1.6) */
+  SILK_TETHER:0.9,     /* 走った時に足を取られる秒数 */
+  SILK_RIP:0.20,       /* 絡んだ糸を振りほどくのに要る抵抗の増分 */
+
+  FRO_ACC:0.5, FRO_FRIC:0.25,   /* 霜の面: 加速と摩擦(=止まれない・曲がれない) */
+  FRO_WET:0.35,        /* この濡れ以上で入ると装束が凍りつく */
+  FRO_STICK:2.2,       /* 凍りつくまでの秒数 */
+  FRO_HOLD:1.1,        /* 凍りついた装束を剥がすまで動けない秒数 */
+  FRO_EXPO_CAP:3,      /* 剥がした回数の上限(3で装束が用を成さない) */
+  FRO_CHILL_V:60,      /* この速さ未満まで足が鈍ると縮こまる(実測: 20 では滑走中に一度も届かなかった) */
+  FRO_CHILL_K:0.55,    /* 縮こまりの進み(毎秒) */
+  FRO_CHILL_CAP:16,    /* 縮こまりが押し上げる敏感化の下限 */
+
+  WOMB_HEAT:2.2,       /* 胎の肉: 踏んでいるだけで上がる発情(毎秒) */
+  WOMB_SPD:0.85,       /* 沈むぶん足が鈍る */
+
+  STALL_LAG:0.42,      /* 時の澱: 抵抗だけがこの秒数だけ遅れて届く(快感は遅れない) */
+
+  LETHE_KNOW:0.55,     /* 忘れ水: 毎秒これだけ種族の知識が溶ける */
+  LETHE_TRAP:0.9,      /* 罠の記憶が溶ける速さ(毎秒) */
+
+  SHAM_STRUG:0.35,     /* 苔(に見えるもの): もがいた力の何割が快感に化けるか */
+  SHAM_DMG:0.0035,     /* 与ダメの何割が快感に化けるか(実測: 0.010 は21秒で発情90——効きすぎ) */
+
   ERA_FLOORS0:2, ERA_DEPTH_K0:0.045, ERA_DEPTH_K:0.10, CORE_ERA_HP0:0.30, CORE_ERA_HP_K:0.13, CORE_ERA_DEF0:0.75, CORE_ERA_DEF_K:0.05, CORE_ERA0_LV_K:0.5, CORE_ERA0_LV_CAP:0.5, SENT_ERA:[2,3,3,4,4,5,6,6,7,7,8,8,8,8,8], ERA_STEEP:10, ERA_DEEP_SOFT:0.7, ERA_DEEP_FROM:13,   // v3.1 世代0の魔核はさらに薄く(HP×0.30・被ダメ0.75・Lv補正は半分で上限+50%): 一人のルミナが討てる。魔物の深さ倍率は毎世代+10%(討たれるごとに魔物も強く)
   /* v2.4 視界の記憶: SEEN_T 秒ごとに半径 SEEN_R×SEEN_RY の楕円を「見た」にする。探索点は未探索率×EXPLORE_UNSEEN_W − 距離×EXPLORE_DIST_W で選ぶ(SEEN_EXPLORE=0 で旧挙動)。BOSS_PICK=1 でボスを想定した武器選び */
   SEEN_T:0.25, SEEN_R:560, SEEN_RY:400, SEEN_EXPLORE:1, EXPLORE_UNSEEN_W:2.5, EXPLORE_DIST_W:0.4, EXPLORE_DONE:0.96, BOSS_PICK:1, BOSS_MEMORY_T:60,
@@ -404,6 +447,44 @@ const BAL={
 /* ---------------- モンスターカード ----------------
    dmgは接触ダメージ。armorで軽減される(dot・特殊は貫通あり)。
    xp: ヒロインが倒したとき彼女に入る経験値 = プレイヤーが得るエッセンス。 */
+/* ================= v6.0 熟れた個体(上位個体) =================
+   「深いほど強い魔物を多く出せる」を、新しい種を素朴に増やすのではなく
+   ★同じ種の“濃い個体”として作る。絵は一枚も描かない(骨格は base のまま・
+   輪郭の発光と体色の沈みだけが段で変わる)。本文と図鑑も base をそのまま継ぐ。
+
+   ・RANK_BASE   どの種にどんな上位個体があるか(id → {base, name, rank, 効き})
+   ・RANK_FLOOR  階ごとの「濃い個体が出る割合」。深いほど上がる
+   ・FIELD_CAP_F 階ごとの場の上限。★深いほど下がる——頭数ではなく格で押す階へ移る
+   数値は RANK_HP/RANK_DMG/RANK_COST 参照 */
+const RANK_HP=[1, 1.85, 3.10], RANK_DMG=[1, 1.45, 2.05], RANK_COST=[1, 1.9, 3.2];
+const RANK_BASE={
+  slugelder:  { base:'slug',      name:'熟れたナメクジ',   rank:1, note:'触れられてもいないのに、格下へ惚れていく' },
+  wormcoil:   { base:'worm',      name:'絡みワーム',       rank:1, limbs:2, note:'雑魚に、両脚を同時に取られる' },
+  gazerpair:  { base:'gazer',     name:'双眼',             rank:1, fans:2, note:'視線の扇が二枚。逃げ場の角が減る' },
+  succuhigh:  { base:'succubus',  name:'焦らしの熟手',     rank:2, deny:11, note:'寸止め十一秒。三・二・一と数えて聞かせる' },
+  hugcapelder:{ base:'hugcap',    name:'二重傘',           rank:1, caps:2, note:'傘が二枚。抜けた先にもう一枚' },
+  mouthdeep:  { base:'mouth',     name:'深口',             rank:2, note:'腰まで含んで、そこで止める' },
+  gtentking:  { base:'gtent',     name:'据わりの触手王',   rank:2, limbs:4, note:'四肢を同時に。動かないのに逃げられない' },
+  beamtwin:   { base:'beamer',    name:'双条',             rank:1, beams:2, note:'光条が二本。片方を避けた先に、もう一本' },
+  impchoir:   { base:'imp',       name:'三重の囃し',       rank:1, choir:3, note:'三方向から、同時に言葉で嬲られる' },
+};
+/* 階ごとに「上位個体が出る割合」。1階は 0(基準線を汚さない)、15階で 0.55 */
+const RANK_FLOOR=[0, 0.04, 0.07, 0.10, 0.14, 0.18, 0.22, 0.26, 0.31, 0.36, 0.41, 0.46, 0.50, 0.53, 0.55];
+/* 場に出せる魔物の上限にかける倍率。★深いほど「下がる」——頭数で押す階から、格で押す階へ移る。
+   BAL.FIELD_CAP(260)に対する係数なので、15階では実質 187 まで絞られる */
+const FIELD_CAP_F=[1.00,1.00,0.99,0.97,0.96,0.94,0.92,0.90,0.88,0.86,0.84,0.81,0.78,0.75,0.72];
+const fieldCapF=(depth)=>FIELD_CAP_F[Math.min(FIELD_CAP_F.length,Math.max(1,depth|0))-1]||1;
+const rankFloorP=(depth)=>RANK_FLOOR[Math.min(RANK_FLOOR.length,Math.max(1,depth|0))-1]||0;
+/* その種に上位個体があれば、階の割合で差し替える。無ければそのまま */
+function rankPick(id, depth){
+  const p=rankFloorP(depth); if(p<=0) return id;
+  for(const rid in RANK_BASE){ if(RANK_BASE[rid].base!==id) continue;
+    /* 段2の個体は、割合の半分でしか出ない(濃い個体はさらに稀) */
+    const q=RANK_BASE[rid].rank>=2?p*0.5:p;
+    if(Math.random()<q) return rid;
+  }
+  return id;
+}
 const MONSTERS={
   slug:{
     name:'ナメクジ', role:'接触魅了', cost:2, unlock:0, tier:'fodder',
@@ -671,6 +752,21 @@ const MONSTERS={
     trait:'濃い雄臭の雲(110px)を撒く。8秒ごとに手下3体と号令(320px内の手下が4秒間1.35倍速)。突進。呪い『雄臭の刷り込み』',
   },
 };
+/* v6.0 熟れた個体を MONSTERS へ生やす。手で9件書かず、base をそのまま複製して
+   HP・ダメージ・EN だけ段の表で乗せる。★こうしておけば base 側を直したとき
+   上位個体も一緒に直る(片方だけ古い数字が残る事故が起きない) */
+for(const rid in RANK_BASE){
+  const R=RANK_BASE[rid], B0=MONSTERS[R.base];
+  if(!B0){ continue; }
+  const k=Math.min(RANK_HP.length-1,R.rank);
+  MONSTERS[rid]=Object.assign({}, B0, {
+    base:R.base, variant:true, name:R.name,
+    hp:Math.round(B0.hp*RANK_HP[k]), dmg:+(B0.dmg*RANK_DMG[k]).toFixed(2),
+    cost:Math.max(1,Math.round((B0.cost||1)*RANK_COST[k])),
+    xp:Math.round((B0.xp||1)*(1+0.6*R.rank)),
+    desc:B0.desc+'\n【熟れた個体】'+R.note+'。同じ種でありながら、深い階でだけ濃く育ったもの。',
+  });
+}
 /* ---------------- 地形マップ(v1.6・実験) ----------------
    有限のマップをマップチップで敷く。世代ごとに地形が変わり、同じ世代の4日間は同じ地形。
    彼女は宝箱・祠(永続強化)・泉(休息)・門(突破)を目当てに歩き回る。地形は魔物にも効く */
@@ -688,7 +784,33 @@ const ZONES={
   flesh:    { name:'肉の床',     col:'#6a2440', fear:2, innate:0.5, desc:'触手・手・壺・ワームのHP+20%・速度+10%。最深部の床', her:'脈がうつる(踏むと発情ゲージがじわじわ上がる)。降り口か魔核だけが目当て' },
   lewd:     { name:'甘い褥',     col:'#7a2a5a', fear:3, innate:1, desc:'v3.2 巣窟の中。奥へ入るほど効きが強い(前室→沼→最奥)。入った瞬間に発情が跳ね、魔法陣・媚薬の花・壁の光線・番人が待つ。いちばん奥に王の宝箱', her:'いいものがある……でも、からだがへんになる' },
   haze:     { name:'媚薬の澱み', col:'#4a2448', fear:2, innate:0.8, desc:'v3.2 巣窟の口の外に漂う甘い澱み。中よりずっと薄いが、匂いで奥に何があるか分かる。発情と敏感化がゆっくり進む', her:'このにおい……おくに、なにかある' },
+  /* ===== v6.0 新しい地形。階層ごとに「露骨に違う」顔を作るための八種 =====
+     ★ZONE_IDS は Object.keys の順なので、必ず末尾に足すこと(既存の帯の番号がずれる) */
+  mirror:   { name:'凪ぎの鏡',   col:'#16324f', fear:1, innate:0.3, desc:'v6.0 波の無い水鏡。凪いだ面の上に立つと、誰も見ていなくても「見られている」快感が入る。走れば波立って鏡は消え、静けさが戻るとまた映る', her:'きれい……あ、わたしが、映ってる' },
+  glyph:    { name:'紋の敷石',   col:'#4a2c46', fear:2, innate:0.6, desc:'v6.0 未灯の紋を踏むと灯り、二度と消えない。灯した数がそのまま淫紋の濃さになり、全ての快感の入りと拘束の抜けにくさが上がる', her:'踏むと……光る。踏まないように、行かなきゃ' },
+  silk:     { name:'糸の床',     col:'#2a2632', fear:2, innate:0.5, desc:'v6.0 粘る糸が張り巡らされた床。ゆっくり歩けば糸が擦れて敏感化が進み、走れば絡めとられる。急いでも急がなくても損をする唯一の地形', her:'……糸? ぬるぬるしてる。ゆっくり行こう' },
+  frost:    { name:'霜の面',     col:'#2c3a48', fear:2, innate:0.5, desc:'v6.0 凍った面。滑って止まれず曲がれない。濡れたまま入れば装束が床に凍りつき、剥がすたびに肌が出る。立ち止まるほど縮こまり、縮こまるほど感じる', her:'……つめたい。濡れたまま、入りたくない' },
+  womb:     { name:'胎の肉',     col:'#7a2038', fear:3, innate:0.9, desc:'v6.0 柔らかく沈む肉の床。足が沈んで走れない。踏んでいるだけで発情が上がり、人の形の窪みがここに生える', her:'やわらかい……歩きにくい。ここ、いや' },
+  stall:    { name:'時の澱',     col:'#3a3348', fear:3, innate:0.8, desc:'v6.0 抵抗だけが遅れて届く澱み。もがきも攻撃も回避も奥義も半拍遅れる。快感と発情と拘束の判定だけは、少しも遅れない', her:'……手が、おそい。わたしの手なのに' },
+  lethe:    { name:'忘れ水',     col:'#c8b8c0', fear:2, innate:0.4, desc:'v6.0 浸かると覚えたことが消える。魔物の知識も罠の記憶も溶ける。敏感化・発情の下限・性癖・淫紋は消えない——記憶だけが消えて、身体は残る', her:'……あったかい。ここ、はじめて来た' },
+  sham:     { name:'苔(に見えるもの)', col:'#223a3c', fear:0, innate:0, desc:'v6.0 苔と見分けがつかない何か。踏んだ者がその瞬間に出した力を吸って、そのぶんの快感に変える。ミニマップでも地形学習でも苔と区別できない', her:'……いつもの苔だ' },
 };
+/* ================= v6.0 壁の様式 =================
+   v5.x では rock/brick/flesh の三種が map.js に直接 if で書かれていた(行番号・面の色・
+   ミニマップ色の三箇所)。壁を足すたび三箇所を直す作りだったので、ここへ表として出す。
+   base: チップの下地色 / face: 下が床のときに描く「面」の[色, 縁の色] / mini: ミニマップの色 */
+const WALLS={
+  rock:     { name:'岩壁',     base:'#2b2742', face:['#17132a','rgba(120,110,160,0.35)'], mini:'#14111f' },
+  brick:    { name:'煉瓦の壁', base:'#262636', face:['#15151f','rgba(140,140,180,0.35)'], mini:'#1c1c28' },
+  flesh:    { name:'肉の壁',   base:'#3a0f22', face:['#22060f','rgba(230,120,160,0.40)'], mini:'#2a0812' },
+  bone:     { name:'骨の壁',   base:'#221e20', face:['#141012','rgba(220,210,185,0.38)'], mini:'#1a1614' },
+  obsidian: { name:'黒鏡の壁', base:'#14121c', face:['#0a0910','rgba(190,215,255,0.30)'], mini:'#0e0d16' },
+  ice:      { name:'氷の壁',   base:'#3a5e78', face:['#1a2e3c','rgba(220,245,255,0.50)'], mini:'#2c4c62' },
+  strata:   { name:'層の壁',   base:'#3c3444', face:['#201c28','rgba(255,150,190,0.30)'], mini:'#2a2432' },
+  caul:     { name:'心膜の壁', base:'#5a1830', face:['#300b1a','rgba(230,130,165,0.42)'], mini:'#3e1020' },
+};
+const WALL_IDS=Object.keys(WALLS);
+
 /* fear: 彼女がその地形をどれだけ嫌うか(0 気にしない / 1 ちょっと嫌 / 2 できれば避けたい / 3 入りたくない)。innate: 見ただけで分かる分(0〜1)。残りは踏んで学ぶ(zoneKnow) */
 const ZONE_IDS=Object.keys(ZONES);
 
@@ -726,13 +848,18 @@ const FLOOR_FORM=[
   /* 15 はじめの夜 */ { ridge:1, causeway:0, pillars:1, escarp:0, rockfall:2, spine:1, chamber:0, narrow:0, cliffP:0.00 },
 ];
 /* v4.0 地形の湿り気(0 乾いている 〜 1 濡れきっている)。フレイラの火はここで強くも弱くもなる */
-const ZONE_WET={ water:1.0, damp:0.65, hotspring:0.85, moss:0.3, flesh:0.35, lewd:0.4, haze:0.25, flower:0.15, nest:0.1, ruin:0 };
+const ZONE_WET={ water:1.0, damp:0.65, hotspring:0.85, moss:0.3, flesh:0.35, lewd:0.4, haze:0.25, flower:0.15, nest:0.1, ruin:0,
+  /* v6.0 新地形の湿り気。鏡と忘れ水は水そのもの、霜は融ければ水、糸と紋と澱は乾いている */
+  mirror:1.0, lethe:1.0, frost:0.5, womb:0.6, silk:0.2, glyph:0.2, stall:0.3, sham:0.3 };
 /* v4.0 種族の質: 1 に近いほどヌルヌル(火が通りにくい) / -1 に近いほどカラカラ・薄っぺら(よく燃える) */
 const MON_WET={ slime:1, mistslime:1, slimeking:1, slug:0.9, leech:0.9, worm:0.8, suiyou:1, pot:0.6, gtent:0.5, hand:0.4, mouth:0.5, slugqueen:0.8, ghosthand:0.3,
   moth:-1, spore:-0.9, web:-1, flower:-0.7, imp:-0.6, gas:-0.5, ghost:-0.4, dreamtree:-0.7, tower:-0.6, goblin:-0.2, gobking:-0.2, succubus:-0.3, inyoku:-0.4, vampi:-0.3 };
 const FREILA_WET_K=0.30, FREILA_DRY_K=0.55;   // その質が与ダメに効く強さ(ヌルヌルには弱く、カラカラにはめっぽう強い)
-const ZONE_HP_MON={ damp:{slug:1.25,leech:1.25,worm:1.25,slimeking:1.25}, nest:{'*':1.15}, flesh:{gtent:1.2,hand:1.2,pot:1.2,worm:1.2,ghosthand:1.2,slugqueen:1.2}, lewd:{'*':1.1} };
-const ZONE_SPD_MON={ water:{slime:1.3,mistslime:1.3,slimeking:1.3}, ruin:{'*':1.06}, nest:{'*':1.1}, flesh:{gtent:1.1,hand:1.1,worm:1.1,ghosthand:1.1}, lewd:{'*':1.08} };
+const ZONE_HP_MON={ damp:{slug:1.25,leech:1.25,worm:1.25,slimeking:1.25}, nest:{'*':1.15}, flesh:{gtent:1.2,hand:1.2,pot:1.2,worm:1.2,ghosthand:1.2,slugqueen:1.2}, lewd:{'*':1.1},
+  /* v6.0 その地形の主が居る帯。三点セット(WET/HP/SPD)は必ず同時に書き足す */
+  glyph:{glyphmite:1.3}, silk:{silkmite:1.4}, frost:{suiyou:1.2,slime:1.2,frostbud:1.3}, womb:{'*':1.15}, lethe:{lethemoth:1.3} };
+const ZONE_SPD_MON={ water:{slime:1.3,mistslime:1.3,slimeking:1.3}, ruin:{'*':1.06}, nest:{'*':1.1}, flesh:{gtent:1.1,hand:1.1,worm:1.1,ghosthand:1.1}, lewd:{'*':1.08},
+  mirror:{'*':1.0}, glyph:{'*':1.04}, silk:{'*':0.86}, frost:{'*':1.25}, womb:{'*':0.85}, stall:{'*':0.96}, lethe:{lethemoth:1.4,'*':0.94} };
 const POI_DEF={
   shrine:{ name:'祠',   desc:'着くと彼女の自己強化が1段上がる(世代内で1度ずつ)' },
   spring:{ name:'泉',   desc:'HPが減っていれば湯に浸かって休む。回復するが、敏感化と発情ゲージが上がる' },
@@ -749,19 +876,24 @@ const POI_DEF={
    最終階層は魔核を倒せば目的達成。深いほど夜側のENが多く、魔物も硬い(mon)。affinity=その階層で HP×1.2 になる種 */
 const FLOORS=[
   { id:'f1', name:'入口の洞',   sub:'苔と水の浅い洞。まだ光が届く',          depth:1, dark:0.46, zoneW:{moss:5,damp:3,water:1,ruin:1,flower:1}, wall:'rock',  en:{start:1.0,base:1.0,regen:1.0,max:1.0},     hero:{hp:1.00,dmg:1.00,stam:1.00}, mon:{hp:1.0,dmg:1.0},   affinity:['slug','worm','goblin','hand','lurecap'], col:'#8fd3ff', lewd:{name:'蜜の窪地', sub:'甘い蜜が溜まる窪み。床がぬめり、手が伸びる。奥に王の宝箱', guard:'slugqueen', beam:'climax', guardSub:'蜜に浸かった女王が、窪みの底で待っている'} },
-  { id:'f2', name:'水鏡の洞',   sub:'浅瀬と湿った洞。足を取られる',          depth:2, dark:0.55, zoneW:{damp:4,water:4,moss:2,hotspring:1},        wall:'rock',  en:{start:1.1,base:1.15,regen:1.15,max:1.15}, hero:{hp:1.05,dmg:1.05,stam:1.05}, mon:{hp:1.15,dmg:1.05}, affinity:['slime','mistslime','leech','slimeking','worm','suiyou'], col:'#7fe0ff', lewd:{name:'湯けむりの隠れ湯', sub:'湯気の濃い隠れ湯。火照りが止まらない。奥に王の宝箱', guard:'suiyou', beam:'hypno', guardSub:'湯の中から、白い腕がいくつも伸びている'} },
+  { id:'f2', name:'水鏡の洞',   sub:'凪いだ浅瀬。自分が、足元に居る',        depth:2, dark:0.55, zoneW:{water:4,damp:3,mirror:3,moss:2,hotspring:1}, wall:'rock',  en:{start:1.1,base:1.15,regen:1.15,max:1.15}, hero:{hp:1.05,dmg:1.05,stam:1.05}, mon:{hp:1.15,dmg:1.05}, affinity:['slime','mistslime','leech','slimeking','worm','suiyou'], col:'#7fe0ff', lewd:{name:'湯けむりの隠れ湯', sub:'湯気の濃い隠れ湯。火照りが止まらない。奥に王の宝箱', guard:'suiyou', beam:'hypno', guardSub:'湯の中から、白い腕がいくつも伸びている'} },
   { id:'f3', name:'蜜の花園',   sub:'花と温泉。甘い匂いが濃い',              depth:3, dark:0.62, zoneW:{flower:5,moss:2,hotspring:2,damp:1},        wall:'rock',  en:{start:1.2,base:1.3,regen:1.3,max:1.3},     hero:{hp:1.12,dmg:1.12,stam:1.12}, mon:{hp:1.3,dmg:1.1},   affinity:['flower','moth','gas','imp','succubus','dreamtree','inyoku','lurecap','hugcap'], col:'#ffb3cf', lewd:{name:'花の褥', sub:'花びらが敷き詰められた褥。花粉が濃い。奥に王の宝箱', guard:'succubus', beam:'climax', guardSub:'花に埋もれて、寸止めの淫魔が眠っている'} },
-  { id:'f4', name:'沈んだ回廊', sub:'石畳の遺跡。封印石を灯さねば降り口は開かない', depth:4, dark:0.70, zoneW:{ruin:6,damp:2,water:1,moss:1},          wall:'brick', en:{start:1.3,base:1.5,regen:1.5,max:1.5},     hero:{hp:1.20,dmg:1.20,stam:1.20}, mon:{hp:1.5,dmg:1.15},  affinity:['gazer','beamer','eye','runemage','tower','bossgazer','guardian'], puzzle:'seals', col:'#cbd5ff', lewd:{name:'淫紋の間', sub:'床いちめんに紋が刻まれた間。踏むほど身体が疼く。奥に王の宝箱', guard:'guardian', beam:'hypno', guardSub:'紋の中心に、遺跡の番人が据わっている'} },
+  { id:'f4', name:'沈んだ回廊', sub:'石畳の遺跡。封印石を灯さねば降り口は開かない', depth:4, dark:0.70, zoneW:{ruin:6,damp:2,water:1,moss:1,glyph:1},  wall:'brick', en:{start:1.3,base:1.5,regen:1.5,max:1.5},     hero:{hp:1.20,dmg:1.20,stam:1.20}, mon:{hp:1.5,dmg:1.15},  affinity:['gazer','beamer','eye','runemage','tower','bossgazer','guardian'], puzzle:'seals', col:'#cbd5ff', lewd:{name:'淫紋の間', sub:'床いちめんに紋が刻まれた間。踏むほど身体が疼く。奥に王の宝箱', guard:'guardian', beam:'hypno', guardSub:'紋の中心に、遺跡の番人が据わっている'} },
   { id:'f5', name:'肉の巣',     sub:'壁も床も脈打つ。深淵の心臓に近い',    depth:5, dark:0.76, zoneW:{flesh:5,nest:3,flower:1,damp:1},           wall:'flesh', en:{start:1.5,base:1.75,regen:1.75,max:1.75}, hero:{hp:1.30,dmg:1.30,stam:1.30}, mon:{hp:1.75,dmg:1.25}, affinity:['gtent','hand','pot','worm','slugqueen','succuqueen','gobking','vampi','mouth','hugcap'], col:'#ff6b81', lewd:{name:'肉の褥', sub:'脈打つ肉の褥。横になれば、もう起きられない。奥に王の宝箱', guard:'gtent', beam:'climax', guardSub:'褥の奥から、太い触手が幾本も生えている'} },
   /* v3.0 追加の階層(世代=魔核の討伐回数で開く) */
-  { id:'f6', name:'骸の回廊',   sub:'骨を積んだ煉瓦の回廊。番人が多い',      depth:6, dark:0.82, zoneW:{ruin:5,flesh:2,damp:2,nest:1},           wall:'brick', en:{start:1.6,base:2.0,regen:2.0,max:2.0},     hero:{hp:1.40,dmg:1.40,stam:1.40}, mon:{hp:2.0,dmg:1.35},  affinity:['guardian','sentinel','gazer','beamer','ghost','ghosthand','eye','runemage'], col:'#d9d2ff', lewd:{name:'骸の寝台', sub:'骨で組んだ寝台。横たえられた者の形に凹んでいる。奥に王の宝箱', guard:'guardian', beam:'hypno', guardSub:'寝台の主が、骨の椅子から立ち上がる'} },
-  { id:'f7', name:'星の湖底',   sub:'星明かりの湖。浅瀬と水妖',              depth:7, dark:0.86, zoneW:{water:5,damp:3,moss:1,hotspring:1},         wall:'rock',  en:{start:1.7,base:2.3,regen:2.3,max:2.3},     hero:{hp:1.50,dmg:1.50,stam:1.50}, mon:{hp:2.3,dmg:1.45},  affinity:['suiyou','slime','mistslime','leech','slimeking','inyoku','moth','succubus'], col:'#9fd8ff', lewd:{name:'星の浅瀬', sub:'星が映る浅瀬。水が腕の形になって待っている。奥に王の宝箱', guard:'suiyou', beam:'hypno', guardSub:'星を映す水が、腕の形に立ち上がる'} },
-  { id:'f8', name:'深淵の底',   sub:'肉と紋。かつて、もっとも深かった所',    depth:8, dark:0.90, zoneW:{flesh:5,nest:2,ruin:2,flower:1},           wall:'flesh', en:{start:1.9,base:2.6,regen:2.6,max:2.6},     hero:{hp:1.62,dmg:1.62,stam:1.62}, mon:{hp:2.6,dmg:1.55},  affinity:['gtent','hand','pot','mouth','succuqueen','gobking','vampi','core','runemage'], col:'#ff5d9a', lewd:{name:'底の褥', sub:'紋の刻まれた肉の褥。深淵の底で、二人ぶんの窪みが待つ。奥に王の宝箱', guard:'mouth', beam:'climax', guardSub:'底の肉が裂けて、大きな口がひらく'} },
+  { id:'f6', name:'骸の回廊',   sub:'骨と糸。凹みには、前の形が残っている',  depth:6, dark:0.82, zoneW:{ruin:4,silk:3,flesh:2,damp:2,nest:1},    wall:'bone', en:{start:1.6,base:2.0,regen:2.0,max:2.0},     hero:{hp:1.40,dmg:1.40,stam:1.40}, mon:{hp:2.0,dmg:1.35},  affinity:['guardian','sentinel','gazer','beamer','ghost','ghosthand','eye','runemage'], col:'#d9d2ff', lewd:{name:'骸の寝台', sub:'骨で組んだ寝台。横たえられた者の形に凹んでいる。奥に王の宝箱', guard:'guardian', beam:'hypno', guardSub:'寝台の主が、骨の椅子から立ち上がる'} },
+  { id:'f7', name:'星の湖底',   sub:'天井の星が水に映る。映った中に、彼女が立つ', depth:7, dark:0.86, zoneW:{water:4,mirror:4,damp:2,moss:1,hotspring:1}, wall:'obsidian',  en:{start:1.7,base:2.3,regen:2.3,max:2.3},     hero:{hp:1.50,dmg:1.50,stam:1.50}, mon:{hp:2.3,dmg:1.45},  affinity:['suiyou','slime','mistslime','leech','slimeking','inyoku','moth','succubus'], col:'#9fd8ff', lewd:{name:'星の浅瀬', sub:'星が映る浅瀬。水が腕の形になって待っている。奥に王の宝箱', guard:'suiyou', beam:'hypno', guardSub:'星を映す水が、腕の形に立ち上がる'} },
+  { id:'f8', name:'深淵の底',   sub:'床いちめんの紋。歩いた分だけ、濃くなる', depth:8, dark:0.90, zoneW:{glyph:5,flesh:3,nest:2,ruin:1,flower:1},  wall:'flesh', en:{start:1.9,base:2.6,regen:2.6,max:2.6},     hero:{hp:1.62,dmg:1.62,stam:1.62}, mon:{hp:2.6,dmg:1.55},  affinity:['gtent','hand','pot','mouth','succuqueen','gobking','vampi','core','runemage'], col:'#ff5d9a', lewd:{name:'底の褥', sub:'紋の刻まれた肉の褥。深淵の底で、二人ぶんの窪みが待つ。奥に王の宝箱', guard:'mouth', beam:'climax', guardSub:'底の肉が裂けて、大きな口がひらく'} },
   /* v5.0 追加の階層(世代がさらに進むと開く。氷の天使が降り、渦の縁で闇が眠っている) */
-  { id:'f9',  name:'凍る水路',   sub:'水が凍りかけた古い水路。息が白い',      depth:9,  dark:0.92, zoneW:{water:5,damp:3,ruin:2,moss:1},           wall:'brick', en:{start:2.0,base:2.9,regen:2.9,max:2.9},     hero:{hp:1.74,dmg:1.74,stam:1.74}, mon:{hp:2.9,dmg:1.65},  affinity:['suiyou','slime','mistslime','sentinel','gazer','ghost','leech','slimeking'], col:'#bfeaff', lewd:{name:'凍らない淀み', sub:'ここだけ凍らない、生温い淀み。踏み込めば足が抜けない。奥に王の宝箱', guard:'suiyou', beam:'hypno', guardSub:'凍らない水の底から、白い腕が幾本も立ち上がる'} },
-  { id:'f10', name:'胎の回廊',   sub:'深淵が自分を作り直している所',          depth:10, dark:0.94, zoneW:{nest:5,flesh:3,ruin:1,flower:1},          wall:'flesh', en:{start:2.2,base:3.2,regen:3.2,max:3.2},     hero:{hp:1.88,dmg:1.88,stam:1.88}, mon:{hp:3.2,dmg:1.75},  affinity:['gtent','pot','hand','mouth','succuqueen','vampi','inyoku','hugcap','worm'], col:'#ff8fb3', lewd:{name:'産みの褥', sub:'いくつもの窪みが並ぶ褥。どれも、ちょうど人の形をしている。奥に王の宝箱', guard:'mouth', beam:'climax', guardSub:'窪みの一つが裂けて、内側から口がひらく'} },
-  { id:'f11', name:'渦の縁',     sub:'ループの渦の外周。時が澱んでいる',      depth:11, dark:0.96, zoneW:{ruin:4,flesh:3,nest:2,damp:1},            wall:'brick', en:{start:2.4,base:3.6,regen:3.6,max:3.6},     hero:{hp:2.02,dmg:2.02,stam:2.02}, mon:{hp:3.6,dmg:1.90},  affinity:['guardian','sentinel','runemage','gazer','beamer','eye','ghost','ghosthand','tower'], col:'#b09aff', lewd:{name:'澱みの寝台', sub:'同じ夜が何度も繰り返された寝台。凹みだけが増えていく。奥に王の宝箱', guard:'guardian', beam:'hypno', guardSub:'寝台の脇の石像が、いま目を開けた'} },
-  { id:'f12', name:'渦の中心',   sub:'すべてが巻き戻る一点。心臓はここにある', depth:12, dark:0.97, zoneW:{flesh:5,nest:3,ruin:2},                  wall:'flesh', en:{start:2.6,base:4.0,regen:4.0,max:4.0},     hero:{hp:2.16,dmg:2.16,stam:2.16}, mon:{hp:4.0,dmg:2.05},  affinity:['core','gtent','mouth','pot','hand','succuqueen','gobking','vampi','runemage'], col:'#ff4d7f', lewd:{name:'巻き戻しの褥', sub:'ここで何をされても、朝には無かったことになる褥。だから際限がない。奥に王の宝箱', guard:'gtent', beam:'climax', guardSub:'褥の奥から、幾度も同じ形をなぞってきた触手が伸びる'} },
+  { id:'f9',  name:'凍る水路',   sub:'濡れたまま入れば、床に貼りつく',        depth:9,  dark:0.92, zoneW:{frost:5,water:3,damp:2,ruin:2,moss:1},   wall:'ice', en:{start:2.0,base:2.9,regen:2.9,max:2.9},     hero:{hp:1.74,dmg:1.74,stam:1.74}, mon:{hp:2.9,dmg:1.65},  affinity:['suiyou','slime','mistslime','sentinel','gazer','ghost','leech','slimeking'], col:'#bfeaff', lewd:{name:'凍らない淀み', sub:'ここだけ凍らない、生温い淀み。踏み込めば足が抜けない。奥に王の宝箱', guard:'suiyou', beam:'hypno', guardSub:'凍らない水の底から、白い腕が幾本も立ち上がる'} },
+  { id:'f10', name:'胎の回廊',   sub:'達することが、許可制になる',            depth:10, dark:0.94, zoneW:{womb:5,nest:3,flesh:2,ruin:1,flower:1},  wall:'flesh', en:{start:2.2,base:3.2,regen:3.2,max:3.2},     hero:{hp:1.88,dmg:1.88,stam:1.88}, mon:{hp:3.2,dmg:1.75},  affinity:['gtent','pot','hand','mouth','succuqueen','vampi','inyoku','hugcap','worm'], col:'#ff8fb3', lewd:{name:'産みの褥', sub:'いくつもの窪みが並ぶ褥。どれも、ちょうど人の形をしている。奥に王の宝箱', guard:'mouth', beam:'climax', guardSub:'窪みの一つが裂けて、内側から口がひらく'} },
+  { id:'f11', name:'渦の縁',     sub:'抗いだけが遅れて届く。快感は遅れない',  depth:11, dark:0.96, zoneW:{stall:4,ruin:3,glyph:2,flesh:2,nest:1,damp:1}, wall:'brick', en:{start:2.4,base:3.6,regen:3.6,max:3.6},     hero:{hp:2.02,dmg:2.02,stam:2.02}, mon:{hp:3.6,dmg:1.90},  affinity:['guardian','sentinel','runemage','gazer','beamer','eye','ghost','ghosthand','tower'], col:'#b09aff', lewd:{name:'澱みの寝台', sub:'同じ夜が何度も繰り返された寝台。凹みだけが増えていく。奥に王の宝箱', guard:'guardian', beam:'hypno', guardSub:'寝台の脇の石像が、いま目を開けた'} },
+  { id:'f12', name:'渦の中心',   sub:'三つの喉。選ばなければ、進めない',      depth:12, dark:0.97, zoneW:{flesh:4,nest:3,ruin:2},                  wall:'flesh', en:{start:2.6,base:4.0,regen:4.0,max:4.0},     hero:{hp:2.16,dmg:2.16,stam:2.16}, mon:{hp:4.0,dmg:2.05},  affinity:['core','gtent','mouth','pot','hand','succuqueen','gobking','vampi','runemage'], col:'#ff4d7f', lewd:{name:'巻き戻しの褥', sub:'ここで何をされても、朝には無かったことになる褥。だから際限がない。奥に王の宝箱', guard:'gtent', beam:'climax', guardSub:'褥の奥から、幾度も同じ形をなぞってきた触手が伸びる'} },
+  /* ===== v6.0 追加の三階層。ここから先は「特化階層」——一階につき一つの問いだけに賭ける =====
+     13 忘却 / 14 待ち / 15 抵抗。深さの数字だけでなく、責め方そのものが階ごとに変わる */
+  { id:'f13', name:'忘れ潟',   sub:'巻き戻すたびに零れた夜が、ここに溜まっている', depth:13, dark:0.97, zoneW:{lethe:6,damp:2,moss:1,ruin:1},            wall:'strata', en:{start:2.8,base:4.4,regen:4.4,max:4.4}, hero:{hp:2.30,dmg:2.30,stam:2.30}, mon:{hp:4.4,dmg:2.20}, affinity:['ghost','ghosthand','moth','gas','dreamtree','mistslime','succubus','inyoku','runemage'], col:'#d8c8d0', lewd:{name:'覚えのない褥', sub:'何度も横たわった跡があるのに、初めて見る褥。だから何度でも新しく怖がれる。奥に王の宝箱', guard:'succuqueen', beam:'hypno', guardSub:'褥の主が、初対面の顔で微笑んでいる'} },
+  { id:'f14', name:'厚みの中', sub:'討たれた数だけ厚くなった、心臓の身の内側',     depth:14, dark:0.98, zoneW:{womb:5,flesh:3,nest:1,silk:1},             wall:'caul',   en:{start:3.0,base:4.8,regen:4.8,max:4.8}, hero:{hp:2.44,dmg:2.44,stam:2.44}, mon:{hp:4.8,dmg:2.35}, affinity:['gtent','hand','pot','mouth','tower','guardian','sentinel','slugqueen','hugcap'], col:'#ff6f9e', lewd:{name:'厚みの窪み', sub:'肉の層をいくつも隔てた奥の窪み。ここまで来た者の形が、まだ残っている。奥に王の宝箱', guard:'mouth', beam:'climax', guardSub:'層の奥の口が、ゆっくりと開いて待っている'} },
+  { id:'f15', name:'はじめの夜', sub:'見覚えのある苔と水。何もかもが、一晩目に似ている', depth:15, dark:0.50, zoneW:{sham:6,moss:2,damp:1,water:1},           wall:'rock',   en:{start:3.2,base:5.2,regen:5.2,max:5.2}, hero:{hp:2.58,dmg:2.58,stam:2.58}, mon:{hp:5.2,dmg:2.50}, affinity:['slug','worm','goblin','hand','lurecap','slugqueen','core','gtent','mouth'], col:'#8fd3ff', lewd:{name:'はじめの窪地', sub:'一晩目に見た窪地と、寸分たがわない。ただし今度は、身体の方が全部覚えている。奥に王の宝箱', guard:'slugqueen', beam:'climax', guardSub:'あの夜と同じ女王が、あの夜と同じ姿で待っている'} },
 ];
 /* v3.0 深淵のループ: era=魔核を討たれた回数。開いている階層 = ERA_FLOORS0 + era(上限 FLOORS.length)。最深の開いた階層が最終階層(魔核)。
    era が階層数の上限を超えても深さ倍率(eraMul)は伸び続ける */
@@ -1154,6 +1286,34 @@ const TRAITS={
   musk:{ name:'雄臭への発情', max:3,
     desc:'ゴブリンの雄の臭いと発情が結びついた。以後、臭いの雲の中に居るだけで身体が熱を覚え(発情ゲージ・敏感化の入りがLvごとに増す)、臭いを避ける足が鈍る。',
     how:'発情したまま、ゴブリンの臭いの雲の中に居続ける' },
+  /* ===== v6.0 新しい床が刻むもの =====
+     ★どれも「戦力を減らす」呪いではない。プロファイル第五部のとおり、
+       刻まれるのは快感の入りと、同じ責めへの慣れ(=振りほどきの速さ)の両方。
+       だから堕ちても弱くならず、戦いは長引き、そのぶん激しくなる */
+  exhibit:{ need:4, name:'映る悦び', max:3,
+    desc:'誰も見ていない所でも、自分の姿が目に入るだけで熱が回るようになった。視姦の入りが段ごとに増し、代わりに見られることへの怯みが薄れて、視線の中でも手が動くようになる。',
+    how:'凪いだ水鏡の上に、自分が映ったまま立ち続ける' },
+  sigilJoy:{ need:2, name:'紋を灯す悦び', max:3,
+    desc:'自分の足が紋を灯していく感触を、身体が先に憶えた。淫紋由来の快感の入りが段ごとに増し、代わりに紋の拘束から抜ける速さも上がる。',
+    how:'紋の敷石を、自分の足で灯し続ける' },
+  attachCalm:{ need:4, name:'絡まる安堵', max:3,
+    desc:'絡めとられた時に、抗うより先に息が落ち着くようになった。拘束中の快感の入りが段ごとに増し、代わりに糸・触手を振りほどく手際も良くなる。',
+    how:'糸の張った床を、ゆっくり歩き続ける' },
+  bareHabit:{ need:2, name:'剥がれ癖', max:3,
+    desc:'装束が肌から離れる感触に、身体が反応するようになった。露出した状態での快感の入りが段ごとに増し、代わりに肌を晒したままでも足がすくまなくなる。',
+    how:'霜の面で装束を凍りつかせ、剥がして歩く' },
+  grindhabit:{ need:5, name:'擦り合わせ癖', max:3,
+    desc:'寒さをしのぐために脚を擦り合わせた癖が、そのまま残った。立ち止まっている間の敏感化が段ごとに速くなり、代わりに冷えで身体が鈍らなくなる。',
+    how:'霜の面で立ち止まり、縮こまったまま時を過ごす' },
+  sinkCalm:{ need:4, name:'沈む安堵', max:3,
+    desc:'柔らかいものに脚を取られる感触が、恐怖ではなく安らぎに繋がってしまった。沈み込む床での発情が段ごとに速くなり、代わりに沈んでも足取りが乱れなくなる。',
+    how:'胎の肉を歩き続ける' },
+  hypnoObey:{ need:3, name:'忘れる従順', max:3,
+    desc:'覚えていないことには抗えない。忘れ水に浸かるたび、抗う理由の方が先に流れていく。催眠の入りが段ごとに深くなり、代わりに覚え直しが速くなる。',
+    how:'忘れ水に浸かって、覚えたことを流す' },
+  defyBliss:{ need:4, name:'抗いの悦び', max:3,
+    desc:'正しく抗った力が、そのまま快感に化けて返ってくる床を踏んだ。もがきが快感に変わる割合が段ごとに増し、代わりにもがきそのものの力も上がる。',
+    how:'苔に見えるものの上で、それでも抗い続ける' },
 };
 const LIMBS=['armL','armR','legL','legR'];
 const LIMB_NAMES={armL:'左腕', armR:'右腕', legL:'左脚', legR:'右脚'};

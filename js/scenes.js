@@ -774,6 +774,7 @@ const SCENES={
 };
 
 function sceneFor(kind,id){
+  if(id && typeof MONSTERS!=='undefined' && MONSTERS[id] && MONSTERS[id].base) id=MONSTERS[id].base;   /* v6.0 熟れた個体は base の本文を継ぐ */
   const t=SCENES[kind]||{};
   const r=t[id]||t.default||null;
   return (typeof sceneNorm==='function')?sceneNorm(r):r;   // 素の配列で書かれた場面も {beats:[…]} にそろえる
