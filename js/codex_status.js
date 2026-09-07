@@ -233,3 +233,113 @@ function heroReviewFallback(id){
   const c=titleCtx(id), nm=(HEROES[id]||{}).name||id;
   return ['観測対象: '+nm+'。通算'+c.runs+'戦、捕獲'+c.captures+'回、絶頂'+c.climax+'回。筆はまだ、この対象の書き方を決めていない。'];
 }
+
+/* ================= v5.8 称号のヒロイン別 =================
+   称号の文はルミナの像(星・光・守り手・聖女・街の灯)で書かれている。
+   数字だけ各人ぶんにしても、名前がルミナのままでは記録にならないので、
+   名前と——ルミナ固有の像を含む——本文を差し替える。
+   `long` は「彼女」で通る中立の文が多いので、必要な所だけ上書きする。 */
+const TITLE_BY={
+  freila:{
+    star:{name:'前を持つ者', desc:'助っ人として先に立つ役目の、いちばん古い呼び名。彼女はこれを、まだ一度も疑ったことがない。'},
+    unfallen:{name:'消えない火'},
+    hunter:{name:'薪を絶やさぬ者'},
+    kingslayer:{name:'王を焼いた者', desc:'夜の統率者を一度でも焼き払った火。王は、焼かれたことを覚えていない。'},
+    fivenights:{name:'五夜を越えた火', desc:'五度の夜明けを見た。見るたびに、彼女は刃の欠けを数え直した。'},
+    bind1:{name:'刃を持つ腕の、蟲の縄目', desc:'踏み込むための腕と脚が、蟲の縄目として使われた回数。一線は、一度目に越えている。'},
+    bind2:{name:'読み切って、蔦の寝台'},
+    bind3:{name:'縛られて息を継ぐ火'},
+    charm1:{name:'刃の鈍った火'},
+    charm2:{name:'種族に焦がれる火'},
+    charm3:{name:'火の花嫁', long:'魅了拘束の最中にスタミナが尽き、縋りついた腕がそのまま降参の形になった敗北。前を持つと決めた者が、夜側に嫁いだ夜の記録。'},
+    body1:{name:'火の身に、甘い霧'},
+    body2:{name:'前を持つはずの、崩れる膝', desc:'戦場で十度、脚を止めて震えた身体。前を持つという役目は、もう膝のほうには届いていない。'},
+    body3:{name:'数を言わなくなった火'},
+    hypno1:{name:'電波の届く火'},
+    deny1:{name:'待たされる火'},
+    deny2:{name:'栓を抜かれて燃える火', desc:'待たされ、抜かれ、深く達する。その手順を身体が覚えた。役目の名は、待っている間だけ思い出される。'},
+    possess1:{name:'自分の手に負けた火'},
+    watch1:{name:'見られている火'},
+    suit1:{name:'纏われた火'},
+    hypno2:{name:'瞳に従う火'},
+    self1:{name:'人目を忘れた火'},
+    beam1:{name:'照らされて咲く火'},
+    musk1:{name:'雄の匂いに酔う火'},
+  },
+  kuu:{
+    star:{name:'測る者', desc:'届く距離を先に測る役目の、いちばん古い呼び名。彼女はこれを、まだ一度も疑ったことがない。'},
+    unfallen:{name:'溶けない氷'},
+    hunter:{name:'数え終えた者'},
+    kingslayer:{name:'王を止めた者', desc:'夜の統率者を一度でも止めた冷気。王は、止められたことを覚えていない。'},
+    fivenights:{name:'五夜を越えた氷', desc:'五度の夜明けを見た。見るたびに、彼女は溶けた分を目盛りに書き足した。'},
+    bind1:{name:'測る腕の、蟲の縄目', desc:'距離を測るための腕と脚が、蟲の縄目として使われた回数。一線は、一度目に越えている。'},
+    bind2:{name:'測り違えて、蔦の寝台'},
+    bind3:{name:'縛られて数えるのをやめた氷'},
+    charm1:{name:'手加減という名の誤差'},
+    charm2:{name:'種族に懐く氷'},
+    charm3:{name:'氷の花嫁', long:'魅了拘束の最中にスタミナが尽き、縋りついた腕がそのまま降参の形になった敗北。距離を測る者が、測るのをやめて嫁いだ夜の記録。'},
+    body1:{name:'冷えた身に、甘い霧'},
+    body2:{name:'測れなくなった身体', desc:'戦場で十度、脚を止めて震えた身体。測るという仕事は、もう身体のほうには届いていない。'},
+    body3:{name:'数えるのをやめた氷'},
+    hypno1:{name:'電波の届く氷'},
+    deny1:{name:'待たされる氷'},
+    deny2:{name:'栓を抜かれて溶ける氷', desc:'待たされ、抜かれ、深く達する。その手順を身体が覚えた。数える癖は、待っている間だけ戻ってくる。'},
+    possess1:{name:'自分の手に負けた氷'},
+    watch1:{name:'見られている氷'},
+    suit1:{name:'纏われた氷'},
+    hypno2:{name:'瞳に従う氷'},
+    self1:{name:'人目を忘れた氷'},
+    beam1:{name:'照らされて咲く氷'},
+    musk1:{name:'濃度に酔う氷'},
+  },
+  yamiko:{
+    star:{name:'渡ってきた者', desc:'夜側で生まれ、光の側へ渡った者の呼び名。彼女はこれを、まだ一度も返上していない。'},
+    unfallen:{name:'明けない夜'},
+    hunter:{name:'群れを掃く者'},
+    kingslayer:{name:'王の作法を返した者', desc:'夜の統率者を一度でも退けた者。かつて同じ側にいた者に退けられたことを、王は覚えていない。'},
+    fivenights:{name:'五夜を越えた影', desc:'五度の夜明けを見た。見るたびに、彼女は朝の眩しさに慣れられなかった。'},
+    bind1:{name:'夜側を知る腕の、蟲の縄目', desc:'かつて縄目を掛ける側にあった腕と脚が、蟲の縄目として使われた回数。一線は、一度目に越えている。'},
+    bind2:{name:'手筋を知って、蔦の寝台'},
+    bind3:{name:'縛られて作法に戻る者'},
+    charm1:{name:'情の移った渡り者'},
+    charm2:{name:'種族に馴染む影'},
+    charm3:{name:'里帰りした花嫁', long:'魅了拘束の最中にスタミナが尽き、縋りついた腕がそのまま降参の形になった敗北。渡ってきた者が、渡ってきた先から帰った夜の記録。'},
+    body1:{name:'慣れた身に、甘い霧'},
+    body2:{name:'作法を知る、崩れる身体', desc:'戦場で十度、脚を止めて震えた身体。手順を知っていることは、止められることではない。'},
+    body3:{name:'数えるのが仕事だった者'},
+    hypno1:{name:'電波の届く影'},
+    deny1:{name:'待たされる者'},
+    deny2:{name:'栓を抜かれて崩れる影', desc:'待たされ、抜かれ、深く達する。その手順を身体が覚えた。手順は、こちら側でも同じだった。'},
+    possess1:{name:'自分の手に負けた者'},
+    watch1:{name:'見られる側に回った者'},
+    suit1:{name:'纏われた影'},
+    hypno2:{name:'瞳に従う者'},
+    self1:{name:'人目を忘れた者'},
+    beam1:{name:'照らされて咲く影'},
+    musk1:{name:'雄の匂いに帰る影'},
+  },
+};
+/* 種族別の敗北称号。ルミナ以外は、まだ一人ずつ書き下ろしていないので、
+   その子の像に合う型で名づける(ルミナの「聖女」「星」を借りない) */
+const SPECIES_TITLE_FORM={
+  freila:n=>n+'に二度焼き損ねた火',
+  kuu:n=>n+'に二度測り違えた氷',
+  yamiko:n=>n+'に二度沈んだ影',
+};
+/* heldTitles から呼ばれる: その子ぶんの名前と本文へ差し替える */
+function titleFor(t, hero){
+  if(!hero || hero==='lumina') return t;
+  const B=TITLE_BY[hero]; if(!B) return t;
+  const o=B[t.id]; if(!o) return t;
+  const r=Object.assign({}, t);
+  if(o.name) r.name=o.name;
+  if(o.desc) r.desc=o.desc;
+  if(o.long) r.long=o.long;
+  return r;
+}
+function speciesTitleFor(monId, hero){
+  const nm=(MONSTERS[monId]||{}).name||monId;
+  if(!hero || hero==='lumina') return (typeof SPECIES_TITLES!=='undefined' && SPECIES_TITLES[monId])||(nm+'の戦利品');
+  const f=SPECIES_TITLE_FORM[hero];
+  return f?f(nm):(nm+'の戦利品');
+}

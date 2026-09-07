@@ -535,13 +535,18 @@ const SPECIES_TITLES={
   slimeking:'粘液の王の玉座', runemage:'焼き紋の聖女', succuqueen:'女王に止められた星', gobking:'王の臭いに酔う星',
 };
 function heldTitles(id){
-  const c=titleCtx(id||'lumina');
-  const out=TITLES.filter(t=>{ try{ return t.cond(c); }catch(e){ return false; } }).map(t=>Object.assign({},t));
-  for(const id in c.cb){
-    if(!MONSTERS[id] || c.cb[id]<2) continue;
-    out.push({ id:'sp_'+id, kind:'ero', line:'敗北', stage:c.cb[id]>=5?3:2, name:SPECIES_TITLES[id]||(MONSTERS[id].name+'の戦利品'),
-      condText:MONSTERS[id].name+'に2回以上敗北('+c.cb[id]+'回)',
-      desc:MONSTERS[id].name+'に繰り返し敗れた者の呼び名。回数が増えるほど、呼び名は本人の名より先に思い出される。',
+  /* v5.8 その子の帳簿で条件を判定し、名前と本文もその子の像へ差し替える
+     (称号の文はルミナの像で書かれているので、そのままでは他の子の記録にならない) */
+  const who=id||'lumina';
+  const c=titleCtx(who);
+  const swap=(typeof titleFor==='function')?(t=>titleFor(t,who)):(t=>t);
+  const out=TITLES.filter(t=>{ try{ return t.cond(c); }catch(e){ return false; } }).map(t=>swap(Object.assign({},t)));
+  for(const mid in c.cb){
+    if(!MONSTERS[mid] || c.cb[mid]<2) continue;
+    const nm=(typeof speciesTitleFor==='function')?speciesTitleFor(mid,who):(SPECIES_TITLES[mid]||(MONSTERS[mid].name+'の戦利品'));
+    out.push({ id:'sp_'+mid, kind:'ero', line:'敗北', stage:c.cb[mid]>=5?3:2, name:nm,
+      condText:MONSTERS[mid].name+'に2回以上敗北('+c.cb[mid]+'回)',
+      desc:MONSTERS[mid].name+'に繰り返し敗れた者の呼び名。回数が増えるほど、呼び名は本人の名より先に思い出される。',
       long:'同じ種族に同じ形で負け続けた記録。手記の追記は三度で止まるが、敗北は止まらない。' });
   }
   return out;
