@@ -1092,7 +1092,13 @@ function statesTick(h,dt){
     if(zoneFear(h.zone)>=2){ h.zoneEnter={x:h.x,y:h.y}; h.zoneHeat0=h.heatG||0; h.zoneSens0=h.sensit||0; h.zoneAbortTried=false; } else h.zoneEnter=null;   // v2.2 嫌な地形に入った位置と、入った時の火照り
     h.zoneLast=h.zone;
   }
-  h.iceOn = iceAt(h.x,h.y)>0.5 ? 0.25 : Math.max(0,(h.iceOn||0)-dt);   // v5.0 半歩の踏み外しで点滅しないよう 0.25秒のラッチ
+  { const wasOn=(h.iceOn||0)>0;
+    h.iceOn = iceAt(h.x,h.y)>0.5 ? 0.25 : Math.max(0,(h.iceOn||0)-dt);   // v5.0 半歩の踏み外しで点滅しないよう 0.25秒のラッチ
+    /* v5.0 道が実際に助けた時も褒める。氷の本当の使い道(悪い床をまたぐ)が、
+       それまで一度も褒められなかった——直撃と沼だけが引き金だった */
+    if(!wasOn && h.iceOn>0 && h.id!=='kuu'){
+      const bad=(h.zone==='lewd'||h.zone==='haze'||h.zone==='flesh'||!!mireAt(h.x,h.y));
+      if(bad){ const K=G.B.heroes.find(x=>x.id==='kuu'&&!x.out); if(K) icePraise(K,'road'); } } }
   if(h.iceBless>0) h.iceBless-=dt;
   /* v5.0 クウの氷の道の上では、地形の効き(発情・敏感・足)がまるごと効かない。
      生き物と仕掛け(床の手・触手・魔法陣・壁の光線・撒かれたガス)は氷では止まらない */
@@ -1525,6 +1531,7 @@ function aiDecide(foc){
     if(!inSight(e,p) || e.seenT < BAL.NOTICE_T*(1.4-0.4*foc)) continue;
     const dx=p.x-e.x, dy=p.y-e.y;
     const d=Math.hypot(dx,dy)||0.001;
+    if(e.id==='yamiboss' && (e.meltT||0)>0) continue;   // v5.0 闇に溶けている間は身構えようがない
     const mobileBoss=e.boss && MONSTERS[e.id].spd>0 && e.id!=='bossgazer';   // 動かないボス/多眼のボスからは逃げ回らない(視界を見て避ける)
     // 学習: 知らない相手は一律の距離感。知るほど種族ごとの間合いになり、脅威3の相手は熟知で広く避ける
     const kl=knowLv(e.id), th=SPEC_THREAT[e.id]||0;
@@ -1959,6 +1966,7 @@ function nearestEnemies(n,maxD){
     const grabber=!!(p.assist && ((e.state==='attached' && e.ti===p.assist.hi) || p.assist.pinBy===e));   // v3.0 仲間を掴んでいる魔物
     const swarm=!grabber && !!(p.assist && Math.hypot(e.x-p.assist.x,e.y-p.assist.y)<BAL.COVER_ENEMY_R);   // v4.0 相方に群がっている魔物
     if(e.dead||e.dormant||(e.state==='attached'&&!grabber)) continue;
+    if(e.id==='yamiboss' && (e.meltT||0)>0) continue;   // v5.0 闇に溶けている間は、そこに居ない
     if(!inSight(e,p)) continue;                       // 見えていない敵は撃てない
     let d=Math.hypot(e.x-p.x,e.y-p.y); if(grabber) d*=0.25;
     // 魅了された相手は狙いが後回し(距離に下駄)。理解した脅威は優先討伐(距離を差し引く)
@@ -2656,6 +2664,10 @@ function damageEnemy(e,dmg){
   if(e.id==='flower') dmg*=(e.state==='bud'?0.5:1.3);
   if(e.id==='tower') dmg*=0.3;                        // 催眠電波の塔: 骨の骨組みは光を通しにくい
   if(e.id==='core') dmg*=coreDef();                   // 魔核: 厚い肉(v3.0 世代0は薄く 0.7、世代ごとに 0.05 ずつ厚く、下限 CORE_DEF)
+  if(e.id==='yamiboss'){
+    if((e.meltT||0)>0) return;                        // v5.0 闇に溶けている間は当たらない
+    if(e.asleep) dmg*=BAL.YAMI_SLEEP_DEF;             //      眠っている的は、起こさないと削れない
+  }
   if(e.id==='sentinel') dmg*=BAL.SENTINEL_DEF;        // v2.1 石の番兵: 光が通りにくい
   else if(e.boss && !MONSTERS[e.id].guardian) dmg*=BAL.BOSS_DEF;   // v2.4 ボス級: 被ダメ 80%
   // 魅了: その個体への攻撃は無意識に鈍る(Lvごとに与ダメ減)
@@ -2797,9 +2809,12 @@ function enemiesUpdate(dt){
 
     if(e.dormant){
       e.dormT+=dt;
-      if(d<170 || e.dormT>25){
+      /* v5.0 渦の眠り手だけは別の眠り: 時間では起きず、近づかれた時だけ目を開ける。
+         起きる合図(台詞・帯・闇の輪)は yamiBossTick が同じフレームで出す */
+      const yami=e.id==='yamiboss';
+      if(d < (yami?BAL.YAMI_WAKE:170) || (!yami && e.dormT>25)){
         e.dormant=false;
-        parts(e.x,e.y,10,['#6a5a9c','#3a3158'],120,0.5);
+        if(!yami) parts(e.x,e.y,10,['#6a5a9c','#3a3158'],120,0.5);
       }else continue;
     }
 
@@ -3570,7 +3585,8 @@ function spawnYamiBoss(){
   const u=spawnUnit('yamiboss',q.x,q.y,{});
   if(!u) return;
   u.hp=u.maxHp=Math.round(MONSTERS.yamiboss.hp*(1+0.18*Math.max(0,eraNow()-6))*(1+0.05*Math.max(0,(B.hero.level||1)-1)));
-  u.asleep=true; u.wakeT=0; u.bladeCd=1.2; u.ringCd=4; u.spearCd=3; u.callCd=6; u.meltCd=5; u.meltT=0;
+  u.asleep=true; u.dormant=true; u.dormT=0;   // v5.0 眠っている間は動かない・狙われない(dormant が全部を止める)
+  u.wakeT=0; u.bladeCd=1.2; u.ringCd=4; u.spearCd=3; u.callCd=6; u.meltCd=5; u.meltT=0;
   B.yami=u;
 }
 /* 淫魔三種に囲まれている(救出の一幕) */
@@ -3594,6 +3610,16 @@ function spawnYamiCaptive(){
   G.map.pois.push({kind:'yamicap', x:q.x, y:q.y, key:'yamicap'});
 }
 /* 眠り手の毎フレーム */
+/* v5.0 眠り手はとどめを刺さない。削るだけ削って、飽きる。
+   彼女には捕獲の場面が無い(あるべきでもない)ので、ここで下限を作る */
+function yamiHurt(e,h,dmg,opt){
+  const B=G.B, ci0=B.ci; B.ci=h.hi;
+  const floor=h.maxHp*BAL.YAMI_MERCY;
+  if(h.hp>floor) hurtHero(Math.min(dmg, h.hp-floor), e, opt||{});
+  else if(!h.yamiSpared){ h.yamiSpared=1;
+    floatTxt(e.x,e.y-e.r-30,pickRand(['……もういい','つまらない','立ちなさい']),'#c9a6ff',12,2.0); }
+  B.ci=ci0;
+}
 function yamiBossTick(e,dt,d,dx,dy){
   const B=G.B, p=B.hero;
   if(e.asleep){
@@ -3632,7 +3658,7 @@ function yamiBossTick(e,dt,d,dx,dy){
       const hx=h.x-e.x, hy=(h.y-10)-e.y, hd=Math.hypot(hx,hy);
       if(hd>BAL.YAMI_BLADE_R+12) continue;
       const da=Math.abs(((Math.atan2(hy,hx)-e.swingA+Math.PI*3)%TAU)-Math.PI);
-      if(da<1.1){ const ci0=B.ci; B.ci=h.hi; hurtHero(BAL.YAMI_BLADE_DMG*yamiDmgK(e), e, {pierce:true}); B.ci=ci0; } }
+      if(da<1.1) yamiHurt(e,h,BAL.YAMI_BLADE_DMG*yamiDmgK(e),{pierce:true}); }
     B.fx.push({kind:'darkslash', x:e.x, y:e.y, ang:e.swingA, r:BAL.YAMI_BLADE_R, t:0, life:0.4});
     sfx(180,70,0.3,'sawtooth',0.09);
   }
@@ -3640,7 +3666,7 @@ function yamiBossTick(e,dt,d,dx,dy){
   if(e.ringCd<=0 && d<BAL.YAMI_RING_R+60){
     e.ringCd=BAL.YAMI_RING_CD;
     for(const h of B.heroes){ if(h.out) continue;
-      if(Math.hypot(h.x-e.x,h.y-e.y)<BAL.YAMI_RING_R+10){ const ci0=B.ci; B.ci=h.hi; hurtHero(BAL.YAMI_RING_DMG*yamiDmgK(e), e, {noKb:true}); B.ci=ci0; } }
+      if(Math.hypot(h.x-e.x,h.y-e.y)<BAL.YAMI_RING_R+10) yamiHurt(e,h,BAL.YAMI_RING_DMG*yamiDmgK(e),{noKb:true}); }
     B.fx.push({kind:'darkring', x:e.x, y:e.y, r:BAL.YAMI_RING_R, t:0, life:0.7});
     G.shake=Math.min(9,G.shake+4); sfx(120,60,0.4,'square',0.08);
   }
@@ -6858,9 +6884,13 @@ function nearestHeroIdx(x,y){ const B=G.B; let bi=-1, bd=1e9; B.heroes.forEach((
 function partnerOf(p){ const B=G.B; let best=null, bd=1e9; for(const h of B.heroes){ if(h===p||h.out) continue; const d=Math.hypot(h.x-p.x,h.y-p.y); if(d<bd){ bd=d; best=h; } } return best; }
 function heroOf(k){ const B=G.B; const own=(UPG[k]&&UPG[k].owner)||'lumina'; return (B&&B.heroes&&B.heroes.find(h=>h.id===own))||(B&&B.hero); }
 function heroSkills(p){ return (HEROES[p.id]||HEROES.lumina).skills; }
+/* 場面は {title, beats:[…]} の形。素の配列で書かれたものも受け取る——
+   v5.0 でクウとヤミコの表の一部が配列のまま入っていて、結果画面が sc.beats.map で落ち、
+   押し倒しの本文は render 側の番人に弾かれて黙って出ていなかった。読む所で一度そろえる */
+function sceneNorm(r){ return Array.isArray(r) ? {beats:r} : r; }
 function sceneForHero(h,kind,id){
   const T=(h&&h.id==='freila'&&typeof SCENES_F!=='undefined')?SCENES_F:((h&&h.id==='kuu'&&typeof SCENES_K!=='undefined')?SCENES_K:((h&&h.id==='yamiko'&&typeof SCENES_Y!=='undefined')?SCENES_Y:null));   // v5.0 話者ごとの場面
-  if(T){ const t=T[kind]||{}; const r=t[id]||t.default; if(r) return r; }
+  if(T){ const t=T[kind]||{}; const r=t[id]||t.default; if(r) return sceneNorm(r); }
   return sceneFor(kind,id);
 }
 function gainXpAll(v){ const B=G.B; for(const h of B.heroes) h.xp+=v; }
@@ -6945,7 +6975,9 @@ function battleTick(dt){
   for(const b of B.ebullets){
     b.t+=dt; b.x+=b.vx*dt; b.y+=b.vy*dt;
     for(let i=0;i<B.heroes.length;i++){ const h=B.heroes[i]; if(h.out||b.dead) continue; if(Math.hypot(b.x-h.x,b.y-(h.y-14))<b.r+h.r*0.8 && h.freezeT<=0){ B.ci=i; b.dead=true;
-      if(b.kind==='dark'){ hurtHero(b.dmg||20, {id:'yamiboss', x:b.x, y:b.y, dmg:b.dmg||20}, {pierce:true}); parts(b.x,b.y,14,['#2a1a3e','#a77dff','#fff'],150,0.6); }   // v5.0 闇の穿ち: 快感ではなく体力を削る
+      if(b.kind==='dark'){ const Y=G.B.yami;
+        yamiHurt(Y&&!Y.dead?Y:{id:'yamiboss', x:b.x, y:b.y, r:26, dmg:b.dmg||20}, G.B.hero, b.dmg||20, {pierce:true});
+        parts(b.x,b.y,14,['#2a1a3e','#a77dff','#fff'],150,0.6); }   // v5.0 闇の穿ち: 快感ではなく体力を削る(とどめは刺さない)
       else runeHit(b); } }   // v3.0 誰に当たったか
   }
   B.ci=leaderIdx();

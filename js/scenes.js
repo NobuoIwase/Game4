@@ -775,5 +775,6 @@ const SCENES={
 
 function sceneFor(kind,id){
   const t=SCENES[kind]||{};
-  return t[id]||t.default||null;
+  const r=t[id]||t.default||null;
+  return (typeof sceneNorm==='function')?sceneNorm(r):r;   // 素の配列で書かれた場面も {beats:[…]} にそろえる
 }
