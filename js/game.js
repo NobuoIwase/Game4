@@ -750,6 +750,21 @@ function attachMonster(mon, kind, opt){
   opt=opt||{};
   const slot=freeSlotFor(kind, opt.legFirst, opt.armsOnly);
   if(!slot) return false;
+  /* v5.6 注意力が残っていれば、掴みをかわせる。
+     発情・波・焦らしで heroFocus が落ちるほど掴まれる——「余裕が無いから取られる」を数値にする。
+     加えて、一度やられて覚えた相手(knowLv)の手は見えるので、その分だけ余分にかわす。
+     押し倒されている時と、絶頂・時間停止の最中はかわせない(そもそも余裕が無い)。 */
+  if(!h.pinned && h.climaxT<=0 && h.freezeT<=0 && !opt.noDodge){
+    const f=heroFocus(h);
+    let ev=BAL.FOCUS_DODGE*Math.max(0,(f-0.45)/0.55) + BAL.KNOW_DODGE*knowLv(mon.id);
+    ev=Math.min(BAL.DODGE_MAX, ev)*(1-0.25*h.hypnoLv);   /* 催眠が入っているほど、見えていても避けられない */
+    if(ev>0 && Math.random()<ev){
+      mon.stun=Math.max(mon.stun||0,0.45); mon.grabCd=Math.max(mon.grabCd||0,0.9);
+      floatTxt(h.x,h.y-46,'かわした','#8fd3ff',11,0.7);
+      learn(mon.id,'dodge');
+      return false;
+    }
+  }
   const needBase=(kind==='tether'?BAL.RIP_NEED_TETHER:BAL.RIP_NEED_CLING)*(opt.needMul||1);
   const need=needBase/(1+0.12*(h.resist.bound||0));
   h.limbs[slot]={mon, kind, need, r:opt.r||0, t:B.time};
@@ -927,9 +942,15 @@ function pinTick(dt){
     applyPleasure(BAL.PLEAS_PIN);
     parts(h.x+rand(-10,10),h.y-rand(4,22),3,['#fff','#c98cff'],90,0.4);
     // 絡みつき中のモンスターがじわじわ削る(貫通)
+    /* v5.6 スロットの一覧は先に取るので、ループの途中で肢が外れることがある——
+       hurtHero が捕獲を起こして limbs が空になる / 撃たれて剥がれる、など。
+       その時に h.limbs[sl] が null になっていて落ちていた。毎回引き直して確かめる。
+       dmg を持たない個体(沼の触手のような、地形から生えている物)は 0 として扱う */
     for(const sl of attachedSlots(h)){
-      const m=h.limbs[sl].mon;
-      if(m&&!m.dead) hurtHero(Math.max(0.6,m.dmg*0.3), m, {pierce:true, quiet:true, noKb:true});
+      const at=h.limbs[sl]; if(!at) continue;
+      const m=at.mon;
+      if(m&&!m.dead) hurtHero(Math.max(0.6,(m.dmg||0)*0.3), m, {pierce:true, quiet:true, noKb:true});
+      if(G.mode!=='battle'&&G.mode!=='levelup') return;
     }
     checkStaminaCollapse();
     if(G.mode!=='battle'&&G.mode!=='levelup') return;
@@ -1633,6 +1654,24 @@ function aiDecide(foc,dt){
           if(pd<60){ ddx+=px/pd*1.6*dodge; ddy+=py/pd*1.6*dodge; if(kl>=2) strong=true; }
         }
       }
+      /* v5.6 魔核の技も、覚えた分だけ避ける。心臓は据わっている(spd=0)ので
+         下の「熟知した脅威からは距離を取る」の条件から外れており、
+         2.6秒の溜めがある大光線を棒立ちで浴びていた。
+         光線=軸から横へ / 鞭・脈=間合いの外へ一歩。どちらも短いので、すぐ削りに戻る */
+      if(e.id==='core'){
+        if((e.beamT||0)>0){
+          const ux=Math.cos(e.beamA||0), uy=Math.sin(e.beamA||0);
+          const rx=p.x-e.x, ry=p.y-e.y, along=rx*ux+ry*uy;
+          if(along>0 && along<BAL.CORE_BEAM_LEN){
+            const px=rx-ux*along, py=ry-uy*along, pd=Math.hypot(px,py)||0.001;
+            if(pd<BAL.CORE_BEAM_W*0.9){ ddx+=px/pd*1.8*dodge; ddy+=py/pd*1.8*dodge; if(kl>=2) strong=true; }
+          }
+        }
+        if((e.whipT||0)>0 || (e.pulseT||0)>0){
+          const wx=p.x-e.x, wy=p.y-e.y, wd=Math.hypot(wx,wy)||0.001;
+          if(wd<e.r+BAL.CORE_AURA_R){ ddx+=wx/wd*1.1*dodge; ddy+=wy/wd*1.1*dodge; if(kl>=2) strong=true; }
+        }
+      }
       // 熟知した脅威3の相手からは、狙われる前から距離を取る(下に続く)
       if(kl>=3 && th>=3 && MONSTERS[e.id].spd>0){
         const dx=p.x-e.x, dy=p.y-e.y, d=Math.hypot(dx,dy)||0.001;
@@ -2004,6 +2043,31 @@ function aiDecide(foc,dt){
         const w=BAL.MRING_AVOID_K*(1-rd/near);
         /* 真正面から押し返すだけだと、行きたい向きと正面衝突してその場で止まる。
            縁に沿って回り込む成分(接線)を主にして、行きたい方に近い側へ流す */
+        const tx=-ry/rd, ty=rx/rd, sgn=(tx*dx+ty*dy)>=0?1:-1;
+        dx+=(rx/rd*0.5 + tx*sgn)*w;
+        dy+=(ry/rd*0.5 + ty*sgn)*w*0.78;
+      }
+    }
+  }
+  /* v5.6 媚薬沼を避ける。BAL.MIRE_FEAR は定数だけあって一度も読まれておらず、
+     沼を嫌う仕組みは「中に落ちている物の価値を割り引く」だけだった——
+     だから縁を平気で歩き、触手に足首を取られていた。
+     菌輪と同じく接線を主にして縁を回り込む。浸かってしまった時は、いちばん近い外へ。
+     やむを得ない時(いま目当てがその沼の中にある/逃げている最中)は弱める。 */
+  if(B.mires && B.mires.length && !p.pinned && state!=='struggle'){
+    const fleeing=(state==='abort'||state==='retreat'||state==='flee');
+    for(const m of B.mires){
+      if(m.dry||m.iced) continue;
+      const rx=p.x-m.x, ry=(p.y-m.y)/0.78, rd=Math.hypot(rx,ry)||1;
+      if(rd<m.r){                                    /* もう浸かっている: 外へ出る */
+        const w=BAL.MIRE_OUT_K*(0.55+0.45*m.depth);
+        dx+=rx/rd*w; dy+=ry/rd*w*0.78;
+        continue;
+      }
+      if(p.goal && mireAt(p.goal.x,p.goal.y)===m) continue;   /* その沼の中に用がある時だけは避けない */
+      const near=m.r*BAL.MIRE_AVOID_R;
+      if(rd<near){
+        const w=BAL.MIRE_AVOID_K*(1-rd/near)*(0.6+0.4*m.depth)*(BAL.MIRE_FEAR*0.5)*(fleeing?BAL.MIRE_FLEE_MUL:1);
         const tx=-ry/rd, ty=rx/rd, sgn=(tx*dx+ty*dy)>=0?1:-1;
         dx+=(rx/rd*0.5 + tx*sgn)*w;
         dy+=(ry/rd*0.5 + ty*sgn)*w*0.78;
@@ -2747,7 +2811,23 @@ function damageEnemy(e,dmg){
   }
   e.hp-=dmg; e.hitFlash=0.12;
   floatDmg(e.x,e.y-e.r-4,dmg);
-  if(e.hp<=0) killEnemy(e);
+  if(e.hp<=0){ killEnemy(e); return; }
+  /* v5.6 仲間を掴んでいる魔物を撃つと、倒しきらなくても掴みが緩んで、やがて剥がれる。
+     救出は「そばに立って待つ」だけではなく「撃って剥がす」でもできる。
+     倒しきれない硬い相手(石の番兵など)から仲間を引き離す道でもある */
+  if(e.state==='attached' && e.limb && e.ti!=null && G.B && G.B.heroes[e.ti]){
+    const ho=G.B.heroes[e.ti], at=(!ho.out && ho.limbs) ? ho.limbs[e.limb] : null;
+    if(at && at.mon===e){
+      at.need-=dmg*BAL.PEEL_K;
+      if(at.need<=0){
+        const ci0=G.B.ci; G.B.ci=e.ti;
+        detachLimb(e.limb,{fling:true});
+        G.B.ci=ci0;
+        floatTxt(ho.x,ho.y-52,'剥がした!','#8fd3ff',12,0.9);
+        heroBubble(ho,{freila:'……助かる', kuu:'……ん。ありがと', yamiko:'……恩に着る'}[ho.id]||'ありがと! たすかった!',true,2);
+      }
+    }
+  }
 }
 function killEnemy(e){
   if(e.dead) return;
@@ -5320,7 +5400,7 @@ function miresTick(dt){
         tn.reach=Math.max(0, tn.reach-dt*2.2);
         if(tn.cd<=0 && td<BAL.MIRE_TENT_R && !h.out){
           tn.cd=BAL.MIRE_TENT_CD; tn.reach=1;
-          if(attachMonster({id:'miretent', x:tx, y:ty, r:10, hp:1, maxHp:1, dead:false, mire:true},'tether',{r:BAL.MIRE_TENT_R,needMul:0.8,legFirst:true})){
+          if(attachMonster({id:'miretent', x:tx, y:ty, r:10, hp:1, maxHp:1, dead:false, mire:true, dmg:0, xp:0},'tether',{r:BAL.MIRE_TENT_R,needMul:0.8,legFirst:true})){
             applySensit(4); addHeatG(9);
             parts(tx,ty,10,['#ff9ec2','#c85682','#fff'],110,0.7);
             sayLine('feat.mireTent',2,0,'ぬまから、て……っ、あし、つかま……!');
