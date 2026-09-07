@@ -181,14 +181,18 @@ function defaultMeta(){
     cards:{ slug:{owned:true,lv:1}, worm:{owned:true,lv:1}, ghost:{owned:true,lv:1} },
     deck:['slug','worm','ghost'],
     formations:['scatter'],
-    altar:{},                              // {id: lv}
+    altar:{},                              // {id: lv} 夜側の軍備(共通)
+    altarH:{},                             // v5.8 ヒロインへの弱体化 {ヒロインid:{id: lv}}
     life:{ dmg:0, ail:0, kills:0, herBoss:0, climax:0, survive:0, bestClimax:0,
            ailBy:{}, capBy:{}, capCause:{} },   // 通算記録(v1.1: 種別内訳も)
     streak:0,                                   // 連続生存(捕獲で0に)
     nightItems:{ mist:true },                   // 夜側のアイテム(解放状態)
     traits:{},                                  // 身についた性癖(永続) {musk:Lv}
     codex:{},                                   // 図鑑: {id:{seen,met,climax,capture,kills}}
+    codexH:{},                                  // v5.8 ヒロインごとの手記 {ヒロインid:{魔物id:{seen,met,...}}}
     rot:{ dmg:0, ail:0, captures:0, battles:0 }, // 世代内記録(リセットされる)
+    lifeH:{},                                   // v5.8 ヒロインごとの通算記録 {id:{dmg,ail,kills,climax,captures,capBy,ailBy,...}}
+    rotH:{},                                    // v5.8 ヒロインごとの世代内記録(リセットされる)
     best:null,
     lumina:{ coins:0, will:0, upg:{vital:0,guard:0,bless:0,swift:0,grit:0,zeal:0} },  // 彼女の自己強化(永続)・抵抗の意志
     curse:null,   // ボス敗北の呪い {id,left}
@@ -219,9 +223,32 @@ function loadMeta(){
       META.map=Object.assign(defaultMeta().map, d.map||{}); if(META.map.floor===undefined) META.map.floor=0;
       META.traits=Object.assign({}, d.traits||{});
       META.codex=Object.assign({}, d.codex||{});
+      META.codexH=Object.assign({}, d.codexH||{});
+      if(!d.codexH){ META.codexH.lumina=JSON.parse(JSON.stringify(META.codex)); }   /* v5.8 v5.7 までの手記は、ルミナのもの */
+      /* v5.8 記録をヒロインごとに分けた。v5.7 までの共通の記録は、そのままルミナのものになる */
+      META.lifeH=Object.assign({}, d.lifeH||{});
+      META.rotH=Object.assign({}, d.rotH||{});
+      if(!d.lifeH){
+        const L=META.lifeH.lumina={};
+        const S=META.life||{};
+        L.dmg=S.dmg||0; L.ail=S.ail||0; L.kills=S.kills||0; L.climax=S.climax||0;
+        L.bestClimax=S.bestClimax||0; L.survive=S.survive||0; L.filmed=S.filmed||0; L.herBoss=S.herBoss||0;
+        L.captures=META.captures||0; L.runs=META.runs||0; L.streak=META.streak||0;
+        L.capBy=Object.assign({},S.capBy||{}); L.ailBy=Object.assign({},S.ailBy||{}); L.capCause=Object.assign({},S.capCause||{});
+        L.will=(META.lumina&&META.lumina.will)||0; L.traits=Object.assign({}, META.traits||{});
+        META.rotH.lumina=Object.assign({dmg:0,ail:0,captures:0,battles:0}, META.rot||{});
+      }
       META.rot=Object.assign(defaultMeta().rot, d.rot);
       META.settings=Object.assign(defaultMeta().settings, d.settings);
       META.lumina=Object.assign({coins:0,will:0,upg:{}}, d.lumina);
+      /* v5.8 ヒロインへの弱体化をヒロインごとに分けた。v5.7 までに積んだ分は、そのままルミナのものになる */
+      META.altar=Object.assign({}, d.altar||{});
+      META.altarH=Object.assign({}, d.altarH||{});
+      if(typeof ALTAR!=='undefined'){
+        /* 共通側にヒロインへの弱体化が残っていたら、それは v5.7 までに積んだ分。ルミナへ移す */
+        const L=META.altarH.lumina=Object.assign({}, META.altarH.lumina||{});
+        for(const a of ALTAR){ if(a.side) continue; if(META.altar[a.id]){ L[a.id]=Math.max(L[a.id]||0, META.altar[a.id]); delete META.altar[a.id]; } }
+      }
       META.curse=(d.curse&&d.curse.id&&d.curse.left>0)?d.curse:null;
       META.map=Object.assign({gen:0, floor:0, known:{}, visited:{}, seen:0}, d.map||{});
       META.map.known=META.map.known||{}; META.map.visited=META.map.visited||{};

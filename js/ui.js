@@ -7,7 +7,10 @@ const $=id=>document.getElementById(id);
 
 const UI={
   root:null, selForm:'scatter', retreatArm:0,
-  labSel:null,          // v5.2 研究所で詳細を開いている魔物(再描画しても開いたまま残す)
+  labSel:null,     // v5.2 研究所で詳細を開いている魔物(再描画しても開いたまま残す)
+  altarWho:null,   // v5.8 祭壇でいま見ているヒロイン
+  statWho:null,    // v5.8 観測記録でいま見ているヒロイン
+  codexWho:null,   // v5.8 図鑑でいま開いている手記の持ち主
 
   init(){
     this.root=$('screens');
@@ -150,12 +153,22 @@ const UI={
         }else S.deny();
         this.show('lab'); break;
       }
+      case 'altarWho':
+        this.altarWho=arg; this.show('altar'); break;
+      case 'statWho':
+        this.statWho=arg; this.show('status'); break;
+      case 'codexWho':
+        this.codexWho=arg; this.show('codex'); break;
       case 'altar':{
-        const a=ALTAR.find(x=>x.id===arg);
-        const lv=altarLv(arg);
-        if(lv<a.max && META.orbs>=a.costs[lv]){
+        /* v5.8 arg は "id"(夜側の共通) か "id:ヒロインid"(ヒロインごとの弱体化) */
+        const cut=arg.indexOf(':'), aid=cut<0?arg:arg.slice(0,cut), who=cut<0?null:arg.slice(cut+1);
+        const a=ALTAR.find(x=>x.id===aid);
+        if(!a){ S.deny(); this.show('altar'); break; }
+        const tbl=who?altarHTable(who):META.altar;
+        const lv=tbl[aid]||0;
+        if(lv<a.max && altarOpen(a,lv) && META.orbs>=a.costs[lv]){
           META.orbs-=a.costs[lv];
-          META.altar[arg]=lv+1;
+          tbl[aid]=lv+1;
           saveMeta(); S.altar();
         }else S.deny();
         this.show('altar'); break;
@@ -247,7 +260,10 @@ const UI={
     const prevScr=this.root.querySelector('.screen');
     const keepScroll=sameScreen&&prevScr?prevScr.scrollTop:0;
     G.screen=name;
-    if(name!=='lab') this.labSel=null;   /* v5.2 研究所を離れたら、開いていた詳細は畳む */
+    if(name!=='lab') this.labSel=null;       /* v5.2 研究所を離れたら、開いていた詳細は畳む */
+    if(name!=='altar') this.altarWho=null;   /* v5.8 祭壇のヒロイン選択も、離れたら戻す */
+    if(name!=='status') this.statWho=null;   /* v5.8 観測記録のヒロイン選択も同じ */
+    if(name!=='codex') this.codexWho=null;   /* v5.8 図鑑の手記の持ち主も同じ */
     G.mode='home';
     G.B=null;
     this.hideStory();
@@ -297,7 +313,7 @@ const UI={
         <button class="sub" data-act="go" data-arg="lab">✦ 研究所<small>解放・強化・融合・陣形</small></button>
         <button class="sub" data-act="go" data-arg="altar">◉ オーブの祭壇<small>ルミナの初期状態を書き換える</small></button>
         <button class="sub" data-act="go" data-arg="status">👁 観測記録<small>称号・総評・自己評価</small></button>
-        <button class="sub" data-act="go" data-arg="codex">📖 図鑑<small>魔物の解説と、彼女の手記</small></button>
+        <button class="sub" data-act="go" data-arg="codex">📖 図鑑<small>魔物の解説と、それぞれの手記</small></button>
         <button class="sub" data-act="go" data-arg="story">📜 物語<small>彼女がここへ来た理由と、深淵の記録</small></button>
         <button class="sub" data-act="autoDefault">🤖 オート初期値: ${META.settings.autoplay?'ON':'OFF'}<small>戦闘開始時のオート指揮</small></button>
         <button class="sub" data-act="gfxToggle">🎨 絵柄: ${(META.settings.gfx||'hd')==='hd'?'描き込み':'ドット(旧)'}<small>ルミナと魔物の描き方を切り替え</small></button>
@@ -469,20 +485,34 @@ const UI={
   },
 
   htmlAltar(){
-    const row=a=>{
-      const lv=altarLv(a.id);
+    /* v5.8 段ごとの錠。魔核を討った回数(META.era)で一段ずつ開く。
+       ——HUD の「第N世代」は META.gen.idx(二連敗でも進む)で別の数なので、ここでは討伐回数で言う。
+       ヒロインへの弱体化は各ヒロインぶん別々に積む(誰を選んでいるかは this.altarWho) */
+    const era=eraNow();
+    const row=(a,who)=>{
+      const lv=who?altarLvH(a.id,who):(META.altar[a.id]||0);
       const atMax=lv>=a.max;
+      const need=altarGateEra(a,lv);
+      const open=atMax||era>=need;
       const cost=atMax?0:a.costs[lv];
-      const pips='<span class="pips">'+Array.from({length:a.max},(_,i)=>`<i class="${i<lv?'on':''}"></i>`).join('')+'</span>';
-      return `<div class="lrow">
+      const openN=altarOpenMax(a);
+      const pips='<span class="pips">'+Array.from({length:a.max},(_,i)=>
+        `<i class="${i<lv?'on':(i<openN?'':'shut')}"></i>`).join('')+'</span>';
+      let btn;
+      if(atMax) btn='<span style="color:var(--vio);font-size:11px">極まった</span>';
+      else if(!open) btn=`<span style="color:var(--dim);font-size:11px">魔核を${need}度討つと</span>`;
+      else btn=`<button class="sub" data-act="altar" data-arg="${a.id}${who?':'+who:''}" ${META.orbs<cost?'disabled':''}>◉${cost}</button>`;
+      return `<div class="lrow${open?'':' shut'}">
         <div class="info"><div class="nm">${esc(a.name)}${pips}</div>
         <div class="ds">${esc(a.desc)} <span style="color:var(--vio)">[${esc(a.fx)}]</span></div></div>
-        ${atMax?'<span style="color:var(--vio);font-size:11px">極まった</span>'
-          :`<button class="sub" data-act="altar" data-arg="${a.id}" ${META.orbs<cost?'disabled':''}>◉${cost}</button>`}
+        ${btn}
       </div>`;
     };
-    const heroRows=ALTAR.filter(a=>!a.side).map(row).join('');
-    const nightRows=ALTAR.filter(a=>a.side==='night').map(row).join('');
+    const ids=(typeof partyIds==='function')?partyIds():['lumina'];
+    const who=(ids.indexOf(this.altarWho)>=0)?this.altarWho:'lumina';
+    const tabs=ids.map(id=>`<button class="sub${id===who?' on':''}" data-act="altarWho" data-arg="${id}">${esc((HEROES[id]||{}).name||id)}</button>`).join('');
+    const heroRows=ALTAR.filter(a=>!a.side).map(a=>row(a,who)).join('');
+    const nightRows=ALTAR.filter(a=>a.side==='night').map(a=>row(a,null)).join('');
     const shaveRows=Object.keys(LUMINA_UPG).map(id=>{
       const r=luminaRank(id);
       const cost=shaveCost(r);
@@ -495,10 +525,13 @@ const UI={
     }).join('');
     return `
       <h2>◉ オーブの祭壇 <span style="font-size:12px;color:var(--vio)">オーブ ${Math.floor(META.orbs)}</span></h2>
-      <p style="font-size:11.5px">攻撃・状態異常・捕獲で得たオーブを捧げる。<b>すべて世代リセット後も残り続ける</b>。</p>
-      <h3 style="color:var(--vio)">ルミナの初期状態を書き換える</h3>
+      <p style="font-size:11.5px">攻撃・状態異常・捕獲で得たオーブを捧げる。<b>すべて世代リセット後も残り続ける</b>。<br>
+      <span style="color:var(--dim)">段には錠がかかっている。心臓が厚くなるたび、書き換えられる段が一つずつ開く。<b>魔核を討った回数 ${era}</b>。</span></p>
+      <h3 style="color:var(--vio)">ヒロインの初期状態を書き換える</h3>
+      <div class="row" style="margin:2px 0 6px">${tabs}</div>
+      <div class="note" style="margin:0 0 6px">${esc((HEROES[who]||{}).name||who)}に積んだ分だけが、${esc((HEROES[who]||{}).name||who)}に効く。<b>ヒロインごとに別々</b>。</div>
       <div class="list">${heroRows}</div>
-      <h3 style="color:var(--pink);margin-top:14px">夜側の軍備</h3>
+      <h3 style="color:var(--pink);margin-top:14px">夜側の軍備 <span style="font-size:11px;color:var(--dim);font-weight:normal">(共通)</span></h3>
       <div class="list">${nightRows}</div>
       <h3 style="color:var(--gold);margin-top:14px">ルミナの自己強化を削ぐ <span style="font-size:11px;color:var(--dim);font-weight:normal">(彼女がコインで積んだ強化を1段引き剥がす)</span></h3>
       <div class="note" style="margin:2px 0 6px">彼女の貯えコイン: ${Math.floor((META.lumina&&META.lumina.coins)||0)} — 夜明けごとに自動で買い足してくるので、削ぎ続けるか元を断つかはあなた次第。</div>
@@ -507,24 +540,41 @@ const UI={
   },
 
   htmlStatus(){
-    const preview=newHero();
-    const body=fallBody(), mind=fallMind();
+    /* v5.8 観測記録はヒロインごと。数字も称号も総評も、その子の帳簿だけを見る */
+    const sids=(typeof partyIds==='function')?partyIds():['lumina'];
+    const who=(sids.indexOf(this.statWho)>=0)?this.statWho:'lumina';
+    const HD=HEROES[who]||HEROES.lumina;
+    const preview=newHero(who);
+    const body=fallBodyOf(who), mind=fallMindOf(who);
     const bodyStg=stageName(body,FALL_BODY_STAGES), mindStg=stageName(mind,FALL_MIND_STAGES);
-    const mods=ALTAR.filter(a=>altarLv(a.id)>0).map(a=>esc(a.name)+' '+genNum(altarLv(a.id))).join(' / ')||'なし';
-    const titles=heldTitles();
+    const mods=ALTAR.filter(a=>(a.side?(META.altar[a.id]||0):altarLvH(a.id,who))>0)
+      .map(a=>esc(a.name)+' '+genNum(a.side?(META.altar[a.id]||0):altarLvH(a.id,who))+(a.side?'(共通)':'')).join(' / ')||'なし';
+    const titles=heldTitles(who);
     const honor=titles.filter(t=>t.kind==='honor'), ero=titles.filter(t=>t.kind==='ero');
     const tcard=t=>`<div class="tcard ${t.kind}">
         <div class="tn">${t.kind==='honor'?'📜':'💋'} ${esc(t.name)}${t.stage?`<small>s${t.stage}・${esc(t.line)}</small>`:''}</div>
         <div class="td">${esc(t.desc)}${t.long?'<br><span style="color:var(--dim)">'+esc(t.long)+'</span>':''}</div>
         <div class="tc">取得条件: ${esc(t.condText)}</div></div>`;
-    const review=heroReview(), self=heroSelfEval();
-    const L=META.life||{}, cb=L.capBy||{};
+    const review=heroReview(who), self=heroSelfEval(who);
+    const L=heroLife(who), cb=L.capBy||{};
+    const statTabs=sids.map(id=>`<button class="sub${id===who?' on':''}" data-act="statWho" data-arg="${id}">${esc((HEROES[id]||{}).name||id)}</button>`).join('');
+    /* 自己強化(コインで積む)はルミナだけの仕組みなので、他の子の頁には出さない */
+    const selfUpgHtml = (who!=='lumina') ? '' : `<div class="stcard"><h3>ルミナの自己強化 <span style="color:var(--dim);font-weight:normal">(彼女が夜明けに買う)</span></h3>
+        <div class="kv">
+          ${Object.keys(LUMINA_UPG).map(id=>{
+            const r=luminaRank(id);
+            return `<div>${esc(LUMINA_UPG[id].name)} <b>${r?genNum(r):'—'}</b><span>/${LUMINA_UPG[id].max}</span></div>`;
+          }).join('')}
+        </div>
+        <div class="note">貯えたコイン: ${Math.floor((META.lumina&&META.lumina.coins)||0)} — 戦闘中に彼女が拾ったジェムの一部がコインになる。<b>世代の夜明けごとに${BAL.LUMINA_DECAY}段だけ薄れる</b>(初期値には戻らない——世代を跨ぐごとに土台が少しずつ上がる)。</div>
+      </div>`;
     const topCap=Object.keys(cb).filter(id=>MONSTERS[id]).sort((a,b)=>cb[b]-cb[a]).slice(0,3)
       .map(id=>esc(MONSTERS[id].name)+' '+cb[id]+'回').join(' / ')||'まだ無い';
     const ailBy=L.ailBy||{};
     const ailTxt=Object.keys(ailBy).filter(k=>AILMENTS[k]).map(k=>esc(AILMENTS[k].name)+' '+ailBy[k]).join(' / ')||'—';
     return `
-      <h2>👁 観測記録 — ルミナ</h2>
+      <h2>👁 観測記録 — ${esc(HD.name)}</h2>
+      <div class="row" style="margin:2px 0 8px">${statTabs}</div>
       <div class="stcard"><h3>称号</h3>
         ${honor.map(tcard).join('')}
         ${ero.length?`<div class="divider">——立派な響きの、その裏の記録——</div>${ero.map(tcard).join('')}`
@@ -532,7 +582,7 @@ const UI={
       </div>
       <div class="stcard"><h3>人物</h3>
         <div class="kv">
-          <div>名前 <b>ルミナ</b>(成人・光の守り手)</div>
+          <div>名前 <b>${esc(HD.name)}</b><span>${esc(HD.desc||'')}</span></div>
           <div>世代 <b>第${genNum(META.gen.idx)}</b></div>
           <div>潜行の日数 <b>${META.gen.battle}</b> <span>(二連敗か魔核討伐でリセット)</span></div>
         </div>
@@ -549,15 +599,7 @@ const UI={
       <div class="stcard"><h3>書き換え(祭壇・永続)</h3>
         <div class="kv"><div>${mods}</div></div>
       </div>
-      <div class="stcard"><h3>ルミナの自己強化 <span style="color:var(--dim);font-weight:normal">(彼女が夜明けに買う)</span></h3>
-        <div class="kv">
-          ${Object.keys(LUMINA_UPG).map(id=>{
-            const r=luminaRank(id);
-            return `<div>${esc(LUMINA_UPG[id].name)} <b>${r?genNum(r):'—'}</b><span>/${LUMINA_UPG[id].max}</span></div>`;
-          }).join('')}
-        </div>
-        <div class="note">貯えたコイン: ${Math.floor((META.lumina&&META.lumina.coins)||0)} — 戦闘中に彼女が拾ったジェムの一部がコインになる。<b>世代の夜明けごとに${BAL.LUMINA_DECAY}段だけ薄れる</b>(初期値には戻らない——世代を跨ぐごとに土台が少しずつ上がる)。</div>
-      </div>
+      ${selfUpgHtml}
       <div class="stcard"><h3>経過 — 堕ちの二軸 <span style="color:var(--dim);font-weight:normal">(世代内でリセット)</span></h3>
         <div class="kv spread"><div>肉体</div><div class="stagename">${bodyStg} (${Math.round(body)})</div></div>
         <div class="bar"><i style="width:${body}%;background:linear-gradient(90deg,#ff86b3,#ff5d7a)"></i></div>
@@ -577,26 +619,26 @@ const UI={
       </div>
       <div class="stcard"><h3>抵抗の意志 <span style="color:var(--dim);font-weight:normal">(夜側の強化が行き着いても、彼女は「全く抵抗できない」には落ちない)</span></h3>
         <div class="kv">
-          <div>意志 <b>${(META.lumina&&META.lumina.will)||0}/${BAL.WILL_CAP}</b> <span>(敗北のたび+${BAL.WILL_CAP_GAIN}、60秒以内の敗北は+${BAL.WILL_CAP_GAIN+BAL.WILL_FAST_GAIN}。生き延びると-${BAL.WILL_SURVIVE_LOSS})</span></div>
+          <div>意志 <b>${L.will||0}/${BAL.WILL_CAP}</b> <span>(敗北のたび+${BAL.WILL_CAP_GAIN}、60秒以内の敗北は+${BAL.WILL_CAP_GAIN+BAL.WILL_FAST_GAIN}。生き延びると-${BAL.WILL_SURVIVE_LOSS})</span></div>
           <div>効果 <span>最大HP+3%/点・与ダメ+2%/点・スタミナ+1.5/点・振りほどき+2%/点。催眠Ⅲの底でも意志の分だけ手が動く。魅了/催眠ゲージの入り-1.5%/点</span></div>
           <div>世代の成長 <span>第${genNum(META.gen.idx)}世代: 素のHPと火力 ×${(1+BAL.GEN_SCALE*Math.min(10,Math.max(0,(META.gen.idx||1)-1))).toFixed(2)}</span></div>
         </div>
         ${META.curse&&BOSS_CURSES[META.curse.id]?`<div class="note" style="color:#ff6b81;margin-top:6px">ボス敗北の呪い『${esc(BOSS_CURSES[META.curse.id].name)}』 残り${META.curse.left}日 — ${esc(BOSS_CURSES[META.curse.id].desc)}</div>`:'<div class="note" style="margin-top:6px">ボス敗北の呪いは、いま無い。</div>'}
       </div>
       <div class="stcard"><h3>身についた性癖 <span style="color:var(--dim);font-weight:normal">(通常の処置では抜けぬ・世代を跨いで残る)</span></h3>
-        ${Object.keys(TRAITS).filter(k=>(META.traits[k]||0)>0).map(k=>`<div class="tcard ero"><div class="tn">♨ ${esc(TRAITS[k].name)} <b style="color:var(--pink)">${ROMANS[META.traits[k]]}</b><small>/${TRAITS[k].max}</small></div><div class="td">${esc(TRAITS[k].desc)}</div><div class="tc">刻まれ方: ${esc(TRAITS[k].how)}</div></div>`).join('')
+        ${Object.keys(TRAITS).filter(k=>((L.traits||{})[k]||0)>0).map(k=>`<div class="tcard ero"><div class="tn">♨ ${esc(TRAITS[k].name)} <b style="color:var(--pink)">${ROMANS[L.traits[k]]}</b><small>/${TRAITS[k].max}</small></div><div class="td">${esc(TRAITS[k].desc)}</div><div class="tc">刻まれ方: ${esc(TRAITS[k].how)}</div></div>`).join('')
           ||'<div class="note">まだ何も刻まれていない。性癖は特定の条件が揃った夜に一つずつ刻まれ、世代リセットでも消えない。</div>'}
       </div>
       <div class="stcard"><h3>記録</h3>
         <div class="kv">
-          <div>通算戦闘 <b>${META.runs}</b></div>
-          <div>捕獲 <b>${META.captures}</b></div>
-          <div>生存 <b>${L.survive||0}</b> <span>(連続${META.streak||0})</span></div>
-          <div>総与ダメージ <b>${L.dmg}</b></div>
-          <div>異常付与 <b>${L.ail}</b></div>
-          <div>彼女に討たれた魔物 <b>${L.kills}</b></div>
+          <div>通算戦闘 <b>${L.runs||0}</b></div>
+          <div>捕獲 <b>${L.captures||0}</b></div>
+          <div>生存 <b>${L.survive||0}</b> <span>(連続${L.streak||0})</span></div>
+          <div>夜側に削られた <b>${L.dmg||0}</b> <span>(この子が受けた損耗の合計)</span></div>
+          <div>この子に入った異常 <b>${L.ail||0}</b></div>
+          <div>この子が討った魔物 <b>${L.kills||0}</b></div>
           <div>通算絶頂 <b>${L.climax||0}</b>回 <span>(一夜最多${L.bestClimax||0})</span></div>
-          <div>彼女のボス討伐 <b>${L.herBoss}</b></div>
+          <div>この子のボス討伐 <b>${L.herBoss||0}</b></div>
           <div>撮影された絶頂 <b>${L.filmed||0}</b></div>
         </div>
         <div class="kv" style="margin-top:6px"><div>とどめを刺した種族 <b>${topCap}</b></div></div>
@@ -627,26 +669,36 @@ const UI={
     let detail='';
     const sel=this.codexSel;
     if(sel && MONSTERS[sel] && codexStage(sel)>=0){
-      const m=MONSTERS[sel], cx=CODEX[sel], stg=codexStage(sel), rec=(META.codex||{})[sel]||{};
-      const note=cx?cx.note:null;
-      const fjoin=(typeof partyIds==='function')?partyIds().includes('freila'):true;   // v3.1 合流するまで、手記はルミナ一人のもの
-      const fx=(typeof CODEX_F!=='undefined' && fjoin)?CODEX_F[sel]:null;   // v3.0 フレイラの欄外書き込み(赤ペン)
-      const kjoin=(typeof partyIds==='function')?partyIds().includes('kuu'):false;   // v5.0 クウの青い細字
-      const kx=(typeof CODEX_K!=='undefined' && kjoin)?CODEX_K[sel]:null;
-      const yjoin=(typeof partyIds==='function')?partyIds().includes('yamiko'):false;   // v5.0 ヤミコの墨の走り書き
-      const yx=(typeof CODEX_Y!=='undefined' && yjoin)?CODEX_Y[sel]:null;
-      const mg=t=>t?`<div class="mnote">${esc(t)}</div>`:'';
-      const mgk=t=>t?`<div class="mnote k">${esc(t)}</div>`:'';   // v5.0 クウの青い細字
-      const mgy=t=>t?`<div class="mnote y">${esc(t)}</div>`:'';   // v5.0 ヤミコの墨の走り書き
+      const m=MONSTERS[sel], cx=CODEX[sel], rec=(META.codex||{})[sel]||{};
+      /* v5.8 手記はヒロインごと。ルミナの頁に他の子が書き足す形をやめ、各人が自分の帳面を持つ。
+         段の解禁も各人ぶん——同じ魔物でも、負けた子の頁だけが三段目まで進む */
+      const cids=(typeof partyIds==='function')?partyIds():['lumina'];
+      const cwho=(cids.indexOf(this.codexWho)>=0)?this.codexWho:'lumina';
+      const cTabs=cids.map(id=>`<button class="sub${id===cwho?' on':''}" data-act="codexWho" data-arg="${id}">${esc((HEROES[id]||{}).name||id)}</button>`).join('');
+      const BOOKS={ lumina:(cx&&cx.note)||null,
+                    freila:(typeof CODEX_F!=='undefined')?CODEX_F[sel]:null,
+                    kuu:(typeof CODEX_K!=='undefined')?CODEX_K[sel]:null,
+                    yamiko:(typeof CODEX_Y!=='undefined')?CODEX_Y[sel]:null };
+      const PENS={ lumina:{cls:'', how:'戦闘後、自室でペンで'},
+                   freila:{cls:'f', how:'赤ペン。短く、要点だけ'},
+                   kuu:{cls:'k', how:'青の細字。数と条件だけ'},
+                   yamiko:{cls:'y', how:'墨の走り書き。夜側から見た書き方'} };
+      const book=BOOKS[cwho], pen=PENS[cwho]||PENS.lumina;
+      const hrec=((META.codexH&&META.codexH[cwho])||{})[sel]||{};
+      const hstg=codexStage(sel, cwho);
       const entries=[];
-      if(note){
-        entries.push(`<div class="entry"><span class="lbl">特徴</span>${noteHtml(note.base)}${mg(fx&&fx.base)}${mgk(kx&&kx.base)}${mgy(yx&&yx.base)}</div>`);
+      if(book){
+        const line=(txt)=> (cwho==='lumina') ? noteHtml(txt) : ('<div class="mline '+pen.cls+'">'+esc(txt)+'</div>');
+        const line3=(txt)=> (cwho==='lumina') ? noteHtml(txt, true) : ('<div class="mline '+pen.cls+'">'+esc(txt)+'</div>');
+        if(hstg>=0 && book.base) entries.push(`<div class="entry"><span class="lbl">特徴</span>${line(book.base)}</div>`);
         for(let i=0;i<3;i++){
-          if(stg>=i+1) entries.push(`<div class="entry"><span class="lbl">追記${['一','二','三'][i]}</span>${noteHtml(note.add[i], i===2)}${mg(fx&&fx.add&&fx.add[i])}${mgk(kx&&kx.add&&kx.add[i])}${mgy(yx&&yx.add&&yx.add[i])}</div>`);
-          else{ entries.push(`<div class="entry locked">（追記${['一','二','三'][i]}は、まだ書かれていない——${['この種族に何かされた夜','この種族が絡んだ絶頂','この種族への敗北'][i]}の後に増える）</div>`); break; }
+          const txt=book.add&&book.add[i];
+          if(hstg>=i+1 && txt) entries.push(`<div class="entry"><span class="lbl">追記${['一','二','三'][i]}</span>${i===2?line3(txt):line(txt)}</div>`);
+          else{ entries.push(`<div class="entry locked">（追記${['一','二','三'][i]}は、まだ書かれていない——${esc((HEROES[cwho]||{}).name||cwho)}が${['この種族に何かされた夜','この種族が絡んだ絶頂','この種族への敗北'][i]}を経た後に増える）</div>`); break; }
         }
-        if(stg>=3 && note.after) entries.push(`<div class="after">${esc(note.after)}${mg(fx&&fx.after)}${mgk(kx&&kx.after)}${mgy(yx&&yx.after)}</div>`);   // v3.0 末尾に、赤ペンの余白の様子 / v5.0 青の細字
+        if(hstg>=3 && book.after) entries.push(`<div class="after">${esc(book.after)}</div>`);
       }
+      const bookTitle=(cwho==='lumina')?((cx&&cx.note&&cx.note.title)||m.name):m.name;
       detail=`<div class="stcard" style="text-align:left">
         <div style="display:flex;gap:12px;align-items:center">
           <div data-icon="${sel}" data-size="56"></div>
@@ -657,18 +709,25 @@ const UI={
         <div class="review"><p>${esc(m.desc)}</p>${cx?'<p>'+esc(cx.lore)+'</p>':''}</div>
         <div class="kv" style="margin-top:6px">
           <div>今世代の学習 <b>${esc(KNOW_NAMES[knowLv(sel)])}</b> <span>(脅威度${SPEC_THREAT[sel]||0}${knowLv(sel)>=2&&(SPEC_THREAT[sel]||0)>=3?'・何があっても避ける':''})</span></div>
-          <div>彼女に討たれた <b>${rec.kills||0}</b></div>
-          <div>彼女に何かした <b>${rec.met||0}</b>回</div>
-          <div>絡んだ絶頂 <b>${rec.climax||0}</b></div>
-          <div>この種族への敗北 <b>${rec.capture||0}</b></div>
+          <div>討たれた(全員) <b>${rec.kills||0}</b></div>
+          <div>何かされた(全員) <b>${rec.met||0}</b>回</div>
+          <div>絡んだ絶頂(全員) <b>${rec.climax||0}</b></div>
+          <div>敗北(全員) <b>${rec.capture||0}</b></div>
         </div>
-        <h3 style="margin-top:12px">ルミナの手記 <span style="color:var(--dim);font-weight:normal">(戦闘後、自室で)</span></h3>
-        <div class="notebook"><h4>${esc((cx.note&&cx.note.title)||m.name)}</h4>${entries.join('')||'<div class="locked">（この魔物の頁は、まだ白い）</div>'}</div>
+        <h3 style="margin-top:12px">手記 — ${esc((HEROES[cwho]||{}).name||cwho)} <span style="color:var(--dim);font-weight:normal">(${esc(pen.how)})</span></h3>
+        <div class="row" style="margin:2px 0 6px">${cTabs}</div>
+        <div class="kv" style="margin-bottom:6px">
+          <div>${esc((HEROES[cwho]||{}).name||cwho)}が討った <b>${hrec.kills||0}</b></div>
+          <div>されたこと <b>${hrec.met||0}</b>回</div>
+          <div>絡んだ絶頂 <b>${hrec.climax||0}</b></div>
+          <div>この種族への敗北 <b>${hrec.capture||0}</b></div>
+        </div>
+        <div class="notebook ${pen.cls}"><h4>${esc(bookTitle)}</h4>${entries.join('')||'<div class="locked">（'+esc((HEROES[cwho]||{}).name||cwho)+'は、この魔物の頁をまだ持っていない）</div>'}</div>
       </div>`;
     }
     return `
-      <h2>📖 図鑑 <span style="font-size:12px;color:var(--dim)">夜側の解説と、彼女の手記</span></h2>
-      <div class="note">左は夜側から見た解説。右の手記は彼女が戦闘後に書いたもので、<b>その種族に何かされる／その種族が絡んだ絶頂／その種族への敗北</b>のたびに追記が増える。追記は三度まで。</div>
+      <h2>📖 図鑑 <span style="font-size:12px;color:var(--dim)">夜側の解説と、それぞれの手記</span></h2>
+      <div class="note">上は夜側から見た解説。手記は<b>各人が自分の帳面に</b>書いたもので、<b>その子が</b>その種族に何かされる／その種族が絡んだ絶頂／その種族への敗北を経るたびに追記が増える。追記は三度まで。<br>同じ魔物でも、負けた子の頁だけが三段目まで進む——誰が何を知っているかは、四人で食い違う。</div>
       ${detail}
       <div class="codex-grid">${cards}</div>
       <div class="row"><button data-act="go" data-arg="status">👁 観測記録</button><button data-act="go" data-arg="home">← もどる</button></div>`;

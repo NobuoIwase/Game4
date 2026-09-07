@@ -830,34 +830,64 @@ const NIGHT_ITEMS={
 
 /* ---------------- 祭壇(オーブによる初期状態の書き換え) ----------------
    世代リセット後も維持される永続改変。levelごとにcost。 */
+/* ---------------- オーブの祭壇 ----------------
+   v5.8 段ごとの錠。段ごとに「その段を開けるのに要る討伐回数」を持たせた。
+   魔核が厚くなるたび、書き換えられる段が一つずつ開いていく——
+   序盤に EN上限・EN回復・召喚CT・召喚数を積み切れてしまう問題を、
+   「初期状態を弱くする」ではなく「増えていく」形で塞ぐ。
+   gate[r] = r+1 段目に要る魔核の討伐回数(META.era。0 なら最初から)。
+   ※ HUD の「第N世代」は META.gen.idx で、二連敗でも進む別の数。混同しないこと。
+   ヒロインへの弱体化も同じ形で開き、そちらは各ヒロインごとに別々に積む
+   (META.altarH[ヒロインid])。夜側の軍備は共通(META.altar)。 */
 const ALTAR=[
-  { id:'armor', name:'加護侵蝕', max:3, costs:[12,24,40],
+  { id:'armor', name:'加護侵蝕', max:3, costs:[12,24,40], gate:[0,2,4],
     desc:'光の護り(アーマー)を弱める。-1/段階。', fx:'護り -1' },
-  { id:'regen', name:'祝福遅滞', max:3, costs:[10,20,34],
+  { id:'regen', name:'祝福遅滞', max:3, costs:[10,20,34], gate:[0,2,4],
     desc:'自然回復の巡りを鈍らせる。', fx:'回復 -30%/段階' },
-  { id:'speed', name:'足枷の残滓', max:3, costs:[10,20,34],
+  { id:'speed', name:'足枷の残滓', max:3, costs:[10,20,34], gate:[1,3,5],
     desc:'脚の軽さを僅かに奪う。', fx:'速度 -6%/段階' },
-  { id:'sense', name:'感応増幅', max:3, costs:[14,26,44],
+  { id:'sense', name:'感応増幅', max:3, costs:[14,26,44], gate:[0,2,5],
     desc:'媚薬・魅了・拘束への感受性を高める。効きが深く、抜けにくくなる。', fx:'異常効果 +18%/段階' },
-  { id:'heat', name:'媚薬の残滓', max:2, costs:[16,32],
+  { id:'heat', name:'媚薬の残滓', max:2, costs:[16,32], gate:[1,4],
     desc:'戦闘開始時から肌が僅かに敏感になっている(敏感化の下限が上がり、減衰しきらない)。', fx:'初期敏感 +26/段階' },
-  { id:'focus', name:'朧の霞', max:2, costs:[16,32],
+  { id:'focus', name:'朧の霞', max:2, costs:[16,32], gate:[2,5],
     desc:'集中の芯を曇らせる。判断と反応が僅かに遅れる。', fx:'反応 -12%/段階' },
-  { id:'stamina', name:'倦怠の澱', max:3, costs:[14,26,44],
+  { id:'stamina', name:'倦怠の澱', max:3, costs:[14,26,44], gate:[1,3,6],
     desc:'身体の芯に疲労を澱ませる。スタミナの上限と回復が落ちる。', fx:'スタミナ上限 -12/段階' },
   /* --- 夜側の軍備(プレイヤー側の強化) --- */
-  { id:'encap', name:'夜気の器', max:3, costs:[12,24,40], side:'night',
+  { id:'encap', name:'夜気の器', max:3, costs:[12,24,40], side:'night', gate:[0,2,4],
     desc:'夜の気を蓄える器を広げる。', fx:'EN上限 +6/段階' },
-  { id:'enregen', name:'湧き出る瘴気', max:3, costs:[12,24,40], side:'night',
+  { id:'enregen', name:'湧き出る瘴気', max:3, costs:[12,24,40], side:'night', gate:[0,3,5],
     desc:'夜の気の湧きを速める。', fx:'EN回復 +0.12/s/段階' },
-  { id:'cdcut', name:'素早き喚起', max:3, costs:[14,26,44], side:'night',
+  { id:'cdcut', name:'素早き喚起', max:3, costs:[14,26,44], side:'night', gate:[1,3,6],
     desc:'召喚の詠唱が短くなる。', fx:'カードCD -12%/段階' },
-  { id:'legion', name:'夜の軍団旗', max:2, costs:[20,40], side:'night',
+  { id:'legion', name:'夜の軍団旗', max:2, costs:[20,40], side:'night', gate:[2,5],
     desc:'多数陣形の基礎頭数が増える。', fx:'陣形+1体/段階' },
-  { id:'mhp', name:'魔性の肉', max:3, costs:[14,26,44], side:'night',
+  { id:'mhp', name:'魔性の肉', max:3, costs:[14,26,44], side:'night', gate:[0,2,4],
     desc:'召喚される魔物の肉体が強靭になる。', fx:'魔物HP +10%/段階' },
 ];
-const altarLv=id=>META.altar[id]||0;
+const altarOf=id=>ALTAR.find(a=>a.id===id)||null;
+/* その段を開けるのに要る討伐回数(上限まで積んでいれば null) */
+function altarGateEra(a,lv){ if(!a||lv>=a.max) return null; const g=a.gate||[]; return g[lv]|0; }
+function altarOpen(a,lv){ const need=altarGateEra(a,lv); return need===null?false:(eraNow()>=need); }
+/* いま開いている段の数(表示用) */
+function altarOpenMax(a){ const g=a.gate||[]; let n=0; for(let i=0;i<a.max;i++){ if(eraNow()>=(g[i]|0)) n++; else break; } return n; }
+
+/* ヒロインごとの書き換え。夜側の軍備は共通のまま(META.altar)、
+   ヒロインへの弱体化だけ META.altarH[id] に分ける。
+   v5.7 までのセーブは、積んだ分がそのままルミナのものになる(loadMeta で移す) */
+function altarHTable(hero){
+  META.altarH=META.altarH||{};
+  const id=hero||'lumina';
+  return (META.altarH[id]=META.altarH[id]||{});
+}
+/* 夜側の軍備(共通)。ヒロインへの弱体化は altarLvH で引く */
+const altarLv=id=>{
+  const a=altarOf(id);
+  if(a&&!a.side) return altarLvH(id,(G&&G.B&&G.B.hero&&G.B.hero.id)||'lumina');
+  return META.altar[id]||0;
+};
+const altarLvH=(id,hero)=>altarHTable(hero)[id]||0;
 
 /* ---------------- ルミナの自己強化(ヴァンサバのコイン強化に相当) ----------------
    彼女は戦闘で拾ったジェムをコインとして貯え、夜明けに自分を強化する。
@@ -1095,3 +1125,30 @@ function stageName(v,table){
 }
 function fallBody(){ return clamp(META.rot.dmg/8 + META.rot.ail*2, 0, 100); }
 function fallMind(){ return clamp(META.rot.captures*22 + META.rot.ail*0.5, 0, 100); }
+
+/* ================= v5.8 ヒロインごとの帳簿 =================
+   観測記録も図鑑も「ルミナの帳簿に他の子が書き足す」形だった。
+   それぞれが自分の記録を持つように、通算(lifeH)と世代内(rotH)を各人ぶんに分ける。
+   v5.7 までのセーブは、共通の記録がそのままルミナのものになる(loadMeta で移す)。 */
+function heroLife(id){
+  META.lifeH=META.lifeH||{};
+  const k=id||'lumina';
+  const L=(META.lifeH[k]=META.lifeH[k]||{});
+  L.dmg=L.dmg||0; L.ail=L.ail||0; L.kills=L.kills||0; L.climax=L.climax||0;
+  L.bestClimax=L.bestClimax||0; L.captures=L.captures||0; L.runs=L.runs||0;
+  L.survive=L.survive||0; L.streak=L.streak||0; L.filmed=L.filmed||0; L.herBoss=L.herBoss||0;
+  L.capBy=L.capBy||{}; L.ailBy=L.ailBy||{}; L.capCause=L.capCause||{};
+  L.will=L.will||0; L.traits=L.traits||{};
+  return L;
+}
+function heroRot(id){
+  META.rotH=META.rotH||{};
+  const k=id||'lumina';
+  const R=(META.rotH[k]=META.rotH[k]||{});
+  R.dmg=R.dmg||0; R.ail=R.ail||0; R.captures=R.captures||0; R.battles=R.battles||0;
+  return R;
+}
+function rotHClear(){ META.rotH={}; }
+/* 堕ちの二軸を、その子の世代内の記録から */
+function fallBodyOf(id){ const R=heroRot(id); return clamp(R.dmg/8 + R.ail*2, 0, 100); }
+function fallMindOf(id){ const R=heroRot(id); return clamp(R.captures*22 + R.ail*0.5, 0, 100); }

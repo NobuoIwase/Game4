@@ -8,9 +8,10 @@
 function newHero(id){
   const HD=HEROES[id]||HEROES.lumina; id=HEROES[id]?id:'lumina';   // v3.0 ヒロインの素性
   const gb=Math.min(3,META.gen.battle||0);   // 潜行の日数(0..3 で頭打ち。v2.0 で日数は増え続けるため)
-  const aArmor=altarLv('armor'), aRegen=altarLv('regen'), aSpeed=altarLv('speed');
-  const aSense=altarLv('sense'), aHeat=altarLv('heat'), aFocus=altarLv('focus');
-  const aStam=altarLv('stamina');
+  /* v5.8 弱体化はヒロインごとに積む。ここは生成中で G.B.hero がまだ居ないので、明示的に引く */
+  const aArmor=altarLvH('armor',id), aRegen=altarLvH('regen',id), aSpeed=altarLvH('speed',id);
+  const aSense=altarLvH('sense',id), aHeat=altarLvH('heat',id), aFocus=altarLvH('focus',id);
+  const aStam=altarLvH('stamina',id);
   const LU=(META.lumina&&META.lumina.upg)||{};
   // 抵抗の意志(敗北で固くなる・生き延びると少し緩む)と、世代ごとの素の成長。夜側の強化が行き着いても「全く抵抗できない」には落ちない
   const will=Math.min(BAL.WILL_CAP,(META.lumina&&META.lumina.will)||0);
@@ -97,6 +98,10 @@ function newHero(id){
   if(gb>=3){ h.ps.speed=1; h.ps.haste=1; }
   h.hp=h.maxHp;
   h.stamina=h.staminaMax;
+  /* v5.8 一夜ぶんの、その子だけの記録。夜明けに META.lifeH[id] へ畳む。
+     観測記録も図鑑も「ルミナの帳簿に他の子が書き足す」形だったのを、各人の帳簿に分ける */
+  h.recDmg=0; h.recAil=0; h.recKills=0; h.recClimax=0; h.recFilmed=0; h.recBoss=0;
+  h.recAilBy={}; h.recCapBy=null; h.recCapCause=null;
   // ボス敗北の呪い(日を跨ぐ): 前の日にボスに負けていれば、その痕が残った身体で始まる
   const cu=(META.curse&&META.curse.left>0&&BOSS_CURSES[META.curse.id])?META.curse.id:null;
   h.curse=cu;
@@ -317,6 +322,22 @@ function endBattle(outcome){
   META.life.climax=(META.life.climax||0)+B.climaxN;
   META.life.bestClimax=Math.max(META.life.bestClimax||0, B.climaxN);
   if(outcome!=='capture'){ META.life.survive=(META.life.survive||0)+1; META.streak=(META.streak||0)+1; }
+  /* v5.8 各人の帳簿へ畳む。誰が何をして、誰が何をされたかを、その子の記録として残す */
+  for(const h of B.heroes){
+    const L=heroLife(h.id), R=heroRot(h.id);
+    L.runs++; R.battles++;
+    L.dmg+=Math.round(h.recDmg||0); L.ail+=(h.recAil||0); L.kills+=(h.recKills||0);
+    L.climax+=(h.recClimax||0); L.bestClimax=Math.max(L.bestClimax, h.recClimax||0);
+    L.filmed+=(h.recFilmed||0); L.herBoss+=(h.recBoss||0);
+    for(const k in (h.recAilBy||{})) L.ailBy[k]=(L.ailBy[k]||0)+h.recAilBy[k];
+    R.dmg+=Math.round(h.recDmg||0); R.ail+=(h.recAil||0);
+    if(h.recCapBy){
+      L.captures++; R.captures++; L.streak=0;
+      L.capBy[h.recCapBy]=(L.capBy[h.recCapBy]||0)+1;
+      L.capCause[h.recCapCause||'hp']=(L.capCause[h.recCapCause||'hp']||0)+1;
+      L.will=Math.min(BAL.WILL_CAP, L.will+BAL.WILL_CAP_GAIN+(B.time<60?BAL.WILL_FAST_GAIN:0));   /* 抵抗の意志も各人ぶん */
+    }else{ L.survive++; L.streak++; }
+  }
   // 呪いは一日ごとに薄れる(今日新たに受けた呪いは下で上書き)
   let newCurse=null;
   const oldCurse=META.curse?Object.assign({},META.curse):null;
@@ -392,6 +413,7 @@ function runReset(wipeKnow){
   META.run.floor=1; META.run.fails=0; META.run.day=1; META.run.hero=null; META.run.heroes={}; META.run.seen={}; META.run.bossSeen=false;   // v2.1 引き継ぎも消える / v2.4 見た範囲とボスの記憶も
   META.gen.battle=0; META.gen.idx++;
   META.rot={dmg:0, ail:0, captures:0, battles:0};
+  rotHClear();   /* v5.8 各人ぶんの世代内記録も一緒に流す */
   if(wipeKnow){ META.gen.know={}; META.gen.zoneKnow={}; META.gen.trapKnow={}; META.gen.dryLesson=0; }   // 魔核が巻き戻した時だけ、覚えたことも書き換えられる(手記に書いた分だけ残る)
   dryClearAll(); iceClearAll();   // v4.0/v5.0 焼いた床も凍らせた床も、巻き戻りで元の洞へ戻る
   { const o=META.run.storySeen||{}; const n={prologue:o.prologue}; for(const k in o) if(k.startsWith('loop')||k.startsWith('join')) n[k]=o[k]; META.run.storySeen=n; }   // 階層の導入はまた出る(序章・合流・世代の朝は出ない)
@@ -448,9 +470,20 @@ function codexOf(id){
   if(!META.codex[id]) META.codex[id]={seen:0,met:0,climax:0,capture:0,kills:0};
   return META.codex[id];
 }
-function codexMark(id,key,n){
+/* v5.8 手記はヒロインごと。誰の身に起きたかで、その子の頁だけが進む。
+   META.codex は「party の誰かが知った」総体として残す(一覧の伏せ字と解禁条件に使う) */
+function codexOfH(hero,id){
+  META.codexH=META.codexH||{};
+  const k=hero||'lumina';
+  const H=(META.codexH[k]=META.codexH[k]||{});
+  if(!H[id]) H[id]={seen:0,met:0,climax:0,capture:0,kills:0};
+  return H[id];
+}
+function codexMark(id,key,n,hero){
   if(!id||!MONSTERS[id]||MONSTERS[id].item) return;
   const c=codexOf(id); c[key]=(c[key]||0)+(n||1);
+  const who=hero||((G.B&&G.B.hero)?G.B.hero.id:'lumina');
+  const h=codexOfH(who,id); h[key]=(h[key]||0)+(n||1);
   if(key==='met'&&G.B) G.B.recentMet[id]=G.B.time;
 }
 /* 「何かされた」は種族ごとに1.5秒に1回まで数える */
@@ -560,6 +593,7 @@ function awardAil(type){
   if(B.time-rt>2){
     B.ailRateT[type]=B.time; B.orbFrag+=BAL.ORB_PER_AIL; B.ailCount++;
     META.life.ailBy[type]=(META.life.ailBy[type]||0)+1;
+    const ap=B.hero; if(ap){ ap.recAil=(ap.recAil||0)+1; ap.recAilBy=ap.recAilBy||{}; ap.recAilBy[type]=(ap.recAilBy[type]||0)+1; }   /* v5.8 その子の帳簿にも */
   }
 }
 /* 魅了(v0.4): 種族別・レベル制。接触のたびその種族への段階が上がる。
@@ -680,8 +714,8 @@ function enterClimax(){
   h.vx=0; h.vy=0;
   h.squirted=h.deepClimax||Math.random()<Math.min(0.95, BAL.SQUIRT_BASE+0.2*h.heatLv+0.12*sensLvOf(h));
   // 見られながらの絶頂は「撮影」される
-  if(h.watchedT>0){ B.filmed++; META.life.filmed=(META.life.filmed||0)+1; codexMark('eye','climax'); floatTxt(h.x,h.y-70,'撮影された','#c98cff',11,1.4); }
-  B.climaxN++; h.worn=(h.worn||0)+BAL.WORN_CLIMAX;   // v5.0 何度も達させられるほど、切り上げたくなる
+  if(h.watchedT>0){ B.filmed++; META.life.filmed=(META.life.filmed||0)+1; h.recFilmed=(h.recFilmed||0)+1; codexMark('eye','climax'); floatTxt(h.x,h.y-70,'撮影された','#c98cff',11,1.4); }
+  B.climaxN++; h.recClimax=(h.recClimax||0)+1; h.worn=(h.worn||0)+BAL.WORN_CLIMAX;   // v5.0 何度も達させられるほど、切り上げたくなる
   codexClimax();
   if(h.inMusk && h.heatLv>0 && h.muskCond>=8) conditionMusk();   // 雄臭の雲の中、発情したまま達すると匂いと結びつく
   heroBubble(h,'や、だめ、いま……きちゃ……あ、ぁあああっ——!',true,3);
@@ -1090,9 +1124,12 @@ function conditionMusk(){
   const B=G.B, h=B.hero;
   if(h.muskDone) return;
   h.muskDone=true;
-  const lv=Math.min(TRAITS.musk.max,(META.traits.musk||0)+1);
-  if(lv===(META.traits.musk||0)) return;
-  META.traits.musk=lv;
+  /* v5.8 性癖もその子のもの。共通の META.traits は「誰かに刻まれた」印として残す(表示の後方互換) */
+  const HL=heroLife(h.id);
+  const lv=Math.min(TRAITS.musk.max,(HL.traits.musk||0)+1);
+  if(lv===(HL.traits.musk||0)) return;
+  HL.traits.musk=lv;
+  META.traits.musk=Math.max(META.traits.musk||0, lv);
   setBanner('性癖が刻まれた — '+TRAITS.musk.name+' '+ROMANS[lv], '雄の臭いと快感が、結びついてしまった', '#8fd36a');
   heroBubble(h,pickRand(['……くさい。くさい、はず、なのに……','この、におい……なんで、あつく……']),true,3);
   awardAil('musk');
@@ -1329,7 +1366,7 @@ function condTick(h,dt){
   }
   // ガス雲=媚薬: 敏感化と発情ゲージが上がる(快感は直接生まない)。雄臭の雲は加えて、発情したまま居続けると匂いと結びつく
   h.inMusk=false; let inCloud=false;
-  { const mk=META.traits.musk||0, cm=(h.curse==='gobking'?1.5:1);
+  { const mk=(heroLife(h.id).traits.musk)||0, cm=(h.curse==='gobking'?1.5:1);   /* v5.8 その子に刻まれた分だけ効く */
     for(const c of B.clouds){
       if(Math.hypot(h.x-c.x,(h.y-12)-c.y)<c.r){
         inCloud=true;
@@ -2862,6 +2899,7 @@ function killEnemy(e){
   if(e.dead) return;
   const B=G.B, h=B.hero;
   e.dead=true; B.kills++;
+  { const kp=G.B&&G.B.hero; if(kp) kp.recKills=(kp.recKills||0)+1; }   /* v5.8 討った数も、その時の文脈のヒロインの分として数える */
   if(!MONSTERS[e.id].item) codexOf(e.id).kills++;
   // v3.0 誰かの四肢に付いていたら解放(全員を見る)
   for(let i=0;i<B.heroes.length;i++){ const hh=B.heroes[i];
@@ -2889,6 +2927,7 @@ function killEnemy(e){
     setBanner('魔核、討たれる','深淵の心臓が止まった——彼女は目的を果たした','#ffd76a');
     heroBubble(h,'……おわった。おわった、よ',true,3);
     META.life.herBoss++;
+    { const bp=G.B&&G.B.hero; if(bp) bp.recBoss=(bp.recBoss||0)+1; }   /* v5.8 誰が討ったかも、その子の帳簿に */
     B.coreRoots={x:e.x, y:e.y, r:e.r, t:0, era:e.era||0};   // v4.0 本体は消え、根だけが残る → 巻き上がって赤黒い渦へ
     G.mode='survived'; B.winT=BAL.LOOP_WIN_T; G.shake=Math.min(14,G.shake+10); S.boss();
     return;
@@ -2900,6 +2939,7 @@ function killEnemy(e){
     }
     setBanner('ボスが討たれた…','大量のエッセンスが残された','#b46cff');
     META.life.herBoss++;
+    { const bp=G.B&&G.B.hero; if(bp) bp.recBoss=(bp.recBoss||0)+1; }   /* v5.8 誰が討ったかも、その子の帳簿に */
     B.essence+=30;
     { const q=snapFloor(e.x,e.y,false,6)||{x:e.x,y:e.y}; B.chests.push({x:q.x,y:q.y,t:0,taken:false,bossChest:true,known:true}); }   // 王の宝箱: 強くて面倒な相手を倒した報酬(彼女側)。歩ける床に置く
     G.shake=Math.min(10,G.shake+7);
@@ -5147,6 +5187,7 @@ function hurtHero(dmg,src,opt){
   }
   p.hp-=net;
   B.dmgDealt+=net;
+  { const dp=G.B&&G.B.hero; if(dp) dp.recDmg=(dp.recDmg||0)+net; }   /* v5.8 与ダメも各人ぶん */
   B.dmgCarry+=net;
   if(src&&src.id) codexMet(src.id);
   while(B.dmgCarry>=BAL.ORB_DMG_STEP){ B.dmgCarry-=BAL.ORB_DMG_STEP; B.orbFrag++; S.coin(); }
@@ -5177,6 +5218,7 @@ function beginCapture(src,cause){
     } }
   cause=cause||'hp';
   B.captures=B.captures||[]; B.captures.push({hi:B.ci, id:h.id, by, cause, t:B.time});
+  h.recCapBy=by; h.recCapCause=cause;   /* v5.8 誰にどう負けたかを、その子の帳簿に */
   B.capturedBy=by; B.captureCause=cause;
   const CAP_BUB={
     lumina:{stamina:'ちから、が……はいらな……', charm:'だって……はなれたく、な……', hp:'そんな……っ'},

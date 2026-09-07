@@ -398,10 +398,12 @@ CODEX.gobking={
 };
 
 /* 図鑑の段階: -1=未知 / 0=見かけた / 1=追記一 / 2=追記二 / 3=追記三 */
-function codexStage(id){
-  const c=(META.codex||{})[id];
+function codexStage(id, hero){
+  /* v5.8 hero を渡すと、その子の頁がどこまで書かれているかを返す。
+     省くと総体(誰かが知っている分)。一覧の伏せ字は総体で、頁の中身は各人ぶんで見る */
+  const c=hero ? ((META.codexH&&META.codexH[hero])||{})[id] : (META.codex||{})[id];
   const owned=META.cards[id]&&META.cards[id].owned;
-  if(!c && !owned) return -1;
+  if(!c && !owned) return hero?-1:-1;
   if(!c) return 0;
   if(c.capture>0 || c.climax>=3) return 3;
   if(c.climax>0 || c.met>=10) return 2;
@@ -422,16 +424,19 @@ function noteHtml(txt, heavy){
 
 /* ================= 称号 =================
    誉れ(honor)と、その裏の記録(ero)。ero は s1/s2/s3 の段階と系統(line)を持つ */
-function titleCtx(){
-  const L=META.life||{}, ab=L.ailBy||{}, cb=L.capBy||{}, cc=L.capCause||{};
-  const codex=META.codex||{};
+/* v5.8 ヒロインごとの帳簿から組み立てる。id を省くとルミナ。
+   称号も堕ちの二軸も、その子自身の記録だけを見る */
+function titleCtx(id){
+  id=id||'lumina';
+  const L=heroLife(id), ab=L.ailBy||{}, cb=L.capBy||{}, cc=L.capCause||{};
+  const codex=(META.codexH&&META.codexH[id])||META.codex||{};
   let topSp=null, topN=0;
-  for(const id in cb){ if(MONSTERS[id] && cb[id]>topN){ topN=cb[id]; topSp=id; } }
-  return { L, ab, cb, cc, codex, topSp, topN, traits:META.traits||{},
-    captures:META.captures||0, runs:META.runs||0, streak:META.streak||0,
+  for(const k in cb){ if(MONSTERS[k] && cb[k]>topN){ topN=cb[k]; topSp=k; } }
+  return { id, L, ab, cb, cc, codex, topSp, topN, traits:L.traits||{},
+    captures:L.captures||0, runs:L.runs||0, streak:L.streak||0,
     climax:L.climax||0, best:L.bestClimax||0, kills:L.kills||0,
-    lumRanks:Object.values((META.lumina&&META.lumina.upg)||{}).reduce((a,b)=>a+(b||0),0),
-    body:fallBody(), mind:fallMind() };
+    lumRanks:(id==='lumina')?Object.values((META.lumina&&META.lumina.upg)||{}).reduce((a,b)=>a+(b||0),0):0,
+    body:fallBodyOf(id), mind:fallMindOf(id) };
 }
 const TITLES=[
   /* ---- 誉れ ---- */
@@ -529,8 +534,8 @@ const SPECIES_TITLES={
   gazer:'紫の視界の住人', beamer:'細い光条の的', bossgazer:'三つの瞳の寵姫',
   slimeking:'粘液の王の玉座', runemage:'焼き紋の聖女', succuqueen:'女王に止められた星', gobking:'王の臭いに酔う星',
 };
-function heldTitles(){
-  const c=titleCtx();
+function heldTitles(id){
+  const c=titleCtx(id||'lumina');
   const out=TITLES.filter(t=>{ try{ return t.cond(c); }catch(e){ return false; } }).map(t=>Object.assign({},t));
   for(const id in c.cb){
     if(!MONSTERS[id] || c.cb[id]<2) continue;
@@ -543,8 +548,8 @@ function heldTitles(){
 }
 
 /* ================= 反応段階・総評・自己評価 ================= */
-function fallTier(){
-  const body=fallBody(), mind=fallMind();
+function fallTier(id){
+  const body=fallBodyOf(id||'lumina'), mind=fallMindOf(id||'lumina');
   if(mind>=62) return 'crave';
   if(body>=50) return 'yield';
   if(body>=25) return 'strain';
@@ -552,8 +557,10 @@ function fallTier(){
 }
 const TIER_NAMES_JP={resist:'抵抗', strain:'綻び', yield:'心は拒み、体は応える', crave:'待ってしまう'};
 /* 総評: 第三者(観測者)の筆。堕ちが進むほど突き放し、侮蔑が混ざる */
-function heroReview(){
-  const c=titleCtx(), tier=fallTier();
+function heroReview(id){
+  id=id||'lumina';
+  if(id!=='lumina' && typeof heroReviewOther==='function') return heroReviewOther(id);   /* v5.8 他の子は codex_status.js の筆 */
+  const c=titleCtx(id), tier=fallTier(id);
   const bodyStg=stageName(c.body,FALL_BODY_STAGES), mindStg=stageName(c.mind,FALL_MIND_STAGES);
   const sp=c.topSp?MONSTERS[c.topSp].name:null;
   const p=[];
@@ -588,8 +595,10 @@ function heroReview(){
   return p;
 }
 /* 自己評価: 本人の台詞のみ。口調は だよ／じゃん／だし。崩れると幼い素が出る */
-function heroSelfEval(){
-  const c=titleCtx(), tier=fallTier();
+function heroSelfEval(id){
+  id=id||'lumina';
+  if(id!=='lumina' && typeof heroSelfEvalOther==='function') return heroSelfEvalOther(id);   /* v5.8 他の子は自分の声で */
+  const c=titleCtx(id), tier=fallTier(id);
   const sp=c.topSp?MONSTERS[c.topSp].name:null;
   const lines=[]; let heart='';
   if(c.runs===0){

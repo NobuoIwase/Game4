@@ -3239,7 +3239,7 @@ function drawHUD(g){
   { const SK=heroSkills(p); const un=Object.keys(SK).filter(k=>p.level>=SK[k].lv); if(un.length) chips.push(['skill','奥義 '+un.map(k=>SK[k].icon+((p.skillCd[k]||0)>0?Math.ceil(p.skillCd[k]):'')).join(' ')]); }   // v2.3 解放済みの奥義とCD(v3.0 ヒロインごと)
   if(BAL.SMART_AI && (p.aiMode==='kite'||p.aiMode==='flee')) chips.push(['flee',p.aiMode==='flee'?'逃げに徹する':'引き撃ち']);
   if(p.selfT>0) chips.push(['self','自慰……']);
-  if(p.inMusk) chips.push(['musk','雄臭'+((META.traits.musk||0)>0?ROMANS[META.traits.musk]:'')]);
+  if(p.inMusk){ const mk=(typeof heroLife==='function'?(heroLife(p.id).traits.musk||0):(META.traits.musk||0)); chips.push(['musk','雄臭'+(mk>0?ROMANS[mk]:'')]); }   /* v5.8 その子に刻まれた段 */
   if(p.curse&&BOSS_CURSES[p.curse]) chips.push(['curse','呪い: '+BOSS_CURSES[p.curse].name]);
   /* v5.0 三人以上でも段が重ならないよう、名前は段の先頭に置く(上に浮かせない) */
   if(B.heroes.length>1 && chips.length){ const HD=HEROES[hh.id]||HEROES.lumina;
