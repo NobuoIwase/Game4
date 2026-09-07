@@ -320,6 +320,12 @@ idは汎用カタログ準拠。効果はすべて数値・挙動レベルで表
   `storyTick`: 落ち着いている時(拘束・発情・魔物30体超でない)に 38〜58 秒ごと、その階層の独り言を吹き出しで。降り口で `descend`、魔核の間を見つけた時に `finalEncounter`(1戦1度)。結果画面: clear=`ending`、reset=`reset`。
 - 表示: `#storybox`(盤面の上、タップか時間で閉じる)。ホームの「物語」画面は序章と到達済みの階層の導入、魔核討伐後は結末を載せる。
 
+### 3-46. v5.5 合流の経路と、参戦の引き金
+
+**(1) `joinBy.freila.joinLate` が undefined で固定されていた** (`js/story_v30.js`): `party.joinBy` を組み立てる 1326 行が `STORY_V30.party.joinLate` を読むが、その配列に中身が入るのは 1480 行——**後**。よって `joinBy.freila.joinLate` は `undefined` のまま焼き付き、`joinMorning` の `late` 判定(`joinWhy==='late' && J.joinLate && J.joinLate.length`)が恒偽になる。結果、`partyJoinCheck` が `runNote==='clear'` 経路で `partyJoin(id,'late')` を呼んでいても、朝に流れるのは二連敗版の `join` だった。10行の `joinLate` は書かれていたのに一度も表示されていない。ファイル末尾で両方が出そろってから `joinBy.freila.join` / `.joinLate` を結び直して修正。`joinBy.yamiko.joinLate:null` は正しい(彼女は `partyJoin('yamiko','rescued')` で入るのでこの分岐を通らない)。
+
+**(2) 参戦の引き金を「深さ」から「巻き戻り」へ** (`js/data.js` の `PARTY_JOIN`): `freila:{minEra:3,resets:5,lateEra:4}` / `kuu:{minEra:6,resets:6,lateEra:7}` を、`freila:{minEra:0,resets:1,lateEra:4}` / `kuu:{minEra:0,resets:1,lateEra:9}` に変更。`partyJoinCheck` は `runNote==='reset'` の時 `(era>=minEra || resets>=rule.resets)` を見るので、`minEra:0` で**どの巻き戻りでも次の子が来る**。物語の規則(倒される→時が戻る→仲間が居る)と実装の規則が一致した。`lateEra` は「一度も二連敗せずに勝ち続けた場合に後続が永久に来ない」ことへの保険として残す。ヤミコは `PARTY_JOIN` を通らず `yamiAdvance` の三段(眠り手→囚われ→参戦)のままなので、クウの前倒しに追随して梯子ごと繰り上がる。
+
 ### 3-45. v5.3 その場に居ない子の名前を呼んでいた
 
 報告は一行——「フレイラがいないのに『フレイラ今の凄かった』という台詞が見えた」。掘ると、**名指しの台詞が誰に向けたものかを、コードが一度も台詞に教えていなかった**という一族まるごとの穴だった。

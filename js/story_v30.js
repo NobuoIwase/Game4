@@ -1503,3 +1503,14 @@ STORY_V30.era.endingSoloAgain=[
     {"s":"n","t":"その夜、手記に同じ一行を書いた。「夢は見なかった」。上にも、同じ字が並んでいる。"},
     {"s":"lumina","f":"shy","t":"……ちょっとだけ、手が疲れてる。書きすぎだし。……ぜんぜん、へいきなんだけどね"},
   ];
+
+/* v5.5 バグ修正: party.joinBy を組み立てているのは 1326 行だが、party.joinLate に
+   中身が入るのは 1480 行——**後**である。そのため joinBy.freila.joinLate は
+   undefined のまま固定され、joinMorning の late 判定が常に偽になっていた。
+   結果、魔核を討った翌朝にフレイラが来た時(joinWhy='late')も、
+   「二晩つづけて入口へ戻された朝」= 二連敗の文が流れていた。
+   ここで、両方が出そろってから結び直す。 */
+if(STORY_V30.party && STORY_V30.party.joinBy && STORY_V30.party.joinBy.freila){
+  STORY_V30.party.joinBy.freila.join     = STORY_V30.party.join;
+  STORY_V30.party.joinBy.freila.joinLate = STORY_V30.party.joinLate;
+}

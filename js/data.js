@@ -883,8 +883,13 @@ const PARTY_MAX=4;                        // v3.1 パーティの上限(作り�
 function partyIds(){ const r=(typeof META!=='undefined'&&META&&META.party&&Array.isArray(META.party.roster))?META.party.roster:['lumina']; const out=[]; for(const id of r){ if(HEROES[id]&&!out.includes(id)) out.push(id); if(out.length>=PARTY_MAX) break; } return out.length?out:['lumina']; }
 /* v3.1 参戦の規則(合流の順に並ぶ)。minEra: 深淵が組み替わった後(世代≥minEra)に二連敗で入口へ戻された朝に来る。
    resets: 保険——前の合流からのリセット回数がこれに達したら世代を問わず来る。lateEra: 保険——一人(いまの人数)で世代がここまで進んだら、その組み替わりの朝に来る */
-const PARTY_JOIN=[ { id:'freila', minEra:3, resets:5, lateEra:4 },
-                   { id:'kuu',    minEra:6, resets:6, lateEra:7 } ];   // v5.0 開放階層=2+世代 なので、世代6=第8層が開く朝にクウが来る   // lateEra は「一人で第6層(骸の回廊)に降りさせない」で決まる: 開放階層=2+世代 なので、世代4の朝までに必ず合流する(第6〜8層の物語は二人のもの)。joinLate の文の線の数もこれに合わせてある
+/* v5.5 仲間は「深さ」ではなく「巻き戻り」で増える。
+   二連敗で時が初日へ戻された朝に、前の周では居なかった子が居る——ループの筋そのもの。
+   だから minEra(世代の門番)は置かない。resets=1 は「その子を待たせる周回数」で、
+   フレイラが入った次の巻き戻りでクウが来る。
+   lateEra は保険で、一度も二連敗せずに勝ち続けた時だけ働く(そのままだと後続が永久に来ない)。 */
+const PARTY_JOIN=[ { id:'freila', minEra:0, resets:1, lateEra:4 },
+                   { id:'kuu',    minEra:0, resets:1, lateEra:9 } ];   // ヤミコは PARTY_JOIN を通らない(クウ参戦→眠り手→救出→参戦の三段。yamiAdvance)
 const luminaUpCost=(id,rank)=>Math.round(LUMINA_UPG[id].base*Math.pow(1.5,rank));
 const luminaRank=id=>((META.lumina&&META.lumina.upg)||{})[id]||0;
 const shaveCost=rank=>Math.round(6+3*rank);   // 自己強化を1段削ぐオーブ費用
