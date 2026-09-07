@@ -1360,17 +1360,60 @@ function aiUpdate(dt){
     }
   }
 
+  /* v5.2 「近い所でグルグル」を断つ。よく歩いているのに狭い円から出ていない状態が続いたら、
+     かばいのラッチと目当てを捨てて、円の外へ向き直す。
+     詰まり検知(stuckT)は「進みたいのに進めない」を見るので、こちらは拾えない。
+     ここは毎フレーム走る場所に置くこと——思考の拍(aiDecide)は 0.1〜0.3 秒に一度しか来ないので、
+     あちらに置くと 12 秒の窓がいつまでも埋まらない */
+  { p.grindT=p.grindT||0; p.trail=p.trail||[]; p.trailT=(p.trailT||0)-dt;
+    if(p.trailT<=0){
+      p.trailT=BAL.GRIND_SAMP; p.trail.push({x:p.x,y:p.y});
+      if(p.trail.length>BAL.GRIND_N) p.trail.shift();
+      if(p.trail.length>=BAL.GRIND_N){
+        let len=0, cx=0, cy=0;
+        for(let i=1;i<p.trail.length;i++) len+=Math.hypot(p.trail[i].x-p.trail[i-1].x, p.trail[i].y-p.trail[i-1].y);
+        for(const q of p.trail){ cx+=q.x; cy+=q.y; }
+        cx/=p.trail.length; cy/=p.trail.length;
+        let rad=0; for(const q of p.trail) rad=Math.max(rad, Math.hypot(q.x-cx,q.y-cy));
+        if(len>=BAL.GRIND_PATH && rad<=BAL.GRIND_RAD){ p.grindT+=BAL.GRIND_SAMP; p.grindCx=cx; p.grindCy=cy; }
+        else p.grindT=Math.max(0,p.grindT-BAL.GRIND_SAMP*2);
+      }
+    }
+    /* 戦っている最中は断たない(引き撃ちの円は正しい動き)。近くに敵が居らず、脅威も薄い時だけ */
+    let quiet=(p.threatV||0)<BAL.GRIND_THREAT;
+    if(quiet){ for(const e of B.enemies){ if(e.dead||e.dormant||e.item) continue;
+      if(Math.hypot(e.x-p.x,e.y-p.y)<BAL.GRIND_QUIET_R){ quiet=false; break; } } }
+    const canBreak=quiet && attachCount(p)===0 && !p.pinned && !p.charmBind && p.climaxT<=0;
+    if(canBreak && p.grindT>=BAL.GRIND_T && B.time-(p.grindLast||-99)>BAL.GRIND_CD){
+      p.grindT=0; p.grindLast=B.time; p.trail.length=0; B.nGrind=(B.nGrind||0)+1;
+      p.coverUntil=0; p.coverOf=-1; p.assist=null;              // かばいのラッチを外す
+      if(p.goal) giveUpOn(p.goal);
+      p.goal=null; p.goalT=0; p.tgtKey=null; p.tgtNear=0; p.path=null;
+      p.explore=null; p.exploreUntil=0; p.dest=null; p.destUntil=0; p.thinkT=0;
+      const ox=p.x-(p.grindCx||p.x), oy=p.y-(p.grindCy||p.y), od=Math.hypot(ox,oy)||1;
+      const q=snapFloor(clampMapX(p.x+ox/od*760,120), clampMapY(p.y+oy/od*760,120), false, 6);
+      p.breakOut=(q&&reachableAt(q.x,q.y,false))?{x:q.x,y:q.y,until:B.time+BAL.GRIND_OUT}:null;
+      sayLine('feat.grind',0,25,'……あれ? ここ、さっきも通った気がする');
+    }
+    if(p.breakOut && (B.time>p.breakOut.until || !canBreak)) p.breakOut=null;
+  }
   // ---- 思考の拍 ----
   // 一定間隔でしか判断を更新しない。集中が低いほど判断が遅れ、
   // 判断の合間は前の判断のまま動き続ける(境界でのガクガクを消し、考えている風の間を作る)
   p.thinkT-=dt;
   if(p.thinkT<=0){
     p.thinkT=(BAL.THINK_MIN+(BAL.THINK_MAX-BAL.THINK_MIN)*(1-foc)+rand(0,0.06))*(p.dazeT>0?2.2:1)*(1+0.35*p.hypnoLv)*(p.curse==='bossgazer'?1.15:1);
-    aiDecide(foc);
+    aiDecide(foc,dt);
   }
 
   let dx=p.steerX, dy=p.steerY;
   let state=p.steerState;
+  /* v5.2 回っていた円の外へ、しばらく向き直す(舵は毎フレーム上書きする) */
+  if(p.breakOut){
+    const bx=p.breakOut.x-p.x, by=p.breakOut.y-p.y, bd=Math.hypot(bx,by)||1;
+    if(bd<80) p.breakOut=null;
+    else{ dx=dx*0.15+bx/bd*1.2; dy=dy*0.15+by/bd*1.2; state='breakout'; }
+  }
   // おねだり: 撃つのをやめて、いちばん近い魔物へ寄っていく
   if(p.begT>0){
     let ne=null, nd=1e9;
@@ -1509,7 +1552,7 @@ function cloudWorth(cl){
 }
 /* 判断本体: 「見えている」敵だけを材料に進路と行動を決め、p.steer* に書き込む。
    思考の拍(aiUpdate)からのみ呼ばれる */
-function aiDecide(foc){
+function aiDecide(foc,dt){
   const B=G.B, p=B.hero;
   // 詰まりからの脱出: しばらく探索点へ経路で歩く
   if(p.unstickT>0){
@@ -1941,6 +1984,21 @@ function aiDecide(foc){
     if(F){ const hx=p.x-F.x, hy=p.y-F.y, hd=Math.hypot(hx,hy)||1;
       if(hd<BAL.KUU_MELT_R*1.4){ const w=BAL.KUU_MELT_K*(1-hd/(BAL.KUU_MELT_R*1.4)); dx+=hx/hd*w; dy+=hy/hd*w; } } }
   if(B.party && B.time<B.party.talkUntil && attachCount(p)===0 && threat<0.6){ dx=dx*0.05+sepX; dy=dy*0.05+sepY; state='talk'; const o=partnerFor(p); if(o && Math.abs(o.x-p.x)>6) p.face=o.x>p.x?1:-1; }   // v3.1 話す間は相手の方を向く(v5.0 離れる力だけは残す)
+  /* v5.2 覚えた菌輪は、歩く時も迂回する。目当てから外すだけでは、輪の上を通り抜けてしまっていた */
+  if(ringKnown() && B.rings && B.rings.length && attachCount(p)===0 && !p.pinned){
+    for(const R of B.rings){
+      if(R.state==='cool') continue;
+      const rx=p.x-R.x, ry=(p.y-R.y)/0.78, rd=Math.hypot(rx,ry)||1, near=R.r*BAL.MRING_AVOID_R;
+      if(rd<near){
+        const w=BAL.MRING_AVOID_K*(1-rd/near);
+        /* 真正面から押し返すだけだと、行きたい向きと正面衝突してその場で止まる。
+           縁に沿って回り込む成分(接線)を主にして、行きたい方に近い側へ流す */
+        const tx=-ry/rd, ty=rx/rd, sgn=(tx*dx+ty*dy)>=0?1:-1;
+        dx+=(rx/rd*0.5 + tx*sgn)*w;
+        dy+=(ry/rd*0.5 + ty*sgn)*w*0.78;
+      }
+    }
+  }
   p.steerX=dx; p.steerY=dy; p.steerState=state; p.threatV=threat;   // v3.1 脅威の見積もりを残す(集合の判定に使う)
 }
 
@@ -4153,7 +4211,10 @@ function poiTick(dt){
       sayLine('poi.'+q.kind,1,0,q.kind==='stairs'?'おりぐち、みっけ! でも、まだ見てないとこあるし':pickRand(['あそこ、なにかある……','あれ、なんだろ','おぼえておこう']));   // v2.1 場所ごとの台詞
       partyShare(p,'poi',q.x,q.y);   // v3.0 相手に伝える
       if(q.kind==='stairs') setBanner('降り口を見つけた',exitGuarded()?'石の番兵が守っている。彼女は他を見てから降りる':'彼女は見るものを見てから降りる','#8fd3ff');
-      if(q.kind==='core'){ setBanner('魔核の間','深淵の心臓。彼女は挑むだろう','#ff6b81'); { const two=B.heroes.length>1, V=(typeof STORY_V30!=='undefined')?STORY_V30:null; const fe=(two&&V&&V.finalEncounter&&V.finalEncounter.length)?V.finalEncounter:STORY.finalEncounter;   // v3.0 二人で魔核を見る
+      if(q.kind==='core'){ setBanner('魔核の間','深淵の心臓。彼女は挑むだろう','#ff6b81'); { const two=B.heroes.length>1, V=(typeof STORY_V30!=='undefined')?STORY_V30:null; let fe=(two&&V&&V.finalEncounter&&V.finalEncounter.length)?V.finalEncounter:STORY.finalEncounter;   // v3.0 二人で魔核を見る
+        /* v5.2 二周目以降: 彼女たちは一日目のつもりで来ている。だから「弱いはず」の心臓の厚みに説明がつかない。
+           そして心臓の側も、落としきる寸前だったはずが供が増えていることに説明がつかない。互いに、覚えていない */
+        if(V && V.era && eraNow()>=1){ fe=fe.concat(V.era.coreStronger||[], V.era.coreVoice||[]); }
         if(fe.length && !B.storyCoreSeen){ B.storyCoreSeen=true; UI.showStory(fe,{dur:11}); } } }
       if(q.kind==='seal') setBanner('封印石','3つ全て灯すと降り口が開く','#c98cff');
     }
@@ -5282,7 +5343,7 @@ function mireEvaporate(m){
    一度やられれば覚えて(trapKnow)、次からは輪を避けて歩く */
 function spawnRings(){
   const B=G.B, dep=Math.max(1,Math.min(8,(B.floor&&B.floor.depth)||1));
-  const n=(BAL.RING_N[dep-1]||1);
+  const n=(BAL.MRING_N[dep-1]||1);
   B.rings=[];
   for(let i=0;i<n;i++){
     let q=null;
@@ -5290,26 +5351,26 @@ function spawnRings(){
       const c=snapFloor(clampMapX(B.hero.x+Math.cos(a)*d,90), clampMapY(B.hero.y+Math.sin(a)*d,90), false, 4);
       if(!c||!reachableAt(c.x,c.y,false)) continue;
       let ok=true;   // 輪ぜんぶが床であること(壁に食い込ませない)
-      for(let s=0;s<10;s++){ const t=s*TAU/10; if(!passAt(c.x+Math.cos(t)*BAL.RING_R, c.y+Math.sin(t)*BAL.RING_R*0.78, false)){ ok=false; break; } }
+      for(let s=0;s<10;s++){ const t=s*TAU/10; if(!passAt(c.x+Math.cos(t)*BAL.MRING_R, c.y+Math.sin(t)*BAL.MRING_R*0.78, false)){ ok=false; break; } }
       if(ok) q=c;
     }
     if(!q) continue;
-    B.rings.push({x:q.x, y:q.y, r:BAL.RING_R, state:'open', t:0, cd:0, seen:false, caps:8+((Math.random()*4)|0)});
+    B.rings.push({x:q.x, y:q.y, r:BAL.MRING_R, state:'open', t:0, cd:0, seen:false, caps:8+((Math.random()*4)|0)});
   }
 }
 function ringAt(x,y){ const B=G.B; if(!B.rings) return null; for(const R of B.rings){ if(Math.hypot(x-R.x,(y-R.y)/0.78)<R.r) return R; } return null; }
 function ringsTick(dt){
   const B=G.B; if(!B.rings||!B.rings.length) return;
   for(const R of B.rings){
-    if(R.state==='shut'){ R.t-=dt; if(R.t<=0){ R.state='cool'; R.cd=BAL.RING_CD; } }
+    if(R.state==='shut'){ R.t-=dt; if(R.t<=0){ R.state='cool'; R.cd=BAL.MRING_CD; } }
     else if(R.state==='cool'){ R.cd-=dt; if(R.cd<=0) R.state='open'; }
     for(const h of B.heroes){
       if(h.out) continue;
       const d=Math.hypot(h.x-R.x,(h.y-R.y)/0.78);
       const ci0=B.ci; B.ci=h.hi;
       if(R.state==='open' && d<R.r*0.72){   // 踏み込んだ: 一斉に噴いて、傘が閉じる
-        R.state='shut'; R.t=BAL.RING_T; R.seen=true;
-        spawnCloud(R.x,R.y,R.r*1.35,BAL.RING_T+5,BAL.SENSIT_GAS*BAL.RING_RATE,'gas');
+        R.state='shut'; R.t=BAL.MRING_T; R.seen=true;
+        spawnCloud(R.x,R.y,R.r*1.35,BAL.MRING_T+5,BAL.SENSIT_GAS*BAL.MRING_RATE,'gas');
         B.fx.push({kind:'ringpuff', x:R.x, y:R.y, r:R.r, t:0, life:0.8});
         addHeatG(14); applySensit(5); h.stumbleDur=Math.max(h.stumbleDur,0.5);
         parts(R.x,R.y,26,['#e8d0f0','#ffd0e4','#fff'],150,0.9); sfx(200,90,0.4,'sine',0.07); G.shake=Math.min(7,G.shake+3);
@@ -5319,8 +5380,8 @@ function ringsTick(dt){
       }
       if(R.state!=='cool' && ringKnown() && d>R.r*1.05 && d<R.r*2.1) sayLine('feat.ringKnown',0,30,'ここ、わっかになってる。まわろ');   // 覚えた輪は避けて通る
       if(R.state==='shut' && d<R.r*1.05){   // 中に居る間: 濃い胞子と、押し返してくる傘
-        addHeatG(BAL.RING_HEAT*dt); applySensit(BAL.RING_SENS*dt);
-        if(d>R.r*0.72){ const dd=Math.hypot(h.x-R.x,h.y-R.y)||1; h.vx-=(h.x-R.x)/dd*BAL.RING_PUSH*dt; h.vy-=(h.y-R.y)/dd*BAL.RING_PUSH*dt; }
+        addHeatG(BAL.MRING_HEAT*dt); applySensit(BAL.MRING_SENS*dt);
+        if(d>R.r*0.72){ const dd=Math.hypot(h.x-R.x,h.y-R.y)||1; h.vx-=(h.x-R.x)/dd*BAL.MRING_PUSH*dt; h.vy-=(h.y-R.y)/dd*BAL.MRING_PUSH*dt; }
         if(Math.random()<dt*3) parts(h.x+rand(-14,14),h.y-rand(0,24),1,['#e8d0f0','#ffd0e4'],40,0.7);
       }
       B.ci=ci0;
@@ -5969,8 +6030,13 @@ function coverTarget(p){
     if(w>th){ th=w; o=h; }
   }
   if(!o) return null;
-  if(p.coverUntil>B.time && th>=BAL.COVER_TH*0.7) return o;    // ちらつかせない
-  if(th>=BAL.COVER_TH && th>my+BAL.COVER_MARGIN){ p.coverUntil=B.time+BAL.COVER_HOLD; return o; }
+  /* v5.2 かばい合いを断つ。coverUntil のラッチは両側で立ちうるので、そうなると
+     互いを目標にして寄り、PARTY_SEP に押し戻され、その場で回り続ける。
+     助けが要るのは調子の悪い方なので、悪い方がかばうのをやめる */
+  if(o.coverOf===p.hi && my>=distressOf(o)){ p.coverUntil=0; p.coverOf=-1; return null; }
+  if(p.coverUntil>B.time && th>=BAL.COVER_TH*0.7){ p.coverOf=o.hi; return o; }    // ちらつかせない
+  if(th>=BAL.COVER_TH && th>my+BAL.COVER_MARGIN){ p.coverUntil=B.time+BAL.COVER_HOLD; p.coverOf=o.hi; return o; }
+  p.coverOf=-1;
   return null;
 }
 /* ================= v4.0 魔核戦の専念 =================

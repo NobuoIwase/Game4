@@ -2847,25 +2847,48 @@ function drawCoreling(g,e){
   g.fillStyle='#ff5d9a'; g.beginPath(); g.ellipse(0,-r*0.3,r*0.09,r*0.3,0,0,TAU); g.fill();
   g.restore();
 }
+/* ================= v5.2 魔核の段階 =================
+   討たれるたびに巻き戻して厚くなる。世代で姿がはっきり変わるように、6段に分ける。
+     0 芽    まだ心臓ですらない。膜だけの袋。目は縫い目のまま開いていない
+     1 心臓  目が開く。根が床を掴む
+     2 肥厚  房が分かれ、脈が浮く。小さい目が二つ
+     3 殻    表面が石灰化して殻が張りはじめる。根の先が浮く
+     4 鎧    殻が覆う。継ぎ目が光る。目が輪になる
+     5 渦    最終形。まわりの闇がゆっくり回る                                  */
+const CORE_ST=[
+  { pal:['#f0c2d4','#d69ab0','#a87a90','#9a6a80'], body:0.74, sheen:0.55, roots:5,  rootW:4,  rootL:1.55, lift:0,    eyes:0, mainEye:0,   plate:0,    ring:0, veins:3 },
+  { pal:['#d1698c','#94406a','#5e2c48','#7a3050'], body:0.90, sheen:0.10, roots:8,  rootW:6,  rootL:1.85, lift:0,    eyes:0, mainEye:1,   plate:0,    ring:0, veins:5 },
+  { pal:['#c2456f','#7a1f44','#3a0b20','#5a1630'], body:1.00, sheen:0.05, roots:10, rootW:7,  rootL:1.95, lift:0.04, eyes:2, mainEye:1,   plate:0.18, ring:0, veins:6 },
+  { pal:['#a82a56','#5e1434','#280716','#46101f'], body:1.03, sheen:0.06, roots:12, rootW:8,  rootL:2.05, lift:0.10, eyes:4, mainEye:1,   plate:0.45, ring:0, veins:6 },
+  { pal:['#8e1a44','#420c26','#180310','#340a18'], body:1.06, sheen:0.04, roots:14, rootW:9,  rootL:2.15, lift:0.16, eyes:6, mainEye:1,   plate:0.72, ring:0, veins:7 },
+  { pal:['#7a1038','#33081e','#0e020a', '#26060f'], body:1.10, sheen:0.03, roots:16, rootW:10, rootL:2.25, lift:0.22, eyes:8, mainEye:1,   plate:0.92, ring:1, veins:8 },
+];
+function coreStage(era){ return era<=0?0 : era<=2?1 : era<=4?2 : era<=6?3 : era<=9?4 : 5; }
 function drawCore(g,e){
-  const r=e.r, t=e.t, ph=e.maxHp?e.hp/e.maxHp:1, era=e.era||0;   // v3.0 世代で見た目が変わる(0: 小さく淡く弱そう → 濃く、根と目が増える)
-  const CC=era===0?['#e29ab8','#b06a8a','#7a4a66','#8a3a5a']:(era<=2?['#c2456f','#7a1f44','#3a0b20','#5a1630']:['#9a1848','#4a0a26','#160310','#3a0818']);
-  const nRoot=Math.min(15,(era===0?5:9)+Math.max(0,era-2)*2);
+  const r=e.r, t=e.t, ph=e.maxHp?e.hp/e.maxHp:1, era=e.era||0;
+  const S=CORE_ST[coreStage(era)], CC=S.pal;
   const beat=1+0.045*Math.sin(t*(ph<0.5?5.2:3.4))+(e.pulseT>0?0.12*Math.sin(e.pulseT*9):0);
+  const br=r*S.body;   // 見た目の大きさ(当たり判定は e.r のまま。若い個体は輪郭の中で小さく縮こまっている)
   g.save();
-  g.fillStyle='rgba(20,4,12,0.55)'; g.beginPath(); g.ellipse(0,r*0.35,r*1.5,r*0.6,0,0,TAU); g.fill();
-  // 根(床へ広がる)
-  g.strokeStyle=CC[3]; g.lineWidth=era===0?5:7; g.lineCap='round';
-  for(let i=0;i<nRoot;i++){ const a=i*TAU/9+0.3+Math.sin(t*0.7+i)*0.05; const L=r*1.9+Math.sin(t*1.3+i*2)*6; g.beginPath(); g.moveTo(Math.cos(a)*r*0.7,Math.sin(a)*r*0.35); g.quadraticCurveTo(Math.cos(a+0.25)*r*1.3,Math.sin(a+0.25)*r*0.7,Math.cos(a)*L,Math.sin(a)*L*0.55); g.stroke(); }
-  g.strokeStyle='rgba(200,80,120,0.35)'; g.lineWidth=2.5;
-  for(let i=0;i<9;i++){ const a=i*TAU/9+0.3; const L=r*1.9; g.beginPath(); g.moveTo(Math.cos(a)*r*0.7,Math.sin(a)*r*0.35); g.quadraticCurveTo(Math.cos(a+0.25)*r*1.3,Math.sin(a+0.25)*r*0.7,Math.cos(a)*L,Math.sin(a)*L*0.55); g.stroke(); }
-  // v4.0 発狂: 根がほどけて逆立ち、赤い脈が走る
+  g.fillStyle='rgba(20,4,12,'+(0.30+0.25*S.body).toFixed(2)+')'; g.beginPath(); g.ellipse(0,r*0.35,br*1.5,br*0.6,0,0,TAU); g.fill();
+  /* --- 根 --- 若いほど細く短く、床に届いていない。古いほど太く多く、先が浮き上がる --- */
+  const rootPath=(a,L,lift)=>{ g.beginPath(); g.moveTo(Math.cos(a)*br*0.7,Math.sin(a)*br*0.35);
+    g.quadraticCurveTo(Math.cos(a+0.25)*br*1.3,Math.sin(a+0.25)*br*0.7 - lift*br,Math.cos(a)*L,Math.sin(a)*L*0.55 - lift*br*1.6); g.stroke(); };
+  g.strokeStyle=CC[3]; g.lineWidth=S.rootW; g.lineCap='round';
+  for(let i=0;i<S.roots;i++){ const a=i*TAU/S.roots+0.3+Math.sin(t*0.7+i)*0.05, L=br*S.rootL+Math.sin(t*1.3+i*2)*6; rootPath(a,L,S.lift); }
+  g.strokeStyle='rgba(200,80,120,'+(0.35-0.04*coreStage(era)).toFixed(2)+')'; g.lineWidth=2.5;
+  for(let i=0;i<S.roots;i++){ const a=i*TAU/S.roots+0.3; rootPath(a,br*S.rootL,S.lift); }
+  /* --- v5.2 最終形: まわりの闇がゆっくり回る --- */
+  if(S.ring){ g.save(); g.translate(0,-r*0.15);
+    g.globalAlpha=0.42+0.10*Math.sin(t*1.1); g.strokeStyle='#1c0410'; g.lineWidth=7; g.setLineDash([13,9]); g.lineDashOffset=-t*22;
+    g.beginPath(); g.ellipse(0,0,br*1.48,br*1.02,0,0,TAU); g.stroke();
+    g.globalAlpha=0.34; g.strokeStyle='#ff2e6a'; g.lineWidth=1.8; g.lineDashOffset=t*15;
+    g.beginPath(); g.ellipse(0,0,br*1.62,br*1.14,0,0,TAU); g.stroke(); g.setLineDash([]); g.restore(); }
   if(e.rage){ const rg=0.45+0.3*Math.abs(Math.sin(t*6));
     g.strokeStyle='rgba(255,46,106,'+rg.toFixed(2)+')'; g.lineWidth=3.4; g.lineCap='round';
-    for(let i=0;i<12;i++){ const a=i*TAU/12+Math.sin(t*2+i)*0.25, L=r*(2.1+0.35*Math.sin(t*4+i));
-      g.beginPath(); g.moveTo(Math.cos(a)*r*0.8,Math.sin(a)*r*0.45); g.quadraticCurveTo(Math.cos(a-0.4)*L*0.7,Math.sin(a-0.4)*L*0.45,Math.cos(a)*L,Math.sin(a)*L*0.6); g.stroke(); }
-    glow(g,0,-r*0.25,r*2.1,'255,46,106',0.18+0.1*Math.sin(t*7)); }
-  // v4.0 大溜め: 狙いの線がじわじわ濃くなる(避ける猶予)
+    for(let i=0;i<12;i++){ const a=i*TAU/12+Math.sin(t*2+i)*0.25, L=br*(2.1+0.35*Math.sin(t*4+i));
+      g.beginPath(); g.moveTo(Math.cos(a)*br*0.8,Math.sin(a)*br*0.45); g.quadraticCurveTo(Math.cos(a-0.4)*L*0.7,Math.sin(a-0.4)*L*0.45,Math.cos(a)*L,Math.sin(a)*L*0.6); g.stroke(); }
+    glow(g,0,-br*0.25,br*2.1,'255,46,106',0.18+0.1*Math.sin(t*7)); }
   if(e.beamT>0){ const k=1-e.beamT/BAL.CORE_BEAM_CHARGE, a=e.beamA||0, L=BAL.CORE_BEAM_LEN;
     g.save(); g.globalAlpha=0.16+0.5*k; g.strokeStyle='#ff86b3'; g.lineWidth=BAL.CORE_BEAM_W*2*(0.25+0.75*k); g.lineCap='butt';
     g.beginPath(); g.moveTo(0,-r*0.25); g.lineTo(Math.cos(a)*L,-r*0.25+Math.sin(a)*L); g.stroke();
@@ -2873,25 +2896,50 @@ function drawCore(g,e){
     g.beginPath(); g.moveTo(0,-r*0.25); g.lineTo(Math.cos(a)*L,-r*0.25+Math.sin(a)*L); g.stroke();
     g.restore();
     glow(g,0,-r*0.25,r*(0.8+1.4*k),'255,134,179',0.25+0.45*k); }
-  // 鞭の予兆: 彼女の方へ根が伸びる
-  if(e.whipT>0){ const k=1-e.whipT/0.6; g.strokeStyle='rgba(255,120,170,'+(0.5+0.4*k)+')'; g.lineWidth=5+3*k; g.beginPath(); g.moveTo(0,0); g.lineTo(Math.cos(e.lookA||0)*r*(1.2+2.2*k),Math.sin(e.lookA||0)*r*(1.2+2.2*k)*0.8); g.stroke(); }
-  // 本体
+  if(e.whipT>0){ const k=1-e.whipT/0.6; g.strokeStyle='rgba(255,120,170,'+(0.5+0.4*k)+')'; g.lineWidth=5+3*k; g.beginPath(); g.moveTo(0,0); g.lineTo(Math.cos(e.lookA||0)*br*(1.2+2.2*k),Math.sin(e.lookA||0)*br*(1.2+2.2*k)*0.8); g.stroke(); }
+  /* --- 本体 --- */
   g.save(); g.translate(0,-r*0.25); g.scale(beat,beat);
-  const grad=g.createRadialGradient(-r*0.25,-r*0.3,r*0.15,0,0,r*1.05); grad.addColorStop(0,CC[0]); grad.addColorStop(0.55,CC[1]); grad.addColorStop(1,CC[2]);
-  g.fillStyle=grad; g.beginPath(); g.ellipse(0,0,r,r*0.86,0,0,TAU); g.fill();
-  for(let i=0;i<5;i++){ const a=i*1.3+0.4; g.fillStyle='rgba(180,60,100,0.55)'; g.beginPath(); g.ellipse(Math.cos(a)*r*0.5,Math.sin(a)*r*0.42,r*0.34,r*0.26,a,0,TAU); g.fill(); }
+  const grad=g.createRadialGradient(-br*0.25,-br*0.3,br*0.15,0,0,br*1.05);
+  grad.addColorStop(0,CC[0]); grad.addColorStop(0.55,CC[1]); grad.addColorStop(1,CC[2]);
+  g.fillStyle=grad; g.beginPath(); g.ellipse(0,0,br,br*0.86,0,0,TAU); g.fill();
+  // 房(古いほど数が増え、はっきり分かれる)
+  for(let i=0;i<S.veins;i++){ const a=i*(TAU/S.veins)+0.4; g.fillStyle='rgba(180,60,100,'+(0.30+0.25*S.body).toFixed(2)+')';
+    g.beginPath(); g.ellipse(Math.cos(a)*br*0.5,Math.sin(a)*br*0.42,br*0.34,br*0.26,a,0,TAU); g.fill(); }
   g.strokeStyle='rgba(255,110,160,'+(0.35+(e.pulseT>0?0.4:0))+')'; g.lineWidth=2.2;
-  for(let i=0;i<6;i++){ const a=i*TAU/6+t*0.1; g.beginPath(); g.moveTo(Math.cos(a)*r*0.25,Math.sin(a)*r*0.22); g.bezierCurveTo(Math.cos(a+0.4)*r*0.55,Math.sin(a+0.4)*r*0.5,Math.cos(a-0.2)*r*0.8,Math.sin(a-0.2)*r*0.7,Math.cos(a)*r*0.98,Math.sin(a)*r*0.84); g.stroke(); }
-  g.fillStyle='rgba(255,220,235,0.28)'; g.beginPath(); g.ellipse(-r*0.3,-r*0.4,r*0.32,r*0.16,-0.5,0,TAU); g.fill();
-  // 縦に裂けた目(彼女を見る)
-  const la=e.lookA||0, ex=Math.cos(la)*r*0.12, ey=Math.sin(la)*r*0.08;
-  g.fillStyle='#1a0510'; g.beginPath(); g.ellipse(0,0,r*0.16,r*0.42,0,0,TAU); g.fill();
-  g.fillStyle='#ff5d9a'; g.beginPath(); g.ellipse(ex,ey,r*0.07,r*0.3,0,0,TAU); g.fill();
-  g.fillStyle='#fff'; g.beginPath(); g.ellipse(ex-r*0.02,ey-r*0.12,r*0.025,r*0.06,0,0,TAU); g.fill();
-  if(era>=3){ for(let i=0;i<Math.min(6,era-2);i++){ const a=i*1.05+0.6+t*0.05; const ox=Math.cos(a)*r*0.62, oy=Math.sin(a)*r*0.5; g.fillStyle='#1a0510'; g.beginPath(); g.ellipse(ox,oy,r*0.07,r*0.16,0,0,TAU); g.fill(); g.fillStyle='#ff5d9a'; g.beginPath(); g.ellipse(ox+Math.cos(la)*r*0.02,oy+Math.sin(la)*r*0.02,r*0.03,r*0.1,0,0,TAU); g.fill(); } }   // v3.0 深い世代ほど目が増える
+  for(let i=0;i<S.veins;i++){ const a=i*TAU/S.veins+t*0.1; g.beginPath(); g.moveTo(Math.cos(a)*br*0.25,Math.sin(a)*br*0.22);
+    g.bezierCurveTo(Math.cos(a+0.4)*br*0.55,Math.sin(a+0.4)*br*0.5,Math.cos(a-0.2)*br*0.8,Math.sin(a-0.2)*br*0.7,Math.cos(a)*br*0.98,Math.sin(a)*br*0.84); g.stroke(); }
+  /* --- v5.2 殻: 石灰の板が表面を覆っていく。継ぎ目は古いほど光る --- */
+  if(S.plate>0){
+    const nP=Math.round(4+S.plate*8);
+    for(let i=0;i<nP;i++){ const a=i*TAU/nP+0.25, rr=br*(0.55+0.34*S.plate);
+      g.save(); g.translate(Math.cos(a)*br*0.42,Math.sin(a)*br*0.36); g.rotate(a);
+      g.fillStyle='rgba(30,10,20,'+(0.30+0.45*S.plate).toFixed(2)+')';
+      g.beginPath(); g.ellipse(0,0,rr*0.52,rr*0.34,0,0,TAU); g.fill();
+      g.strokeStyle='rgba(255,90,140,'+(0.10+0.35*S.plate).toFixed(2)+')'; g.lineWidth=1.2;
+      g.beginPath(); g.ellipse(0,0,rr*0.52,rr*0.34,0,0,TAU); g.stroke();
+      g.restore(); }
+  }
+  if(S.sheen>0){ g.fillStyle='rgba(255,235,245,'+S.sheen.toFixed(2)+')'; g.beginPath(); g.ellipse(-br*0.22,-br*0.3,br*0.52,br*0.34,-0.5,0,TAU); g.fill(); }
+  g.fillStyle='rgba(255,220,235,0.28)'; g.beginPath(); g.ellipse(-br*0.3,-br*0.4,br*0.32,br*0.16,-0.5,0,TAU); g.fill();
+  /* --- 目 --- 芽の段はまだ開いていない(縫い目だけ) --- */
+  const la=e.lookA||0, ex=Math.cos(la)*br*0.12, ey=Math.sin(la)*br*0.08;
+  if(!S.mainEye){
+    g.strokeStyle='rgba(120,60,90,0.75)'; g.lineWidth=2.4; g.lineCap='round';
+    g.beginPath(); g.moveTo(0,-br*0.34); g.lineTo(0,br*0.34); g.stroke();
+    g.strokeStyle='rgba(255,200,225,0.5)'; g.lineWidth=1.1;
+    g.beginPath(); g.moveTo(-br*0.05,-br*0.28); g.lineTo(-br*0.05,br*0.28); g.stroke();
+  }else{
+    g.fillStyle='#1a0510'; g.beginPath(); g.ellipse(0,0,br*0.16,br*0.42,0,0,TAU); g.fill();
+    g.fillStyle='#ff5d9a'; g.beginPath(); g.ellipse(ex,ey,br*0.07,br*0.3,0,0,TAU); g.fill();
+    g.fillStyle='#fff'; g.beginPath(); g.ellipse(ex-br*0.02,ey-br*0.12,br*0.025,br*0.06,0,0,TAU); g.fill();
+  }
+  for(let i=0;i<S.eyes;i++){ const a=i*(TAU/Math.max(1,S.eyes))+0.6+t*0.05, ox=Math.cos(a)*br*0.62, oy=Math.sin(a)*br*0.5;
+    g.fillStyle='#1a0510'; g.beginPath(); g.ellipse(ox,oy,br*0.07,br*0.16,0,0,TAU); g.fill();
+    g.fillStyle='#ff5d9a'; g.beginPath(); g.ellipse(ox+Math.cos(la)*br*0.02,oy+Math.sin(la)*br*0.02,br*0.03,br*0.1,0,0,TAU); g.fill(); }
   g.restore();
   g.restore();
 }
+
 /* v3.0 捕まってその場に残っている子の印: 紫の輪と「救出」の進み */
 function drawCaptiveMark(g,p){
   const c=p.captive, t=G.B.time; g.save();
