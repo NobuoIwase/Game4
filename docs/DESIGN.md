@@ -320,6 +320,28 @@ idは汎用カタログ準拠。効果はすべて数値・挙動レベルで表
   `storyTick`: 落ち着いている時(拘束・発情・魔物30体超でない)に 38〜58 秒ごと、その階層の独り言を吹き出しで。降り口で `descend`、魔核の間を見つけた時に `finalEncounter`(1戦1度)。結果画面: clear=`ending`、reset=`reset`。
 - 表示: `#storybox`(盤面の上、タップか時間で閉じる)。ホームの「物語」画面は序章と到達済みの階層の導入、魔核討伐後は結末を載せる。
 
+### 3-39. v5.0 (D) クウ — 氷の見習い天使
+
+- **素性** (`HEROES.kuu`): `hpMul 0.94 / dmgMul 0.86 / armor 0 / spdMul 1.06 / stamMul 0.78`(新フィールド。`newHero` が `staminaMax` に掛ける)、`lightR 150 / lightK 0.72`(三人でいちばん暗い)、`braveAdd 0`(巣窟では必ず外で待つ側)、`heatShy:true`(熱いヒロインから離れる)、`follow:'lumina'`(相方の指名)。`HEROES.freila` には `hot:true` を足した。`pref` は `spring 0.45 / hotspring 0.35`(暑がりが「湯に浸からない」として見える)、`pool 1.35 / lantern 1.25`。
+- **氷の道** (`kuuIce`/`icePick`/`icePaintLine`): フレイラの `dry` と対の設計。`META.ice[gen+floor]` にタイル index を持ち、`M.iceT`(`Uint8Array`)へ展開。`iceAt` は O(1)。線は 12px 刻みで壁に当たるまで伸ばし、`segDist<=ICE_W` のタイルを塗る(**壁と泉の120px以内は塗らない**——仲間の回復を止めないため)。方角は12方位×8サンプルで採点: lewd/haze +1.8、沼 +2.2、敵1体 +0.55、焦げた床 +0.5(塗り替えたい)、**熱いヒロインの150px以内 −3.0**、皆の行き先へ +1.4、`iceBias`(譲った提案の方角)へ +2.5。
+- **氷の上の効き**: `onIce(h)` は `h.iceOn` の 0.25 秒ラッチ(`statesTick` で更新)。ゾーン効果ブロック(flower/hotspring/flesh/lewd/haze)と `miresTick` の「浸かっている」分岐を丸ごと `!ice` でゲート。**床の手・沼の触手・巣窟の仕掛けはゲートしない**(あれらは生き物と仕掛けであって地形ではない、という線引き)。`heroStat` で足 +22%、`aiMove` の追従係数に `ICE_SLIDE_K`(0.55)を掛けて**曲がりきれない**ようにした。
+- **氷の上の魔物**: `enemiesUpdate` の速度行に `ICE_MON_SPD`(0.62)と `chillT`(0.72)を掛け、下限 `ICE_SPD_FLOOR`(0.35)。`ICE_DOT`(2.2/0.5秒)の凍傷は**クウの文脈**(`B.ci=K.hi`)で入れる。`damageEnemy` に3段の被ダメ増(氷上12% / 帳14% / 凍結25%)。`frozT>0` は行動ディスパッチの手前で止める。
+- **凍結の上限** (`freezeEnemy`): 直近 `ICE_FROZ_WIN`(6秒)の合計が `ICE_FROZ_BUDGET`(3.5秒)を超えたら `ICE_FROZ_REST`(2秒)は凍らない。ボスは 1.2 秒で頭打ち。**重ね掛けの永久停止を作らない**。
+- **武器** (`kuuWeapons`): `ineedle`(追尾弾。`kind:'ineedle'` を持ち、追い矢の複製対象になる) / `ifield`(0.35秒ごとのオーラ。半径に `1-0.45*kuuHeatAt` を掛けるので**フレイラのそばで目に見えて縮む**) / `ibloom`(`B.zones` に `ice:true` のゾーンを置き、入った敵を一度だけ凍らせる。進化 `glacier` は `icePaintDisc` で床ごと凍らせる) / `iorbit`(**全ヒロイン**に `h.iceOrb` を張る。ヒロインごとに敵配列を1回だけ走ってから盾を回す) / `iecho`(**全ヒロイン**に `h.iceEcho` を張り、`iceEchoSpawn` が `battleTick` の弾タグ付けループで直進弾を複製。`B.bullets.length>130` で打ち切り)。**クウが `out` になった瞬間、全員の氷が消える**(誰が支えていたかが分かる)。
+- **奥義** (`skillTick` の `p.id==='kuu'` ブロック): `frostveil`(逃げずにその場で半径170を凍らせ90px滑る) / `hoarfrost`(拘束を断ち、`hoarT` 4秒のあいだ 0.6秒ごとに近づく魔物を凍てつかせる) / `stasis`(半径260を止め、300px内の味方に `iceBless` 6秒。`heroStat` で足×1.30、`weaponsUpdate` の `atkMult`×1.10、`dupN` +1)。
+- **溶ける** (`kuuHeatAt`/`meltTick`): 熱いヒロイン(`KUU_MELT_R` 170)・炎のエリア・焦げた床×0.55・温泉0.7・肉の床0.25・火柱ゾーンの最大値。0.75 を 1.2 秒超えると発情 1.2/秒、氷のクールダウンが伸び、12秒ごとに一言。`aiSteer` に斥力(`KUU_MELT_K` 0.85)、間合いも `KUU_SEP`(150)に広げた。
+- **ませてる** (`iceBias`): `updateGoal` の敗者記録に、クウなら `iceBias={x,y,t:+8}` を残す。`icePick` がその方角に +2.5×dot を付ける。**口では譲って、8秒後に道が伸びる**。
+- **調子に乗る** (`icePraise`/`hypeT`): 直撃3体以上か沼を閉じた時、ルミナが `ICE_PRAISE_R`(520)以内で見ていれば `praise.ice` → 1.1秒後に `praise.reply`。以後 `ICE_HYPE_T`(18秒)は cd×0.45・閾値0.8・方角に±0.42radのジッター、そして**必ずスタミナが切れる**。1戦 `ICE_HYPE_N`(4)回まで。
+- **三人になって直した既存の穴**: `heroLightR` の相方判定を先頭固定から**最近接**へ / `coverTarget` を「いちばん調子の悪い仲間」へ(素性の `follow` 相手に 1.25 倍) / `denAssignRole` を配列化(`denWaits`。度胸のない子から順に外で待ち、口の前に扇状に並ぶ) / `sayLine`・`sceneForHero` の三項をテーブル(`linesFor`)へ / HUD の名前を段の先頭にインライン化(三段が重ならない) / **`drawUpgIcon` にフレイラの8件が最初から無かったのを、クウの8件と一緒に追加**。
+- **声**: `js/lines_kuu.js`(`LINES_K`、187キー)・`js/scenes_kuu.js`(`SCENES_K`)・`js/codex_kuu.js`(`CODEX_K`、青の細字)。`LINES_P` の全43リーフに `kuu` を追加(**足りないリーフは無言になるだけでなく、`agree`/`yield` が `said` を返さず相談で足が止まらなくなる**)。`storyNorm` は**まだ合流していないヒロインの台詞を落とす**ので、三人ぶんで書いた場面が二人でも一人でも成立する。
+
+### 3-38. v5.0 (C) 階層9〜12
+
+- `FLOORS` を12層に。9=凍る水路(water/damp/ruin) / 10=胎の回廊(nest/flesh) / 11=渦の縁(ruin/flesh/nest) / 12=渦の中心(flesh/nest/ruin、魔核)。暗さ 0.92→0.97、`mon.hp` 2.9→4.0、`mon.dmg` 1.65→2.05。
+- 深度で引く表(`LANTERN_N`/`MIRE_N`/`RING_N`/`WILD_LURE`/`WILD_HUG`/`SENT_ERA`)を12まで伸ばした。
+- **`eraMul()` の勾配の位置を固定**: `FLOORS.length-ERA_FLOORS0` から導いていたので、階層を12に伸ばすと急勾配の閾値が era>6 から era>10 へ後退し、中盤が一気に軽くなるところだった。`BAL.ERA_STEEP:6` を置いて第8層時代の位置に固定。
+- 物語(`STORY_V30.floors` 9〜12 の intro/enter/descend)と階層の独り言(`LINES.floor` は0基点配列で12件、`LINES_F.floor`/`LINES_K.floor` はキー)を追加。
+
 ### 3-37. v5.0 (H) 巻き戻りの向き — 誰が時を戻したかで、残るものが違う
 
 - **二つの巻き戻り**。`endBattle` の分岐はそのままだが、`runReset(wipeKnow)` に引数が付いた。

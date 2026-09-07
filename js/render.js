@@ -253,8 +253,8 @@ function drawZone(g,z){
   g.save();
   g.globalAlpha=a*0.55;
   const zg=g.createRadialGradient(z.x,z.y,z.r*0.2,z.x,z.y,z.r);
-  zg.addColorStop(0,z.fire?'rgba(255,170,90,0.6)':(z.evo?'rgba(200,240,255,0.55)':'rgba(160,220,255,0.45)'));   // v3.0 火柱は炎の色
-  zg.addColorStop(1,z.fire?'rgba(255,110,40,0.08)':'rgba(120,180,255,0.05)');
+  zg.addColorStop(0,z.fire?'rgba(255,170,90,0.6)':(z.ice?'rgba(190,235,255,0.62)':(z.evo?'rgba(200,240,255,0.55)':'rgba(160,220,255,0.45)')));   // v3.0 火柱は炎の色 / v5.0 霜の華は氷の色
+  zg.addColorStop(1,z.fire?'rgba(255,110,40,0.08)':(z.ice?'rgba(120,190,255,0.06)':'rgba(120,180,255,0.05)'));
   g.fillStyle=zg;
   g.beginPath(); g.ellipse(z.x,z.y,z.r,z.r*0.62,0,0,TAU); g.fill();
   g.strokeStyle='rgba(220,245,255,0.7)'; g.lineWidth=1.4;
@@ -349,6 +349,37 @@ function drawFx(g,f){
     for(let i=0;i<8;i++){ const th=i*TAU/8; g.beginPath();
       g.moveTo(f.x+Math.cos(th)*f.r*0.6, f.y+Math.sin(th)*f.r*0.45);
       g.lineTo(f.x+Math.cos(th)*f.r*(0.9+1.6*pr), f.y+Math.sin(th)*f.r*(0.7+1.2*pr)-40*pr); g.stroke(); }
+  }else if(f.kind==='icepath'){   // v5.0 氷の道: 白い線が伸びて、青白い帯になって残る
+    const pr=clamp(f.t/f.life,0,1), grow=clamp(f.t/0.25,0,1), L=f.len*grow;
+    const ux=Math.cos(f.ang), uy=Math.sin(f.ang)*0.9;
+    g.save(); g.globalAlpha=(1-pr)*0.9;
+    g.strokeStyle='rgba(232,250,255,0.9)'; g.lineWidth=f.w*0.5*(1-pr*0.5); g.lineCap='round';
+    g.beginPath(); g.moveTo(f.x,f.y); g.lineTo(f.x+ux*L,f.y+uy*L); g.stroke();
+    g.strokeStyle='rgba(150,215,245,0.55)'; g.lineWidth=f.w*1.5*(1-pr*0.4);
+    g.beginPath(); g.moveTo(f.x,f.y); g.lineTo(f.x+ux*L,f.y+uy*L); g.stroke();
+    g.restore();
+  }else if(f.kind==='iceshatter'){   // v5.0 氷が砕ける
+    const pr=clamp(f.t/f.life,0,1);
+    g.save(); g.globalAlpha=1-pr; g.fillStyle='rgba(232,250,255,0.9)';
+    for(let i=0;i<6;i++){ const a=i*TAU/6+f.r, d=f.r*(0.3+pr*1.1);
+      g.save(); g.translate(f.x+Math.cos(a)*d, f.y+Math.sin(a)*d*0.7); g.rotate(a);
+      g.beginPath(); g.moveTo(0,-3); g.lineTo(2.4,0); g.lineTo(0,3); g.lineTo(-2.4,0); g.closePath(); g.fill(); g.restore(); }
+    g.restore();
+  }else if(f.kind==='icebloom'){   // v5.0 霜の華がひらく
+    const pr=clamp(f.t/f.life,0,1), R=f.r*(0.3+0.7*pr);
+    g.save(); g.globalAlpha=(1-pr)*0.85;
+    g.strokeStyle='rgba(232,250,255,0.9)'; g.lineWidth=2;
+    for(let i=0;i<6;i++){ const a=i*TAU/6;
+      g.beginPath(); g.moveTo(f.x,f.y); g.lineTo(f.x+Math.cos(a)*R,f.y+Math.sin(a)*R*0.7); g.stroke(); }
+    g.restore();
+  }else if(f.kind==='icering'){   // v5.0 氷結の帳・静止の一点: 白い輪が広がって止まる
+    const pr=clamp(f.t/f.life,0,1), R=f.r*Math.min(1,pr*2.2);
+    g.save(); g.globalAlpha=(1-pr)*0.85;
+    g.strokeStyle='rgba(232,250,255,0.95)'; g.lineWidth=4*(1-pr);
+    g.beginPath(); g.ellipse(f.x,f.y,R,R*0.68,0,0,TAU); g.stroke();
+    g.strokeStyle='rgba(150,215,245,0.45)'; g.lineWidth=12*(1-pr);
+    g.beginPath(); g.ellipse(f.x,f.y,R*0.92,R*0.62,0,0,TAU); g.stroke();
+    g.restore();
   }else if(f.kind==='dryburst'){   // v4.0 フレイラが床を焼いた: 熱の輪が外へ抜ける
     const a=1-pr;
     g.globalAlpha=a*0.7; g.strokeStyle='#ffb060'; g.lineWidth=7*(1-pr*0.6); g.shadowColor='#ff7a3a'; g.shadowBlur=18;
@@ -563,9 +594,18 @@ const gfxHd=()=>LUMINA_HD_OK && ((META.settings&&META.settings.gfx)||'hd')==='hd
 /* v3.0 フレイラのスプライト(tools/make_freila.py で生成。手描き原画を置けば差し替わる) */
 const FREILA_SPR=new Image(); let FREILA_OK=false; FREILA_SPR.onload=()=>{ FREILA_OK=true; }; FREILA_SPR.onerror=()=>{ FREILA_OK=false; }; FREILA_SPR.src='assets/sprites/freila.png';
 const FREILA_HD=new Image(); let FREILA_HD_OK=false; FREILA_HD.onload=()=>{ FREILA_HD_OK=true; }; FREILA_HD.onerror=()=>{ FREILA_HD_OK=false; }; FREILA_HD.src='assets/sprites/freila_hd.png';
+const KUU_SPR=new Image(); let KUU_OK=false; KUU_SPR.onload=()=>{ KUU_OK=true; }; KUU_SPR.onerror=()=>{ KUU_OK=false; }; KUU_SPR.src='assets/sprites/kuu.png';
+const KUU_HD=new Image(); let KUU_HD_OK=false; KUU_HD.onload=()=>{ KUU_HD_OK=true; }; KUU_HD.onerror=()=>{ KUU_HD_OK=false; }; KUU_HD.src='assets/sprites/kuu_hd.png';
+/* v5.0 ヒロインの絵姿は表で引く(三人目からは三項では足りない) */
+const HERO_IMG={
+  lumina:{px:()=>LUMINA_SPR, hd:()=>LUMINA_HD, pxOk:()=>LUMINA_OK, hdOk:()=>true},
+  freila:{px:()=>FREILA_SPR, hd:()=>FREILA_HD, pxOk:()=>FREILA_OK, hdOk:()=>FREILA_HD_OK},
+  kuu:   {px:()=>KUU_SPR,    hd:()=>KUU_HD,    pxOk:()=>KUU_OK,    hdOk:()=>KUU_HD_OK},
+};
+const heroImg=id=>HERO_IMG[id]||HERO_IMG.lumina;
 /* v1.4: 原本(160×240)から端末の実ピクセル寸のスプライトを一度だけ焼く(色変種込み)。毎フレームの ctx.filter を廃止 */
 const LUMINA_H=60;                    // 論理高さ(足元アンカー -hgt+2 は据え置き)
-const HERO_VARS={lumina:{key:''}, freila:{key:''}};   // v3.0 ヒロインごとの焼き絵
+const HERO_VARS={lumina:{key:''}, freila:{key:''}, kuu:{key:''}};   // v3.0 ヒロインごとの焼き絵(v5.0 クウ)
 function bakeVariants(img,cw,ch,smooth){
   let src=img;                        // 2段階で縮小(1回で縮めるとぼやける)
   while(smooth && src.height>ch*2){
@@ -586,7 +626,7 @@ function heroVariants(id,hd){
   const ds=Math.max(0.5,Math.round(dpr*viewScale*4)/4);   // 論理1pxあたりの実ピクセル(0.25刻み)。resize() で変わる
   const key=(hd?'hd':'px')+ds;
   if(VAR.key===key) return VAR;
-  const img=id==='freila'?(hd?FREILA_HD:FREILA_SPR):(hd?LUMINA_HD:LUMINA_SPR);
+  const HI=heroImg(id), img=hd?HI.hd():HI.px();
   const hgt=hd?LUMINA_H:img.height*1.05, w=img.width*hgt/img.height;
   Object.assign(VAR,{key,w,h:hgt}, hd?bakeVariants(img,Math.round(w*ds),Math.round(hgt*ds),true):bakeVariants(img,img.width,img.height,false));
   return VAR;
@@ -617,7 +657,7 @@ function drawGirlSprite(g,x,y,opt){
   if(pinned) g.rotate(Math.sin(t*9)*0.07);
   if(climax) g.rotate(Math.sin(t*30)*0.05);     // びくっ、びくっ
   const sy=(pinned?0.84:1)*(climax?1-Math.abs(Math.sin(t*13))*0.09:1);
-  const hd=gfxHd() && (opt.id==='freila'?FREILA_HD_OK:true);
+  const hd=gfxHd() && heroImg(opt.id).hdOk();
   const V=heroVariants(opt.id||'lumina',hd);
   const img=G.hurtFlash>0.15?V.hurt:climax?V.climax:heat>=60?V.heat:V.normal;
   const w=V.w, hgt=V.h*sy;
@@ -651,7 +691,7 @@ function drawGirlSprite(g,x,y,opt){
   g.restore();
 }
 function drawGirl(g,x,y,opt){
-  if(opt.id==='freila'?FREILA_OK:LUMINA_OK){ drawGirlSprite(g,x,y,opt); return; }
+  if(heroImg(opt.id).pxOk()){ drawGirlSprite(g,x,y,opt); return; }
   if(opt.mood==='climax') opt=Object.assign({},opt,{mood:'pinned'});
   const t=opt.t, face=opt.face||1, moving=opt.moving, mood=opt.mood||'normal';
   const heat=opt.heat||0;
@@ -1038,6 +1078,23 @@ function drawEnemy(g,e){
     else { ent=drawEnemyCached(g,e); if(ent && MON_IRIS[e.id]) MON_IRIS[e.id](g,e); if(gfxLv()>=2 && MON_OVER[e.id]) MON_OVER[e.id](g,e); }
   }else drawBody(g,e);
 
+  if((e.frozT||0)>0){   // v5.0 凍結: 青い氷に覆われ、結晶が立つ
+    g.save();
+    g.fillStyle='rgba(180,230,255,0.42)';
+    g.beginPath(); g.ellipse(0,-e.r*0.7,e.r*1.15,e.r*1.35,0,0,TAU); g.fill();
+    g.strokeStyle='rgba(255,255,255,0.85)'; g.lineWidth=1.6;
+    for(let i=0;i<3;i++){ const a=-1.9+i*0.9;
+      g.beginPath(); g.moveTo(Math.cos(a)*e.r*0.4,-e.r*0.7+Math.sin(a)*e.r*0.4);
+      g.lineTo(Math.cos(a)*e.r*1.25,-e.r*0.7+Math.sin(a)*e.r*1.35); g.stroke(); }
+    g.restore();
+  }else if((e.chillT||0)>0){   // 冷気: 縁だけ淡く青い
+    g.save(); g.globalAlpha=0.30; g.strokeStyle='#bfeaff'; g.lineWidth=2;
+    g.beginPath(); g.ellipse(0,-e.r*0.7,e.r*1.05,e.r*1.2,0,0,TAU); g.stroke(); g.restore();
+  }
+  if((e.vulnT||0)>0){   // 冷気の帳の中: 足元に青い破線の輪
+    g.save(); g.globalAlpha=0.4; g.strokeStyle='#9fd8ff'; g.lineWidth=1.2; g.setLineDash([3,3]);
+    g.beginPath(); g.ellipse(0,3,e.r*1.1,e.r*0.4,0,0,TAU); g.stroke(); g.setLineDash([]); g.restore();
+  }
   if(e.hitFlash>0){
     g.globalAlpha=Math.min(1,e.hitFlash*6)*0.75;
     if(ent) g.drawImage(flashOf(ent),-ent.R,-ent.oy,ent.S,ent.S);
@@ -2994,7 +3051,7 @@ function drawHUD(g){
   // 状態チップ
   let sx=10, sy=(narrow?chipY+50:76)+Math.max(0,B.heroes.length-2)*26;   // v3.0 3人以上なら段を下げる
   for(const hh of B.heroes){ const p=hh;   // v3.0 ヒロインごとに一段(チップがある時だけ名前を添える)
-  const sxName=sx, syName=sy;
+  /* v5.0 名前は段の先頭にインラインで置くので、上に浮かせるための座標は不要 */
   const chips=[];
   const atk=attachCount(p);
   if(p.climaxT>0) chips.push(['climax','絶頂!!']);
@@ -3031,6 +3088,12 @@ function drawHUD(g){
   if(p.selfT>0) chips.push(['self','自慰……']);
   if(p.inMusk) chips.push(['musk','雄臭'+((META.traits.musk||0)>0?ROMANS[META.traits.musk]:'')]);
   if(p.curse&&BOSS_CURSES[p.curse]) chips.push(['curse','呪い: '+BOSS_CURSES[p.curse].name]);
+  /* v5.0 三人以上でも段が重ならないよう、名前は段の先頭に置く(上に浮かせない) */
+  if(B.heroes.length>1 && chips.length){ const HD=HEROES[hh.id]||HEROES.lumina;
+    g.font='bold 9px '+FONT; g.fillStyle=HD.col; g.textAlign='left'; g.textBaseline='middle';
+    g.shadowColor='rgba(0,0,0,0.85)'; g.shadowBlur=3;
+    g.fillText(HD.name, sx+1, sy+10.5); g.shadowBlur=0;
+    sx+=g.measureText(HD.name).width+8; }
   g.font='bold 10px '+FONT;
   for(const [id,txt] of chips){
     const A=AILMENTS[id];
@@ -3043,7 +3106,6 @@ function drawHUD(g){
     sx+=w2+6;
     if(sx>W-160){ sx=10; sy+=24; }
   }
-  if(B.heroes.length>1 && chips.length){ const HD=HEROES[hh.id]||HEROES.lumina; g.font='bold 9px '+FONT; g.fillStyle=HD.col; g.textAlign='left'; g.textBaseline='middle'; g.shadowColor='rgba(0,0,0,0.8)'; g.shadowBlur=3; g.fillText(HD.name, sxName+2, syName-6); g.shadowBlur=0; }
   if(chips.length){ sx=10; sy+=24; } else { sx=10; } }
   // デバッグ
   g.font='9px '+FONT; g.fillStyle='rgba(130,140,180,0.55)'; g.textAlign='left';
@@ -3058,7 +3120,7 @@ function drawCards(g){
   g.textAlign='center'; g.textBaseline='middle';
   g.font='bold 20px '+FONT; g.fillStyle='#ffd76a';
   g.shadowColor='rgba(0,0,0,0.7)'; g.shadowBlur=6;
-  g.fillText('LEVEL UP! — '+((B.heroes&&B.heroes.length>1)?'二人が選んでいます(強化できるのは一人)…':'ルミナのAIが選んでいます…'), W/2, 92);
+  g.fillText('LEVEL UP! — '+((B.heroes&&B.heroes.length>1)?(B.heroes.length+'人が選んでいます(強化できるのは一人)…'):'ルミナのAIが選んでいます…'), W/2, 92);
   g.shadowBlur=0;
   const cw=168, ch=186;
   const vert = W < cw*3+56;   // 縦長の画面では3枚を横に並べきれないので縦に積む
@@ -3103,7 +3165,64 @@ function drawCards(g){
 function drawUpgIcon(g,k,x,y){
   g.save(); g.translate(x,y);
   const id=k.startsWith('EVO:')?k.slice(4):k;
-  if(id==='chain'||id==='hchain'){
+  /* v3.0 フレイラの火(v5.0 でようやく絵が付いた) */
+  if(id==='fsword'||id==='inferno'){
+    g.shadowColor='#ff7a3a'; g.shadowBlur=9; g.strokeStyle='#ffd76a'; g.lineWidth=3; g.lineCap='round';
+    const n=id==='inferno'?3:1;
+    for(let i=0;i<n;i++){ const a=i*TAU/3-0.5; g.save(); g.rotate(n>1?a:0);
+      g.beginPath(); g.moveTo(-11,7); g.quadraticCurveTo(2,-2,12,-9); g.stroke();
+      g.strokeStyle='#ff7a3a'; g.lineWidth=1.4; g.beginPath(); g.moveTo(-9,10); g.quadraticCurveTo(3,1,13,-6); g.stroke();
+      g.strokeStyle='#ffd76a'; g.lineWidth=3; g.restore(); }
+  }else if(id==='fring'||id==='corona'){
+    g.shadowColor='#ff7a3a'; g.shadowBlur=9; g.lineCap='round';
+    const seg=id==='corona'?8:5, R=id==='corona'?13:10;
+    for(let i=0;i<seg;i++){ const a0=i*TAU/seg; g.strokeStyle=i%2?'#ffd76a':'#ff7a3a'; g.lineWidth=id==='corona'?4:3;
+      g.beginPath(); g.arc(0,0,R,a0,a0+TAU/seg*0.62); g.stroke(); }
+  }else if(id==='fburst'||id==='eruption'){
+    g.shadowColor='#ff7a3a'; g.shadowBlur=10; g.fillStyle='#ffd76a';
+    const n=id==='eruption'?8:6;
+    for(let i=0;i<n;i++){ const a=i*TAU/n, r0=id==='eruption'?5:4, r1=id==='eruption'?15:11;
+      g.save(); g.rotate(a); g.beginPath(); g.moveTo(0,-r0); g.lineTo(3,-r1); g.lineTo(-3,-r1); g.closePath(); g.fill(); g.restore(); }
+    g.fillStyle='#ff7a3a'; g.beginPath(); g.arc(0,0,4,0,TAU); g.fill();
+  }else if(id==='fpillar'){
+    g.shadowColor='#ff7a3a'; g.shadowBlur=9; g.fillStyle='#ffd76a';
+    g.beginPath(); g.moveTo(-6,12); g.quadraticCurveTo(-3,-2,0,-13); g.quadraticCurveTo(3,-2,6,12); g.closePath(); g.fill();
+    g.fillStyle='#ff7a3a'; g.beginPath(); g.moveTo(-3,12); g.quadraticCurveTo(-1,2,0,-6); g.quadraticCurveTo(1,2,3,12); g.closePath(); g.fill();
+  }else if(id==='fwing'){
+    g.shadowColor='#ff7a3a'; g.shadowBlur=9; g.fillStyle='#ffb060';
+    for(const sx of [-1,1]){ g.save(); g.scale(sx,1);
+      g.beginPath(); g.moveTo(2,-2); g.quadraticCurveTo(11,-12,14,-2); g.quadraticCurveTo(9,0,2,6); g.closePath(); g.fill(); g.restore(); }
+    g.fillStyle='#ffd76a'; g.beginPath(); g.arc(0,0,3.4,0,TAU); g.fill();
+  /* v5.0 クウの氷 */
+  }else if(id==='ineedle'){
+    g.shadowColor='#bfeaff'; g.shadowBlur=9; g.fillStyle='#bfeaff';
+    for(const dx of [-7,0,7]){ g.beginPath(); g.moveTo(dx,-12); g.lineTo(dx+2.4,0); g.lineTo(dx,12); g.lineTo(dx-2.4,0); g.closePath(); g.fill(); }
+  }else if(id==='ifield'||id==='blizzard'){
+    g.shadowColor='#bfeaff'; g.shadowBlur=9; g.strokeStyle='#bfeaff'; g.lineWidth=2; g.setLineDash([4,3]);
+    g.beginPath(); g.arc(0,0,id==='blizzard'?14:11,0,TAU); g.stroke();
+    g.beginPath(); g.arc(0,0,id==='blizzard'?9:6.5,0,TAU); g.stroke(); g.setLineDash([]);
+    if(id==='blizzard'){ g.strokeStyle='#7fe8dd'; g.lineWidth=1.6;
+      for(let i=0;i<4;i++){ const y=-9+i*6; g.beginPath(); g.moveTo(-13,y); g.lineTo(-4,y-3); g.stroke(); } }
+  }else if(id==='ibloom'||id==='glacier'){
+    g.shadowColor='#bfeaff'; g.shadowBlur=9; g.strokeStyle='#e8faff'; g.lineWidth=2.2; g.lineCap='round';
+    for(let i=0;i<6;i++){ const a=i*TAU/6;
+      g.beginPath(); g.moveTo(0,0); g.lineTo(Math.cos(a)*12,Math.sin(a)*12); g.stroke();
+      g.lineWidth=1.2; g.beginPath(); g.moveTo(Math.cos(a)*7,Math.sin(a)*7); g.lineTo(Math.cos(a+0.5)*11,Math.sin(a+0.5)*11); g.stroke(); g.lineWidth=2.2; }
+    if(id==='glacier'){ g.fillStyle='rgba(150,215,245,0.5)'; g.fillRect(-13,7,26,6); }
+  }else if(id==='iorbit'||id==='aurora'){
+    g.shadowColor='#bfeaff'; g.shadowBlur=8; g.fillStyle='#bfeaff';
+    const n=id==='aurora'?8:3, R=11;
+    for(let i=0;i<n;i++){ const a=i*TAU/n; g.save(); g.translate(Math.cos(a)*R,Math.sin(a)*R*0.8); g.rotate(a);
+      const w=id==='aurora'?4:5, h2=id==='aurora'?7:9;
+      g.beginPath(); g.moveTo(0,-h2/2); g.lineTo(w/2,0); g.lineTo(0,h2/2); g.lineTo(-w/2,0); g.closePath(); g.fill(); g.restore(); }
+    g.fillStyle='#7fe8dd'; g.beginPath(); g.arc(0,0,3,0,TAU); g.fill();
+  }else if(id==='iecho'){
+    g.shadowColor='#bfeaff'; g.shadowBlur=8; g.lineCap='round';
+    g.strokeStyle='#ffd76a'; g.lineWidth=2.6; g.beginPath(); g.moveTo(-12,-5); g.lineTo(12,-5); g.stroke();
+    g.beginPath(); g.moveTo(6,-9); g.lineTo(12,-5); g.lineTo(6,-1); g.stroke();
+    g.strokeStyle='#bfeaff'; g.beginPath(); g.moveTo(-12,6); g.lineTo(12,6); g.stroke();
+    g.beginPath(); g.moveTo(6,2); g.lineTo(12,6); g.lineTo(6,10); g.stroke();
+  }else if(id==='chain'||id==='hchain'){
     g.strokeStyle=id==='hchain'?'#ffe9a8':'#ffd76a'; g.lineWidth=2.6; g.shadowColor='#ffd76a'; g.shadowBlur=8;
     const n=id==='hchain'?3:1; for(let k2=0;k2<n;k2++){ const oy=(k2-(n-1)/2)*7; for(let i=-2;i<=2;i++){ g.beginPath(); g.ellipse(i*6,oy,3.4,2.2,i%2?0.4:-0.4,0,TAU); g.stroke(); } }
   }else if(id==='spirit'||id==='twinspirit'){
@@ -3382,6 +3501,32 @@ function draw(){
     }
 
     for(const hh of B.heroes){ const p=hh; B.ci=hh.hi;   // v3.0 ヒロインごとの武器の光と姿
+    // v5.0 冷気の帳: クウの周りの薄い青の輪(フレイラのそばでは目に見えて縮む)
+    if(p.ifieldR>0){
+      g.save(); g.globalAlpha=0.16;
+      const fg2=g.createRadialGradient(p.x,p.y-8,p.ifieldR*0.4,p.x,p.y-8,p.ifieldR);
+      fg2.addColorStop(0,'rgba(190,235,255,0)'); fg2.addColorStop(1,'rgba(150,215,245,0.75)');
+      g.fillStyle=fg2; g.beginPath(); g.ellipse(p.x,p.y-8,p.ifieldR,p.ifieldR*0.7,0,0,TAU); g.fill();
+      g.globalAlpha=0.35; g.strokeStyle='#bfeaff'; g.lineWidth=1.2; g.setLineDash([5,5]);
+      g.beginPath(); g.ellipse(p.x,p.y-8,p.ifieldR,p.ifieldR*0.7,0,0,TAU); g.stroke(); g.setLineDash([]);
+      g.restore();
+    }
+    // v5.0 氷衛: 味方の周りを回る氷の菱形(割れている枠は描かない=消耗が見える)
+    if(p.iceOrb){
+      const O=p.iceOrb;
+      g.save();
+      for(let i=0;i<O.n;i++){
+        if(O.cd[i]>0) continue;
+        const a=O.ang+i*TAU/O.n, sx=p.x+Math.cos(a)*O.r, sy=(p.y-10)+Math.sin(a)*O.r*0.78;
+        const w=O.evo?8:6, hgt=O.evo?13:10;
+        g.save(); g.translate(sx,sy); g.rotate(a*0.6);
+        g.fillStyle='rgba(191,234,255,0.85)'; g.strokeStyle=O.evo?'rgba(255,240,255,0.95)':'rgba(255,255,255,0.9)'; g.lineWidth=1.2;
+        g.beginPath(); g.moveTo(0,-hgt/2); g.lineTo(w/2,0); g.lineTo(0,hgt/2); g.lineTo(-w/2,0); g.closePath(); g.fill(); g.stroke();
+        g.restore();
+        glow(g,sx,sy,14,'150,220,255',0.25);
+      }
+      g.restore();
+    }
     // せいいき(聖域): 彼女を中心にした光の輪。脈動の瞬間に明滅
     if(p.wp.sanct>0 && p.sanctR){
       const evo=p.evo.gsanct>0;

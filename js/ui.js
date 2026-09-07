@@ -209,14 +209,16 @@ const UI={
   advSyncAuto(){ const b=$('advAuto'); if(b) b.textContent='自動送り: '+((META.settings.advAuto!==false)?'ON':'OFF'); },
   advRender(){
     const A=this.adv, ln=A.lines[A.idx]; if(!ln) return;
-    const NAMES={lumina:'ルミナ', freila:'フレイラ', town:'街の人', voice:'声', n:''};
+    const NAMES={lumina:'ルミナ', freila:'フレイラ', kuu:'クウ', town:'街の人', voice:'声', n:''};
+    const SPK=['lumina','freila','kuu'];   // v5.0 立ち絵と鉤括弧の付く話者
     const nm=$('advName'); nm.textContent=(NAMES[ln.s]!==undefined)?NAMES[ln.s]:ln.s; nm.className=ln.s;
     // v3.0 立ち絵は話しているヒロインに切り替える(地の文は直前の話者のまま暗く)
-    { const img=$('advImg'); const who=(ln.s==='lumina'||ln.s==='freila')?ln.s:(A.lastWho||'lumina'); A.lastWho=who;
-      if(img && img.dataset.who!==who){ img.dataset.who=who; img.dataset.fb='0'; img.style.visibility=''; img.src=who==='freila'?'assets/ref/freila.png':'assets/ref/lumina_novelai.png'; } }
-    const st=$('advStand'); st.className=((ln.s==='lumina'||ln.s==='freila')?'speak':'dim')+(ln.f?' f-'+ln.f:'');
+    { const img=$('advImg'); const who=SPK.includes(ln.s)?ln.s:(A.lastWho||'lumina'); A.lastWho=who;
+      const SRC={lumina:'assets/ref/lumina_novelai.png', freila:'assets/ref/freila.png', kuu:'assets/ref/kuu.png'};
+      if(img && img.dataset.who!==who){ img.dataset.who=who; img.dataset.fb='0'; img.style.visibility=''; img.src=SRC[who]||SRC.lumina; } }
+    const st=$('advStand'); st.className=(SPK.includes(ln.s)?'speak':'dim')+' who-'+(A.lastWho||'lumina')+(ln.f?' f-'+ln.f:'');
     const tx=$('advText'); tx.className=ln.s; tx.textContent='';
-    A.typeT=0; A.shown=0; A.dwell=0; A.full=(ln.s==='lumina'||ln.s==='freila'||ln.s==='town'||ln.s==='voice')?'「'+ln.t+'」':ln.t;
+    A.typeT=0; A.shown=0; A.dwell=0; A.full=(SPK.includes(ln.s)||ln.s==='town'||ln.s==='voice')?'「'+ln.t+'」':ln.t;
     $('advHint').textContent=(A.idx>=A.lines.length-1)?'▼ タップで閉じる':'▼ タップで次へ';
   },
   tickAdv(rdt){
@@ -589,15 +591,18 @@ const UI={
       const note=cx?cx.note:null;
       const fjoin=(typeof partyIds==='function')?partyIds().includes('freila'):true;   // v3.1 合流するまで、手記はルミナ一人のもの
       const fx=(typeof CODEX_F!=='undefined' && fjoin)?CODEX_F[sel]:null;   // v3.0 フレイラの欄外書き込み(赤ペン)
+      const kjoin=(typeof partyIds==='function')?partyIds().includes('kuu'):false;   // v5.0 クウの青い細字
+      const kx=(typeof CODEX_K!=='undefined' && kjoin)?CODEX_K[sel]:null;
       const mg=t=>t?`<div class="mnote">${esc(t)}</div>`:'';
+      const mgk=t=>t?`<div class="mnote k">${esc(t)}</div>`:'';   // v5.0 クウの青い細字
       const entries=[];
       if(note){
-        entries.push(`<div class="entry"><span class="lbl">特徴</span>${noteHtml(note.base)}${mg(fx&&fx.base)}</div>`);
+        entries.push(`<div class="entry"><span class="lbl">特徴</span>${noteHtml(note.base)}${mg(fx&&fx.base)}${mgk(kx&&kx.base)}</div>`);
         for(let i=0;i<3;i++){
-          if(stg>=i+1) entries.push(`<div class="entry"><span class="lbl">追記${['一','二','三'][i]}</span>${noteHtml(note.add[i], i===2)}${mg(fx&&fx.add&&fx.add[i])}</div>`);
+          if(stg>=i+1) entries.push(`<div class="entry"><span class="lbl">追記${['一','二','三'][i]}</span>${noteHtml(note.add[i], i===2)}${mg(fx&&fx.add&&fx.add[i])}${mgk(kx&&kx.add&&kx.add[i])}</div>`);
           else{ entries.push(`<div class="entry locked">（追記${['一','二','三'][i]}は、まだ書かれていない——${['この種族に何かされた夜','この種族が絡んだ絶頂','この種族への敗北'][i]}の後に増える）</div>`); break; }
         }
-        if(stg>=3 && note.after) entries.push(`<div class="after">${esc(note.after)}${mg(fx&&fx.after)}</div>`);   // v3.0 末尾に、赤ペンの余白の様子
+        if(stg>=3 && note.after) entries.push(`<div class="after">${esc(note.after)}${mg(fx&&fx.after)}${mgk(kx&&kx.after)}</div>`);   // v3.0 末尾に、赤ペンの余白の様子 / v5.0 青の細字
       }
       detail=`<div class="stcard" style="text-align:left">
         <div style="display:flex;gap:12px;align-items:center">

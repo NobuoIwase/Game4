@@ -58,7 +58,7 @@ const BAL={
   DARK_GOAL_K:0.42,        // 目当ての採点: 暗い所は価値がこの割合まで下がる(行かないわけではない)
   DARK_LAG:0.5,            // 暗いと、罠・雲・地形の境に気づく距離がこの割合まで縮む
   DARK_SEEN:0.3,           // 地図に残るのは、この明るさ以上で見た所だけ
-  LANTERN_R:210, LANTERN_HEAT:3.4, LANTERN_SENS:0.9, LANTERN_N:[2,2,3,3,3,4,4,4],
+  LANTERN_R:210, LANTERN_HEAT:3.4, LANTERN_SENS:0.9, LANTERN_N:[2,2,3,3,3,4,4,4,5,5,5,6],
   LANTERN_WANT:0.42, LANTERN_HEAT_MAX:34, LANTERN_STAY:3.4, LANTERN_CD:52, DARK_FAR_SEE:900,   // v5.0 灯篭は「暗くて心細い時の休み場」程度。誘蛾灯にはしない
   LANTERN_NEED_LIGHT:0.16,            // v5.0 この階で集めた灯りがこれ未満のうちだけ、休み場として寄る気になる
   LANTERN_WARM_T:1.6,                 // そばで温まってから「ポカポカしてきた」と気づくまでの秒数
@@ -110,12 +110,26 @@ const BAL={
   DRY_EVAP_R:560, DRY_EVAP_N:6, DRY_EVAP_RATE:1.75, DRY_EVAP_LIFE:15,   // 巣窟で焼いた時: 蒸発した媚薬が外まで広がる
   DRY_EVAP_HEAT:26, DRY_EVAP_CD:14,  // 蒸発の瞬間、その場の二人に乗る発情 / v5.0 続けざまに噴かないための間隔(秒)
   /* --- v5.0 媚薬沼(水溜まりのように点在) --- */
-  MIRE_N:[3,4,4,5,5,6,6,7],          // 階層ごとの数
+  MIRE_N:[3,4,4,5,5,6,6,7,8,8,9,9],  // 階層ごとの数
   MIRE_R0:44, MIRE_R1:96,            // 沼の半径の幅
   MIRE_HEAT:7.5, MIRE_SENS:2.8, MIRE_SLOW:0.55,   // 浸かっている間(深さ1あたり毎秒) / 足の重さ
   MIRE_TENT:3, MIRE_TENT_R:78, MIRE_TENT_CD:4.6,  // 生えている触手の数 / 届く距離 / 掴み直しの間隔
   MIRE_FEAR:2,                       // 沼そのものの嫌い方(避けて通る)
   /* 蒸発: 沼の広さと深さに比例して、ぶわーっと外まで広がる */
+  /* --- v5.0 クウの氷 --- */
+  ICE_STAM:0.10, ICE_STAM_MIN:0.18,   // 一度に注ぐスタミナの割合 / これだけ無いと引かない
+  ICE_LEN:820, ICE_W:46,              // 氷の道の長さ / 半幅
+  ICE_CD:7, ICE_MAX:2400, ICE_WANT:2.2,   // 引き直しの間隔 / 一つの階層に残る氷タイルの上限 / 方角の点数がこれを超えたら引く
+  ICE_HIT_FREEZE:2.0, ICE_HIT_DMG:16,     // 直撃の凍結秒とダメージ
+  ICE_ALLY_SPD:0.22, ICE_SLIDE_K:0.55,    // 氷の上の味方の足 / 曲がりきれない(向き変えの追従)
+  ICE_MON_SPD:0.62, ICE_DOT:2.2, ICE_DOT_CD:0.5,   // 氷の上の魔物の足 / 凍傷
+  ICE_MON_VULN:0.12, ICE_VULN:0.14, ICE_FROZ_VULN:0.25,   // 氷の上 / 帳の中 / 凍結中の被ダメ増
+  ICE_CHILL_T:1.2, ICE_CHILL_SPD:0.72, ICE_SPD_FLOOR:0.35,
+  ICE_FROZ_BUDGET:3.5, ICE_FROZ_WIN:6, ICE_FROZ_REST:2.0,   // 凍結の重ね掛け防止: 直近WIN秒でBUDGET秒を超えたらREST秒は凍らない
+  ICE_LIGHT:0.18, ICE_ORB_CD:3.2, ICE_ECHO_CD:0.45,
+  ICE_HYPE_T:18, ICE_HYPE_CD:0.45, ICE_HYPE_WANT:0.8, ICE_HYPE_N:4, ICE_PRAISE_CD:25, ICE_PRAISE_R:520,   // 褒められて調子に乗る
+  KUU_MELT_R:170, KUU_MELT_K:0.85, KUU_MELT_T:1.2, KUU_MELT_HEAT:1.2,   // フレイラのそばで溶ける
+  KUU_SEP:150, KUU_LUMI_R:620, KUU_DARK_K:0.75,   // フレイラとだけ広い間合い / ここまでならルミナが相方 / 暗い所を人一倍嫌う
   MIRE_EVAP_K:7.4,                   // 広がる半径 = 沼の半径 × 深さ × これ
   MIRE_EVAP_N:10,                    // 噴き出す雲の数(広さで増える)
   MIRE_EVAP_RATE:1.9, MIRE_EVAP_LIFE:17, MIRE_EVAP_HEAT:34,
@@ -127,9 +141,9 @@ const BAL={
   LURE_R:48, LURE_CD:5.5, LURE_HEAT:22, LURE_SENS:6, LURE_CLOUD_R:120, LURE_CLOUD_LIFE:7,   // 媚茸: 掴む距離 / 掴み直しの間隔 / 掛かった時の発情と敏感 / 吹く胞子
   LURE_WORTH:1.25,          // 光茸だと思っている間の「目当て」の価値(光茸 1.1 より少しだけ強く見える)
   HUG_R:86, HUG_CD:7, HUG_HEAT:5.5, HUG_SENS:2.6, HUG_DOT:0.9, HUG_NEED:1.55,   // 抱き茸: かぶせる距離 / かぶせ直しの間隔 / 傘の中の発情・敏感・じわ削り / 振りほどきにくさ
-  RING_N:[1,1,2,2,2,3,3,3], RING_R:74, RING_T:5.0, RING_CD:16,   // 菌輪: 階層ごとの数 / 輪の半径 / 閉じている秒数 / 開き直すまで
+  RING_N:[1,1,2,2,2,3,3,3,4,4,4,5], RING_R:74, RING_T:5.0, RING_CD:16,   // 菌輪: 階層ごとの数 / 輪の半径 / 閉じている秒数 / 開き直すまで
   RING_HEAT:9, RING_SENS:3.2, RING_RATE:1.45, RING_PUSH:150,      // 菌輪: 中に居る間の発情・敏感(毎秒) / 胞子の濃さ / 押し返す強さ
-  WILD_LURE:[1,2,2,2,3,3,3,4], WILD_HUG:[0,0,1,1,1,2,2,2],        // 洞そのものとして生える媚茸・抱き茸の数(夜側のENは使わない)
+  WILD_LURE:[1,2,2,2,3,3,3,4,4,5,5,5], WILD_HUG:[0,0,1,1,1,2,2,2,3,3,3,4],        // 洞そのものとして生える媚茸・抱き茸の数(夜側のENは使わない)
 
   /* --- v3.2 甘い褥の巣窟(えちえちエリア) --- */
   DEN_ENTER_HEAT:22, DEN_ENTER_SENS:14,       // 敷居をまたいだ瞬間、匂いに殴られる
@@ -285,7 +299,7 @@ const BAL={
   /* v5.0 別々に行動: 互いが見えている(壁を挟まない)うちは、案が割れたら譲らず自分の目当てへ向かう */
   SPLIT_MIN:0.55, SPLIT_SEP:260, SPLIT_R:560, SPLIT_T:14, SPLIT_THREAT:0.75, SPLIT_HP:0.55,
   GATHER_R:84, GATHER_T:3.2, GATHER_DANGER_R:150, GATHER_DANGER_THREAT:0.5, GATHER_CD:8, GATHER_TALK_T:2.6,
-  ERA_FLOORS0:2, ERA_DEPTH_K0:0.05, ERA_DEPTH_K:0.10, CORE_ERA_HP0:0.30, CORE_ERA_HP_K:0.22, CORE_ERA_DEF0:0.75, CORE_ERA_DEF_K:0.05, CORE_ERA0_LV_K:0.5, CORE_ERA0_LV_CAP:0.5, SENT_ERA:[2,3,3,4,4,5,6],   // v3.1 世代0の魔核はさらに薄く(HP×0.30・被ダメ0.75・Lv補正は半分で上限+50%): 一人のルミナが討てる。魔物の深さ倍率は毎世代+10%(討たれるごとに魔物も強く)
+  ERA_FLOORS0:2, ERA_DEPTH_K0:0.05, ERA_DEPTH_K:0.10, CORE_ERA_HP0:0.30, CORE_ERA_HP_K:0.22, CORE_ERA_DEF0:0.75, CORE_ERA_DEF_K:0.05, CORE_ERA0_LV_K:0.5, CORE_ERA0_LV_CAP:0.5, SENT_ERA:[2,3,3,4,4,5,6,6,7,7,8], ERA_STEEP:6,   // v3.1 世代0の魔核はさらに薄く(HP×0.30・被ダメ0.75・Lv補正は半分で上限+50%): 一人のルミナが討てる。魔物の深さ倍率は毎世代+10%(討たれるごとに魔物も強く)
   /* v2.4 視界の記憶: SEEN_T 秒ごとに半径 SEEN_R×SEEN_RY の楕円を「見た」にする。探索点は未探索率×EXPLORE_UNSEEN_W − 距離×EXPLORE_DIST_W で選ぶ(SEEN_EXPLORE=0 で旧挙動)。BOSS_PICK=1 でボスを想定した武器選び */
   SEEN_T:0.25, SEEN_R:560, SEEN_RY:400, SEEN_EXPLORE:1, EXPLORE_UNSEEN_W:2.5, EXPLORE_DIST_W:0.4, EXPLORE_DONE:0.96, BOSS_PICK:1, BOSS_MEMORY_T:60,
   /* v2.4 ボス級(カードのボス)は彼女の Lv で厚くなり(+5%/Lv、上限 +250%)、光が通りにくい(被ダメ 80%)。魔核・番兵は各自の値 */
@@ -631,13 +645,18 @@ const FLOORS=[
   /* v3.0 追加の階層(世代=魔核の討伐回数で開く) */
   { id:'f6', name:'骸の回廊',   sub:'骨を積んだ煉瓦の回廊。番人が多い',      depth:6, dark:0.82, zoneW:{ruin:5,flesh:2,damp:2,nest:1},           wall:'brick', en:{start:1.6,base:2.0,regen:2.0,max:2.0},     mon:{hp:2.0,dmg:1.35},  affinity:['guardian','sentinel','gazer','beamer','ghost','ghosthand','eye','runemage'], col:'#d9d2ff', lewd:{name:'骸の寝台', sub:'骨で組んだ寝台。横たえられた者の形に凹んでいる。奥に王の宝箱', guard:'guardian', beam:'hypno', guardSub:'寝台の主が、骨の椅子から立ち上がる'} },
   { id:'f7', name:'星の湖底',   sub:'星明かりの湖。浅瀬と水妖',              depth:7, dark:0.86, zoneW:{water:5,damp:3,moss:1,hotspring:1},         wall:'rock',  en:{start:1.7,base:2.3,regen:2.3,max:2.3},     mon:{hp:2.3,dmg:1.45},  affinity:['suiyou','slime','mistslime','leech','slimeking','inyoku','moth','succubus'], col:'#9fd8ff', lewd:{name:'星の浅瀬', sub:'星が映る浅瀬。水が腕の形になって待っている。奥に王の宝箱', guard:'suiyou', beam:'hypno', guardSub:'星を映す水が、腕の形に立ち上がる'} },
-  { id:'f8', name:'深淵の底',   sub:'肉と紋。もっとも深い所',                depth:8, dark:0.90, zoneW:{flesh:5,nest:2,ruin:2,flower:1},           wall:'flesh', en:{start:1.9,base:2.6,regen:2.6,max:2.6},     mon:{hp:2.6,dmg:1.55},  affinity:['gtent','hand','pot','mouth','succuqueen','gobking','vampi','core','runemage'], col:'#ff5d9a', lewd:{name:'底の褥', sub:'紋の刻まれた肉の褥。深淵の底で、二人ぶんの窪みが待つ。奥に王の宝箱', guard:'mouth', beam:'climax', guardSub:'底の肉が裂けて、大きな口がひらく'} },
+  { id:'f8', name:'深淵の底',   sub:'肉と紋。かつて、もっとも深かった所',    depth:8, dark:0.90, zoneW:{flesh:5,nest:2,ruin:2,flower:1},           wall:'flesh', en:{start:1.9,base:2.6,regen:2.6,max:2.6},     mon:{hp:2.6,dmg:1.55},  affinity:['gtent','hand','pot','mouth','succuqueen','gobking','vampi','core','runemage'], col:'#ff5d9a', lewd:{name:'底の褥', sub:'紋の刻まれた肉の褥。深淵の底で、二人ぶんの窪みが待つ。奥に王の宝箱', guard:'mouth', beam:'climax', guardSub:'底の肉が裂けて、大きな口がひらく'} },
+  /* v5.0 追加の階層(世代がさらに進むと開く。氷の天使が降り、渦の縁で闇が眠っている) */
+  { id:'f9',  name:'凍る水路',   sub:'水が凍りかけた古い水路。息が白い',      depth:9,  dark:0.92, zoneW:{water:5,damp:3,ruin:2,moss:1},           wall:'brick', en:{start:2.0,base:2.9,regen:2.9,max:2.9},     mon:{hp:2.9,dmg:1.65},  affinity:['suiyou','slime','mistslime','sentinel','gazer','ghost','leech','slimeking'], col:'#bfeaff', lewd:{name:'凍らない淀み', sub:'ここだけ凍らない、生温い淀み。踏み込めば足が抜けない。奥に王の宝箱', guard:'suiyou', beam:'hypno', guardSub:'凍らない水の底から、白い腕が幾本も立ち上がる'} },
+  { id:'f10', name:'胎の回廊',   sub:'深淵が自分を作り直している所',          depth:10, dark:0.94, zoneW:{nest:5,flesh:3,ruin:1,flower:1},          wall:'flesh', en:{start:2.2,base:3.2,regen:3.2,max:3.2},     mon:{hp:3.2,dmg:1.75},  affinity:['gtent','pot','hand','mouth','succuqueen','vampi','inyoku','hugcap','worm'], col:'#ff8fb3', lewd:{name:'産みの褥', sub:'いくつもの窪みが並ぶ褥。どれも、ちょうど人の形をしている。奥に王の宝箱', guard:'mouth', beam:'climax', guardSub:'窪みの一つが裂けて、内側から口がひらく'} },
+  { id:'f11', name:'渦の縁',     sub:'ループの渦の外周。時が澱んでいる',      depth:11, dark:0.96, zoneW:{ruin:4,flesh:3,nest:2,damp:1},            wall:'brick', en:{start:2.4,base:3.6,regen:3.6,max:3.6},     mon:{hp:3.6,dmg:1.90},  affinity:['guardian','sentinel','runemage','gazer','beamer','eye','ghost','ghosthand','tower'], col:'#b09aff', lewd:{name:'澱みの寝台', sub:'同じ夜が何度も繰り返された寝台。凹みだけが増えていく。奥に王の宝箱', guard:'guardian', beam:'hypno', guardSub:'寝台の脇の石像が、いま目を開けた'} },
+  { id:'f12', name:'渦の中心',   sub:'すべてが巻き戻る一点。心臓はここにある', depth:12, dark:0.97, zoneW:{flesh:5,nest:3,ruin:2},                  wall:'flesh', en:{start:2.6,base:4.0,regen:4.0,max:4.0},     mon:{hp:4.0,dmg:2.05},  affinity:['core','gtent','mouth','pot','hand','succuqueen','gobking','vampi','runemage'], col:'#ff4d7f', lewd:{name:'巻き戻しの褥', sub:'ここで何をされても、朝には無かったことになる褥。だから際限がない。奥に王の宝箱', guard:'gtent', beam:'climax', guardSub:'褥の奥から、幾度も同じ形をなぞってきた触手が伸びる'} },
 ];
 /* v3.0 深淵のループ: era=魔核を討たれた回数。開いている階層 = ERA_FLOORS0 + era(上限 FLOORS.length)。最深の開いた階層が最終階層(魔核)。
    era が階層数の上限を超えても深さ倍率(eraMul)は伸び続ける */
 const eraNow=()=>((META&&META.era)|0);
 const openFloors=()=>Math.min(FLOORS.length, BAL.ERA_FLOORS0+eraNow());
-const eraMul=()=>1+BAL.ERA_DEPTH_K*Math.max(0,eraNow()-Math.max(0,FLOORS.length-BAL.ERA_FLOORS0))+BAL.ERA_DEPTH_K0*eraNow();   // 毎世代 +K0、階層が増えなくなった後は +K も
+const eraMul=()=>1+BAL.ERA_DEPTH_K*Math.max(0,eraNow()-BAL.ERA_STEEP)+BAL.ERA_DEPTH_K0*eraNow();   // 毎世代 +K0、ERA_STEEP を過ぎると +K も(v5.0 階層を12に伸ばしても勾配の位置は動かさない)
 const curFloorIdx=()=>Math.min(openFloors()-1,Math.max(0,((META.run&&META.run.floor)||1)-1));
 const curFloor=()=>{ const F=FLOORS[curFloorIdx()]; return Object.assign({}, F, {final: F.depth>=openFloors()}); };   // v3.0 最終階層は世代で動く
 /* v1.8 地形の資源(拾い物): 地形帯ごとに生える/沈んでいる。彼女は必要に応じて目当てにする */
@@ -799,14 +818,25 @@ const HEROES={
                     ember:{ name:'熾火の壁', icon:'◎', lv:38, cd:35, desc:'二肢以上を掴まれるか押し倒された時、炎を噴いて全ての拘束を焼き切り、半径120の魔物を弾いて4秒間 近づく魔物を焦がす' },
                     phoenix:{ name:'不死鳥', icon:'✺', lv:52, cd:60, desc:'HPが30%を切った時、炎とともに立ち上がりHP35%回復・2秒無敵・周囲を焼く' } },
            pref:{chest:1.1, boss:1.3, treasure:1.15, item:1.1, stairs:1.15, core:1.3, explore:1.1, event:1.05, shrine:0.8, stele:0.7, pool:0.85, spring:0.9, gems:0.9, shroom:0.85},
+           hot:true,   // v5.0 熱いヒロイン(クウが離れたがる相手)
            desc:'火を操る近接主体の天使。気が強く、前に出る' },
+  /* v5.0 三人目。氷の見習い天使。無口でクール、少しませている。妹あつかい。フレイラの隣は苦手 */
+  kuu:{ name:'クウ', col:'#7fe8dd', hair:'#a5e0f5', sprite:'kuu', wps:['ineedle','ifield','ibloom','iorbit','iecho'],
+        start:{ineedle:2,ifield:1}, grow:['ineedle','ifield','iorbit'], hpMul:0.94, spdMul:1.06, armor:0, dmgMul:0.86, stamMul:0.78,
+        fearMul:0.85, braveAdd:0, kiteMul:1.20, lightR:150, lightK:0.72, heatShy:true, follow:'lumina',
+        skills:{ frostveil:{ name:'氷結の帳', icon:'❄', lv:22, cd:20, desc:'囲まれた時、逃げずにその場で周り半径170を凍らせて止める。0.6秒無敵で90px滑る' },
+                 hoarfrost:{ name:'霜の枷',   icon:'✳', lv:38, cd:35, desc:'二肢以上を掴まれるか押し倒された時、氷の鞘が砕けて拘束を断ち、半径140を凍らせる。以後4秒、近づく魔物が凍てつく' },
+                 stasis:{    name:'静止の一点', icon:'❈', lv:52, cd:60, desc:'HPが32%を切った時、半径260のすべてを止める。HP22%回復・2.4秒無敵。近くの味方は6秒 足が速く弾が増える' } },
+        pref:{pool:1.35, lantern:1.25, stele:1.15, shroom:1.10, explore:1.15, gems:0.9, nectar:0.9, core:0.9, boss:0.8, spring:0.45, hotspring:0.35},
+        desc:'氷を操る天使。無口で、少しませている。フレイラの隣は苦手' },
 };
 const PARTY_MAX=4;                        // v3.1 パーティの上限(作りは3〜4人まで)
 /* v3.1 出撃するヒロイン: META.party.roster(最初はルミナ一人)。HEROES に無い名前は落とし、上限で切る */
 function partyIds(){ const r=(typeof META!=='undefined'&&META&&META.party&&Array.isArray(META.party.roster))?META.party.roster:['lumina']; const out=[]; for(const id of r){ if(HEROES[id]&&!out.includes(id)) out.push(id); if(out.length>=PARTY_MAX) break; } return out.length?out:['lumina']; }
 /* v3.1 参戦の規則(合流の順に並ぶ)。minEra: 深淵が組み替わった後(世代≥minEra)に二連敗で入口へ戻された朝に来る。
    resets: 保険——前の合流からのリセット回数がこれに達したら世代を問わず来る。lateEra: 保険——一人(いまの人数)で世代がここまで進んだら、その組み替わりの朝に来る */
-const PARTY_JOIN=[ { id:'freila', minEra:3, resets:5, lateEra:4 } ];   // lateEra は「一人で第6層(骸の回廊)に降りさせない」で決まる: 開放階層=2+世代 なので、世代4の朝までに必ず合流する(第6〜8層の物語は二人のもの)。joinLate の文の線の数もこれに合わせてある
+const PARTY_JOIN=[ { id:'freila', minEra:3, resets:5, lateEra:4 },
+                   { id:'kuu',    minEra:6, resets:6, lateEra:7 } ];   // v5.0 開放階層=2+世代 なので、世代6=第8層が開く朝にクウが来る   // lateEra は「一人で第6層(骸の回廊)に降りさせない」で決まる: 開放階層=2+世代 なので、世代4の朝までに必ず合流する(第6〜8層の物語は二人のもの)。joinLate の文の線の数もこれに合わせてある
 const luminaUpCost=(id,rank)=>Math.round(LUMINA_UPG[id].base*Math.pow(1.5,rank));
 const luminaRank=id=>((META.lumina&&META.lumina.upg)||{})[id]||0;
 const shaveCost=rank=>Math.round(6+3*rank);   // 自己強化を1段削ぐオーブ費用
@@ -832,6 +862,12 @@ const UPG={
   fburst: {name:'爆炎',             d1:'じぶんの周りで',  d2:'炎がはぜる',      max:8, kind:'wp', bossW:0.7,  owner:'freila'},
   fpillar:{name:'火柱',             d1:'ちかい敵の足元に', d2:'火柱がたつ',      max:8, kind:'wp', bossW:1.25, owner:'freila'},
   fwing:  {name:'焔の翼',           d1:'とびこんで',      d2:'やきはらう',      max:8, kind:'wp', bossW:1.15, owner:'freila'},
+  /* v5.0 クウの武器(氷・支援) */
+  ineedle:{name:'氷の針',           d1:'つめたい針が',    d2:'おって ささる',   max:8, kind:'wp', bossW:1.00, owner:'kuu'},
+  ifield: {name:'冷気の帳',         d1:'まわりの敵が',    d2:'にぶく もろくなる', max:8, kind:'wp', bossW:1.10, owner:'kuu'},
+  ibloom: {name:'霜の華',           d1:'敵の足元に',      d2:'こおる華がひらく', max:8, kind:'wp', bossW:0.70, owner:'kuu'},
+  iorbit: {name:'氷衛',             d1:'みんなの まわりを', d2:'氷がまもって回る', max:8, kind:'wp', bossW:0.90, owner:'kuu'},
+  iecho:  {name:'氷の追い矢',       d1:'みんなの弾に',    d2:'氷の弾が ならぶ',  max:8, kind:'wp', bossW:1.35, owner:'kuu'},
   speed: {name:'スピードシューズ', d1:'いどう速度',      d2:'+10%',            max:5, kind:'ps'},
   vital: {name:'マックスハート',   d1:'さいだいHP+25',   d2:'いまも回復する',   max:5, kind:'ps'},
   magnet:{name:'ジェムマグネット', d1:'ジェムの回収',    d2:'はんいUP',        max:5, kind:'ps', bossW:0.8},
@@ -881,6 +917,13 @@ const EVOS={
     d1:'大きな火の輪が', d2:'触れた敵を焼き止める' },
   eruption:{ name:'大噴火', base:'fburst', pair:'area',
     d1:'噴き上がる炎が', d2:'すべてを弾き飛ばす' },
+  /* v5.0 クウの進化 */
+  blizzard:{ name:'吹雪', base:'ifield', pair:'area',
+    d1:'帳がひろがり、留まる者を', d2:'そのまま凍らせる' },
+  glacier:{ name:'氷河', base:'ibloom', pair:'ward',
+    d1:'華が床ごと凍りつき', d2:'道になって残る' },
+  aurora:{ name:'極光', base:'iorbit', pair:'dup',
+    d1:'八つの氷がみなを囲み', d2:'一撃を代わりに砕く' },
 };
 /* v2.1 引き継ぎで Lv が階層を跨いで積み上がるため、Lv20 を超えると必要量が更に増える(飽和させる) */
 const need=l=>Math.floor((6 + l*3.2 + l*l*0.18)*(1+BAL.NEED_SOFT_K*Math.max(0,l-BAL.NEED_SOFT_LV)));

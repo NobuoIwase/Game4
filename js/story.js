@@ -554,7 +554,10 @@ function storyNorm(lines){
       const m=t.match(/^「(.*)」$/s); if(m){ out.push({s:'lumina',t:m[1]}); continue; }
       const m2=t.match(/^（(.*)）$/s); if(m2){ out.push({s:'lumina',t:m2[1]}); continue; }
       out.push({s:'n',t}); continue; }
-    if(typeof l==='object' && typeof l.t==='string' && l.t.trim()){ out.push({s:l.s||'n', t:l.t.trim(), f:l.f}); }
+    if(typeof l==='object' && typeof l.t==='string' && l.t.trim()){
+      /* v5.0 まだ合流していないヒロインの台詞は落とす(三人ぶんで書いた場面が、二人でも一人でも成立する) */
+      if(l.s && typeof HEROES!=='undefined' && HEROES[l.s] && typeof partyIds==='function' && !partyIds().includes(l.s)) continue;
+      out.push({s:l.s||'n', t:l.t.trim(), f:l.f}); }
   }
   return out;
 }
@@ -564,6 +567,7 @@ function storyLineHtml(l){
   const e=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   if(x.s==='lumina') return `<div class="sl"><b class="who">ルミナ</b>「${e(x.t)}」</div>`;
   if(x.s==='freila') return `<div class="sl"><b class="who f">フレイラ</b>「${e(x.t)}」</div>`;   // v3.0
+  if(x.s==='kuu') return `<div class="sl"><b class="who k">クウ</b>「${e(x.t)}」</div>`;   // v5.0
   if(x.s==='town') return `<div class="sl"><b class="who t">街の人</b>「${e(x.t)}」</div>`;
   if(x.s==='voice') return `<div class="sl"><b class="who v">声</b>「${e(x.t)}」</div>`;
   return `<div class="sn">${e(x.t)}</div>`;
