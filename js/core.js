@@ -194,7 +194,7 @@ function defaultMeta(){
     curse:null,   // ボス敗北の呪い {id,left}
     map:{ gen:0, floor:0, known:{}, visited:{}, seen:0 },   // 地形マップの記憶(世代・階層ごと)
     run:{ floor:1, fails:0, day:1, clears:0, deepest:1, storySeen:{}, hero:null },   // hero: v2.1 引き継ぎ(リセットまで残る彼女のLv・武器・パッシブ・進化)   // v2.0 深淵の潜行: 今の階層 / この階層での連敗 / 潜行の日数 / 魔核討伐回数 / 最深到達
-    yami:{ st:0, era:-1, saved:0 },   // v5.0 ヤミコの筋: 0=まだ / 1=渦の中心で眠っている(ボス) / 2=淫魔に囲まれている(救出待ち) / 3=参戦済み。era はその段に入った世代
+    yami:{ st:0, era:-1, saved:0 },   // v5.0 ヤミコの筋: 0=まだ / 1=前回の最下層で眠っている(ボス) / 2=淫魔に囲まれている(救出待ち) / 3=参戦済み。era はその段に入った世代
     party:{ roster:['lumina'], joined:{}, resets:0 },   // v3.1 出撃するヒロイン(最初はルミナ一人。二連敗リセット×世代≥1でフレイラが合流) / 合流の記録 {id:{era,gen,why}} / 前の合流からのリセット回数(保険の判定に使う)
     settings:{ autoplay:true, gfx:'hd', gfxAuto:true, deckMode:'manual', advAuto:true },   // advAuto: v2.1 物語(ADV)の自動送り   // deckMode: manual / auto(階層に合わせておまかせ) / random   // gfx: 'hd'=描き込み / 'pixel'=ドット。gfxAuto: fps低下で装飾を自動で省く
   };

@@ -261,7 +261,7 @@ function startBattle(){
   spawnWildShrooms();     // v4.1 洞そのものとして生えている茸(媚茸・抱き茸)
   spawnRings();           // v4.1 菌輪
   spawnMires();           // v5.0 媚薬沼(水溜まりのように点在)
-  spawnYamiBoss();        // v5.0 渦の中心で眠っている者(ヤミコの一段目)
+  spawnYamiBoss();        // v5.0 前回の最下層(心臓がどいた後の窪み)で眠っている者(ヤミコの一段目)
   spawnYamiCaptive();     // v5.0 淫魔たちに囲まれている所(救出の一幕)
   dryInit();              // v5.0 焼けた床(タイル単位。前の日の分を復元)
   iceInit();              // v5.0 凍らせた床(前の日の分を復元)
@@ -3534,7 +3534,8 @@ function partyDanger(){ const B=G.B; if(B.heroes.some(h=>h.out)) return true;   
   for(const h of B.heroes){ if(h.out) continue; if(attachCount(h)>0 || h.pinned || h.hp<h.maxHp*0.4 || (h.threatV||0)>=BAL.GATHER_DANGER_THREAT || nearEnemyCount(h.x,h.y,BAL.GATHER_DANGER_R,false)>0) return true; } return false; }
 /* ================= v5.0 ヤミコ =================
    渦の中心で、魔核の闇と天使の加護の両方を持って生まれた者。堕天使ではない。
-   三段の筋: (1)渦の中心で眠っている大ボス → (2)淫魔たちに囲まれている所を助けられる → (3)参戦。
+   三段の筋: (1)前回の最下層で眠っている大ボス → (2)淫魔たちに囲まれている所を助けられる → (3)参戦。
+   居場所は毎回ひとつ上へ繰り上がる。動いているのは深淵のほうで、彼女は生まれた場所から動かない。
    ヒロインとしての特徴: 発光を持たないどころか、周りの光を吸う。吸っているだけなので、
    えっちな目に遭うと漏れて光る。闇の中でだけ瞬間移動できる。武器とパッシブは最初からLv5 */
 /* v5.0 合流の朝: 誰が来たかで場面を分ける(単一フラグのままだと、三人目の朝にフレイラとの出会いが再生される) */
