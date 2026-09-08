@@ -1464,8 +1464,12 @@ function zoneV6Tick(h,dt,ice){
     if(!ice && calmAt(h.x,h.y)>=BAL.MIR_ON){
       learnZone('mirror',dt*0.30);
       applyPleasure(BAL.MIR_PLE*dt); applySensit(BAL.MIR_SENS*dt);
+      /* v6.2 糸の床と同じ形。実測で mirrorT の最大が **ちょうど 7.00**(閾値7)で
+         止まり、150戦で刻まれたのは 1 回・次の150戦では 0 回だった。
+         凪いだ鏡の上に立てている時間は 0.46秒/戦しか無く、間を空けて溜め直す形なので、
+         届いている値の少し下に置く */
       h.mirrorT=(h.mirrorT||0)+dt;
-      if(h.mirrorT>7){ h.mirrorT=0; markTrait(h,'exhibit',1); }
+      if(h.mirrorT>BAL.MIR_TRAIT_T){ h.mirrorT=0; markTrait(h,'exhibit',1); }
     }
   }else h.mirrorT=Math.max(0,(h.mirrorT||0)-dt*BAL.TRAIT_FADE);
 
