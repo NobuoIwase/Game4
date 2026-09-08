@@ -226,6 +226,24 @@ const BAL={
   RIP_NEED_CLING:60,       // 絡みつき(ワーム)を剥がすのに必要な抵抗
   RIP_NEED_TETHER:85,      // 蔦(触手花/大触手)を剥がすのに必要な抵抗
   PIN_STAMINA_TH:35,       // これ未満のスタミナで拘束されると押し倒される
+
+  /* ---- v6.2 拘束の出入り ---- */
+  /* ★振りほどいた肢は、しばらく取られない。これが無いと沼のように
+     触手が複数ある相手で「剥がす→即つく→剥がれない」の輪に入る。
+     実測: 沼の触手は110戦で204回拘束を成立させていて、次点(ワーム88回)の倍以上 */
+  REGRAB_GRACE:1.15,       /* 振りほどいた肢が、次に取られるまでの猶予(秒) */
+  /* ★「えいっ」: スタミナを大きく払って、一気に振りほどく。★失敗する。
+     失敗したらスタミナだけ失って、もがいたぶんの熱が残る */
+  BURST_STAM:0.30,         /* 最大スタミナのこの割合を payer */
+  BURST_CD:6.5,            /* 成否によらず、次に試すまで */
+  BURST_BASE:0.74,         /* 素の成功率 */
+  BURST_PER_LIMB:0.10,     /* 取られている肢1本ごとに下がる */
+  BURST_FALL:0.24,         /* 堕ちきっているほど下がる(発情・敏感・催眠の合成) */
+  BURST_MIN:0.18,          /* 下限。どれだけ深くても、まだ望みはある */
+  BURST_FAIL_SENS:8,       /* 失敗した時、空振りした力が返ってくる分 */
+  BURST_LIMB_TH:3,         /* 何本取られたら試すか */
+  BURST_HOLD_TH:7.0,       /* 押し倒されて何秒たったら試すか */
+
   PIN_PULSE_T:0.8,         // もがき1拍
   PIN_PULSE_COST:6,        // もがき1拍のスタミナ
   PIN_ESCAPE_GAIN:18,      // もがき1拍の脱出ゲージ
@@ -1255,18 +1273,18 @@ const LUMINA_UPG={
 };
 /* v2.3 奥義(彼女の後半の強化): Lvで解放。オート(AI)が状況で使う。cd=秒 */
 const SKILLS={
-  blink:  { name:'光の跳躍', icon:'✦', lv:22, cd:20, desc:'囲まれた時(半径130に6体以上、または脅威が濃い時)、光になって最も空いている方へ180px跳ぶ。0.6秒無敵' },
-  purge:  { name:'浄化の脈', icon:'❂', lv:38, cd:35, desc:'二肢以上を掴まれるか押し倒された時、光を破裂させて全ての拘束を千切り、半径120の魔物を弾いて止める(ボスは短く)' },
-  bulwark:{ name:'聖光の壁', icon:'◈', lv:52, cd:45, desc:'HPが35%を切った時、4秒間 被ダメ-70%・自然回復×4' },
+  blink:  { name:'光の跳躍', icon:'✦', lv:22, cd:20, stam:15, desc:'囲まれた時(半径130に6体以上、または脅威が濃い時)、光になって最も空いている方へ180px跳ぶ。0.6秒無敵' },
+  purge:  { name:'浄化の脈', icon:'❂', lv:38, cd:35, stam:12, desc:'二肢以上を掴まれるか押し倒された時、光を破裂させて全ての拘束を千切り、半径120の魔物を弾いて止める(ボスは短く)' },
+  bulwark:{ name:'聖光の壁', icon:'◈', lv:52, cd:45, stam:16, desc:'HPが35%を切った時、4秒間 被ダメ-70%・自然回復×4' },
 };
 /* v3.0 ヒロイン定義。パーティは HEROES の並びで最大4人まで(現在は2人)。武器はヒロインごと、パッシブは共通、Lv・経験値はパーティ共通 */
 const HEROES={
   lumina:{ name:'ルミナ',   col:'#8fd3ff', hair:'#f2e8d8', sprite:'lumina', wps:['bolt','orb','nova','whip','rain','cross','sanct','blade','thunder','holy','chain','spirit','shield'],
            start:{bolt:2,orb:1}, grow:['bolt','orb','nova'], hpMul:1.22, spdMul:1.0, armor:2, dmgMul:1.20, regenMul:1.15, fearMul:1.0, braveAdd:0, kiteMul:1.0, lightR:330, lightK:1.0,   // v3.2 一人で第5層まで潜れるように(HP+22%・護り+2・火力+20%・回復+15%)。v3.1 の弱体化は取り消し
-           skills:{ blink:{ name:'光の跳躍', icon:'✦', lv:22, cd:20, desc:'囲まれた時、光になって最も空いている方へ180px跳ぶ。0.6秒無敵' },
-                    purge:{ name:'浄化の脈', icon:'❂', lv:38, cd:35, desc:'二肢以上を掴まれるか押し倒された時、光を破裂させて全ての拘束を千切り、半径120の魔物を弾いて止める' },
-                    bulwark:{ name:'聖光の壁', icon:'◈', lv:52, cd:45, desc:'HPが35%を切った時、4秒間 被ダメ-70%・自然回復×4' },
-                    halo:{ name:'聖光の環', icon:'◉', lv:70, cd:70, desc:'v6.0 全ての拘束を断ち、半径260の魔物を6秒足止めする。栓や窪みの類も、これだけは外から外せる' } },
+           skills:{ blink:{ name:'光の跳躍', icon:'✦', lv:22, cd:20, stam:15, desc:'囲まれた時、光になって最も空いている方へ180px跳ぶ。0.6秒無敵' },
+                    purge:{ name:'浄化の脈', icon:'❂', lv:38, cd:35, stam:12, desc:'二肢以上を掴まれるか押し倒された時、光を破裂させて全ての拘束を千切り、半径120の魔物を弾いて止める' },
+                    bulwark:{ name:'聖光の壁', icon:'◈', lv:52, cd:45, stam:16, desc:'HPが35%を切った時、4秒間 被ダメ-70%・自然回復×4' },
+                    halo:{ name:'聖光の環', icon:'◉', lv:70, cd:70, stam:26, desc:'v6.0 全ての拘束を断ち、半径260の魔物を6秒足止めする。栓や窪みの類も、これだけは外から外せる' } },
            pref:{shrine:1.2, stele:1.25, pool:1.1, spring:1.1, shroom:1.15, nectar:1.1, gems:1.1, explore:1.0, chest:1.0, boss:0.95, core:0.85, stairs:0.95},
            desc:'光の投射で戦う見習いの天使。元気で、少し怖がり' },
   freila:{ name:'フレイラ', col:'#ff7a5a', hair:'#c8434a', sprite:'freila', wps:['fsword','fring','fburst','fpillar','fwing'],
@@ -1275,10 +1293,10 @@ const HEROES={
               火は届く所でしか働かない——近いほど強い、という形で近接を得意にする。
               零距離で 1.22×1.55 = 約1.9倍、CLOSE_R の外では 1.22倍 */
            dmgMul:1.22, closeK:0.55,
-           skills:{ blaze:{ name:'焔の突進', icon:'➶', lv:22, cd:20, desc:'囲まれた時、炎になって最も空いている方へ突き抜け、通り道の魔物を焼いて止める。0.6秒無敵' },
+           skills:{ blaze:{ name:'焔の突進', icon:'➶', lv:22, cd:20, stam:15, desc:'囲まれた時、炎になって最も空いている方へ突き抜け、通り道の魔物を焼いて止める。0.6秒無敵' },
                     ember:{ name:'熾火の壁', icon:'◎', lv:38, cd:35, desc:'二肢以上を掴まれるか押し倒された時、炎を噴いて全ての拘束を焼き切り、半径120の魔物を弾いて4秒間 近づく魔物を焦がす' },
                     phoenix:{ name:'不死鳥', icon:'✺', lv:52, cd:60, desc:'HPが30%を切った時、炎とともに立ち上がりHP35%回復・2秒無敵・周囲を焼く' },
-                    scorch:{ name:'灼き払い', icon:'☄', lv:70, cd:70, desc:'v6.0 前方を一直線に焼き払い、通った床を乾かす。凍った面は水に、忘れ水は薄くなる' } },
+                    scorch:{ name:'灼き払い', icon:'☄', lv:70, cd:70, stam:26, desc:'v6.0 前方を一直線に焼き払い、通った床を乾かす。凍った面は水に、忘れ水は薄くなる' } },
            pref:{chest:1.1, boss:1.3, treasure:1.15, item:1.1, stairs:1.15, core:1.3, explore:1.1, event:1.05, shrine:0.8, stele:0.7, pool:0.85, spring:0.9, gems:0.9, shroom:0.85},
            hot:true,   // v5.0 熱いヒロイン(クウが離れたがる相手)
            desc:'火を操る近接主体の天使。気が強く、前に出る' },
@@ -1286,10 +1304,10 @@ const HEROES={
   kuu:{ name:'クウ', col:'#7fe8dd', hair:'#a5e0f5', sprite:'kuu', wps:['ineedle','ifield','ibloom','iorbit','iecho'],
         start:{ineedle:2,ifield:1}, grow:['ineedle','ifield','iorbit'], hpMul:0.94, spdMul:1.06, armor:0, dmgMul:0.86, stamMul:0.78,
         fearMul:0.85, braveAdd:0, kiteMul:1.20, lightR:150, lightK:0.72, heatShy:true, follow:'lumina',
-        skills:{ frostveil:{ name:'氷結の帳', icon:'❄', lv:22, cd:20, desc:'囲まれた時、逃げずにその場で周り半径170を凍らせて止める。0.6秒無敵で90px滑る' },
+        skills:{ frostveil:{ name:'氷結の帳', icon:'❄', lv:22, cd:20, stam:15, desc:'囲まれた時、逃げずにその場で周り半径170を凍らせて止める。0.6秒無敵で90px滑る' },
                  hoarfrost:{ name:'霜の枷',   icon:'✳', lv:38, cd:35, desc:'二肢以上を掴まれるか押し倒された時、氷の鞘が砕けて拘束を断ち、半径140を凍らせる。以後4秒、近づく魔物が凍てつく' },
                  stasis:{    name:'静止の一点', icon:'❈', lv:52, cd:60, desc:'HPが32%を切った時、半径260のすべてを止める。HP22%回復・2.4秒無敵。近くの味方は6秒 足が速く弾が増える' },
-                 zero:{      name:'絶対零度', icon:'❆', lv:70, cd:75, desc:'v6.0 半径380を4秒すべて止め、床を霜に書き換える。書き換えた面の上では、彼女だけが滑らずに走れる' } },
+                 zero:{      name:'絶対零度', icon:'❆', lv:70, cd:75, stam:26, desc:'v6.0 半径380を4秒すべて止め、床を霜に書き換える。書き換えた面の上では、彼女だけが滑らずに走れる' } },
         pref:{pool:1.35, lantern:1.25, stele:1.15, shroom:1.10, explore:1.15, gems:0.9, nectar:0.9, core:0.9, boss:0.8, spring:0.45, hotspring:0.35},
         desc:'氷を操る天使。無口で、少しませている。フレイラの隣は苦手' },
   /* v5.0 四人目。渦の中心で、魔核の闇と天使の加護の両方を持って生まれた者。堕天使ではない。
@@ -1298,10 +1316,10 @@ const HEROES={
         start:{dblade:5,dring:5}, grow:['dblade','dring','dspear'], hpMul:1.06, spdMul:1.04, armor:1, dmgMul:1.00, stamMul:0.92,
         fearMul:1.25, braveAdd:0.1, kiteMul:1.10, lightR:120, lightK:0.55, dark:true, pickPenalty:0.45,
         startPs:{ward:2, haste:1, reach:1, pierce:1},   // 最初から育っている(その代わりレベルアップの札に出にくい)
-        skills:{ shadowstep:{ name:'影渡り', icon:'❖', lv:18, cd:16, desc:'囲まれた時、闇の濃い所へ溶けて抜ける。暗いほど遠くへ跳べる' },
+        skills:{ shadowstep:{ name:'影渡り', icon:'❖', lv:18, cd:16, stam:13, desc:'囲まれた時、闇の濃い所へ溶けて抜ける。暗いほど遠くへ跳べる' },
                  nightveil:{  name:'夜の帳', icon:'☾', lv:34, cd:32, desc:'二肢以上を掴まれるか押し倒された時、闇が弾けて拘束を断ち、周りの魔物の目を潰す' },
                  duskcall:{   name:'黄昏の招き', icon:'✵', lv:50, cd:58, desc:'HPが35%を切った時、闇から三体の影を呼び、6秒のあいだ肩代わりさせる' },
-                 devour:{     name:'夜喰い', icon:'☽', lv:70, cd:70, desc:'v6.0 半径240の光を全部吸って自分のHPに変える。見られること自体が責めになる階では、これだけが答えになる' } },
+                 devour:{     name:'夜喰い', icon:'☽', lv:70, cd:70, stam:26, desc:'v6.0 半径240の光を全部吸って自分のHPに変える。見られること自体が責めになる階では、これだけが答えになる' } },
         pref:{chest:1.2, treasure:1.25, boss:1.1, core:1.15, item:1.15, gems:1.1, stairs:1.05, explore:0.95, shrine:0.55, spring:0.9, pool:0.9, stele:0.9, lantern:0.5, shroom:0.55},
         desc:'渦の中心で生まれた者。光を吸う闇を纏う。強がるが、追い詰められるとすぐ助けを乞う' },
 };

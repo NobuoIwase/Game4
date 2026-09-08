@@ -844,9 +844,12 @@ function heatUp(fromClimax){
 
 /* ================= 四肢拘束 ================= */
 function freeSlotFor(kind, legFirst, armsOnly){
-  const h=G.B.hero;
+  const h=G.B.hero, now=G.B.time;
   const order = armsOnly ? shuffle(['armL','armR']) : ((kind==='tether'||legFirst) ? ['legL','legR','armL','armR'] : shuffle(LIMBS.slice()));
-  for(const s of order){ if(!h.limbs[s]) return s; }
+  /* v6.2 振りほどいたばかりの肢は、猶予のあいだ取らせない。
+     ★空いていても取らせない——ここを通すと再拘束の輪が戻る */
+  const F=h.limbFree||{};
+  for(const s of order){ if(!h.limbs[s] && !((F[s]||0)>now)) return s; }
   return null;
 }
 function attachMonster(mon, kind, opt){
@@ -894,6 +897,9 @@ function detachLimb(slot, opt){
   if(!at) return;
   opt=opt||{};
   h.limbs[slot]=null;
+  /* v6.2 振りほどいた肢は、しばらく取られない。これが無いと、触手が複数ある相手
+     (沼の縁など)で「剥がす→即つく→剥がれない」の輪に入って抜けられなくなる */
+  (h.limbFree=h.limbFree||{})[slot]=(G.B?G.B.time:0)+BAL.REGRAB_GRACE;
   const mon=at.mon;
   if(mon && !mon.dead){
     // 同じ個体が別の肢も掴んでいる(粘獣王の呑み込みなど)なら、まだ離れない
@@ -1031,12 +1037,63 @@ function checkStaminaCollapse(){
     heroBubble(h,'はぁ……はぁ……',true,2);
   }
 }
+/* ================= v6.2 「えいっ」= スタミナを払う脱出 =================
+   全身を取られた時と、押し倒されて時間が経った時に、一度だけ大きく力を使う。
+   ★成功が保証されない。失敗するとスタミナだけ失って、空振りした力が熱になって返る。
+   成功率は「取られている本数」と「どこまで堕ちているか」で決まる——
+   深いほど下がるが BURST_MIN より下がらない(どれだけ深くても、まだ望みはある) */
+function burstChance(h){
+  const fall=Math.min(1, (h.aphro/100)*0.45 + Math.min(1,(h.sensit||0)/100)*0.30 + (h.hypnoLv||0)/3*0.25);
+  let c=BAL.BURST_BASE - BAL.BURST_PER_LIMB*restraintCount(h) - BAL.BURST_FALL*fall;
+  c*=heroFocus(h);                       /* 余裕が無いほど、力の入れどころを外す */
+  c*=1+0.02*(h.will||0);                 /* 負けを重ねた分だけ、底で手が動く */
+  return clamp(c, BAL.BURST_MIN, 0.95);
+}
+function burstReady(h){
+  const B=G.B; if(!B||h.out) return false;
+  if((h.burstCd||0)>B.time) return false;
+  if(h.stamina < h.staminaMax*BAL.BURST_STAM) return false;
+  if(h.freezeT>0 || h.climaxT>0) return false;      /* 止まっている間・達している間は力が入らない */
+  if(h.hypnoLv>=3) return false;                     /* 催眠Ⅲ: 抗うという考えが浮かばない */
+  const held=restraintCount(h);
+  return held>=BAL.BURST_LIMB_TH || (h.pinned && (B.time-(h.pinAt||B.time))>=BAL.BURST_HOLD_TH);
+}
+function tryBurst(h){
+  const B=G.B;
+  h.burstCd=B.time+BAL.BURST_CD;
+  h.stamina=Math.max(0, h.stamina - h.staminaMax*BAL.BURST_STAM);
+  const ok=Math.random()<burstChance(h);
+  if(ok){
+    for(const sl of attachedSlots(h)) detachLimb(sl,{fling:true});
+    for(const sl of suckSlots(h)) detachSucker(sl,{fling:true});
+    if(h.pinned){ h.pinned=false; h.pinBy=null; h.pinEscape=0; h.struggle=0; if(B.pinSceneHi===B.ci) B.pinScene=null; }
+    h.silkHold=0; h.frostHold=0;
+    h.ifr=Math.max(h.ifr||0, 0.5);
+    setBanner(h.name+'が振りほどいた','スタミナを使い切って、一息に','#8fd3ff');
+    heroBubble(h,{lumina:'……えいっ!', freila:'——どけ!', kuu:'……いま', yamiko:'離れなっ!'}[h.id]||'えいっ!',true,1.6);
+    parts(h.x,h.y-14,26,['#fff','#8fd3ff'],200,0.7); G.shake=Math.min(7,(G.shake||0)+4);
+  }else{
+    /* ★空振り。出した力はそのまま熱になって返る——苔もどきと同じ理屈 */
+    applySensit(BAL.BURST_FAIL_SENS);
+    if(typeof shamSoak==='function') shamSoak(h, 6);
+    setBanner(h.name+'は振りほどけなかった','力だけが抜けていく','#ff7aa2');
+    heroBubble(h,{lumina:'……っ、ぬけ、ない……!', freila:'……っ、外れない', kuu:'……足りない', yamiko:'……っ、まだ、か'}[h.id]||'……っ',true,1.6);
+    parts(h.x,h.y-14,12,['#ff9ec2','#fff'],120,0.5);
+  }
+  checkStaminaCollapse();
+  return ok;
+}
+function burstTick(h,dt){
+  if(!burstReady(h)) return;
+  tryBurst(h);
+}
 /* --- 押し倒し --- */
 function enterPin(mon){
   const B=G.B, h=B.hero;
   if(h.charmBind) releaseCharmBind(false);   // 押し倒しは魅了拘束を上書きする
   h.pinned=true; h.pinBy=mon||null; h.worn=(h.worn||0)+BAL.WORN_PIN;   // v5.0 押し倒された分の摩耗
   h.pinT=BAL.PIN_PULSE_T; h.pinEscape=0;
+  h.pinAt=B.time;   /* v6.2 いつ押し倒されたか(「えいっ」の長時間判定に使う) */
   markTrait(h,'loser',1);   /* v6.1 押し倒された回数が『負け癖』になる */
   h.vx=0; h.vy=0;
   let sid=mon?mon.id:'default';
@@ -1539,6 +1596,7 @@ function statesTick(h,dt){
   zoneV6Tick(h,dt,ice);   /* v6.0 鏡・紋・糸・霜・胎・澱・忘れ水・苔もどき */
   breathHeroTick(h,dt);   /* v6.0f 14階: 狭まった壁に擦れる */
   traitTick(h,dt);        /* v6.1 履歴が刻む性癖 */
+  burstTick(h,dt);        /* v6.2 全身を取られた時・長く押し倒された時の「えいっ」 */
   if(h.zone==='lewd'){   // v3.2 巣窟: 前室→沼→最奥と、奥ほど効きが強い。奥まで来たら引き返さない(前室でだけ「やっぱ無理」が出る)
     const dst=Math.max(0,Math.min(2,denStage(h.x,h.y)));
     if(!ice){ learnZone('lewd',dt*0.45); addHeatG(BAL.DEN_HEAT[dst]*dt); applySensit(BAL.DEN_SENS[dst]*dt); }
@@ -4859,7 +4917,8 @@ function yamiStep(p){
   for(let k=0;k<16;k++){
     const a=k*TAU/16, d=rand(BAL.YAMI_STEP_R*0.5,BAL.YAMI_STEP_R);
     const q=snapFloor(clampMapX(p.x+Math.cos(a)*d,40), clampMapY(p.y+Math.sin(a)*d,40), false, 3);
-    if(!q||!reachableAt(q.x,q.y,false)) continue;
+    /* ★壁を挟んだ先へは溶けない(分断を防ぐ)。§ blink と同じ理由 */
+    if(!q||!reachableAt(q.x,q.y,false)||!losClear(p.x,p.y,q.x,q.y,false)) continue;
     if(lightAt(q.x,q.y)>BAL.YAMI_STEP_DARK) continue;   // 明るい所へは跳べない
     const sc=nearEnemyCount(q.x,q.y,150,true)+nearEnemyCount(q.x,q.y,60,true)*2;
     if(sc<bs){ bs=sc; best=q; }
@@ -5374,8 +5433,14 @@ function sentinelTick(e,dt,d,dx,dy){
 }
 /* ================= v2.3 奥義(彼女の後半の強化) =================
    Lvで解放され、AIが状況で使う。跳躍=囲まれた時に空いている方へ、浄化=拘束を千切って弾く、壁=瀕死で被ダメ-70% */
-function skillReady(p,id){ const s=heroSkills(p)[id]; return !!s && p.level>=s.lv && (p.skillCd[id]||0)<=0; }   // v3.0 ヒロインごとの奥義
-function useSkill(p,id){ const B=G.B, s=heroSkills(p)[id]; p.skillCd[id]=s.cd; B.nSkill=B.nSkill||{}; B.nSkill[id]=(B.nSkill[id]||0)+1; setBanner('奥義 '+s.name,s.desc.split('。')[0],'#ffd76a'); sayLine('skill.'+id,2,0,s.name+'!'); S.lvup(); }
+/* v6.2 奥義にもスタミナが要る。足りなければ撃てない——
+   「切り札はあるが、疲れていると出せない」を数字にする */
+function skillReady(p,id){ const s=heroSkills(p)[id];
+  if(!s || p.level<s.lv || (p.skillCd[id]||0)>0) return false;
+  if((s.stam||0)>0 && p.stamina<s.stam) return false;
+  return true; }
+function useSkill(p,id){ const B=G.B, s=heroSkills(p)[id]; p.skillCd[id]=s.cd;
+  if(s.stam) { p.stamina=Math.max(0,p.stamina-s.stam); checkStaminaCollapse(); }   /* v6.2 奥義のスタミナ消費 */ B.nSkill=B.nSkill||{}; B.nSkill[id]=(B.nSkill[id]||0)+1; setBanner('奥義 '+s.name,s.desc.split('。')[0],'#ffd76a'); sayLine('skill.'+id,2,0,s.name+'!'); S.lvup(); }
 function nearEnemyCount(x,y,r,all){ let n=0; for(const e of G.B.enemies){ if(e.dead||e.dormant||e.item||e.state==='attached'||e.id==='imp') continue; if(e.id==='flower' && !e.revealed) continue; if(!all && MONSTERS[e.id].spd<=0) continue; if(Math.hypot(e.x-x,e.y-y)<r) n++; } return n; }   // all=true で据わった個体も数える(逃げ先・跳び先の採点)
 function skillTick(dt){
   const B=G.B, p=B.hero;
@@ -5392,7 +5457,7 @@ function skillTick(dt){
     for(const sl of suckSlots(p)) detachSucker(sl,{fling:true});
     if(p.pinned){ p.pinned=false; p.pinBy=null; p.pinEscape=0; p.struggle=0; if(B.pinSceneHi===B.ci) B.pinScene=null; }
     for(const e of B.enemies){ if(e.dead||e.dormant||e.item) continue; const dx=e.x-p.x, dy=e.y-p.y, d=Math.hypot(dx,dy)||0.001; if(d<120){ if(MONSTERS[e.id].spd>0 && !MONSTERS[e.id].guardian){ e.x+=dx/d*90; e.y+=dy/d*90; collideMap(e,e.r*0.75,canFly(e.id)); } e.stun=Math.max(e.stun||0,e.boss?0.6:1.2); } }
-    p.ifr=Math.max(p.ifr,1.0); p.stamina=Math.min(p.staminaMax,p.stamina+20); useSkill(p,'purge'); parts(p.x,p.y-14,40,['#fff','#8fd3ff','#ffd76a'],260,0.9); G.shake=Math.min(8,G.shake+5);
+    p.ifr=Math.max(p.ifr,1.0); useSkill(p,'purge');   /* v6.2 以前あった +20 の回復は取った(消費と二重になる) */ parts(p.x,p.y-14,40,['#fff','#8fd3ff','#ffd76a'],260,0.9); G.shake=Math.min(8,G.shake+5);
   }
   /* ================= v6.0 四つ目の奥義(Lv70) =================
      ★どれも「地形の責め」への答えになっている。栓・凍り・忘れ水・視線に対して、
@@ -5467,7 +5532,11 @@ function skillTick(dt){
       for(const e of B.enemies){ if(e.dead||e.dormant||e.item||e.state==='attached') continue; const dx=e.x-p.x, dy=e.y-p.y, d=Math.hypot(dx,dy)||0.001; if(d<80){ damageEnemy(e,14*dt*(1+0.05*p.level)); if(MONSTERS[e.id].spd>0 && !MONSTERS[e.id].guardian){ e.x+=dx/d*40*dt; e.y+=dy/d*40*dt; } } } }
     // 焔の突進: 囲まれたら空いている方へ突き抜け、通り道を焼く
     if(skillReady(p,'blaze') && B.time>=(p.blinkRetry||0) && attachCount(p)===0 && !p.pinned && !p.charmBind && p.climaxT<=0 && (nearEnemyCount(p.x,p.y,130)>=6 || (p.press||0)>=1.4)){
-      let best=null, bs=1e9; for(let k=0;k<12;k++){ const a=k*TAU/12; const q=snapFloor(clampMapX(p.x+Math.cos(a)*180,40),clampMapY(p.y+Math.sin(a)*180,40),false,3); if(!q||!reachableAt(q.x,q.y,false)) continue; const sc=nearEnemyCount(q.x,q.y,150,true)+nearEnemyCount(q.x,q.y,60,true)*2; if(sc<bs){ bs=sc; best=q; } }
+      let best=null, bs=1e9; for(let k=0;k<12;k++){ const a=k*TAU/12; const q=snapFloor(clampMapX(p.x+Math.cos(a)*180,40),clampMapY(p.y+Math.sin(a)*180,40),false,3);
+        /* ★reachableAt は「マップの出発点から届くか」しか見ない。盤は一つに繋がっているので
+           壁の向こうでも真になり、跳んだ先が壁越しになってパーティが分断されていた。
+           いま居る場所から壁を挟んでいないことを losClear で確かめる */
+        if(!q||!reachableAt(q.x,q.y,false)||!losClear(p.x,p.y,q.x,q.y,false)) continue; const sc=nearEnemyCount(q.x,q.y,150,true)+nearEnemyCount(q.x,q.y,60,true)*2; if(sc<bs){ bs=sc; best=q; } }
       p.blinkRetry=B.time+0.5;
       if(best && bs<nearEnemyCount(p.x,p.y,150,true)){ const x0=p.x, y0=p.y, vx=best.x-x0, vy=best.y-y0, L=Math.hypot(vx,vy)||1;
         for(const e of B.enemies){ if(e.dead||e.dormant||e.item) continue; const t=Math.max(0,Math.min(1,((e.x-x0)*vx+(e.y-y0)*vy)/(L*L))); const px=x0+vx*t, py=y0+vy*t; if(Math.hypot(e.x-px,e.y-py)<44+e.r*0.5){ damageEnemy(e,30*(1+0.06*p.level)); e.stun=Math.max(e.stun||0,e.boss?0.4:0.8); } }
@@ -5546,7 +5615,11 @@ function skillTick(dt){
   }
   // 光の跳躍: 囲まれた
   if(skillReady(p,'blink') && B.time>=(p.blinkRetry||0) && attachCount(p)===0 && !p.pinned && !p.charmBind && p.climaxT<=0 && (nearEnemyCount(p.x,p.y,130)>=6 || (p.press||0)>=1.4)){
-    let best=null, bs=1e9; for(let k=0;k<12;k++){ const a=k*TAU/12; const q=snapFloor(clampMapX(p.x+Math.cos(a)*180,40),clampMapY(p.y+Math.sin(a)*180,40),false,3); if(!q||!reachableAt(q.x,q.y,false)) continue; const sc=nearEnemyCount(q.x,q.y,150,true)+nearEnemyCount(q.x,q.y,60,true)*2; if(sc<bs){ bs=sc; best=q; } }
+    let best=null, bs=1e9; for(let k=0;k<12;k++){ const a=k*TAU/12; const q=snapFloor(clampMapX(p.x+Math.cos(a)*180,40),clampMapY(p.y+Math.sin(a)*180,40),false,3);
+        /* ★reachableAt は「マップの出発点から届くか」しか見ない。盤は一つに繋がっているので
+           壁の向こうでも真になり、跳んだ先が壁越しになってパーティが分断されていた。
+           いま居る場所から壁を挟んでいないことを losClear で確かめる */
+        if(!q||!reachableAt(q.x,q.y,false)||!losClear(p.x,p.y,q.x,q.y,false)) continue; const sc=nearEnemyCount(q.x,q.y,150,true)+nearEnemyCount(q.x,q.y,60,true)*2; if(sc<bs){ bs=sc; best=q; } }
     p.blinkRetry=B.time+0.5;   // 跳べる先が無ければ0.5秒は探し直さない(毎フレームの走査を避ける)
     if(best && bs<nearEnemyCount(p.x,p.y,150,true)){ parts(p.x,p.y-14,24,['#fff','#8fd3ff'],200,0.6); p.x=best.x; p.y=best.y; p.vx=p.vy=0; p.path=null; p.ifr=Math.max(p.ifr,0.6); parts(p.x,p.y-14,24,['#fff','#ffd76a'],200,0.6); useSkill(p,'blink'); }
   }
