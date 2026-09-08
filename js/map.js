@@ -336,7 +336,11 @@ function genMap(){
     for(let t=2;t<path.length-2;t+=2) feat.seatPath.push(T2(path[t][0],path[t][1]));
     /* 座を置く: 道に沿って SEAT_GAP おき。出発点と降り口の手前は空ける */
     const gapT=Math.max(4,Math.round(BAL.SEAT_GAP/MAP_T));
-    for(let t=gapT;t<path.length-gapT;t+=gapT){
+    /* ★降り口の広間(arena の半径8タイル)には食い込ませない。path[0] が降り口なので、
+       半径8＋余白2 の 10タイルぶん離れてから座を置く。
+       間隔そのものは SEAT_GAP のまま——ここで空けるのは「広間を侵さない距離」だけ */
+    const clearT=10;
+    for(let t=Math.max(gapT,clearT);t<path.length-gapT;t+=gapT){
       const [si,sj]=path[t];
       feat.seats.push(T2(si,sj));
       usedF.push({i:si,j:sj,r:4});
@@ -377,7 +381,12 @@ function genMap(){
     else arena(ex.i,ex.j,fl2>=4?8:7,fl2>=4?SOLID_ROCK:SOLID_CLIFF);
     feat.exit=T2(ex.i,ex.j);
     feat.list.push(Object.assign({kind:'arena',r:(F.final?10:8)*MAP_T},T2(ex.i,ex.j)));
-    if(F.seatway) seatway(ex.i,ex.j);   /* v6.0f 14階: 待ち手の間合いを通らない道は無い */
+    /* v6.0f 14階: 待ち手の間合いを通らない道は無い。
+       ★最深階(＝心臓がそこに居る夜)では引かない。降りる先が無いので道の意味が無い上に、
+         座のまわりを埋める輪が魔核の間へ食い込んで、party に遮蔽を与えてしまう。
+         実測: 世代12(最深が14階になる唯一の世代)の毎秒が 280→412(線0)・301→456(線6)、
+         討伐が 2/8→6/8・3/8→7/8。壁越しに心臓を削れる盤になっていた */
+    if(F.seatway && !F.final) seatway(ex.i,ex.j);
     lewdDen();
     /* ★ここで初めて岩を生やす */
     rockForms();
