@@ -331,15 +331,22 @@ function genMap(){
     if(path.length<14) return;
     const onPath=new Uint8Array(N);
     for(const [i,j] of path) for(let dj=-1;dj<=1;dj++) for(let di=-1;di<=1;di++){ const ii=i+di, jj=j+dj; if(inMap(ii,jj)) onPath[jj*MAP_W+ii]=1; }
-    /* 道そのものも控えておく。この階で出された「動く種」は、壁に吸われて
-       この道のどこかに据わる——だから彼女は、道いっぱいの待ち手の間を歩くことになる */
-    for(let t=2;t<path.length-2;t+=2) feat.seatPath.push(T2(path[t][0],path[t][1]));
     /* 座を置く: 道に沿って SEAT_GAP おき。出発点と降り口の手前は空ける */
     const gapT=Math.max(4,Math.round(BAL.SEAT_GAP/MAP_T));
     /* ★降り口の広間(arena の半径8タイル)には食い込ませない。path[0] が降り口なので、
        半径8＋余白2 の 10タイルぶん離れてから座を置く。
        間隔そのものは SEAT_GAP のまま——ここで空けるのは「広間を侵さない距離」だけ */
     const clearT=10;
+    /* 道そのものも控えておく。この階で出された「動く種」は、壁に吸われて
+       この道のどこかに据わる——だから彼女は、道いっぱいの待ち手の間を歩くことになる。
+       ★v6.2 ここも降り口から clearT だけ空ける。空けないと、プレイヤーが召喚した
+       魔物が降り口の際に据わって永久に居座り、彼女は降りられなくなる。
+       降下の条件は「四肢がどれも取られていないまま EXIT_STAND 秒そばに立つ」で、
+       間合い SEAT_REACH の待ち手が隣に居ると一度も成立しない。
+       実測: 14階だけ 6回中2回が500秒で終わらず(13階・15階は 6/6 で終わる)、
+       終わらなかった回も降り口に 1px まで着き、そばに約6秒立っていた。
+       座そのものは前から空けてあったのに、この行だけ t=2 から始めていた */
+    for(let t=Math.max(2,clearT);t<path.length-2;t+=2) feat.seatPath.push(T2(path[t][0],path[t][1]));
     for(let t=Math.max(gapT,clearT);t<path.length-gapT;t+=gapT){
       const [si,sj]=path[t];
       feat.seats.push(T2(si,sj));
