@@ -4013,6 +4013,14 @@ function enemiesUpdate(dt){
     }
 
     let dx=p.x-e.x, dy=p.y-e.y;
+    /* v6.3 巣窟の住人は、巣窟から出ていかない。
+       ★これが無いと「その階の巣窟に住み着いている顔ぶれ」がただの追加の雑魚になり、
+         盤じゅうに散って巣窟の顔が消える。輪の外へ出たら、帰る向きへ歩かせる */
+    if(e.denSeed){ const L=denOf();
+      if(L){ const ddn=Math.hypot(e.x-L.x,e.y-L.y), lim=Math.max(L.rx,L.ry)+BAL.DEN_SEED_LEASH;
+        /* 境で行ったり来たりしないよう、帰り始めたら 0.7倍の内へ入るまで帰り続ける */
+        if(ddn>lim) e.denBack=true; else if(ddn<lim*0.7) e.denBack=false;
+        if(e.denBack){ dx=L.x-e.x; dy=L.y-e.y; } } }
     const d=Math.hypot(dx,dy)||0.001;
     const fly=canFly(e.id);
     // 壁で彼女が見えないときは、流れ場(BFS)に沿って回り込む(以降の追跡・照準はその向きを使う)
