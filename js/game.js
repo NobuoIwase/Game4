@@ -1751,8 +1751,13 @@ function condTick(h,dt){
   for(const k in h.resist) h.resist[k]=Math.max(0,h.resist[k]-dt*0.04);
   if(h.refractT>0) h.refractT-=dt;
   // 吸い付き: 快感を注ぎ続け、体液=スタミナも吸っていく(死んだ個体は外す)
+  /* ★v6.2 applyPleasure が輪の途中で絶頂を起こすと、そこで別の吸盤が外れる。
+     suckSlots が返した一覧は取った時点の写しなので、次の回で h.suckers[sl] が
+     null になっていて落ちていた(通しを最後まで回せるようにして初めて出た)。
+     肢では二度直してある同じ罠。毎回引き直して確かめる */
   for(const sl of suckSlots(h)){
     const at=h.suckers[sl];
+    if(!at){ continue; }
     if(!at.mon||at.mon.dead){ h.suckers[sl]=null; continue; }
     applyPleasure(BAL.SUCK_PLEAS*unitPmul(at.mon)*dt);
   }
