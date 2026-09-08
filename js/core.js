@@ -190,6 +190,7 @@ function defaultMeta(){
     traits:{},                                  // 身についた性癖(永続) {musk:Lv}
     codex:{},                                   // 図鑑: {id:{seen,met,climax,capture,kills}}
     codexH:{},                                  // v5.8 ヒロインごとの手記 {ヒロインid:{魔物id:{seen,met,...}}}
+    readScenes:{},                              // v6.5 一度でも目に触れた押し倒し・敗北の本文 {ヒロインid:{'kind/相手id':1}}。図鑑から読み返せる
     rot:{ dmg:0, ail:0, captures:0, battles:0 }, // 世代内記録(リセットされる)
     lifeH:{},                                   // v5.8 ヒロインごとの通算記録 {id:{dmg,ail,kills,climax,captures,capBy,ailBy,...}}
     rotH:{},                                    // v5.8 ヒロインごとの世代内記録(リセットされる)

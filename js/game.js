@@ -784,6 +784,7 @@ function enterClimax(){
   if(B.climaxN===1) setBanner('絶頂','ルミナは立っていられない','#ff5d9e');
   if(!h.pinned && !h.charmBind){
     B.pinScene=sceneForHero(B.hero,'climax','default'); B.pinSceneHi=B.ci;
+    recordScene(B.hero.id,'climax','default');   /* v6.5 図鑑で読み返せるように */
     B.pinSceneIdx=0; B.pinSceneT=0;
   }
   parts(h.x,h.y-18,20,['#ff9ec2','#ff5d9e','#fff'],150,0.8);
@@ -1115,6 +1116,7 @@ function enterPin(mon){
   { const lh=h.lastHypno;   // 催眠Ⅱ以上で押し倒された時は、催眠の源(ゲイザー)の場面——抵抗しなかった理由はそこにある
     if(h.hypnoLv>=2 && lh && B.time-lh.t<25 && SCENES.pin[lh.id] && !(mon&&mon.boss)) sid=lh.id; }
   B.pinScene=sceneForHero(h,'pin', sid); B.pinSceneHi=B.ci;   // v3.0 押し倒された子の声で
+  recordScene(h.id,'pin',sid);   /* v6.5 図鑑で読み返せるように */
   B.pinSceneIdx=0; B.pinSceneT=0;
   setBanner(h.name+'が押し倒された!','もがいて逃れろ——スタミナかHPが尽きれば敗北','#ff5d7a');
   heroBubble(h,{freila:'……っ、どけ!', kuu:'……のいて', yamiko:'……離れなさい。いま'}[h.id]||'はなれて……っ!',true,2);
@@ -1167,6 +1169,7 @@ function enterCharmBind(mon){
   h.vx=0; h.vy=0;
   mon.stun=0;
   B.pinScene=sceneForHero(B.hero,'charmbind', mon.id); B.pinSceneHi=B.ci;
+  recordScene(B.hero.id,'charmbind',mon.id);   /* v6.5 図鑑で読み返せるように */
   B.pinSceneIdx=0; B.pinSceneT=0;
   setBanner('魅了拘束!','ルミナは自分から縋りついた——正気に戻れば振りほどける','#ff86b3');
   heroBubble(h,'あったかい……ちがう、これ、ちがうのに……',true,3);
@@ -8880,6 +8883,21 @@ function heroSkills(p){ return (HEROES[p.id]||HEROES.lumina).skills; }
 /* 場面は {title, beats:[…]} の形。素の配列で書かれたものも受け取る——
    v5.0 でクウとヤミコの表の一部が配列のまま入っていて、結果画面が sc.beats.map で落ち、
    押し倒しの本文は render 側の番人に弾かれて黙って出ていなかった。読む所で一度そろえる */
+/* ★v6.5 目に触れた本文を控える。本文そのものではなく鍵だけを持ち、読み返す時に
+   sceneForHero で組み直す——だから本文を書き換えても、控えは古びない */
+function recordScene(heroId,kind,sid){
+  if(!heroId||!kind) return;
+  META.readScenes=META.readScenes||{};
+  const R=META.readScenes[heroId]=META.readScenes[heroId]||{};
+  const k=kind+'/'+(sid||'default');
+  if(R[k]) return;
+  R[k]=1; saveMeta();
+}
+/* 控えた鍵から本文を組み直す(図鑑の読み返し用) */
+function sceneReplay(heroId,key){
+  const i=String(key).indexOf('/'); if(i<0) return null;
+  return sceneForHero({id:heroId}, key.slice(0,i), key.slice(i+1));
+}
 function sceneNorm(r){ return Array.isArray(r) ? {beats:r} : r; }
 function sceneForHero(h,kind,id){
   if(id && MONSTERS[id] && MONSTERS[id].base) id=MONSTERS[id].base;   /* v6.0 本文は base をそのまま継ぐ */
@@ -9080,18 +9098,87 @@ function battleTick(dt){
 
   autoDirector(dt);
 }
+/* ★v6.5 敗北のあとの観測: 形だけの抵抗
+   ------------------------------------------------------------
+   捕まえた夜を、その場で終わらせない。彼女は形だけ抗い続け、次々に押し倒される。
+   ★ここでは何も進まない——オーブもエッセンスも経験値も増えず、日も進まない。
+     battleTick を回さないので、増える経路そのものが無い(数字を止める細工は不要)。
+   主(pinSceneHi)を順に回すので、四人ぶんの本文が順に読める。
+   終わりはプレイヤーが決める(afterEnd) */
+function afterStart(){
+  const B=G.B; if(!BAL.AFTER_ON) return false;
+  if(!B.enemies.some(e=>!e.dead)) return false;
+  B.after={t:0, phase:'gap', gap:0.4, hi:-1, n:0};
+  for(const h of B.heroes) h.pinned=true;
+  setBanner('観測はまだ終わらない','彼女は形だけ抗い続ける — 終えるなら「観測を終える」','#c98cff');
+  if(typeof UI!=='undefined' && UI.afterBtn) UI.afterBtn(true);
+  return true;
+}
+function afterNextPin(){
+  const B=G.B, A=B.after; if(!A) return;
+  /* 主を順に回す。四人ぶんの本文を、同じ画面で順に読ませるため */
+  const idx=B.heroes.length?((A.hi+1)%B.heroes.length):0;
+  A.hi=idx; const h=B.heroes[idx]; if(!h) return;
+  const near=B.enemies.filter(e=>!e.dead && !MONSTERS[e.id].item);
+  const mon=near.length?near[(Math.random()*near.length)|0]:null;
+  if(mon){ mon.x=h.x+rand(-14,14); mon.y=h.y+rand(-10,10); }
+  const sid=mon?mon.id:'default';
+  B.ci=idx;
+  B.pinScene=sceneForHero(h,'pin',sid); B.pinSceneHi=idx; B.pinSceneIdx=0; B.pinSceneT=0;
+  if(B.pinScene) recordScene(h.id,'pin',sid);   /* 図鑑で読み返せるように控える */
+  h.pinned=true; h.pinBy=mon||null; h.vx=0; h.vy=0;
+  A.phase='pin'; A.t=0; A.n++;
+  G.shake=Math.min(7,G.shake+4); S.capture();
+}
+function afterEnd(){
+  const B=G.B; if(!B||!B.after) return;
+  B.after=null;
+  if(typeof UI!=='undefined' && UI.afterBtn) UI.afterBtn(false);
+  endBattle('capture');
+}
 function capturedTick(dt){
   const B=G.B, p=B.hero;
-  B.captureT-=dt;
-  p.anim+=dt;
+  const A=B.after;
+  if(!A){
+    B.captureT-=dt;
+    p.anim+=dt;
+    for(const e of B.enemies){
+      if(e.dead||e.state==='attached') continue;
+      const dx=p.x-e.x, dy=p.y-e.y, d=Math.hypot(dx,dy)||1;
+      if(d>36 && MONSTERS[e.id].spd>0){ e.x+=dx/d*60*dt; e.y+=dy/d*60*dt; }
+      e.t+=dt;
+    }
+    if(Math.random()<dt*10) parts(p.x+rand(-20,20),p.y-rand(0,26),1,['#c98cff','#8458d8','#ff86b3'],40,0.8);
+    if(B.captureT<=0){ if(!afterStart()) endBattle('capture'); }
+    return;
+  }
+  /* --- 観測フェーズ --- */
+  A.t+=dt;
+  const sub=B.heroes[A.hi]||p;
+  sub.anim+=dt;
+  for(const h of B.heroes){ h.pinned=true; h.struggle=Math.max(0,(h.struggle||0)-dt*0.2); }
   for(const e of B.enemies){
-    if(e.dead||e.state==='attached') continue;
-    const dx=p.x-e.x, dy=p.y-e.y, d=Math.hypot(dx,dy)||1;
-    if(d>36 && MONSTERS[e.id].spd>0){ e.x+=dx/d*60*dt; e.y+=dy/d*60*dt; }
+    if(e.dead) continue;
+    const dx=sub.x-e.x, dy=sub.y-e.y, d=Math.hypot(dx,dy)||1;
+    if(d>34 && MONSTERS[e.id].spd>0){ e.x+=dx/d*52*dt; e.y+=dy/d*52*dt; }
     e.t+=dt;
   }
-  if(Math.random()<dt*10) parts(p.x+rand(-20,20),p.y-rand(0,26),1,['#c98cff','#8458d8','#ff86b3'],40,0.8);
-  if(B.captureT<=0) endBattle('capture');
+  if(Math.random()<dt*12) parts(sub.x+rand(-22,22),sub.y-rand(0,28),1,['#c98cff','#8458d8','#ff86b3'],40,0.8);
+  if(A.phase==='gap'){
+    if(A.t>=(A.gap||BAL.AFTER_GAP)){ A.gap=BAL.AFTER_GAP; afterNextPin(); }
+    return;
+  }
+  /* 本文を送る(pinTick は回っていないので、ここで送る) */
+  B.pinSceneT+=dt;
+  if(B.pinScene && B.pinSceneT>BAL.AFTER_BEAT_T){ B.pinSceneT=0; B.pinSceneIdx++; }
+  if(Math.random()<dt*0.5){   /* 形だけの抵抗 */
+    const V={lumina:['……や、だ……','……もう、やめ……','……はな、して'], freila:['……っ、まだ……','……どけ、って……'],
+             kuu:['……いや……','……やめ、て'], yamiko:['……もう、いい……','……好きに、しなさい']}[sub.id]||['……や、だ……'];
+    heroBubble(sub, V[(Math.random()*V.length)|0], true, 3);
+  }
+  /* 本文を最後まで読ませてから次へ。AFTER_PIN_T は保険の上限 */
+  const done=B.pinScene && B.pinScene.beats && B.pinSceneIdx>=B.pinScene.beats.length;
+  if(done || A.t>=BAL.AFTER_PIN_T){ A.phase='gap'; A.t=0; B.pinScene=null; }
 }
 function survivedTick(dt){
   const B=G.B, p=B.hero;

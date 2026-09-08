@@ -31,6 +31,8 @@ const UI={
       $('btnSpd').textContent='▶ ×'+G.spd;
     });
     $('btnRetreat').addEventListener('click',()=>{
+      /* ★v6.5 敗北のあとの観測は、このボタンで終える(バーの場所を新しく作らない) */
+      if(G.B && G.B.after && G.mode==='captured'){ afterEnd(); return; }
       if(!G.B||G.mode!=='battle') return;
       const now=performance.now();
       if(now-this.retreatArm<2000){ endBattle('retreat'); }
@@ -223,6 +225,8 @@ const UI={
     }
     this.advSyncAuto(); box.hidden=false; this.advRender();
   },
+  /* ★v6.5 敗北のあとの観測の間だけ、撤退ボタンを「観測を終える」に貸す */
+  afterBtn(on){ const b=$('btnRetreat'); if(!b) return; b.textContent=on?'観測を終える':'撤退'; b.classList.toggle('warn',!!on); },
   advSyncAuto(){ const b=$('advAuto'); if(b) b.textContent='自動送り: '+((META.settings.advAuto!==false)?'ON':'OFF'); },
   advRender(){
     const A=this.adv, ln=A.lines[A.idx]; if(!ln) return;

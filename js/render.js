@@ -3502,7 +3502,7 @@ function getCG(names){
 }
 function drawCutin(g){
   const B=G.B; if(!B) return;
-  const h=(B.heroes&&B.heroes[B.pinSceneHi]&&!B.heroes[B.pinSceneHi].out)?B.heroes[B.pinSceneHi]:B.hero;   // v3.0 場面の主
+  const h=(B.heroes&&B.heroes[B.pinSceneHi]&&(!B.heroes[B.pinSceneHi].out||B.after))?B.heroes[B.pinSceneHi]:B.hero;   // v3.0 場面の主 / v6.5 観測フェーズでは捕まった子も主になる
   let im=null;
   if(h.pinned){ const id=h.pinBy?h.pinBy.id:'default'; im=getCG(['pin_'+id+'.png','pin.png']); }
   else if(h.charmBind){ im=getCG(['charmbind_'+h.charmBind.mon.id+'.png','charmbind.png']); }
@@ -3521,7 +3521,7 @@ function drawCutin(g){
 }
 function drawPinScene(g){
   const B=G.B; const hh=B&&((B.heroes&&B.heroes[B.pinSceneHi])||B.hero);   // v3.0 場面の主(押し倒された/絶頂した子)
-  if(!B||!hh||hh.out||!(hh.pinned||hh.charmBind||hh.climaxT>0)||!B.pinScene||!B.pinScene.beats||!B.pinScene.beats.length) return;
+  if(!B||!hh||(hh.out&&!B.after)||!(hh.pinned||hh.charmBind||hh.climaxT>0)||!B.pinScene||!B.pinScene.beats||!B.pinScene.beats.length) return;   /* v6.5 観測フェーズは out でも描く */
   const beat=B.pinScene.beats[B.pinSceneIdx % B.pinScene.beats.length];
   g.save();
   const w2=Math.min(640,W-80);
