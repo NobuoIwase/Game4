@@ -189,7 +189,7 @@ function nearestOfId(id){
 function heroFocus(h){
   const aph=h.heatLv>0 ? 0.2+0.1*h.heatLv+(h.waveDur>0?0.1:0) : h.aphro/100*0.2;
   /* v6.1 囃されたがり: 気が散らなくなる / 見られ熱: 見られていても手元が狂わない */
-  const tz=0.08*Math.min(2,h.teaseN)*(1-0.25*traitLv(h,'impLove'));
+  const tz=0.08*Math.min(BAL.IMP_TEASE_CAP,h.teaseN)*(1-0.25*traitLv(h,'impLove'));   /* v6.2 上限が literal の 2 に二重化していて、BAL 側を動かしても効かなかった */
   const fp=h.focusPen*(h.watchedT>0?(1-0.12*traitLv(h,'publicHeat')):1);
   return clamp(1 - aph - fp - tz, 0.25, 1);
 }
@@ -574,7 +574,11 @@ function knowLv(id){
 function learn(id,kind){
   if(!MONSTERS[id]) return;
   const before=knowLv(id); const k=genKnow(id);
-  if(kind==='cap') k.cap++; else k.met++;
+  /* v6.2 忘れる従順の代償側。忘れ水で流された分を、覚え直す時に取り返しが早い。
+     ★この性癖は刻む場所はあったのに、効きを読む場所が一つも無かった(check_dead.py) */
+  const hh=(G.B&&G.B.hero)||null;
+  const relearn=hh?0.35*traitLv(hh,'hypnoObey'):0;
+  if(kind==='cap') k.cap++; else k.met+=1+relearn;
   const after=knowLv(id);
   if(after>before && G.B && G.mode==='battle'){
     const h=G.B.hero, m=MONSTERS[id];
@@ -1216,7 +1220,8 @@ function applyHypno(src){
   h.dazeT=Math.max(h.dazeT,1.2);
   if(h.hypnoLv>=3){ h.hypnoT=BAL.HYPNO_LV_DUR; parts(h.x,h.y-20,8,['#b46cff','#fff'],90,0.5); return; }
   // 催眠ゲージ: Ⅰは一発で入り、Ⅱは2回、Ⅲは3回の閃光が要る。抵抗の意志の分だけ入りが鈍る
-  const gain=BAL.HYPNO_GAIN[Math.min(2,h.hypnoLv)]*Math.max(0.45,1-BAL.HYPNO_WILL_K*(h.will||0));   /* v5.7 意志で鈍るのは残すが、下限を置く(以前は意志50で×0.25まで落ち、Ⅲが原理上届かなかった) */
+  const gain=BAL.HYPNO_GAIN[Math.min(2,h.hypnoLv)]*Math.max(0.45,1-BAL.HYPNO_WILL_K*(h.will||0))
+    *(1+0.12*traitLv(h,'hypnoObey'));   /* v5.7 意志で鈍るのは残すが、下限を置く(以前は意志50で×0.25まで落ち、Ⅲが原理上届かなかった) / v6.2 忘れる従順の分だけ深く入る */
   h.hypnoG=(h.hypnoG||0)+gain;
   if(h.hypnoG<100){
     heroBubble(h,pickRand(['……あ、ひかっ……','……いま、なにか……','……なんだろ、め、が……']),false,2);
@@ -1323,6 +1328,12 @@ function traitTick(h,dt){
   sec('waitfall',    BD.some(m=>MONSTERS[m.id]&&MONSTERS[m.id].spd<=0), 12);
   sec('nippleHeat',  sensLvOf(h)>=2,                   14);
   sec('impLove',     (h.teaseN||0)>0,                   3);
+  /* ★v6.2 雄臭だけ、刻む場所が一つも無かった。25件のうちこれだけ、
+     読む側(heroLife(h.id).traits.musk で効きが増す)はあるのに書く側が無く、
+     一生 0 のままだった。定義を数えるだけでは見つからない——
+     『刻む場所があるか』を鍵ごとに突き合わせて出た穴。
+     条件は how のとおり「発情したまま、臭いの雲の中」 */
+  sec('musk',        h.inMusk && h.heatLv>0,             6);
   /* ★ここから下は「閾値が厳しい」のではなく、条件そのものが成立しなかった組。
      110戦で 0〜2秒しか立たなかったので、種を取られている時だけ、から
      「その相手の間合いに居て、かつ取られている」まで広げる */
@@ -7856,7 +7867,10 @@ function spawnWildShrooms(){
 }
 function spawnInitialPicks(){
   for(let i=0;i<BAL.PICK_SHROOM_N;i++) spawnPick('shroom');
-  for(let i=0;i<BAL.PICK_FAMILY_N;i++) spawnPick('family');   // v4.1 家族茸(光茸の亜種)
+  /* v4.1 家族茸(光茸の亜種)。v6.2 PICK_FAMILY_MAX が読まれておらず、
+     「一階に1〜2株」と書いてあるのに常に1株だった */
+  { const nf=BAL.PICK_FAMILY_N+((Math.random()*(BAL.PICK_FAMILY_MAX-BAL.PICK_FAMILY_N+1))|0);
+    for(let i=0;i<nf;i++) spawnPick('family'); }
   for(let i=0;i<BAL.PICK_NECTAR_N;i++) spawnPick('nectar');
   spawnPick('treasure');
 }

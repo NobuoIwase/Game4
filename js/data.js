@@ -84,7 +84,7 @@ const BAL={
   COVER_TH:1.15,           // この値を超えたら「まずい」。放って探索を続けない
   COVER_MARGIN:0.45,       // 自分より相手がこれだけ悪い時だけ動く(共倒れを避ける)
   COVER_WORTH:5.2,         // カバーの目当ての価値(救出 6.5 の一段下、宝箱 2.6 より上)
-  COVER_R:96,              // ここまで寄れば「そばに居る」
+  COVER_R:96,              // (未使用: v4.0 のかばいは距離ではなく COVER_TH/MARGIN/HOLD の閾値で決める)
   COVER_ENEMY_R:170, COVER_ENEMY_N:5,   // 相方の周りの魔物: この半径にこの数で満点
   COVER_HOLD:2.5,          // 一度カバーに入ったら、少なくともこの秒数は続ける(ちらつき防止)
   COVER_FOCUS_D:420,       // 相方に群がっている魔物を先に撃つ(距離から差し引く)
@@ -120,7 +120,7 @@ const BAL={
   DRY_MIRE_AVOID_K:3.4,              // その時によける力(普段の沼よけより強い)
   /* --- v5.0 媚薬沼(水溜まりのように点在) --- */
   MIRE_N:[3,4,4,5,5,6,6,7,8,8,9,9,10,10,11],  // 階層ごとの数(v6.0 15階まで)
-  MIRE_R0:44, MIRE_R1:96,            // 沼の半径の幅(下の型に収まらない古い呼び出し用の控え)
+  MIRE_R0:44, MIRE_R1:96,            // (未使用: 沼の半径は MIRE_SIZE の型ごとに持つ。古い呼び出し用の控え)
   /* v5.8 沼の大きさは三通り。水溜まりのような小さいものから、
      まんなかまで触手が届かない大きなものまで。深さ(濃さ)は大きさに比例する。
      w=出やすさの重み。 */
@@ -130,7 +130,7 @@ const BAL={
     {r:[100,146],d:[0.82,1.00], t:[3,5], w:2},   // 大沼: まんなかは縁の触手も届かない
   ],
   MIRE_HEAT:7.5, MIRE_SENS:2.8, MIRE_SLOW:0.55,   // 浸かっている間(深さ1あたり毎秒) / 足の重さ
-  MIRE_TENT:3, MIRE_TENT_R:78, MIRE_TENT_CD:4.6,  // 生えている触手の数 / 届く距離 / 掴み直しの間隔
+  MIRE_TENT:3, MIRE_TENT_R:78, MIRE_TENT_CD:4.6,  // 触手の数(未使用: MIRE_SIZE の型ごとの t で決める) / 届く距離 / 掴み直しの間隔
   MIRE_FEAR:2,                       // 沼そのものの嫌い方(避けて通る)
   /* v5.6 沼よけ。MIRE_FEAR は長らく定数だけあって、どこからも読まれていなかった——
      だから彼女は媚薬沼の縁を平気で歩いていた。菌輪と同じく接線を主にして縁を回り込む */
@@ -270,7 +270,7 @@ const BAL={
   PLEAS_DECAY:0.6,         // 快感ゲージ自然減衰 /s
   PLEAS_IMP_BURST:4.5,     // 小淫魔の煽りアクション1回ぶんの快感(受動では上がらない)
   IMP_BURST_CD:1.0,        // 煽りバーストの全体クールダウン(数で強くなりすぎ防止)
-  PLEAS_GAS:0,             // (v1.6) ガス雲は快感を直接は生まない——発情ゲージと敏感化だけ
+  PLEAS_GAS:0,             // (v1.6・未使用) ガス雲は快感を直接は生まない——発情ゲージと敏感化だけ
   HEAT_GAS:9,              // ガス雲の中: 発情ゲージ /s(100で発情Lv+1)
   MUSK_CLOUD_CD:2.0, MUSK_CLOUD_R:56, MUSK_CLOUD_LIFE:5.5, MUSK_HEAT:8, MUSK_COND:1.7,   // 雄臭の雲(ゴブリンが歩きながら残す)
   HYPNO_WILL_K:0.008,      // v5.7 意志による催眠の入りの鈍り。0.015 では意志50で×0.25になり、Ⅲに永久に届かなかった
@@ -347,13 +347,13 @@ const BAL={
   HYPNO_LV_DUR:30,         // 催眠Lvが1段薄れるまでの秒数
   SELF_DUR:3.2, SELF_CD:9, // 催眠Ⅲ: その場で自慰を始める(秒)と再発の間隔
   BEAM_AIM:1.0, BEAM_CD:9, BEAM_LEN:300, BEAM_W:14,   // 絶頂照射: 照準1秒→発射。彼女が見て判断できる速さ(学習で避ける)
-  MUSK_R:64,               // ゴブリンの雄臭が届く距離
-  MUSK_SNIFF:1.6,          // 嗅ぐ発作の長さ
+  MUSK_R:64,               // (未使用: 臭いは雲で扱う。届く距離は MUSK_CLOUD_R)
+  MUSK_SNIFF:1.6,          // (未使用: 嗅ぐ発作は入れなかった。雲の中に居る間ずっと効く形にした)
   GEM_CAP:600,
 
   CHEST_TIMES:[40,110,180,250],
   // v2.0 階層
-  EXIT_STAND:2.5, EXIT_WORTH:0.5, EXIT_WORTH_PER_MIN:0.5, EXIT_HP_MIN:0.45,   // 降り口: そばに立つ秒数 / 目当ての価値(時間で増す) / HPがこれ未満なら降りない
+  EXIT_STAND:2.5, EXIT_WORTH:0.5, EXIT_WORTH_PER_MIN:0.5, EXIT_HP_MIN:0.45,   // 降り口: そばに立つ秒数 / (残り3つは未使用: v2.1 の価値式は EXIT_WORTH_WANT と exitTick の EXIT_PRESS/EXIT_HP/EXIT_IDLE_T に置き換えた)
   RUN_FAILS_RESET:2, DESCEND_ESS:40, DESCEND_ESS_DEPTH:15, CLEAR_ESS:120, CLEAR_ESS_ERA:60,   // 二連敗でリセット / 降りられた日(+深さ)・魔核を討たれた日(+世代)の夜側エッセンス(v3.1 調整)
   CORE_HP:22400, CORE_HP_LV:0.025, CORE_HP_LV_CAP:1.4, CORE_WHIP_CD:2.2, CORE_PULSE_CD:5.5, CORE_SPAWN_CD:7, CORE_DEF:0.4, CORE_AURA_R:140, CORE_FLING:0.025, CORE_TWO_PH:0.4,   // 魔核(v2.2 強化: HP↑・被ダメ↓・間隔↓・脈の圏内は熱と敏感化)
   RING_CD:25, RING_R:470, RING_STUN:0.9,                                         // v2.2 包囲円陣: オート指揮の間隔 / 輪の半径 / 出現直後の硬直
@@ -502,7 +502,7 @@ const BAL={
   PICK_TREASURE_CD:28, PICK_TREASURE_MAX:2,                         // 沈んだ宝: 出現間隔/上限
   POOL_CD:45, POOL_T:2.0, STELE_T:2.0,                              // 清水の再使用/浸かる時間、石碑を読む時間
   EVENT_FIRST:30, EVENT_CD_MIN:50, EVENT_CD_MAX:75, EVENT_LIFE:60,  // イベントの初回/間隔/光の柱が立つ時間
-  GOAL_RETHINK:3, FARM_T:6, FARM_BREAK:5,                           // 目当ての見直し間隔 / ジェム拾いに留まる上限 / その後歩く時間
+  GOAL_RETHINK:3, FARM_T:6, FARM_BREAK:5,                           // 目当ての見直し間隔 / (残り2つは未使用: v2.1 の道すがら回収と群れの時間割 GEM_FARM_T/CD に置き換えた)
   SHROOM_REVEAL:900, SHROOM_XP:0.06, TREASURE_XP:0.35,             // 光茸の見通し距離・経験値(必要量比)、沈んだ宝の経験値(必要量比)
 
   IMP_TEASE_CAP:2,         // 快感を注げる小淫魔は同時2体まで(数で強くなりすぎ防止)
