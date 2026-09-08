@@ -5405,6 +5405,21 @@ function updateGoalSolo(p){
       let n=0; for(const g2 of B.gems){ if(Math.abs(g2.x-gm.x)<BAL.GEM_CLUSTER_R && Math.abs(g2.y-gm.y)<BAL.GEM_CLUSTER_R) n++; } if(n>bn){ bn=n; bestG=gm; } }
     if(bestG && bn>=3) add('gems','gems',bestG.x,bestG.y,Math.min(BAL.GEM_CLUSTER_MAX,BAL.GEM_CLUSTER_W*bn),null); }
   // 探索: 目立った目当てが無いとき、届く床の上の未踏の方向へ
+  /* ★v6.3d 降りる気が立っているのに、降り口の場所を知らない時は「探す」を最優先にする。
+     exitTick は降り口を知っているかを条件にしていないので、
+     「降りると決めたが、どこへ降りればいいか知らない」状態が成立する。
+     ところが探索の価値は 0.6 しかなく、光茸(1.1)や清水(2.6)に負け続けるので、
+     彼女は降りる気のまま延々と拾い物をして回る。
+     実測(400秒を越えた夜): 降りる気が 184秒/195秒 で立っているのに、
+     その時も夜の終わりも降り口を知らないまま。探索は 0〜1%、
+     目当ては 光茸34% / 清水19% / 品16% / ジェム13% だった */
+  { const stQ=(!B.floor.final && G.map && G.map.pois) ? G.map.pois.find(q=>q.kind==='stairs') : null;
+    const lost = B.wantExit && !B.exitLocked && stQ && !META.map.known[stQ.key];
+    if(lost){
+      if(!p.explore || B.time>p.exploreUntil || Math.hypot(p.explore.x-p.x,p.explore.y-p.y)<70) pickExplore(p);
+      if(p.explore) add('explore','findExit',p.explore.x,p.explore.y,BAL.EXIT_FIND_WORTH,null);
+      if(!B.lostSaid){ B.lostSaid=true; sayLine('findExit',1,0,'おりぐち、どこ……? さがさなきゃ'); }
+    } }
   if(!cands.some(c=>c.score>=0.35)){
     if(!p.explore || B.time>p.exploreUntil || Math.hypot(p.explore.x-p.x,p.explore.y-p.y)<70) pickExplore(p);
     if(p.explore) add('explore','explore',p.explore.x,p.explore.y,0.6,null);

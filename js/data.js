@@ -444,6 +444,10 @@ const BAL={
   PRESS_T0:90, PRESS_T1:210, PRESS_MAX:2.0, PRESS_EN_MAX:0.35, PRESS_EN_REGEN:0.5, PRESS_UNIT:0.3, PRESS_CAP:0.2,
   /* v2.1 降りる判断: 圧がこれ以上 / HPがこれ未満 / 目当てが探索しか無い時間がこれ以上 → 「降りよう」に切り替わる。降り口の目当て価値 */
   EXIT_PRESS:0.5, EXIT_HP:0.42, EXIT_IDLE_T:40, EXIT_WORTH_WANT:6.0,
+  /* v6.3d 降りる気が立っているのに降り口の場所を知らない時、「探す」に与える価値。
+     ★降り口そのもの(6.0)より少し低く、拾い物(光茸1.1・清水2.6・宝箱3.0)より確実に高く。
+     これが 0.6 だったせいで、降りる気のまま延々と拾い物をして回っていた */
+  EXIT_FIND_WORTH:4.5,
   /* v2.1 石の番兵: 階層ごとの数 / 基礎HP(深さで+35%/層) / 被ダメ倍率 / 輪の半径 / 警戒半径(彼女と穴) / 出ない距離 / 一斉の踏み込み(間隔・時間・速度) */
   SENTINEL_N:[3,3,4,4], SENTINEL_HP:260, SENTINEL_DEF:0.5, SENTINEL_RING:78, SENTINEL_ALERT:250, SENTINEL_LEASH:330, SENTINEL_STEP_CD:5.5, SENTINEL_STEP_T:0.45, SENTINEL_STEP_SPD:300,
   /* v2.1 ジェムの群れを目当てにする(半径・1個あたりの価値・上限) / 目当ての乗り換えに必要な倍率(ふらつき防止) */
