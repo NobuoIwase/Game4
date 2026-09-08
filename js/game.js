@@ -2521,8 +2521,17 @@ function aiDecide(foc,dt){
           }
         }else{
           const nz=zoneAt(p.x+dx*44*darkSense(p.x,p.y),p.y+dy*44*darkSense(p.x,p.y));   // v4.0 暗いと地形の境に気づくのが遅い
-          if(nz!==p.zone && p.scared && p.scared[nz]>B.time){ giveUpOn(target); if(p.goal && (giveUpKey(p.goal)===giveUpKey(target)||p.goal===target)){ if(p.goal.kind==='explore'){ p.explore=null; p.exploreUntil=0; } p.goal=null; p.goalT=0; } dx=-dx*0.5; dy=-dy*0.5; state='hesitate'; }   // 諦めた地形へは、しばらく入らない(探索点なら捨てて別の点を選ぶ)
-          const nf=(nz!==p.zone)?zoneFear(nz):0;   // v2.2 嫌い方の段: <2 は気にせず入る / 2 は短く迷う / 3 は価値が無ければ入らず、あれば長く迷う
+          /* ★v6.3f 迷うのは「いまより嫌な所へ踏み込む時」だけ。
+             前は行き先の嫌さしか見ていなかったので、甘い褥(3.0)から媚薬の澱み(2.0)へ
+             出ようとした時にも「はいる? はいらない?」が立った——巣窟の口は澱みで
+             ぐるりと囲まれているので、出口が必ず「怖い地形」になる。
+             実測(60夜): 迷い576回のうち9回が巣窟の中から。さらに、そこで怯むと
+             澱みを SCARED_T(40秒)こわがるので、唯一の出口を自分で塞ぐ
+             ——巣窟に居た995秒のうち132秒が「出口をこわがったまま中に居る」だった */
+          const cf=zoneFear(p.zone);
+          const worse=(nz!==p.zone && zoneFear(nz)>cf);
+          if(worse && p.scared && p.scared[nz]>B.time){ giveUpOn(target); if(p.goal && (giveUpKey(p.goal)===giveUpKey(target)||p.goal===target)){ if(p.goal.kind==='explore'){ p.explore=null; p.exploreUntil=0; } p.goal=null; p.goalT=0; } dx=-dx*0.5; dy=-dy*0.5; state='hesitate'; }   // 諦めた地形へは、しばらく入らない(探索点なら捨てて別の点を選ぶ)
+          const nf=worse?zoneFear(nz):0;   // v2.2 嫌い方の段: <2 は気にせず入る / 2 は短く迷う / 3 は価値が無ければ入らず、あれば長く迷う
           const scary=nf>=2 && !(p.brave&&p.brave[nz]>B.time) && !(p.scared&&p.scared[nz]>B.time);
           if(scary){
             const worth=(p.goal&&p.goal.worth)?p.goal.worth:(kind==='chest'?(target.bossChest?3.0:2.6):(kind==='item'?3.0:(kind==='heart'?3.2:1.5)));   // 目当てが無い直接の目標(箱・品)は種類から価値を見る
