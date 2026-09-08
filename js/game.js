@@ -914,10 +914,10 @@ function detachLimb(slot, opt){
     const heldSlot=LIMBS.find(sl=>sl!==slot && h.limbs[sl] && h.limbs[sl].mon===mon);
     if(heldSlot){ mon.limb=heldSlot; }
     else{
-      mon.state = mon.id==='flower' ? 'open' : ((mon.id==='gtent'||mon.id==='core'||mon.id==='mouth'||mon.id==='sentinel'||mon.id==='miretent') ? 'idle' : 'chase');
+      mon.state = mon.id==='flower' ? 'open' : (isSeated(mon.id) ? 'idle' : 'chase');
       mon.limb=null;
       const p=limbAnchor(h,slot);
-      if(mon.id!=='flower' && mon.id!=='gtent' && mon.id!=='web' && mon.id!=='core' && mon.id!=='mouth' && mon.id!=='sentinel' && mon.id!=='miretent'){   // 据わった個体はその場から動かない(v5.0 沼の触手は沼から生えている)
+      if(!isSeated(mon.id)){   // 据わった個体はその場から動かない(v5.0 沼の触手は沼から生えている)
         mon.x=p.x+rand(-8,8); mon.y=p.y+rand(-4,4);
       }
     }
@@ -2451,7 +2451,14 @@ function aiDecide(foc,dt){
           else{
             const nz=p.hesit.zone, worth=p.hesit.worth||(p.goal&&p.goal.worth)||1.5, hpR=p.hp/p.maxHp, aroused=p.aphro>=45||p.heatLv>0||p.sensit>=60;
             const hn=(p.hesitN&&p.hesitN[nz])||0;   // v2.3 同じ地形で何度も迷った回数(迷うたびに入る確率が上がる→迷い続けない)
-            const pe=((p.hesit.fear||2)>=3?0.35:0.65)+(worth>=2.6?0.3:(worth>=2?0.15:0))+(hpR>0.7?0.15:-0.1)+(aroused?0.25:0)+BAL.HESIT_ESC*hn;   // v2.2 段が高いほど入りにくい。媚薬まみれなら「もういいや」
+            /* ★v6.3 入るかどうかは「どれだけ知っているか」で決まる。段(fear)ではなく zoneKnow を直に読む。
+               知らない所へは軽い気持ちで入り、覚えた所では宝の魅力も元気さも割り引かれる。
+               媚薬まみれの「もういいや」だけは、知識に関わらず効く */
+            const kn=zoneKnow(nz);
+            const pe=(BAL.HESIT_GO_BASE-BAL.HESIT_GO_KNOW*kn)
+              +(worth>=2.6?0.3:(worth>=2?0.15:0))*(1-0.5*kn)
+              +(hpR>0.7?0.15:-0.1)*(1-kn)
+              +(aroused?0.25:0)+BAL.HESIT_ESC*hn;   // v2.2 媚薬まみれなら「もういいや」
             if(Math.random()<pe){ p.brave=p.brave||{}; p.brave[nz]=B.time+60; B.nBrave=(B.nBrave||0)+1; if(p.hesitN) p.hesitN[nz]=0; sayLine(aroused?'resign':(hn>=2?'braveFinally':'brave'),1,0,'……いく! ちょっとだけ!'); }
             else{ p.scared=p.scared||{}; p.scared[nz]=B.time+BAL.SCARED_T; p.hesitN=p.hesitN||{}; p.hesitN[nz]=hn+1; B.nChicken=(B.nChicken||0)+1; giveUpOn(target); if(p.goal && (giveUpKey(p.goal)===giveUpKey(target)||p.goal===target)){ if(p.goal.kind==='explore'){ p.explore=null; p.exploreUntil=0; } p.goal=null; p.goalT=0; } sayLine('chicken',1,0,'やめとく……こわいし'); dx=0; dy=0; state='hesitate'; }
             p.hesit=null;
@@ -2468,7 +2475,10 @@ function aiDecide(foc,dt){
             if(nf>=3 && worth<BAL.FEAR3_WORTH*(aroused?0.5:1)*Math.max(0.4,1-0.25*hn)){   // 入りたくない地形に、それほどの用は無い→迷わず引き返す(v2.3 引き返した回数だけ敷居が下がり、やがて迷い始める)
               p.scared=p.scared||{}; p.scared[nz]=B.time+BAL.SCARED_T; p.hesitN=p.hesitN||{}; p.hesitN[nz]=hn+1; B.nChicken=(B.nChicken||0)+1; giveUpOn(target); if(p.goal && (giveUpKey(p.goal)===giveUpKey(target)||p.goal===target)){ if(p.goal.kind==='explore'){ p.explore=null; p.exploreUntil=0; } p.goal=null; p.goalT=0; } sayLine('chicken',1,0,'そこは、いかない!'); dx=0; dy=0; state='hesitate';
             }else{
-              p.hesit={zone:nz, fear:nf, worth, until:B.time+(nf>=3?2.0+Math.random()*1.6:1.0+Math.random()*1.0)*(aroused?0.6:1), key:giveUpKey(target)}; B.nHesit=(B.nHesit||0)+1; sayLine(aroused?'resign':(hn>=1?'hesitateAgain':'hesitate'),1,0,'……はいる? はいらない?'); const sw=Math.sin(B.time*2.6), ux=dx, uy=dy; dx=-ux*0.3-uy*sw*0.25; dy=-uy*0.3+ux*sw*0.25; state='hesitate';
+              /* ★v6.3 迷いの長さを反転。よく知っている所ほど「見た瞬間に決まる」。
+                 前は nf>=3 が最長(2.0〜3.6秒)で、覚えた巣窟の前でいちばん長く突っ立っていた */
+              const hesT=(nf>=3?BAL.HESIT_KNOWN:BAL.HESIT_NEW)*(0.75+Math.random()*0.5)*(aroused?0.6:1);
+              p.hesit={zone:nz, fear:nf, worth, until:B.time+hesT, key:giveUpKey(target)}; B.nHesit=(B.nHesit||0)+1; sayLine(aroused?'resign':(hn>=1?'hesitateAgain':'hesitate'),1,0,'……はいる? はいらない?'); const sw=Math.sin(B.time*2.6), ux=dx, uy=dy; dx=-ux*0.3-uy*sw*0.25; dy=-uy*0.3+ux*sw*0.25; state='hesitate';
             }
           }
         }
@@ -3953,7 +3963,23 @@ function enemiesUpdate(dt){
         continue;
       }
       const anch=e.suck?suckAnchor(p,e.suck):limbAnchor(p,e.limb);
-      e.x=anch.x; e.y=anch.y;
+      /* v6.3 据わった個体は、掴んだまま連れ歩かれない。彼女の方が繋ぎの長さまで引き戻される。
+         これが無いと番兵が輪から引きずり出され、離した後も足元に立っているので
+         「何も無い床でもう一度掴まれる」ことになる(抱き茸と同じ作法) */
+      if(isSeated(e.id)){
+        const at=e.limb?p.limbs[e.limb]:null;
+        const reach=Math.max(24,(at&&at.r?at.r:40));
+        const ax=e.x-anch.x, ay=e.y-anch.y, ad=Math.hypot(ax,ay);
+        if(ad>reach){
+          const step=Math.min(ad-reach, BAL.SEAT_PULL*dt);
+          const cx=p.x, cy=p.y;
+          p.x+=ax/ad*step; p.y+=ay/ad*step;
+          if(G.map) collideMap(p,p.r+2,false);
+          if(Math.hypot(p.x-cx,p.y-cy)<step*0.25 && ad>reach+BAL.SEAT_SNAP) detachLimb(e.limb,{});   /* 壁を挟んで引けない時は、繋ぎが切れる */
+        }
+      }else{
+        e.x=anch.x; e.y=anch.y;
+      }
       if(e.id==='inyoku'){ e.holdT=(e.holdT||0)-dt; if(e.holdT<=0 && e.limb){ detachLimb(e.limb,{}); e.swoopCd=rand(3,5); e.orbitA=rand(TAU); e.y-=40; } }   // v2.0 淫翼は数秒で離れて舞い戻る
       if(e.id==='suiyou') p.slow=Math.max(p.slow,0.6);                                                                                              // v2.0 水妖に絡まれている間は足が鈍い
       continue;
@@ -5189,7 +5215,10 @@ function updateGoalSolo(p){
   const anyCaptive=B.heroes.some(c=>c.out&&c.captive&&c!==p);   // v3.2 仲間が捕まっている間は、寄り道の価値を落とす(木の実を拾いに行かない)
   const add=(kind,sub,x,y,worth,ref,key)=>{ worth*=goalPref(p,kind,sub); if(anyCaptive && kind!=='rescue') worth*=BAL.RESCUE_FOCUS; if(!coreLeashOk(kind,sub,x,y)) return; /* v4.0 魔核戦の間は寄り道しない */ if(worth<=0 || !passAt(x,y,false) || nearKnownTrap(x,y) || ringAvoid(x,y)) return;   /* v4.1 覚えた菌輪の中は目当てにしない */
     { const mi=mireAt(x,y); if(mi) worth*=(mi.depth>0.75?0.30:0.55); }   /* v5.0 媚薬沼の中の物は割り引く(深いほど嫌う) */
-    if(HEROES[p.id]&&HEROES[p.id].heatShy){ const kh=kuuHeatAt(x,y); if(kh>0.4) worth*=1-0.45*kh; }   /* v5.0 暑がりは、温泉・肉の床・焦げ跡の中の物を避ける */ if(ref && gaveUp(ref)) return; /* v2.1 諦めた目標は外す */ if(crestKnow()>=1 && B.traps.some(tr=>tr.armed && Math.hypot(tr.x-x,tr.y-y)<tr.r+40)) return; /* 知っている紋の罠の上は目当てにしない */ const d=Math.hypot(x-p.x,y-p.y); const fz=zoneFear(zoneAt(x,y)), fm=fz>=3?0.5:(fz>=2?0.7:(fz>=1?0.9:1));
+    if(HEROES[p.id]&&HEROES[p.id].heatShy){ const kh=kuuHeatAt(x,y); if(kh>0.4) worth*=1-0.45*kh; }   /* v5.0 暑がりは、温泉・肉の床・焦げ跡の中の物を避ける */ if(ref && gaveUp(ref)) return; /* v2.1 諦めた目標は外す */
+    /* ★v6.3 諦めた地形の中の物も、まるごと外す。これが無いと「宝箱を諦める→同じ巣窟の祠を選ぶ→
+       また境で諦める→次はジェム」を繰り返して、口の前を行ったり来たりする(実測 6.6往復・19.8秒) */
+    { const gz=zoneAt(x,y); if(gz!==p.zone && p.scared && p.scared[gz]>B.time) return; } if(crestKnow()>=1 && B.traps.some(tr=>tr.armed && Math.hypot(tr.x-x,tr.y-y)<tr.r+40)) return; /* 知っている紋の罠の上は目当てにしない */ const d=Math.hypot(x-p.x,y-p.y); const fz=zoneFear(zoneAt(x,y)), fm=fz>=3?0.5:(fz>=2?0.7:(fz>=1?0.9:1));
     const dk=BAL.DARK_GOAL_K*((HEROES[p.id]&&HEROES[p.id].lightR<180)?BAL.KUU_DARK_K:1);   // v5.0 発光の弱い子は、暗い所を人一倍嫌う
     const lm=(darkLevel()>0.05 && kind!=='rescue' && kind!=='wait')?(dk+(1-dk)*lightAt(x,y)):1;   // v4.0 暗い所は気が進まない(行かないわけではない)
     cands.push({kind,sub,x,y,ref,key,d,worth,score:worth*fm*lm/(1+d/600)}); };   // v2.2 嫌な地形の中の目当ては割り引く(価値そのものは入る判断に使うので残す)
