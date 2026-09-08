@@ -141,6 +141,10 @@ const BAL={
      浸かりかけては乗り換える→縁で行ったり来たり、になっていた */
   MIRE_GOAL_DEEP:0.45, MIRE_GOAL_SHALLOW:0.62,
   MIRE_GOAL_HOLD:2.2,  /* 沼の中を目当てにしたら、決め直しの間隔をこの倍に伸ばす(渡りきるまで迷わない) */
+  /* ★v6.4 媚薬沼の縁の逡巡。沼は地形(zone)ではなく重ね物なので地形の迷いが一度も掛からず、
+     素振りも無くまっすぐ突っ込んでいた。縁の手前(MIRE_LOOK px)で気づいて MIRE_HESIT_T 秒ためらい、
+     そのあと必ず入る——「入らない」は選ばない。入ったら MIRE_BRAVE_T 秒は蒸し返さない */
+  MIRE_LOOK:70, MIRE_HESIT_T:1.15, MIRE_HESIT_DEEP:0.30, MIRE_BRAVE_T:26,
   /* ★v6.3b 媚薬のベタベタ。沼から出ても身体に残り、洗うまで火照りが上がり続ける。
      「沼に浸かった」が、その場だけの出来事で終わらないようにする */
   STICKY_GAIN:0.55,    /* 沼の中で1秒あたり溜まる濃さ(深さで倍) */
@@ -418,6 +422,10 @@ const BAL={
   /* v1.3 */
   REENTER_D:780,           // 本家同様: これ以上離れた魔物は画面外の縁へ回り込んで再登場(同一個体)
   REENTER_R:560,           // 再登場時の距離(画面外すぐ)
+  /* ★v6.4 再登場の「まわりこんできた!」は一体の大物のための文だったが、ボス級の札は6体まで
+     並べられるので、画面外の群れが入れ替わるたびに同じ文で画面が埋まっていた。
+     同じ種は REENTER_SAY_CD 秒に一度、画面全体でも REENTER_SAY_GAP 秒に一つだけ */
+  REENTER_SAY_CD:9, REENTER_SAY_GAP:2.5,
   GAZE_R:240, GAZE_ANG:0.65,    // ゲイザーの視界(半径・角度rad): 狭く、長く。表示→閃光→催眠
   GAZE_BOSS_EXTRA:130,         // ボスゲイザーの視界はさらに長い(横幅は同じ)
   GAZE_AIM:1.4, GAZE_CD:5.5,
@@ -444,6 +452,16 @@ const BAL={
   PRESS_T0:90, PRESS_T1:210, PRESS_MAX:2.0, PRESS_EN_MAX:0.35, PRESS_EN_REGEN:0.5, PRESS_UNIT:0.3, PRESS_CAP:0.2,
   /* v2.1 降りる判断: 圧がこれ以上 / HPがこれ未満 / 目当てが探索しか無い時間がこれ以上 → 「降りよう」に切り替わる。降り口の目当て価値 */
   EXIT_PRESS:0.5, EXIT_HP:0.42, EXIT_IDLE_T:40, EXIT_WORTH_WANT:6.0,
+  /* ★v6.4 伸びしろが尽きた夜(武器もパッシブも進化も上限)。取るものが無いのだから階を延ばす理由が無い。
+     降り口を知っていて、床を EXIT_FULL_SEEN ぶん見たか EXIT_FULL_T 秒たてば「ちょっとだけ見て」降りる。
+     同時に、いまが自分の最強なので危ない所へも踏み込む(迷いの決心に FULL_BRAVE、
+     入りたくない地形の値打ちの敷居に FULL_FEAR3 を掛ける) */
+  EXIT_FULL_SEEN:0.34, EXIT_FULL_T:70, FULL_BRAVE:0.30, FULL_FEAR3:0.6,
+  /* 「満ちた」の敷居: 取れる強化の残りがこの数以下。0 = ほんとうに一つも無い。
+     ★実測(40夜): ひとりなら最少0(満ちる夜が実在。祈りが最大10回)。四人だと最少24——
+     四人ぶんの武器枠20をレベルアップ一本で埋め切れないので、四人では成立しない。
+     四人でも「軽く見て降りる」を見たければ、ここを上げる */
+  FULL_SLACK:0,
   /* v6.3d 降りる気が立っているのに降り口の場所を知らない時、「探す」に与える価値。
      ★降り口そのもの(6.0)より少し低く、拾い物(光茸1.1・清水2.6・宝箱3.0)より確実に高く。
      これが 0.6 だったせいで、降りる気のまま延々と拾い物をして回っていた */
@@ -587,6 +605,9 @@ const BAL={
   // v1.9 武器の上限: Lv5 までは従来の伸び、Lv6〜8 は覚醒(進化後も効く)。全部が上限なら「ルミナの祈り」(無駄なレベルを出さない)
   /* v6.0 覚醒の段が3→5段に伸びるので、一段あたりの伸びは薄める(Lv10 で ×1.65) */
   WP_EVO_LV:5, WP_OVER_DMG:0.13, WP_OVER_CD:0.94, WP_OVER_AREA:0.04,
+  /* v6.4 満ちた武器の褒美: 素性に fullBloom がある子(ヤミコ)の武器は、上限(FULL_LV)に届くと更に大きく伸びる。
+     最初から Lv5 で始まり、レベルアップの札には出にくい(pickPenalty)。だから「そこまで育てば」の一段を置く */
+  FULL_LV:8, FULL_DMG:1.55, FULL_CD:0.82, FULL_AREA:1.22,
   /* v6.0 武器レベルの上限は深さで開く。★開放が「降りる理由」になる */
   WP_CAP_DEPTH:[[13,10],[10,9]],   /* [その深さ以上, 上限] を上から順に見る */
   WP_SLOTS:5, PS_SLOTS:5,          /* 武器枠・パッシブ枠(v5.x は 4 の決め打ちだった) */
@@ -1466,14 +1487,14 @@ const HEROES={
      発光を持たないどころか、周りの光を吸う。ただし吸っているだけなので、えっちな目に遭うと漏れて光る */
   yamiko:{ name:'ヤミコ', col:'#a77dff', hair:'#2a1a3e', sprite:'yamiko', wps:['dblade','dring','dspear','dcall','dstep'],
         start:{dblade:5,dring:5}, grow:['dblade','dring','dspear'], hpMul:1.06, spdMul:1.04, armor:1, dmgMul:1.00, stamMul:0.92,
-        fearMul:1.25, braveAdd:0.1, kiteMul:1.10, lightR:120, lightK:0.55, dark:true, pickPenalty:0.45,
+        fearMul:1.25, braveAdd:0.1, kiteMul:1.10, lightR:120, lightK:0.55, dark:true, pickPenalty:0.45, fullBloom:true,   /* v6.4 上限まで育てば、そこから更に大きく伸びる */
         startPs:{ward:2, haste:1, reach:1, pierce:1},   // 最初から育っている(その代わりレベルアップの札に出にくい)
         skills:{ shadowstep:{ name:'影渡り', icon:'❖', lv:18, cd:16, stam:13, desc:'囲まれた時、闇の濃い所へ溶けて抜ける。暗いほど遠くへ跳べる' },
                  nightveil:{  name:'夜の帳', icon:'☾', lv:34, cd:32, desc:'二肢以上を掴まれるか押し倒された時、闇が弾けて拘束を断ち、周りの魔物の目を潰す' },
                  duskcall:{   name:'黄昏の招き', icon:'✵', lv:50, cd:58, desc:'HPが35%を切った時、闇から三体の影を呼び、6秒のあいだ肩代わりさせる' },
                  devour:{     name:'夜喰い', icon:'☽', lv:70, cd:70, stam:26, desc:'v6.0 半径240の光を全部吸って自分のHPに変える。見られること自体が責めになる階では、これだけが答えになる' } },
         pref:{chest:1.2, treasure:1.25, boss:1.1, core:1.15, item:1.15, gems:1.1, stairs:1.05, explore:0.95, shrine:0.55, spring:0.9, pool:0.9, stele:0.9, lantern:0.5, shroom:0.55},
-        desc:'渦の中心で生まれた者。光を吸う闇を纏う。強がるが、追い詰められるとすぐ助けを乞う' },
+        desc:'渦の中心で生まれた者。光を吸う闇を纏う。強がるが、追い詰められるとすぐ助けを乞う。★巻き戻しの外側に居るので、繰り返しを一人だけ覚えている——互いが互いの思うようになるまで続くことも' },
 };
 const PARTY_MAX=4;                        // v3.1 パーティの上限(作りは3〜4人まで)
 /* v3.1 出撃するヒロイン: META.party.roster(最初はルミナ一人)。HEROES に無い名前は落とし、上限で切る */

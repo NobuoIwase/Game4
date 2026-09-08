@@ -2500,10 +2500,22 @@ function aiDecide(foc,dt){
       if(B.time<(p.pauseUntil||0) && threat<0.3 && kind!=='g_stairs' && attachCount(p)===0){ dx=0; dy=0; state='think'; }   // v2.2 目当てを変えた直後の一拍
       else if(kind!=='g_stairs' && kind!=='heart' && kind!=='prop' && kind!=='g_wait' && kind!=='g_rescue' && !B.wantExit && threat<0.5 && attachCount(p)===0){   // v3.2 外で待つ・救出は迷いに掛けない(待つだけで巣窟を「怖い所」と覚えて、踏み込めなくなっていた)
         // v2.2 迷い: 進む先が嫌な地形(学習済み)かえちえちエリアなら、境で足を止めて迷う。報酬と体調で入るか諦めるか決める
-        if(p.hesit && p.hesit.key!==giveUpKey(target)) p.hesit=null;   // 目標が変わったら迷いも仕切り直し
+        /* ★v6.4 沼の縁のためらいは「地形」に対するものなので、目標が変わっても続ける。
+           前は目標が変わるたびに消えていて、177回ためらったうち 37回しか
+           「言い訳して入る」まで届いていなかった */
+        if(p.hesit && p.hesit.key!==giveUpKey(target)){ if(p.hesit.zone==='mire') p.hesit.key=giveUpKey(target); else p.hesit=null; }   // 目標が変わったら迷いも仕切り直し
         if(p.hesit){
           // 迷っている最中: 境から半歩下がって左右に揺れる。時間が来たら必ず決める(入る/諦める)
           if(B.time<p.hesit.until){ const sw=Math.sin(B.time*2.6), ux=dx, uy=dy; dx=-ux*0.3-uy*sw*0.25; dy=-uy*0.3+ux*sw*0.25; state='hesitate'; }
+          /* ★v6.4 媚薬沼だけは「入らない」を選ばない。ひと呼吸おいて、言い訳して入る。
+             ここで諦めさせると v6.3b で直した「沼の中の宝箱を取りに行けない」が戻ってくる */
+          else if(p.hesit.zone==='mire'){
+            const aroused=p.aphro>=45||p.heatLv>0||p.sensit>=60;
+            p.brave=p.brave||{}; p.brave.mire=B.time+BAL.MIRE_BRAVE_T;
+            B.nMireGo=(B.nMireGo||0)+1;
+            sayLine(aroused?'mireResign':'mireGo',1,0,'……ちょっとだけ。すぐ、でるから');
+            p.hesit=null;
+          }
           else{
             const nz=p.hesit.zone, worth=p.hesit.worth||(p.goal&&p.goal.worth)||1.5, hpR=p.hp/p.maxHp, aroused=p.aphro>=45||p.heatLv>0||p.sensit>=60;
             const hn=(p.hesitN&&p.hesitN[nz])||0;   // v2.3 同じ地形で何度も迷った回数(迷うたびに入る確率が上がる→迷い続けない)
@@ -2514,8 +2526,9 @@ function aiDecide(foc,dt){
             const pe=(BAL.HESIT_GO_BASE-BAL.HESIT_GO_KNOW*kn)
               +(worth>=2.6?0.3:(worth>=2?0.15:0))*(1-0.5*kn)
               +(hpR>0.7?0.15:-0.1)*(1-kn)
-              +(aroused?0.25:0)+BAL.HESIT_ESC*hn;   // v2.2 媚薬まみれなら「もういいや」
-            if(Math.random()<pe){ p.brave=p.brave||{}; p.brave[nz]=B.time+60; B.nBrave=(B.nBrave||0)+1; if(p.hesitN) p.hesitN[nz]=0; sayLine(aroused?'resign':(hn>=2?'braveFinally':'brave'),1,0,'……いく! ちょっとだけ!'); }
+              +(aroused?0.25:0)+BAL.HESIT_ESC*hn
+              +(growthDone()?BAL.FULL_BRAVE:0);   // v2.2 媚薬まみれなら「もういいや」 / ★v6.4 伸びしろが尽きた=いまが最強、だから踏み込む
+            if(Math.random()<pe){ p.brave=p.brave||{}; p.brave[nz]=B.time+60; B.nBrave=(B.nBrave||0)+1; if(p.hesitN) p.hesitN[nz]=0; sayLine(aroused?'resign':(growthDone()?'fullBrave':(hn>=2?'braveFinally':'brave')),1,0,'……いく! ちょっとだけ!'); }
             else{ p.scared=p.scared||{}; p.scared[nz]=B.time+BAL.SCARED_T; p.hesitN=p.hesitN||{}; p.hesitN[nz]=hn+1; B.nChicken=(B.nChicken||0)+1; giveUpOn(target); if(p.goal && (giveUpKey(p.goal)===giveUpKey(target)||p.goal===target)){ if(p.goal.kind==='explore'){ p.explore=null; p.exploreUntil=0; } p.goal=null; p.goalT=0; } sayLine('chicken',1,0,'やめとく……こわいし'); dx=0; dy=0; state='hesitate'; }
             p.hesit=null;
           }
@@ -2533,11 +2546,23 @@ function aiDecide(foc,dt){
           if(worse && p.scared && p.scared[nz]>B.time){ giveUpOn(target); if(p.goal && (giveUpKey(p.goal)===giveUpKey(target)||p.goal===target)){ if(p.goal.kind==='explore'){ p.explore=null; p.exploreUntil=0; } p.goal=null; p.goalT=0; } dx=-dx*0.5; dy=-dy*0.5; state='hesitate'; }   // 諦めた地形へは、しばらく入らない(探索点なら捨てて別の点を選ぶ)
           const nf=worse?zoneFear(nz):0;   // v2.2 嫌い方の段: <2 は気にせず入る / 2 は短く迷う / 3 は価値が無ければ入らず、あれば長く迷う
           const scary=nf>=2 && !(p.brave&&p.brave[nz]>B.time) && !(p.scared&&p.scared[nz]>B.time);
+          /* ★v6.4 媚薬沼の縁: 沼は地形ではなく重ね物(mireAt)なので、上の地形の迷いには一度も掛からない。
+             だから彼女は素振りも無く、まっすぐ沼へ入っていた。縁の手前で気づいて、ためらう */
+          if(!scary && !mireAt(p.x,p.y) && !(p.brave&&p.brave.mire>B.time)){
+            const mx=p.x+dx*BAL.MIRE_LOOK*darkSense(p.x,p.y), my=p.y+dy*BAL.MIRE_LOOK*darkSense(p.x,p.y);
+            if(mireAt(mx,my) && mireDepthAt(mx,my)>=BAL.MIRE_HESIT_DEEP){
+              const arousedM=p.aphro>=45||p.heatLv>0||p.sensit>=60;
+              p.hesit={zone:'mire', fear:2, worth:(p.goal&&p.goal.worth)||1.5, until:B.time+BAL.MIRE_HESIT_T*(0.8+Math.random()*0.4)*(arousedM?0.6:1), key:giveUpKey(target)};
+              B.nMireHesit=(B.nMireHesit||0)+1;
+              sayLine('mireHesit',1,0,'……これ、あの ぬるぬるの……');
+              const sw=Math.sin(B.time*2.6), ux=dx, uy=dy; dx=-ux*0.3-uy*sw*0.25; dy=-uy*0.3+ux*sw*0.25; state='hesitate';
+            }
+          }
           if(scary){
             const worth=(p.goal&&p.goal.worth)?p.goal.worth:(kind==='chest'?(target.bossChest?3.0:2.6):(kind==='item'?3.0:(kind==='heart'?3.2:1.5)));   // 目当てが無い直接の目標(箱・品)は種類から価値を見る
             const aroused=p.aphro>=45||p.heatLv>0||p.sensit>=60;   // v2.2 媚薬まみれなら「もういいや」で腰が軽い
             const hn=(p.hesitN&&p.hesitN[nz])||0;
-            if(nf>=3 && worth<BAL.FEAR3_WORTH*(aroused?0.5:1)*Math.max(0.4,1-0.25*hn)){   // 入りたくない地形に、それほどの用は無い→迷わず引き返す(v2.3 引き返した回数だけ敷居が下がり、やがて迷い始める)
+            if(nf>=3 && worth<BAL.FEAR3_WORTH*(aroused?0.5:1)*(growthDone()?BAL.FULL_FEAR3:1)*Math.max(0.4,1-0.25*hn)){   /* ★v6.4 強い夜は、入りたくない地形の敷居も下がる */   // 入りたくない地形に、それほどの用は無い→迷わず引き返す(v2.3 引き返した回数だけ敷居が下がり、やがて迷い始める)
               p.scared=p.scared||{}; p.scared[nz]=B.time+BAL.SCARED_T; p.hesitN=p.hesitN||{}; p.hesitN[nz]=hn+1; B.nChicken=(B.nChicken||0)+1; giveUpOn(target); if(p.goal && (giveUpKey(p.goal)===giveUpKey(target)||p.goal===target)){ if(p.goal.kind==='explore'){ p.explore=null; p.exploreUntil=0; } p.goal=null; p.goalT=0; } sayLine('chicken',1,0,'そこは、いかない!'); dx=0; dy=0; state='hesitate';
             }else{
               /* ★v6.3 迷いの長さを反転。よく知っている所ほど「見た瞬間に決まる」。
@@ -2728,7 +2753,14 @@ function nearestEnemies(n,maxD){
   return arr.slice(0,n).map(o=>o.e);
 }
 /* v1.9 武器の覚醒(Lv6〜8): 従来の式は Lv5 で止め、超えた段ぶんを火力・間隔・範囲に掛ける(進化後も効く) */
-function wpOver(lv){ const ov=Math.max(0,lv-BAL.WP_EVO_LV); return {dmg:1+BAL.WP_OVER_DMG*ov, cd:Math.pow(BAL.WP_OVER_CD,ov), area:1+BAL.WP_OVER_AREA*ov}; }
+/* Lv6〜8 の覚醒。★v6.4 持ち主に fullBloom があるなら、上限(FULL_LV)に届いた武器は更に一段跳ねる。
+   ヤミコは Lv5 から始まって札が出にくいので、伸びしろが「上限に届くかどうか」の一点に寄っている */
+function wpOver(lv,p){
+  const ov=Math.max(0,lv-BAL.WP_EVO_LV);
+  const o={dmg:1+BAL.WP_OVER_DMG*ov, cd:Math.pow(BAL.WP_OVER_CD,ov), area:1+BAL.WP_OVER_AREA*ov};
+  if(p && lv>=BAL.FULL_LV && (HEROES[p.id]||{}).fullBloom){ o.dmg*=BAL.FULL_DMG; o.cd*=BAL.FULL_CD; o.area*=BAL.FULL_AREA; }
+  return o;
+}
 function weaponsUpdate(dt){
   const B=G.B, p=B.hero;
   const atkMult=((p.pinned||p.charmBind||p.climaxT>0||p.freezeT>0||p.begT>0||p.selfT>0||p.sniffT>0||p.bathT>0||p.poolT>0||p.readT>0)?0:1)*Math.pow(0.75,armCount(p))   // 腕を拘束されるほど攻撃が乱れる
@@ -2744,7 +2776,7 @@ function weaponsUpdate(dt){
     p.boltT-=dt*atkMult;
     if(p.boltT<=0){
       const evo=p.evo.sstar>0;
-      const lvR=p.wp.bolt, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      const lvR=p.wp.bolt, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
       const shots=(evo?7:Math.min(5,1+Math.ceil(lv*0.8)))+dupN(p);   // 手数で強くなる
       // 回復が要るときは燭台を狙う
       const wantProp=p.propTarget && !p.propTarget.dead &&
@@ -2785,7 +2817,7 @@ function weaponsUpdate(dt){
     p.novaT-=dt*atkMult;
     if(p.novaT<=0){
       const evo=p.evo.sburst>0;
-      const lvR=p.wp.nova, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      const lvR=p.wp.nova, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
       p.novaT=((evo?4.0:4.3)-0.4*(lv-1))*ov.cd;
       const R=(evo?180:100+20*(lv-1))*areaMult(p)*ov.area, dmg=(evo?34:16+7*(lv-1))*ov.dmg;
       p.novaAnim=0.5; p.novaR=R;
@@ -2811,7 +2843,7 @@ function weaponsUpdate(dt){
   if(p.wp.whip>0){
     p.whipT-=dt*atkMult;
     if(p.whipT<=0){
-      const evo=p.evo.srush>0, lvR=p.wp.whip, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      const evo=p.evo.srush>0, lvR=p.wp.whip, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
       p.whipT=(evo?0.65:1.0)*Math.pow(0.9,lv-1)*ov.cd;
       p.whipSide*=-1;
       const range=(evo?165:105+11*lv)*areaMult(p)*ov.area, half=(evo?165:46+5*lv)*areaMult(p)*ov.area;
@@ -2840,7 +2872,7 @@ function weaponsUpdate(dt){
   if(p.wp.rain>0){
     p.rainT-=dt*atkMult;
     if(p.rainT<=0){
-      const evo=p.evo.scomet>0, lvR=p.wp.rain, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      const evo=p.evo.scomet>0, lvR=p.wp.rain, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
       p.rainT=(evo?1.5:2.3)*Math.pow(0.88,lv-1)*ov.cd;
       const drops=(evo?6:1+Math.ceil(lv/2))+dupN(p);
       const ts=nearestEnemies(drops*2,540);
@@ -2863,7 +2895,7 @@ function weaponsUpdate(dt){
   if(p.wp.cross>0){
     p.crossT-=dt*atkMult;
     if(p.crossT<=0){
-      const evo=p.evo.sjudge>0, lvR=p.wp.cross, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      const evo=p.evo.sjudge>0, lvR=p.wp.cross, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
       const ts=nearestEnemies(1,500);
       if(ts.length && B.bullets.length<170){
         p.crossT=(evo?1.3:1.7)*Math.pow(0.9,lv-1)*ov.cd;
@@ -2892,7 +2924,7 @@ function weaponsUpdate(dt){
   }
   /* --- せいいき: 常時の光の領域。触れた敵を焼き続ける。進化=広域+自己回復 --- */
   if(p.wp.sanct>0){
-    const evo=p.evo.gsanct>0, lvR=p.wp.sanct, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+    const evo=p.evo.gsanct>0, lvR=p.wp.sanct, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
     p.sanctPulse+=dt*atkMult;
     p.sanctR=((evo?130:70+8*lv))*areaMult(p)*ov.area;
     if(p.sanctPulse>=0.5){
@@ -2911,7 +2943,7 @@ function weaponsUpdate(dt){
   if(p.wp.blade>0){
     p.bladeT-=dt*atkMult;
     if(p.bladeT<=0){
-      const evo=p.evo.kblade>0, lvR=p.wp.blade, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      const evo=p.evo.kblade>0, lvR=p.wp.blade, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
       p.bladeT=(evo?0.42:0.85)*Math.pow(0.9,lv-1)*ov.cd;
       const n=(evo?4:1+Math.floor(lv/2))+dupN(p);
       /* ★v6.3 前は vx=±sp、vy≈0 の「真横」にしか飛ばず、少しでも斜めに居る相手には
@@ -2941,7 +2973,7 @@ function weaponsUpdate(dt){
   if(p.wp.thunder>0){
     p.thunderT-=dt*atkMult;
     if(p.thunderT<=0){
-      const evo=p.evo.judgment>0, lvR=p.wp.thunder, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      const evo=p.evo.judgment>0, lvR=p.wp.thunder, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
       const n=(evo?6:1+Math.floor((lv+1)/2))+dupN(p);
       const ts=nearestEnemies(n*3,440);
       if(ts.length){
@@ -2966,7 +2998,7 @@ function weaponsUpdate(dt){
   if(p.wp.chain>0){
     p.chainT-=dt*atkMult;
     if(p.chainT<=0){
-      const evo=p.evo.hchain>0, lvR=p.wp.chain, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      const evo=p.evo.hchain>0, lvR=p.wp.chain, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
       const ts=nearestEnemies(evo?4:(lv>=4?2:1),(evo?300:240)*areaMult(p));
       if(ts.length){
         p.chainT=(evo?0.9:1.15)*Math.pow(0.92,lv-1)*ov.cd;
@@ -2989,7 +3021,7 @@ function weaponsUpdate(dt){
   if(p.wp.spirit>0){
     p.spiritT-=dt*atkMult;
     if(p.spiritT<=0){
-      const evo=p.evo.twinspirit>0, lvR=p.wp.spirit, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      const evo=p.evo.twinspirit>0, lvR=p.wp.spirit, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
       const ts=nearestEnemies(1,520);
       if(ts.length && B.bullets.length<170){
         p.spiritT=(evo?1.1:1.7)*Math.pow(0.9,lv-1)*ov.cd;
@@ -3001,7 +3033,7 @@ function weaponsUpdate(dt){
   }
   /* --- v2.0 ひかりの盾: 向いている側に光の弧。触れた敵を焼き、敵弾(呪弾)を弾く。進化=全方位 --- */
   if(p.wp.shield>0){
-    const evo=p.evo.aegis>0, lvR=p.wp.shield, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+    const evo=p.evo.aegis>0, lvR=p.wp.shield, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
     p.shieldPulse+=dt*atkMult; p.shieldR=(evo?52:38+3*lv)*areaMult(p)*ov.area; p.shieldArc=evo?TAU:Math.PI*(0.9+0.1*lv);
     if(Math.hypot(p.vx,p.vy)>20) p.shieldAng=Math.atan2(p.vy,p.vx); else if(!p.shieldArc||p.shieldAng===0) p.shieldAng=p.face>0?0:Math.PI;
     const inArc=(a)=>{ let da=((a-p.shieldAng+Math.PI*3)%TAU)-Math.PI; return Math.abs(da)<=p.shieldArc/2; };
@@ -3018,7 +3050,7 @@ function weaponsUpdate(dt){
     if(p.holyT<=0){
       // v1.1: 本家の聖水どおり、投げる先は【ランダム】。彼女が敵を誘導しないと当たらない。
       // 進化(きよめの泉)で初めて敵の足元を狙うようになり、Lvを積んでようやく使い物になる
-      const evo=p.evo.spring>0, lvR=p.wp.holy, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      const evo=p.evo.spring>0, lvR=p.wp.holy, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
       const n=(evo?3:1+Math.floor((lv-1)/2))+dupN(p);
       const ts=evo?nearestEnemies(n*2,420):[];
       if(!evo || ts.length){
@@ -3049,7 +3081,7 @@ function kuuWeapons(p,dt,atkMult){
   if(p.wp.ineedle>0){
     p.ineedleT-=dt*atkMult;
     if(p.ineedleT<=0){
-      const lvR=p.wp.ineedle, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      const lvR=p.wp.ineedle, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
       const shots=2+(lv>>1)+dupN(p);
       const ts=nearestEnemies(shots, 480*(1+0.12*(p.ps.reach||0)));
       if(!ts.length) p.ineedleT=0.12;
@@ -3064,7 +3096,7 @@ function kuuWeapons(p,dt,atkMult){
   }
   /* 冷気の帳: 常時オーラ。鈍らせ、脆くする。フレイラのそばでは縮む */
   if(p.wp.ifield>0){
-    const evo=p.evo.blizzard>0, lvR=p.wp.ifield, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+    const evo=p.evo.blizzard>0, lvR=p.wp.ifield, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
     let R=(90+14*lv)*areaMult(p)*ov.area*(evo?1.45:1);
     R*=(1-0.45*kuuHeatAt(p.x,p.y));
     p.ifieldR=R;
@@ -3087,7 +3119,7 @@ function kuuWeapons(p,dt,atkMult){
   if(p.wp.ibloom>0){
     p.ibloomT-=dt*atkMult;
     if(p.ibloomT<=0){
-      const evo=p.evo.glacier>0, lvR=p.wp.ibloom, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      const evo=p.evo.glacier>0, lvR=p.wp.ibloom, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
       p.ibloomT=(3.0-0.22*(lv-1))*ov.cd;
       const n=1+dupN(p)+(lv>=4?1:0);
       const ts=nearEnemiesR(p,n,(250+18*lv)*(1+0.12*(p.ps.reach||0)));   /* v6.3 実測で 260px に届いていなかった */
@@ -3104,7 +3136,7 @@ function kuuWeapons(p,dt,atkMult){
   }
   /* 氷衛: 味方全員の周りを回る氷。触れた敵を止めて割れる */
   if(p.wp.iorbit>0){
-    const evo=p.evo.aurora>0, lvR=p.wp.iorbit, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+    const evo=p.evo.aurora>0, lvR=p.wp.iorbit, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
     const n=Math.min(8,(evo?4:2)+(lv>>1)+dupN(p)), R=(56+5*lv)*areaMult(p)*ov.area;
     p.iorbAng+=dt*1.5;
     for(const h of B.heroes){
@@ -3145,7 +3177,7 @@ function kuuWeapons(p,dt,atkMult){
   } else { for(const h of B.heroes) h.iceOrb=null; }
   /* 氷の追い矢: 味方の直進弾に、淡い青の弾を並べる */
   if(p.wp.iecho>0){
-    const lvR=p.wp.iecho, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+    const lvR=p.wp.iecho, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
     const n=(lv>=5?2:1)+((p.ps.dup||0)>=2?1:0), dmg=(5+2.0*(lv-1))*ov.dmg;
     for(const h of B.heroes) h.iceEcho=(h===p||h.out)?null:{n, dmg, chill:BAL.ICE_CHILL_T};
   } else { for(const h of B.heroes) h.iceEcho=null; }
@@ -3172,7 +3204,7 @@ function freilaWeapons(p,dt,atkMult){
   if(p.wp.fsword>0){
     p.fswordT-=dt*atkMult;
     if(p.fswordT<=0){
-      const evo=p.evo.inferno>0, lvR=p.wp.fsword, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      const evo=p.evo.inferno>0, lvR=p.wp.fsword, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
       p.fswordT=(evo?0.6:0.85)*Math.pow(0.91,lv-1)*ov.cd;
       p.fswordSide*=-1;
       /* v6.3 熱: 前に出て当て続けるほど剣が熱くなる。切れると冷める。
@@ -3197,7 +3229,7 @@ function freilaWeapons(p,dt,atkMult){
     }
   }
   if(p.wp.fring>0){
-    const evo=p.evo.corona>0, lvR=p.wp.fring, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+    const evo=p.evo.corona>0, lvR=p.wp.fring, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
     /* v6.3 熱を分け合う: 剣で溜めた熱ぶん、輪が広がって速く回る。
        ★これが無いと、火の輪はルミナのオーブを線にしただけだった。
        二本を繋げることで「前に出るほど強い子」という一つの形になる */
@@ -3210,7 +3242,7 @@ function freilaWeapons(p,dt,atkMult){
   if(p.wp.fburst>0){
     p.fburstT-=dt*atkMult;
     if(p.fburstT<=0){
-      const evo=p.evo.eruption>0, lvR=p.wp.fburst, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      const evo=p.evo.eruption>0, lvR=p.wp.fburst, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
       p.fburstT=((evo?3.4:3.8)-0.3*(lv-1))*ov.cd;
       const R=(evo?170:90+16*(lv-1))*areaMult(p)*ov.area, dmg=(evo?36:14+6*(lv-1))*ov.dmg;
       p.novaAnim=0.5; p.novaR=R; p.novaFire=true; G.shake=Math.min(7,G.shake+3); sfx(160,40,0.25,'sawtooth',0.08);
@@ -3223,7 +3255,7 @@ function freilaWeapons(p,dt,atkMult){
   if(p.wp.fpillar>0){
     p.fpillarT-=dt*atkMult;
     if(p.fpillarT<=0){
-      const lvR=p.wp.fpillar, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      const lvR=p.wp.fpillar, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
       p.fpillarT=(2.6-0.2*(lv-1))*ov.cd;
       const n=1+(p.ps.dup||0)+(lv>=4?1:0), ts=nearEnemiesR(p,n,(220+16*lv)*(1+0.12*(p.ps.reach||0)));   /* v6.3 実測で 260px に届いていなかった */
       for(const e of ts){ if(B.zones.length>24) B.zones.shift(); B.zones.push({x:e.x, y:e.y, r:(30+4*lv)*areaMult(p)*ov.area, t:0, life:2.2, dmg:(6+2.5*(lv-1))*ov.dmg, tick:0, fire:true}); parts(e.x,e.y-10,10,['#ff7a3a','#ffd76a','#fff'],140,0.5); pushLight(e.x,e.y,170,BAL.DARK_MEM_T*0.8,0.95); }   // v4.0 炎が通った所はしばらく見えている
@@ -3233,7 +3265,7 @@ function freilaWeapons(p,dt,atkMult){
   if(p.wp.fwing>0){
     p.fwingT-=dt*atkMult;
     if(p.fwingT<=0 && attachCount(p)===0 && !p.pinned){
-      const lvR=p.wp.fwing, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      const lvR=p.wp.fwing, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
       const ts=nearEnemiesR(p,1,150+15*lv);
       if(ts.length){ p.fwingT=(4.5-0.35*(lv-1))*ov.cd; const e0=ts[0]; const dxv=e0.x-p.x, dyv=e0.y-p.y, L=Math.hypot(dxv,dyv)||1; const len=Math.min(L+40,120+10*lv); const q=snapFloor(clampMapX(p.x+dxv/L*len,30),clampMapY(p.y+dyv/L*len,30),false,3);
         /* v6.2 突進も瞬間移動と同じで、reachableAt だけでは壁の向こうへ抜ける。
@@ -3265,6 +3297,29 @@ function readyEvos(){
   }
   return out;
 }
+/* v6.4 いま取れる強化の一覧。レベルアップの札の元でもあり、「伸びしろが尽きたか」の判定でもある */
+function upgAvail(){
+  const B=G.B; if(!B) return [];
+  const inParty=id=>B.heroes.some(h=>h.id===id);
+  const wpCountOf=h=>Object.keys(h.wp).filter(k=>h.wp[k]>0).length;
+  const psCount=Object.values(B.heroes[0].ps).filter(v=>v>0).length;
+  return Object.keys(UPG).filter(k=>{
+    if(UPG[k].kind==='wp'){ const own=UPG[k].owner||'lumina'; if(!inParty(own)) return false; const h=heroOf(k); if(h.wp[k]>=upgMax(k)) return false; if(h.wp[k]===0 && wpCountOf(h)>=BAL.WP_SLOTS) return false; return true; }   // v3.0 武器はそのヒロインの枠(v6.0 枠は BAL.WP_SLOTS)
+    if(curLv(k)>=upgMax(k)) return false;
+    if(UPG[k].kind==='ps' && curLv(k)===0 && psCount>=BAL.PS_SLOTS) return false;   // パッシブ枠(v6.0 BAL.PS_SLOTS。共通)
+    return true;
+  });
+}
+function upgPool(){ return upgAvail().concat(readyEvos().map(k=>'EVO:'+k)); }
+/* ★v6.4 伸びしろが尽きた = 武器もパッシブも進化も、取れるものが一つも無い。
+   この時の彼女は「もう強くなれない代わりに、いまが最強」。だから
+   降り口を見つけたら軽く見て降りるし、危ない所へも踏み込む */
+function growthDone(){
+  const B=G.B; if(!B) return false;
+  if(B.growT!==undefined && B.time-B.growT<1.0) return !!B.growDone;   // 1秒に一度で足りる
+  B.growT=B.time; B.growDone=(upgPool().length<=BAL.FULL_SLACK);
+  return B.growDone;
+}
 function maybeLevelup(){
   const B=G.B, p=B.heroes[0];
   if(G.mode!=='battle') return;
@@ -3275,17 +3330,8 @@ function maybeLevelup(){
 }
 function offerLevelup(){
   const B=G.B, p=B.hero;
-  const inParty=id=>B.heroes.some(h=>h.id===id);
-  const wpCountOf=h=>Object.keys(h.wp).filter(k=>h.wp[k]>0).length;
-  const psCount=Object.values(B.heroes[0].ps).filter(v=>v>0).length;
-  const avail=Object.keys(UPG).filter(k=>{
-    if(UPG[k].kind==='wp'){ const own=UPG[k].owner||'lumina'; if(!inParty(own)) return false; const h=heroOf(k); if(h.wp[k]>=upgMax(k)) return false; if(h.wp[k]===0 && wpCountOf(h)>=BAL.WP_SLOTS) return false; return true; }   // v3.0 武器はそのヒロインの枠(v6.0 枠は BAL.WP_SLOTS)
-    if(curLv(k)>=upgMax(k)) return false;
-    if(UPG[k].kind==='ps' && curLv(k)===0 && psCount>=BAL.PS_SLOTS) return false;   // パッシブ枠(v6.0 BAL.PS_SLOTS。共通)
-    return true;
-  });
-  const evos=readyEvos();
-  const pool=avail.concat(evos.map(k=>'EVO:'+k));
+  const avail=upgAvail();
+  const pool=upgPool();
   // v3.0 持ち主ごとの候補数で重みを正規化(武器の数が多いルミナばかり選ばれない)
   const ownCnt={}; for(const k of avail){ if(UPG[k].kind==='wp'){ const o=UPG[k].owner||'lumina'; ownCnt[o]=(ownCnt[o]||0)+1; } } const ownN=Object.keys(ownCnt).length||1, wpAvail=Object.values(ownCnt).reduce((a,b)=>a+b,0);
   if(!pool.length){ applyPray(); return; }   // v1.9 全部が上限: レベルを無駄にしない
@@ -3344,8 +3390,11 @@ function applyUpg(k){
   }
   if(UPG[k].kind==='wp'){   // v3.0 武器は持ち主だけ
     const p=heroOf(k); applyUpgStat(p,k);
-    floatTxt(p.x,p.y-64,UPG[k].name+' Lv'+curLv(k)+(curLv(k)>BAL.WP_EVO_LV?' 覚醒!':'!'),'#ffd76a',13,1.5);
-    heroBubble(p,{freila:'……よし', kuu:'……ん', yamiko:'……悪くない'}[p.id]||'つよくなった♪',true);
+    /* ★v6.4 満ちた武器: 素性に fullBloom がある子(ヤミコ)が上限に届いた一段は、見た目も台詞も別にする */
+    const full=!!(HEROES[p.id]||{}).fullBloom && curLv(k)>=BAL.FULL_LV;
+    floatTxt(p.x,p.y-64,UPG[k].name+' Lv'+curLv(k)+(full?' 満ちた!!':(curLv(k)>BAL.WP_EVO_LV?' 覚醒!':'!')),full?'#c98cff':'#ffd76a',full?15:13,full?2.0:1.5);
+    if(full){ setBanner('闇が満ちた', p.name+' — '+UPG[k].name+'。上限に届いた','#c98cff'); parts(p.x,p.y-16,34,['#c98cff','#2a1a3e','#fff'],240,1.0); }
+    heroBubble(p,full?'……満ちた。ここまでは、何度も来ている':({freila:'……よし', kuu:'……ん', yamiko:'……悪くない'}[p.id]||'つよくなった♪'),true);
   } else {                  // パッシブは全員に効く
     for(const h of B.heroes){ applyUpgStat(h,k); if(k==='vital'){ h.hp=Math.min(h.maxHp,h.hp+25); } }
     const p=B.heroes[leaderIdx()]; floatTxt(p.x,p.y-64,UPG[k].name+' Lv'+curLv(k)+'!','#ffd76a',13,1.5);
@@ -4130,7 +4179,12 @@ function enemiesUpdate(dt){
       { const q=placeNear(p.x,p.y,Math.cos(a)*BAL.REENTER_R,Math.sin(a)*BAL.REENTER_R*0.8,e.r,fly); e.x=q.x; e.y=q.y; }
       e.seenT=0; e.lvx=null; e.lvy=null;
       B.spawnFx.push({x:e.x,y:e.y,t:0,r:e.r+8});
-      if(e.boss){ floatTxt(e.x,e.y-e.r-20,'まわりこんできた!','#ff6b81',11,1.2); }
+      B.nReenter=(B.nReenter||0)+1;
+      if(e.boss){ B.reenterT=B.reenterT||{};   /* ★v6.4 一体の大物のための文。群れで喋らせない */
+        if(B.time-(B.reenterT[e.id]||-99)>BAL.REENTER_SAY_CD && B.time-(B.reenterSay||-99)>BAL.REENTER_SAY_GAP){
+          B.reenterT[e.id]=B.time; B.reenterSay=B.time; B.nReenterSay=(B.nReenterSay||0)+1;
+          floatTxt(e.x,e.y-e.r-20,'まわりこんできた!','#ff6b81',11,1.2);
+        } }
       continue;
     }
     e.zone=zoneAt(e.x,e.y);
@@ -4304,7 +4358,7 @@ function enemiesUpdate(dt){
       for(let i=0;i<n;i++){
         const o=orbPos(i,n);
         if(Math.hypot(e.x-o.x,(e.y-e.r)-o.y)<e.r+(evo?14:11)){
-          damageEnemy(e,(evo?16:11+4*(Math.min(BAL.WP_EVO_LV,p.wp.orb)-1))*wpOver(p.wp.orb).dmg);
+          damageEnemy(e,(evo?16:11+4*(Math.min(BAL.WP_EVO_LV,p.wp.orb)-1))*wpOver(p.wp.orb,p).dmg);
           if(evo) p.hp=Math.min(p.maxHp,p.hp+1);
           e.orbCd=0.4;
           parts(o.x,o.y,3,['#fff','#ffd76a'],90,0.3);
@@ -5148,7 +5202,7 @@ function yamiWeapons(p,dt,atkMult){
   if(p.wp.dblade>0){
     p.dbladeT=(p.dbladeT||0)-dt*atkMult;
     if(p.dbladeT<=0){
-      const evo=p.evo.eclipse>0, lvR=p.wp.dblade, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      const evo=p.evo.eclipse>0, lvR=p.wp.dblade, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
       p.dbladeT=(evo?0.78:1.05)*Math.pow(0.92,lv-1)*ov.cd;
       const range=(evo?150:96+9*lv)*areaMult(p)*ov.area, dmg=(evo?24:11+4.4*(lv-1))*ov.dmg;
       /* 斬る向き: 追ってくる者が居ればその線上、居なければ向いている方 */
@@ -5173,7 +5227,7 @@ function yamiWeapons(p,dt,atkMult){
      ★前はフレイラの火の輪と同じ「一定半径を回る輪」だった。
      こちらは投網。輪が縮みきる頃には、囲った者が刃の間合いに集まっている */
   if(p.wp.dring>0){
-    const evo=p.evo.umbra>0, lvR=p.wp.dring, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+    const evo=p.evo.umbra>0, lvR=p.wp.dring, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
     p.dringAng=(p.dringAng||0)+dt*2.0;
     p.dringPh=((p.dringPh||0)+dt/(BAL.DRING_CYCLE*(evo?0.78:1)))%1;
     const Rmax=(evo?128:74+9*lv)*areaMult(p)*ov.area;
@@ -5196,7 +5250,7 @@ function yamiWeapons(p,dt,atkMult){
   if(p.wp.dspear>0){
     p.dspearT=(p.dspearT||0)-dt*atkMult;
     if(p.dspearT<=0){
-      const evo=p.evo.gloom>0, lvR=p.wp.dspear, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      const evo=p.evo.gloom>0, lvR=p.wp.dspear, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
       const maxD=(evo?760:520)*(1+0.12*(p.ps.reach||0));
       let t=null, bd=-1;
       for(const e of B.enemies){ if(e.dead||e.dormant||e.item||e.state==='attached') continue;
@@ -5223,7 +5277,7 @@ function yamiWeapons(p,dt,atkMult){
   if(p.wp.dcall>0){
     p.dcallT=(p.dcallT||0)-dt*atkMult;
     if(p.dcallT<=0){
-      const lvR=p.wp.dcall, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+      const lvR=p.wp.dcall, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
       p.dcallT=(4.5-0.3*(lv-1))*ov.cd;
       B.shades=B.shades||[];
       if(B.shades.length<4+dupN(p)){
@@ -5235,7 +5289,7 @@ function yamiWeapons(p,dt,atkMult){
   }
   /* 影渡りの余波: 跳んだ跡で闇が弾ける(パッシブ的に効く) */
   if(p.wp.dstep>0 && (p.stepFx||0)>0){
-    const lvR=p.wp.dstep, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
+    const lvR=p.wp.dstep, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
     const R=(70+9*lv)*areaMult(p)*ov.area, dmg=(12+5*(lv-1))*ov.dmg;
     for(const e of B.enemies){ if(e.dead||e.dormant||e.item) continue;
       if(Math.hypot(e.x-p.stepX,e.y-p.stepY)<R+e.r){ damageEnemy(e,dmg); e.stun=Math.max(e.stun||0,0.3); } }
@@ -5594,7 +5648,14 @@ function poiTick(dt){
       if(q.kind==='core'){ setBanner('魔核の間','深淵の心臓。彼女は挑むだろう','#ff6b81'); { const two=B.heroes.length>1, V=(typeof STORY_V30!=='undefined')?STORY_V30:null; let fe=(two&&V&&V.finalEncounter&&V.finalEncounter.length)?V.finalEncounter:STORY.finalEncounter;   // v3.0 二人で魔核を見る
         /* v5.2 二周目以降: 彼女たちは一日目のつもりで来ている。だから「弱いはず」の心臓の厚みに説明がつかない。
            そして心臓の側も、落としきる寸前だったはずが供が増えていることに説明がつかない。互いに、覚えていない */
-        if(V && V.era && eraNow()>=1){ fe=fe.concat(V.era.coreStronger||[], V.era.coreVoice||[]); }
+        /* ★v6.4 認知は、ループの向きごとに出す。前は era>=1 で二つとも出していたので、
+           供が一人も増えていない夜にも心臓が「増えている」と言っていた。
+           era(=魔核を討った回数) … 巻き戻されたのは魔核。痕跡は「身の厚み」→ ルミナ側が「思ってたより大きい」
+           供の数(=彼女たちが巻き戻された痕跡) … 巻き戻されたのは彼女たち。痕跡は「仲間」→ 魔核側が「増えている」 */
+        if(V && V.era){
+          if(eraNow()>=1) fe=fe.concat(V.era.coreStronger||[]);
+          if(partyIds().length>=2) fe=fe.concat(V.era.coreVoice||[]);
+        }
         if(fe.length && !B.storyCoreSeen){ B.storyCoreSeen=true; UI.showStory(fe,{dur:11}); } } }
       if(q.kind==='seal') setBanner('封印石','3つ全て灯すと降り口が開く','#c98cff');
     }
@@ -5911,7 +5972,7 @@ function skillTick(dt){
 /* v2.3 いまの武器から見た、おおまかな秒間火力(戦う/引き撃ち/逃げるの判断に使う) */
 function heroDpsEst(p){
   const BASE={bolt:14,orb:10,nova:16,whip:14,rain:13,cross:13,sanct:15,blade:14,thunder:14,holy:9,chain:13,spirit:12,shield:9, fsword:17,fring:12,fburst:15,fpillar:14,fwing:13, ineedle:9,ifield:6,ibloom:10,iorbit:9,iecho:12, dblade:18,dring:11,dspear:19,dcall:10,dstep:8};
-  let d=0; for(const k in BASE){ const lv=p.wp[k]||0; if(lv<=0) continue; const ov=wpOver(lv); const evo=Object.keys(EVOS).some(e=>EVOS[e].base===k && p.evo[e]>0); d+=BASE[k]*(1+0.35*(Math.min(BAL.WP_EVO_LV,lv)-1))*ov.dmg/ov.cd*(evo?1.8:1); }
+  let d=0; for(const k in BASE){ const lv=p.wp[k]||0; if(lv<=0) continue; const ov=wpOver(lv,p); const evo=Object.keys(EVOS).some(e=>EVOS[e].base===k && p.evo[e]>0); d+=BASE[k]*(1+0.35*(Math.min(BAL.WP_EVO_LV,lv)-1))*ov.dmg/ov.cd*(evo?1.8:1); }
   return Math.max(8, d*(p.dmgMult||1)*(1+0.08*(p.ps.haste||0))*(1+0.4*(p.ps.dup||0)));
 }
 
@@ -5956,12 +6017,16 @@ function exitTick(dt){
   else if(B.idleGoalT>=BAL.EXIT_IDLE_T && B.time>90) why='done';
   else if(BAL.SMART_AI && (B.fleeT||0)>=BAL.FLEE_EXIT_T && B.time>40 && !B.floor.final) why='flee';   // v2.3 逃げ続けても終わらない → 降り口を探して降りる
   else if(partyWorn()>=BAL.WORN_EXIT && B.time>50) why='worn';   // v5.0 何度も絶頂させられ、動けない時間が伸びてきた → 宝箱は諦めて次へ
+  /* ★v6.4 伸びしろが尽きた: 降り口を知っているなら、軽く見て降りる */
+  else if(!B.floor.final && growthDone() && B.time>BAL.EXIT_FULL_T*0.35
+          && (seenFrac()>=BAL.EXIT_FULL_SEEN || B.time>=BAL.EXIT_FULL_T)
+          && G.map.pois.some(o=>o.kind==='stairs' && META.map.known[o.key])) why='full';
   if(!why) return;
   const fin=!!B.floor.final; const st=G.map.pois.find(o=>o.kind===(fin?'core':'stairs')); if(!st) return;
   B.wantExit=true; B.wantExitWhy=why; p.goal=null; p.goalT=0;
-  const SUB={press:'魔物が増えてきた——長居はまずい', hp:fin?'体力が薄い——決めに行く':'体力が薄い——ここは離れる', done:fin?'見るところは見た——魔核へ':'見るところは見た——次へ', flee:'逃げ続けても終わらない——降り口を探す', worn:fin?'これ以上は保たない——決めに行く':'これ以上は保たない——切り上げる'};
+  const SUB={press:'魔物が増えてきた——長居はまずい', hp:fin?'体力が薄い——決めに行く':'体力が薄い——ここは離れる', done:fin?'見るところは見た——魔核へ':'見るところは見た——次へ', flee:'逃げ続けても終わらない——降り口を探す', worn:fin?'これ以上は保たない——決めに行く':'これ以上は保たない——切り上げる', full:'もう伸びしろが無い——ちょっとだけ見て、次へ'};
   if(fin){ setBanner('彼女は魔核へ向かう気になった', SUB[why],'#ff6b81'); sayLine('wantExit',1,0,'……いこう。まかくの、ところへ'); }
-  else{ setBanner('彼女は降りる気になった', SUB[why],'#8fd3ff'); if(why==='flee') sayLine('fleeExit',1,0,'にげながら、おりぐちさがす!'); else if(why==='worn') sayLine('feat.wornExit',1,0,'もう、むり……たからばこは、いい。おりる'); else sayLine('wantExit',1,0,why==='done'?'もう、みるとこないし。おりよ!':'……そろそろ、おりなきゃ'); }
+  else{ setBanner('彼女は降りる気になった', SUB[why],'#8fd3ff'); if(why==='flee') sayLine('fleeExit',1,0,'にげながら、おりぐちさがす!'); else if(why==='worn') sayLine('feat.wornExit',1,0,'もう、むり……たからばこは、いい。おりる'); else if(why==='full') sayLine('fullExit',1,0,'もう、とるものないし。ちょっとだけ見て、おりよ'); else sayLine('wantExit',1,0,why==='done'?'もう、みるとこないし。おりよ!':'……そろそろ、おりなきゃ'); }
 }
 /* v2.1 場面に合わせた台詞: 地形に入った / 圧が高まった / 体力が薄い / 一息 */
 function linesTick(dt){
