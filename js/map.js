@@ -38,6 +38,11 @@ function clampMapY(y,m){ m=m===undefined?24:m; return clamp(y,-MAP_HH+m,MAP_HH-m
 function genMap(){
   const gi=mapGen(), F=curFloor(), fl=F.depth, seed=1000+gi*7919+fl*104729+(typeof eraNow==='function'?eraNow()*31337:0);   // v2.0 世代×階層で地形が決まる(同じ階層への再挑戦は同じ地形) / v3.0 世代(era)で最終階層が動くので種にも入れる
   if(G.map && G.map.seed===seed && META.map && META.map.gen===gi && META.map.floor===fl){ G.map.flowT=-9; G.map.heroTile=null; G.map.flows=null; return; }   // 同じ世代・同じ階層: 流れ場だけ次の出撃で作り直す
+  /* v6.0f 見覚え: 一晩目を出ていく時に、その夜の地図だけを控えておく。
+     15階がこれを読んで「知っているつもり」の地図で始める。★ここに置くのは、
+     G.map がまだ一晩目のものである最後の瞬間だから——下で新しい盤を組んだ後では、
+     もう一晩目の場所は残っていない */
+  if(fl!==1 && G.map && G.map.floor===1 && META.map && META.map.floor===1 && META.map.gen===gi) stashFirstNight();
   let sd=seed; const rnd=()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; };
   const N=MAP_W*MAP_H;
   // ---- 地形帯: ボロノイ風。巣は端のほう、出発点は苔
@@ -131,7 +136,7 @@ function genMap(){
      順番を逆にして、設計テンプレートが先に場所を取る。岩はその残りにだけ生える。
      実際の呼び出しは、この下の設計テンプレート群の後(rockForms())に移した。 */
   // ---- v2.0 設計された地形: 階層ごとの型を刻む(崖の一本道・水の細道・闘技場・迷路の袋小路・肉の喉道)
-  const feat={shrines:[], pools:[], seals:[], exit:null, list:[]};   // list: v2.1 地形ごとの中心と半径(彼女がそこへ入った時の台詞に使う)
+  const feat={shrines:[], pools:[], seals:[], seats:[], seatPath:[], exit:null, list:[]};   // list: v2.1 地形ごとの中心と半径(彼女がそこへ入った時の台詞に使う)
   const ZI=(z)=>Math.max(0,ZONE_IDS.indexOf(z));
   const farSpot=(minT)=>{ for(let t=0;t<200;t++){ const a=rnd()*TAU, dd=minT+rnd()*10; const i=Math.round(MAP_W/2+Math.cos(a)*dd*1.3), j=Math.round(MAP_H/2+Math.sin(a)*dd*0.8); if(i>8&&j>8&&i<MAP_W-8&&j<MAP_H-8) return {i,j}; } return {i:MAP_W-10,j:MAP_H/2|0}; };
   const usedF=[]; const freeSpot=(minT,rad)=>{ for(let t=0;t<120;t++){ const s=farSpot(minT); if(usedF.every(u=>Math.hypot(u.i-s.i,u.j-s.j)>u.r+rad+3)){ usedF.push({i:s.i,j:s.j,r:rad}); return s; } } return null; };
@@ -301,6 +306,50 @@ function genMap(){
       for(let w=-5;w<=5;w++){ const i=Math.round(ci-Math.sin(a)*w), j=Math.round(cj+Math.cos(a)*w*0.75); if(i<3||j<3||i>=MAP_W-3||j>=MAP_H-3) continue; if(Math.abs(w)<=1) set(i,j,0); else if(Math.abs(w)<=4 && t>2) set(i,j,SOLID_ROCK); }
     }
   };
+  /* v6.0f 待ち手の道(14階「厚みの中」専用)。
+     この階には追ってくるものが一体も居ない——全部が据わって待っている。
+     だからテンプレート自身が「避けて通る経路を作らない」ことを引き受ける。
+     手順: (1)いま通れる盤の上で、出発点から降り口までの道を先に一本引く
+           (2)その道の上に、待ち手の座を SEAT_GAP おきに置く
+           (3)座のまわりだけ、道から離れたタイルを肉で埋めて迂回路を潰す
+     ★道そのものには絶対に触らない。ここを守っているので到達性は構成上保たれる——
+       「壁で挟んでから通れるか検査する」より、通る道を先に決めて周りだけ埋める方が安全 */
+  const seatway=(exI,exJ)=>{
+    const ci0=Math.floor(MAP_W/2), cj0=Math.floor(MAP_H/2);
+    const reach=floodReach(solid,ci0,cj0);
+    if(!reach[exJ*MAP_W+exI]) return;                       // 届かないなら何もしない(あとの掘り直しに任せる)
+    /* 降り口から出発点へ BFS。prev を辿れば道になる */
+    const prev=new Int32Array(N).fill(-1), seen=new Uint8Array(N);
+    const q=[exJ*MAP_W+exI]; seen[q[0]]=1; let hit=-1;
+    for(let h=0;h<q.length&&hit<0;h++){ const cur=q[h], ci=cur%MAP_W, cj=(cur-ci)/MAP_W;
+      for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1]]){ const ni=ci+di, nj=cj+dj;
+        if(ni<2||nj<2||ni>=MAP_W-2||nj>=MAP_H-2) continue;
+        const nk=nj*MAP_W+ni; if(seen[nk]||solid[nk]) continue;
+        seen[nk]=1; prev[nk]=cur; if(ni===ci0&&nj===cj0){ hit=nk; break; } q.push(nk); } }
+    if(hit<0) return;
+    const path=[]; for(let cur=hit;cur>=0;cur=prev[cur]) path.push([cur%MAP_W,Math.floor(cur/MAP_W)]);
+    if(path.length<14) return;
+    const onPath=new Uint8Array(N);
+    for(const [i,j] of path) for(let dj=-1;dj<=1;dj++) for(let di=-1;di<=1;di++){ const ii=i+di, jj=j+dj; if(inMap(ii,jj)) onPath[jj*MAP_W+ii]=1; }
+    /* 道そのものも控えておく。この階で出された「動く種」は、壁に吸われて
+       この道のどこかに据わる——だから彼女は、道いっぱいの待ち手の間を歩くことになる */
+    for(let t=2;t<path.length-2;t+=2) feat.seatPath.push(T2(path[t][0],path[t][1]));
+    /* 座を置く: 道に沿って SEAT_GAP おき。出発点と降り口の手前は空ける */
+    const gapT=Math.max(4,Math.round(BAL.SEAT_GAP/MAP_T));
+    for(let t=gapT;t<path.length-gapT;t+=gapT){
+      const [si,sj]=path[t];
+      feat.seats.push(T2(si,sj));
+      usedF.push({i:si,j:sj,r:4});
+      /* 座のまわり、道から外れたタイルだけを埋める。半径3〜6の輪 */
+      for(let dj=-6;dj<=6;dj++) for(let di=-6;di<=6;di++){
+        const ii=si+di, jj=sj+dj; if(ii<3||jj<3||ii>=MAP_W-3||jj>=MAP_H-3) continue;
+        const dd=Math.hypot(di,dj*1.25); if(dd<3||dd>6) continue;
+        const k=jj*MAP_W+ii; if(onPath[k]) continue;         // ★道は絶対に埋めない
+        solid[k]=SOLID_ROCK;
+      }
+    }
+    if(feat.seats.length) feat.list.push(Object.assign({kind:'seatway',r:Math.hypot(exI-ci0,exJ-cj0)*MAP_T*0.5},T2(Math.round((exI+ci0)/2),Math.round((exJ+cj0)/2))));
+  };
   /* v6.0 岩の形。設計テンプレートが場所を取った後に、その残りへ生やす。
      階層ごとに「何がどれだけ生えるか」を変える——壁様式だけで決めていたのを、階層で決める */
   const rockForms=()=>{
@@ -328,6 +377,7 @@ function genMap(){
     else arena(ex.i,ex.j,fl2>=4?8:7,fl2>=4?SOLID_ROCK:SOLID_CLIFF);
     feat.exit=T2(ex.i,ex.j);
     feat.list.push(Object.assign({kind:'arena',r:(F.final?10:8)*MAP_T},T2(ex.i,ex.j)));
+    if(F.seatway) seatway(ex.i,ex.j);   /* v6.0f 14階: 待ち手の間合いを通らない道は無い */
     lewdDen();
     /* ★ここで初めて岩を生やす */
     rockForms();
@@ -402,10 +452,47 @@ function genMap(){
       if(Math.hypot(i-ai,(j-aj)*1.15)<=7 && zone[j*MAP_W+i]!==ZL2) zone[j*MAP_W+i]=ZH2;
     }
   }
-  G.map={seed, gi, floor:fl, wall:F.wall, zone, solid, sites, pois, zoneTiles, feats:feat.list, lewd:feat.lewd||null, mini:null, chunks:new Map(), dist:null, distF:null, flowT:-9, heroTile:null};   // feats: v2.1 設計された地形の中心(台詞用)
+  G.map={seed, gi, floor:fl, wall:F.wall, zone, solid, sites, pois, zoneTiles, feats:feat.list, seats:feat.seats, seatPath:feat.seatPath, lewd:feat.lewd||null, mini:null, chunks:new Map(), dist:null, distF:null, flowT:-9, heroTile:null};   // feats: v2.1 設計された地形の中心(台詞用)
   if(!META.map || META.map.gen!==gi || META.map.floor!==fl){ META.map={gen:gi, floor:fl, known:{}, visited:{}, seen:0}; saveMeta(); }   // 世代か階層が変われば記憶を捨てる(同じ階層の再挑戦では保つ)
+  if(F.mimic) mimicKnown();   /* v6.0f 15階: 一晩目の地図をそのまま開いて始める(それが罠) */
   // 出発点からの流れ場を先に作る(初期召喚の配置に使う)
   G.map.dist=bfsField(ci0,cj0,false); G.map.distF=bfsField(ci0,cj0,true); G.map.heroTile=[ci0,cj0];
+}
+/* ================= v6.0f 見覚え(15階「はじめの夜」) =================
+   15階は一晩目と同じ顔をしている。同じ苔、同じ水、同じ場所に祠と清水と降り口。
+   ★ここで作るのは地形の同一性ではなく、彼女の側の「知っているつもり」の方。
+   一晩目に見つけた場所を控えておいて、15階の同じ種類の場所を最初から
+   「知っている」ことにする。だから彼女は探索せず、まっすぐ目的地へ歩く。
+   それが罠——そこに在るのは、覚えているものではない。
+   ★META.map は一階ぶんしか無い(階が変われば捨てられる)ので、
+     一晩目の記録は META.gen 側へ退避する。読むだけで、一晩目の記録は汚さない */
+function stashFirstNight(){
+  if(!G.map||!META.map||!META.gen) return;
+  const K=META.map.known||{}, V=META.map.visited||{}, out=[];
+  for(const q of G.map.pois){ if(!K[q.key]) continue; out.push({k:q.kind, x:Math.round(q.x), y:Math.round(q.y), v:V[q.key]?1:0}); }
+  META.gen.firstNight={ gi:mapGen(), pois:out };
+  saveMeta();
+}
+function mimicKnown(){
+  const S=META.gen&&META.gen.firstNight;
+  if(!S||S.gi!==mapGen()||!S.pois||!S.pois.length) return 0;
+  if(!G.map||!META.map) return 0;
+  const taken=new Set(); let n=0;
+  for(const o of S.pois){
+    let best=null, bd=1e18;
+    for(const q of G.map.pois){
+      if(q.kind!==o.k || taken.has(q.key)) continue;
+      const d=Math.hypot(q.x-o.x,q.y-o.y); if(d<bd){ bd=d; best=q; }
+    }
+    /* 種類が同じでも遠すぎるものは「同じ場所」と見なさない——
+       開きすぎた地図は、罠ではなくただの親切になる */
+    if(!best || bd>BAL.MIMIC_R*3) continue;
+    taken.add(best.key); META.map.known[best.key]=1; n++;
+    /* ★visited は写さない。「行ったことがある」までは寄越さない——
+       祠は開いていない状態で覚えていて、開けに行く。そこに居るのは抱き茸 */
+  }
+  if(n) saveMeta();
+  return n;
 }
 function floodReach(solid,si,sj){
   const N=MAP_W*MAP_H, reach=new Uint8Array(N); const q=[sj*MAP_W+si]; reach[q[0]]=1;

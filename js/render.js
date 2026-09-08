@@ -3119,6 +3119,41 @@ function drawMire(g,m){
    チップが焼くのは静止画。ここで重ねるのは、状態で変わるものだけ——
    凪いだ面に映る姿・灯った紋・時の澱の残像・忘れ水の渦。
    ★毎フレーム舐めるのは画面内のタイルだけに限る */
+/* v6.0f 14階「厚みの中」: 壁の呼吸。
+   ★solid は動かさない(焼き直すと落ちる)。動いて見えるのは、この一枚だけ。
+   壁の内側に、位相ぶんだけ膨らんだ肉の縁を描き足す——寄ってくるのは絵、
+   効いてくるのは breathHeroTick(壁ぎわで走れず、擦れて敏感化) */
+function drawBreath(g){
+  const B=G.B, M=G.map; if(!B||!M||!B.floor||!B.floor.breath) return;
+  const q=(typeof breathPhase==='function')?breathPhase():0; if(q<=0.01) return;
+  const T=MAP_T, t=B.time;
+  const i0=Math.max(0,tileI(G.cam.x-W/2)-1), i1=Math.min(MAP_W-1,tileI(G.cam.x+W/2)+1);
+  const j0=Math.max(0,tileJ(G.cam.y-H/2)-1), j1=Math.min(MAP_H-1,tileJ(G.cam.y+H/2)+1);
+  const d=T*0.5*q;
+  g.save();
+  g.fillStyle='rgba(160,42,74,'+(0.30+0.34*q).toFixed(3)+')';
+  for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++){
+    const k=j*MAP_W+i; if(!M.solid[k]) continue;
+    const x=i*T-MAP_HW, y=j*T-MAP_HH;
+    /* 床に面している辺だけ、内側へ膨らませる */
+    if(!solidIJ(i,j-1)) g.fillRect(x, y-d, T, d);
+    if(!solidIJ(i,j+1)) g.fillRect(x, y+T, T, d);
+    if(!solidIJ(i-1,j)) g.fillRect(x-d, y, d, T);
+    if(!solidIJ(i+1,j)) g.fillRect(x+T, y, d, T);
+  }
+  /* 絨毛が一斉に同じ向きへ倒れる */
+  g.strokeStyle='rgba(230,130,165,'+(0.16+0.20*q).toFixed(3)+')'; g.lineWidth=1.4;
+  g.beginPath();
+  for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++){
+    const k=j*MAP_W+i; if(!M.solid[k]) continue;
+    if(solidIJ(i,j+1)) continue;
+    const x=i*T-MAP_HW+T*0.5, y=j*T-MAP_HH+T;
+    const a=Math.sin(t*1.6+i*0.7)*0.4;
+    g.moveTo(x,y); g.lineTo(x+Math.sin(a)*7, y+d+7);
+  }
+  g.stroke();
+  g.restore();
+}
 function drawZoneV6(g){
   const B=G.B, M=G.map; if(!B||!M||!M.zone) return;
   const T=MAP_T, t=B.time;
@@ -4081,6 +4116,7 @@ function draw(){
     const B=G.B, p=B.hero;
     drawLight(g,p.x,p.y);
     drawZoneV6(g);   /* v6.0 鏡の映り・灯った紋・澱の残像・忘れ水の渦 */
+    drawBreath(g);   /* v6.0f 14階: 壁が寄ってくる */
     if(B.silks && B.silks.length){   /* v6.0 糸紡ぎが張った糸。倒しても残る */
       g.strokeStyle='rgba(255,200,220,0.42)'; g.lineWidth=0.9;
       g.beginPath(); for(const s2 of B.silks){ g.moveTo(s2.x0,s2.y0); g.lineTo(s2.x1,s2.y1); } g.stroke();

@@ -209,6 +209,7 @@ function heroStat(h){
   if(h.waveDur>0) spd*=BAL.WAVE_SPD;
   if(h.exhausted) spd*=0.7;
   if(h.numbT>0) spd*=0.75;        // 痺れ
+  if((h.squeeze||0)>0) spd*=1-(1-BAL.BREATH_SPD)*h.squeeze;   /* v6.0f 14階: 壁が寄っている間は走れない */
   if(h.suitT>0) spd*=0.85;        // 触手服
   return { speed:spd, magnet:90+45*h.ps.magnet };
 }
@@ -291,6 +292,8 @@ function startBattle(){
   spawnInitialPicks();    // v1.8 地形の資源(光茸・蜜の花・沈んだ宝)
   spawnDen();             // v3.2 巣窟の報酬と仕掛け
   spawnWildShrooms();     // v4.1 洞そのものとして生えている茸(媚茸・抱き茸)
+  spawnSeats();           // v6.0f 14階: 待ち手の道に据わるもの
+  mimicSwap();            // v6.0f 15階: 一晩目と同じ場所に、同じではないもの
   spawnRings();           // v4.1 菌輪
   spawnMires();           // v5.0 媚薬沼(水溜まりのように点在)
   spawnYamiBoss();        // v5.0 前回の最下層(心臓がどいた後の窪み)で眠っている者(ヤミコの一段目)
@@ -1432,6 +1435,7 @@ function statesTick(h,dt){
   if(h.zone==='hotspring' && !ice){ applySensit(1.2*dt); addHeatG(2*dt); h.hp=Math.min(h.maxHp,h.hp+h.regen*0.5*dt); }
   if(h.zone==='flesh' && !ice) addHeatG(BAL.FLESH_HEAT*dt);   // v2.0 肉の床: 脈がうつる
   zoneV6Tick(h,dt,ice);   /* v6.0 鏡・紋・糸・霜・胎・澱・忘れ水・苔もどき */
+  breathHeroTick(h,dt);   /* v6.0f 14階: 狭まった壁に擦れる */
   if(h.zone==='lewd'){   // v3.2 巣窟: 前室→沼→最奥と、奥ほど効きが強い。奥まで来たら引き返さない(前室でだけ「やっぱ無理」が出る)
     const dst=Math.max(0,Math.min(2,denStage(h.x,h.y)));
     if(!ice){ learnZone('lewd',dt*0.45); addHeatG(BAL.DEN_HEAT[dst]*dt); applySensit(BAL.DEN_SENS[dst]*dt); }
@@ -3035,6 +3039,29 @@ function unitDef(id){
 }
 function spawnUnit(id, x, y, o){
   o=o||{};
+  /* v6.0f 14階「厚みの中」の法(待ち): この階に追ってくるものは一体も居ない。
+     出された動く種は壁に吸われ、据わったものへ変わって、待ち手の道に並ぶ。
+     ★ボスと魔核戦は除く——この法は「階を渡ること」に掛かるもので、
+       心臓自身の戦いに掛かるものではない。骨兵の番人(v6.0e)と同じ線引き。
+       ここを外すと、世代12の魔核戦(＝最深階が14階になる唯一の世代)だけが
+       静かに無効試合になる。
+     ★F0.final(＝この階が最深＝心臓がここに居る)でも法を止める。
+       coreWar の番人だけでは足りなかった——魔核戦に入る前に湧いたぶんが
+       据わったまま残り、戦いのあいだ何もしない傍観者になる。
+       実測: 世代12 の毎秒が 270→395(線0)・307→456(線6)、余裕が 0.92→1.02 に跳ねた。
+       深いほど苦しいはずの曲線で、最深の世代だけが一番楽になっていた。
+       厚みの中は心臓の身の内側だ。心臓自身がそこに居る夜は、身も据わってはいない。
+     ★ここは rankPick より前。あとの処理は全部この id で走らせる。
+     ★石の番兵(guardian)も除く。番兵は「全員沈黙させるまで降り口が使えない」
+       仕掛けそのものなので、据わらせると降り口が永久に開かなくなる——
+       いまは !M0.guardian が偶然そこを守っているだけなので、理由をここに残す */
+  { const B0=G.B, F0=B0&&B0.floor, M0=MONSTERS[id];
+    if(F0&&F0.sit&&!F0.final&&!B0.coreWar&&!o.parent&&M0&&!M0.boss&&!M0.item&&!M0.guardian&&M0.spd>0){
+      const L=SIT_SUBS[tierOf(id)];
+      if(L&&L.length){ const sub=L[(Math.random()*L.length)|0]; if(MONSTERS[sub]){ id=sub; o=Object.assign({},o,{noRank:true}); } }
+      const P=G.map&&G.map.seatPath;
+      if(P&&P.length){ const q=P[(Math.random()*P.length)|0], g=snapFloor(q.x+rand(-46,46), q.y+rand(-46,46), false, 3); if(g){ x=g.x; y=g.y; } }
+    } }
   /* v6.0 深いほど「熟れた個体」に差し替わる。★頭数ではなく格で押すのが深階の設計なので、
      ここは召喚コストを増やさない(EN は呼んだ側の id で既に払われている)。
      差し替えは種の同一性を壊さない——絵も本文も図鑑も base のまま */
@@ -3117,6 +3144,13 @@ function spawnUnit(id, x, y, o){
   if(id==='guardian'){ u.castCd=3; u.aimT=0; u.lookA=0; }
   if(id==='core'){ u.whipCd=2; u.whipT=0; u.pulseCd=5; u.pulseT=0; u.spawnCd=4; u.lookA=0; { const e0=eraNow()===0, lvK=BAL.CORE_HP_LV*(e0?BAL.CORE_ERA0_LV_K:1), lvCap=e0?BAL.CORE_ERA0_LV_CAP:BAL.CORE_HP_LV_CAP; u.hp=u.maxHp=Math.round(BAL.CORE_HP*(BAL.CORE_ERA_HP0+BAL.CORE_ERA_HP_K*eraNow())*(1+Math.min(lvCap,lvK*Math.max(0,heroLv-1)))*(1+((META.gen&&META.gen.fed)||0)));   /* v6.0 心根が壁伝いに送ったぶん、身が厚い */   /* v5.0 魔核が太るのは「自分が討たれた回数」だけ。彼女たちが捕まって時が戻っても、魔核は何も知らない */ } u.era=eraNow(); /* v3.1 世代0は Lv 補正も半分 */ u.r=Math.round(MONSTERS.core.r*(0.68+0.08*Math.min(4,u.era))); }   // v3.0 世代0は薄く小さく(見た目も弱く)、討たれるごとに厚く大きく   // v2.2 引き継いだLvが高いほど厚い(最大×4.5)
   // 地形の恩恵: 湿地で粘る種のHP、巣の魔物のHP。速度は毎フレーム今いる地形で決まる(spd0 が素の速度)
+  /* v6.0f 14階「厚みの中」の法(待ち): この階に追ってくるものは一体も居ない。
+     カードから出した動く種は、出た瞬間に壁へ吸われて据わる。
+     ★ボスと魔核戦は除く——この法は「階を渡ること」に掛かるもので、
+       心臓自身の戦いに掛かるものではない。骨兵の番人(v6.0e)と同じ線引き。
+       ここを外すと、世代12の魔核戦(＝最深階が14階になる唯一の世代)だけが
+       静かに無効試合になる */
+  if(B.floor&&B.floor.sit&&!B.coreWar&&!MONSTERS[id].boss&&!o.parent) u.sat=true;   /* v6.0f 壁に吸われた印(絵と手記が読む) */
   u.spd0=u.spd; u.zone=zoneAt(x,y); u.item=!!MONSTERS[id].item;   // 設置物は押し合いで動かない
   if(id==='suiyou') u.sub=(u.zone==='water'||u.zone==='damp');   // v2.0 水妖は水の中で待つ
   { const hm=zoneMonHp(u.zone,id); if(hm!==1){ u.hp*=hm; u.maxHp*=hm; } }
@@ -7426,6 +7460,197 @@ function storyTick(dt){
   if(p.pinned||p.charmBind||p.climaxT>0||attachCount(p)>0||p.heatLv>0||B.enemies.length>30) return;
   heroBubble(p,pickRand(pool),false,0);
 }
+/* ================= v6.0f 13階「忘れ潟」: 世界だけが巻き戻る =================
+   45秒ごとに、盤面の状態だけが12秒前へ戻る。
+   戻るもの: 拾った資源 / 沼の乾き・氷結 / 菌輪の開閉 / 壊した設置物 / 魔物の立ち位置。
+   ★戻らないもの: 快感・敏感化・発情・催眠・拘束・スタミナ・HP・経験値・レベル・ジェム。
+     つまり彼女の側は何ひとつ戻らない。「記憶は消えて、身体だけが残る」——
+     ここを取り違えると、この階の一行がまるごと消える。
+   ★solid/zone には一切触らない。地形を焼き直す実装は落ちると分かっているし、
+     この階に扉は無いので、動く状態だけを輪に貯めれば設計の意味は full に出る。
+   ★白い一閃を必ず添える。添えないと、ただのバグに見える */
+function rewindSnap(){
+  const B=G.B; if(!B) return null;
+  return {
+    t:B.time,
+    picks:(B.picks||[]).map(pk=>({o:pk, dead:!!pk.dead, known:!!pk.known, x:pk.x, y:pk.y})),
+    mires:(B.mires||[]).map(m=>({o:m, dry:!!m.dry, iced:!!m.iced})),
+    rings:(B.rings||[]).map(r=>({o:r, state:r.state, t:r.t, cd:r.cd, caps:r.caps})),
+    props:(B.props||[]).map(pr=>({o:pr, hp:pr.hp})),
+    foes:(B.enemies||[]).filter(e=>!e.dead&&!e.boss&&!e.item&&e.state!=='attached').map(e=>({o:e, x:e.x, y:e.y})),
+  };
+}
+function rewindTick(dt){
+  const B=G.B, F=B&&B.floor;
+  if(!B||!F||!F.rewind||B.coreWar) return;
+  B.rwQ=B.rwQ||[];
+  B.rwSnapT=(B.rwSnapT||0)-dt;
+  if(B.rwT===undefined) B.rwT=BAL.REWIND_EVERY;
+  B.rwT-=dt;
+  if(B.rwSnapT<=0){
+    B.rwSnapT=BAL.REWIND_SNAP;
+    const s=rewindSnap();
+    if(s){ B.rwQ.push(s); const keep=Math.ceil(BAL.REWIND_BACK/BAL.REWIND_SNAP)+2; while(B.rwQ.length>keep) B.rwQ.shift(); }
+  }
+  if(B.rwT>0) return;
+  B.rwT=BAL.REWIND_EVERY;
+  /* 12秒前にいちばん近い焼き付けを選ぶ(無ければいちばん古いもの) */
+  let s=null;
+  for(const q of B.rwQ) if(B.time-q.t>=BAL.REWIND_BACK) s=q;
+  if(!s) s=B.rwQ[0];
+  if(s) rewindApply(s);
+}
+function rewindApply(s){
+  const B=G.B; if(!B) return;
+  /* 拾い物: 12秒のあいだに拾われたものだけが戻る。B.picks からは消えているので押し直す */
+  for(const r of s.picks){
+    r.o.known=r.known; r.o.x=r.x; r.o.y=r.y;
+    if(B.picks.indexOf(r.o)>=0) r.o.dead=r.dead;
+    else if(!r.dead){ r.o.dead=false; B.picks.push(r.o); }
+  }
+  /* 沼: 乾き・氷結が戻る。タイルに焼いてあるので焼き直しが要る */
+  let repaint=false;
+  for(const r of s.mires){ if(r.o.dry!==r.dry || r.o.iced!==r.iced){ r.o.dry=r.dry; r.o.iced=r.iced; repaint=true; } }
+  if(repaint && typeof mireInit==='function') mireInit();
+  /* 菌輪: 開いた輪が閉じ直す */
+  for(const r of s.rings){ r.o.state=r.state; r.o.t=r.t; r.o.cd=r.cd; r.o.caps=r.caps; }
+  /* 壊した設置物: 生き残っているものは体力が戻る(消えたものは戻さない——
+     床から生えたのではなく置かれた物なので、無から湧くと嘘になる) */
+  for(const r of s.props){ if(B.props.indexOf(r.o)>=0) r.o.hp=Math.max(r.o.hp,r.hp); }
+  /* 魔物: 立ち位置だけ。死んだものは戻さない(彼女が削った分は彼女のもの) */
+  for(const r of s.foes){
+    const e=r.o; if(e.dead||e.state==='attached'||e.pin) continue;
+    if(B.enemies.indexOf(e)<0) continue;
+    e.x=r.x; e.y=r.y;
+  }
+  B.whiteFlash=0.30;
+  B.rwN=(B.rwN||0)+1;
+  if(typeof setBanner==='function') setBanner('潟が戻った','水面より上のものだけが、さっきの形へ','#d8c8d0');
+}
+
+/* ================= v6.0f 14階「厚みの中」: 呼吸 =================
+   周期 BREATH_T で壁が内側へ寄り、また戻る。狭まっている BREATH_NARROW 秒のあいだ、
+   壁ぎわに居ると走れず、擦れて敏感化が上がる。
+   ★solid は書き換えない。設計側も「毎フレーム焼き直すと確実に落ちる/動いて見える部分は
+     render のオーバーレイで描く」と釘を刺している。ここで要るのは
+     「狭まった時、壁の間合いに居ると逃げ場が無い」という体感の方なので、
+     壁までの距離を測って効かせれば、法としては同じものが立つ */
+function breathPhase(){
+  const B=G.B, F=B&&B.floor;
+  if(!B||!F||!F.breath) return 0;
+  const ph=(B.breathPh||0)%BAL.BREATH_T;
+  return ph<BAL.BREATH_NARROW ? 1-Math.abs(ph/BAL.BREATH_NARROW*2-1) : 0;   /* 0→1→0 の山 */
+}
+function breathTick(dt){
+  const B=G.B, F=B&&B.floor;
+  if(!B||!F||!F.breath) return;
+  B.breathPh=((B.breathPh||0)+dt)%BAL.BREATH_T;
+}
+/* 壁までの距離。BREATH_R より近ければ「壁ぎわ」 */
+function nearWallD(x,y){
+  let best=1e9;
+  const i0=tileI(x), j0=tileJ(y), rad=2;
+  for(let j=j0-rad;j<=j0+rad;j++) for(let i=i0-rad;i<=i0+rad;i++){
+    if(!solidIJ(i,j)) continue;
+    const d=Math.hypot(tileCX(i)-x,(tileCY(j)-y));
+    if(d<best) best=d;
+  }
+  return best;
+}
+function breathHeroTick(h,dt){
+  const B=G.B, F=B&&B.floor;
+  if(!B||!F||!F.breath||h.out) return;
+  const q=breathPhase(); if(q<=0.02){ h.squeeze=0; return; }
+  const d=nearWallD(h.x,h.y);
+  if(d>BAL.BREATH_R+MAP_T*q){ h.squeeze=0; return; }
+  h.squeeze=q;
+  h.sensit=(h.sensit||0)+BAL.BREATH_SENS*q*dt;
+  markTrait(h,'bareHabit',0.30*q*dt);   /* 服の上からずっと擦れている */
+}
+
+/* ================= v6.0f 15階「はじめの夜」: 見覚え =================
+   一晩目と同じ場所に、同じではないものが据わっている。
+   祠の位置には抱き茸、光茸のそばには媚茸、清水の位置には忘れ水。
+   ★地図は開いているので、彼女は探索せずまっすぐ向かう。それが罠 */
+function mimicSwap(){
+  const B=G.B, F=B&&B.floor, M=G.map;
+  if(!B||!F||!F.mimic||!M) return;
+  const den=M.lewd;
+  for(const q of M.pois){
+    if(q.kind==='shrine'){
+      if(den && Math.hypot(q.x-den.x,q.y-den.y)<220) continue;   /* 巣窟の祠はそのまま(そこは元から罠) */
+      const u=spawnUnit('hugcap',q.x,q.y-26,{enVal:0,gemMul:0.8}); if(u) u.wild=true;
+    } else if(q.kind==='pool'||q.kind==='spring'){
+      lethePatch(q.x,q.y,3);   /* 掬った水が忘れ水 */
+    }
+  }
+  /* 光っているものの隣には、光っている振りのもの */
+  for(const pk of B.picks){
+    if(pk.kind!=='shroom'&&pk.kind!=='family') continue;
+    const a=rand(TAU), g=snapFloor(pk.x+Math.cos(a)*54, pk.y+Math.sin(a)*54, false, 3);
+    if(!g) continue;
+    const u=spawnUnit('lurecap',g.x,g.y,{enVal:0,gemMul:0.6}); if(u) u.wild=true;
+  }
+}
+/* 清水の周りを忘れ水に塗り替える(タイル半径 r) */
+function lethePatch(x,y,r){
+  const M=G.map; if(!M||!M.zone) return;
+  const zi=ZONE_IDS.indexOf('lethe'); if(zi<0) return;
+  const i0=tileI(x), j0=tileJ(y); const dirty=new Set();
+  for(let j=j0-r;j<=j0+r;j++) for(let i=i0-r;i<=i0+r;i++){
+    if(!inMap(i,j)||solidIJ(i,j)) continue;
+    if(Math.hypot(i-i0,(j-j0)*1.25)>r) continue;
+    M.zone[j*MAP_W+i]=zi;
+    dirty.add(chunkKey(Math.floor(i/CHUNK),Math.floor(j/CHUNK)));
+  }
+  if(M.chunks) for(const ck of dirty) M.chunks.delete(ck);
+  M.mini=null;
+}
+
+/* v6.0f 壁に吸われたものが手を伸ばす。
+   14階の法は「追ってこない」であって「何もしない」ではない。
+   据わったものは壁の一部になっているので、間合いに入った脚を壁が取る——
+   ★動く種を据わらせただけでは階が無効試合になる(実測: 45秒 発情0→0)。
+   この一手があって初めて「避けて通る経路が無い」が意味を持つ */
+function seatGrabTick(dt){
+  const B=G.B, F=B&&B.floor;
+  if(!B||!F||!F.sit||B.coreWar) return;
+  for(const e of B.enemies){
+    if(!e.sat||e.dead||e.dormant) continue;
+    e.seatCd=Math.max(0,(e.seatCd||0)-dt);
+    if(e.satHold){
+      e.satDot=(e.satDot||0)+dt;
+      if(e.satDot>=0.5){ e.satDot-=0.5; withHero(e.satHold,()=>{ if(!e.satHold.out) hurtHero(BAL.SEAT_DOT,e,{pierce:true,quiet:true,noKb:true}); }); }
+      if(e.state!=='attached'){ e.satHold=null; e.seatCd=BAL.SEAT_CD; }
+      continue;
+    }
+    if(e.seatCd>0||e.spd>0) continue;
+    for(const h of B.heroes){
+      if(h.out||h.pinned) continue;
+      if(Math.hypot(h.x-e.x,h.y-e.y)>e.r+BAL.SEAT_REACH) continue;
+      let got=false;
+      withHero(h,()=>{ got=attachMonster(e,'tether',{r:e.r+BAL.SEAT_REACH,legFirst:true}); });
+      if(got){ e.satHold=h; e.satDot=0; parts(e.x,e.y-8,10,['#e86a9c','#ffb0c8'],120,0.5); }
+      else e.seatCd=BAL.SEAT_CD;
+      break;
+    }
+  }
+}
+/* v6.0f 14階「待ち手の道」に据わるものを置く。
+   マップ側が引いた道の上の配置点に、追ってこないものだけを据える */
+function spawnSeats(){
+  const B=G.B, F=B&&B.floor, M=G.map;
+  if(!B||!F||!F.seatway||!M||!M.seats||!M.seats.length) return;
+  const kinds=['seatflesh','heartroot','nichelord','tallykeeper'];
+  M.seats.forEach((q,k)=>{
+    const id=kinds[k%kinds.length];
+    if(!MONSTERS[id]) return;
+    const g=snapFloor(q.x,q.y,false,3)||q;
+    const u=spawnUnit(id,g.x,g.y,{enVal:0,gemMul:0.9});
+    if(u){ u.wild=true; u.seat=true; }
+  });
+}
+
 /* ================= v1.8 地形の資源(光茸・蜜の花・沈んだ宝) =================
    地形帯ごとに生える/沈んでいる拾い物。彼女は見えたものを覚え、必要に応じて目当てにする */
 function spawnPick(kind,x,y,known){
@@ -8166,6 +8391,8 @@ function battleTick(dt){
   wornTick(dt); miresTick(dt); dryAuraTick(dt);   // v5.0 すり減り / 媚薬沼 / 炎のエリア
   calmTick(dt);   /* v6.0 凪ぎの鏡: 波立った面が静けさを取り戻していく */
   fieldSpawnTick(dt); boneTick(dt); silksTick(dt);   /* v6.0 床が勝手に産むもの / 骨の組み上がり / 張られた糸 */
+  rewindTick(dt); breathTick(dt);   /* v6.0f 13階: 世界だけが戻る / 14階: 壁の呼吸 */
+  seatGrabTick(dt);                 /* v6.0f 14階: 壁に吸われたものが間合いへ手を伸ばす */
   floorBossWake(dt);   /* v6.0 階の主(f7 水鏡の女王 / f13 はじめましての君 / f15 はじめの夜の主) */
   coreWarTick(dt);                   // v4.0 魔核戦に入ったか
   { const ci0=B.ci; for(const h of B.heroes){ if(h.id!=='freila'||h.out) continue; B.ci=h.hi; dryTick(h,dt); } B.ci=ci0; }   // v4.0 フレイラが床を焼くか

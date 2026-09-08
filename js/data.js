@@ -406,6 +406,38 @@ const BAL={
   SHAM_STRUG:0.35,     /* 苔(に見えるもの): もがいた力の何割が快感に化けるか */
   SHAM_DMG:0.0035,     /* 与ダメの何割が快感に化けるか(実測: 0.010 は21秒で発情90——効きすぎ) */
 
+  /* ---- v6.0f 13〜15階の専用ギミック ---- */
+
+  /* 13階「忘れ潟」: 世界だけが巻き戻る。
+     ★戻るのは盤面だけ——彼女の側(快感・敏感化・発情・催眠・拘束・
+     スタミナ・HP・経験値・レベル・ジェム)は一切戻さない。
+     「記憶は消えて、身体だけが残る」がこの階の一行なので、
+     ここを取り違えると階そのものが消える */
+  REWIND_EVERY:45,     /* 何秒ごとに巻き戻すか */
+  REWIND_BACK:12,      /* 何秒前へ戻すか */
+  REWIND_SNAP:2,       /* 盤面を焼き付ける間隔(秒)。輪で7枚ぶん持つ */
+
+  /* 14階「厚みの中」: 呼吸する壁と、待つものしか居ない階 */
+  BREATH_T:5.6,        /* 呼吸の周期(秒) */
+  BREATH_NARROW:1.8,   /* そのうち「狭まっている」時間 */
+  BREATH_R:60,         /* 壁からこの距離までが擦れる範囲 */
+  BREATH_SENS:9.0,     /* 狭まりの間、壁に擦れて毎秒これだけ敏感化。
+                          ★2.2 は死んだ定数だった: SENSIT_DECAY が 1.1/秒あるので、
+                          山の平均(q≒0.5)で 1.1/秒——ちょうど打ち消されて、
+                          実測で 336フレーム擦れさせて 32→30(下がっていた)。
+                          同じ穴を MIR_SENS・SILK_SENS でも踏んでいる。BRIEFING §5 */
+  BREATH_SPD:0.62,     /* 狭まりの間は走れない(速度の上限) */
+  SEAT_GAP:240,        /* 待ち手の道: 配置点の間隔(px) */
+  SEAT_REACH:46,       /* 壁に吸われたものの間合い。★これが無いと階が死ぬ——
+                          動くだけの種は据わらせた瞬間ただの肉になり、実測で
+                          45秒・敵205体・発情 0→0 だった。壁に吸われたのなら、
+                          壁として手を伸ばせなければ「待っている」ことにならない */
+  SEAT_CD:2.6,         /* 掴み損ねた後、次に手を伸ばすまで */
+  SEAT_DOT:0.9,        /* 繋いでいる間の削り(0.5秒ごと) */
+
+  /* 15階「はじめの夜」: 見覚え。一晩目の地図をそのまま開いて始める */
+  MIMIC_R:520,         /* 一晩目の場所と、この距離まで近ければ「同じ場所」と見なす */
+
   /* v6.0 心根が心臓へ送るぶん。彼女には見えない——プレイヤーだけが、
      吸われた光が壁を上っていくのを見ている。BRIEFING §2 の「身が一段厚くなる」の可視化 */
   HEARTROOT_K:0.0015, HEARTROOT_CAP:0.30,
@@ -1015,9 +1047,9 @@ const FLOORS=[
   { id:'f12', name:'渦の中心',   sub:'三つの喉。選ばなければ、進めない',      depth:12, dark:0.97, zoneW:{flesh:4,nest:3,ruin:2},                  wall:'flesh', en:{start:2.6,base:4.0,regen:4.0,max:4.0},     hero:{hp:2.48,dmg:2.18,stam:2.54}, mon:{hp:4.0,dmg:2.05},  affinity:['seatflesh','frostbud','stiller','silkmite','core','gtent','mouth','pot','hand','succuqueen','gobking','vampi','runemage'], col:'#ff4d7f', lewd:{name:'巻き戻しの褥', sub:'ここで何をされても、朝には無かったことになる褥。だから際限がない。奥に王の宝箱', guard:'gtent', beam:'climax', guardSub:'褥の奥から、幾度も同じ形をなぞってきた触手が伸びる'} },
   /* ===== v6.0 追加の三階層。ここから先は「特化階層」——一階につき一つの問いだけに賭ける =====
      13 忘却 / 14 待ち / 15 抵抗。深さの数字だけでなく、責め方そのものが階ごとに変わる */
-  { id:'f13', floorBoss:'nevermet', name:'忘れ潟',   sub:'巻き戻すたびに零れた夜が、ここに溜まっている', depth:13, dark:0.97, zoneW:{lethe:6,damp:2,moss:1,ruin:1},            wall:'strata', en:{start:2.8,base:4.4,regen:4.4,max:4.4}, hero:{hp:2.66,dmg:2.32,stam:2.72}, mon:{hp:4.4,dmg:2.20}, affinity:['lethemoth','ghost','ghosthand','moth','gas','dreamtree','mistslime','succubus','inyoku','runemage'], col:'#d8c8d0', lewd:{name:'覚えのない褥', sub:'何度も横たわった跡があるのに、初めて見る褥。だから何度でも新しく怖がれる。奥に王の宝箱', guard:'succuqueen', beam:'hypno', guardSub:'褥の主が、初対面の顔で微笑んでいる'} },
-  { id:'f14', name:'厚みの中', sub:'討たれた数だけ厚くなった、心臓の身の内側',     depth:14, dark:0.98, zoneW:{womb:5,flesh:3,nest:1,silk:1},             wall:'caul',   en:{start:3.0,base:4.8,regen:4.8,max:4.8}, hero:{hp:2.84,dmg:2.47,stam:2.90}, mon:{hp:4.8,dmg:2.35}, affinity:['seatflesh','heartroot','silkmite','gtent','hand','pot','mouth','tower','guardian','sentinel','slugqueen','hugcap'], col:'#ff6f9e', lewd:{name:'厚みの窪み', sub:'肉の層をいくつも隔てた奥の窪み。ここまで来た者の形が、まだ残っている。奥に王の宝箱', guard:'mouth', beam:'climax', guardSub:'層の奥の口が、ゆっくりと開いて待っている'} },
-  { id:'f15', floorBoss:'firstslug', name:'はじめの夜', sub:'見覚えのある苔と水。何もかもが、一晩目に似ている', depth:15, dark:0.50, zoneW:{sham:6,moss:2,damp:1,water:1},           wall:'rock',   en:{start:3.2,base:5.2,regen:5.2,max:5.2}, hero:{hp:3.02,dmg:2.62,stam:3.10}, mon:{hp:5.2,dmg:2.50}, affinity:['heartroot','slug','worm','goblin','hand','lurecap','slugqueen','core','gtent','mouth'], col:'#8fd3ff', lewd:{name:'はじめの窪地', sub:'一晩目に見た窪地と、寸分たがわない。ただし今度は、身体の方が全部覚えている。奥に王の宝箱', guard:'slugqueen', beam:'climax', guardSub:'あの夜と同じ女王が、あの夜と同じ姿で待っている'} },
+  { id:'f13', floorBoss:'nevermet', rewind:1, name:'忘れ潟',   sub:'巻き戻すたびに零れた夜が、ここに溜まっている', depth:13, dark:0.97, zoneW:{lethe:6,damp:2,moss:1,ruin:1},            wall:'strata', en:{start:2.8,base:4.4,regen:4.4,max:4.4}, hero:{hp:2.66,dmg:2.32,stam:2.72}, mon:{hp:4.4,dmg:2.20}, affinity:['lethemoth','ghost','ghosthand','moth','gas','dreamtree','mistslime','succubus','inyoku','runemage'], col:'#d8c8d0', lewd:{name:'覚えのない褥', sub:'何度も横たわった跡があるのに、初めて見る褥。だから何度でも新しく怖がれる。奥に王の宝箱', guard:'succuqueen', beam:'hypno', guardSub:'褥の主が、初対面の顔で微笑んでいる'} },
+  { id:'f14', sit:1, breath:1, seatway:1, name:'厚みの中', sub:'討たれた数だけ厚くなった、心臓の身の内側',     depth:14, dark:0.98, zoneW:{womb:5,flesh:3,nest:1,silk:1},             wall:'caul',   en:{start:3.0,base:4.8,regen:4.8,max:4.8}, hero:{hp:2.84,dmg:2.47,stam:2.90}, mon:{hp:4.8,dmg:2.35}, affinity:['seatflesh','heartroot','silkmite','gtent','hand','pot','mouth','tower','guardian','sentinel','slugqueen','hugcap'], col:'#ff6f9e', lewd:{name:'厚みの窪み', sub:'肉の層をいくつも隔てた奥の窪み。ここまで来た者の形が、まだ残っている。奥に王の宝箱', guard:'mouth', beam:'climax', guardSub:'層の奥の口が、ゆっくりと開いて待っている'} },
+  { id:'f15', floorBoss:'firstslug', mimic:1, name:'はじめの夜', sub:'見覚えのある苔と水。何もかもが、一晩目に似ている', depth:15, dark:0.50, zoneW:{sham:6,moss:2,damp:1,water:1},           wall:'rock',   en:{start:3.2,base:5.2,regen:5.2,max:5.2}, hero:{hp:3.02,dmg:2.62,stam:3.10}, mon:{hp:5.2,dmg:2.50}, affinity:['heartroot','slug','worm','goblin','hand','lurecap','slugqueen','core','gtent','mouth'], col:'#8fd3ff', lewd:{name:'はじめの窪地', sub:'一晩目に見た窪地と、寸分たがわない。ただし今度は、身体の方が全部覚えている。奥に王の宝箱', guard:'slugqueen', beam:'climax', guardSub:'あの夜と同じ女王が、あの夜と同じ姿で待っている'} },
 ];
 /* v3.0 深淵のループ: era=魔核を討たれた回数。開いている階層 = ERA_FLOORS0 + era(上限 FLOORS.length)。最深の開いた階層が最終階層(魔核)。
    era が階層数の上限を超えても深さ倍率(eraMul)は伸び続ける */
@@ -1089,6 +1121,19 @@ const cardCost=(id,lv)=>{
 };
 const cardUpCost=(id,lv)=>Math.round((MONSTERS[id].cost*38)*(1+0.65*(lv-1)));
 const FUSION_IDS=['mistslime','gtent'];
+/* v6.0f 14階「厚みの中」の法(待ち)。この階へ出された「動く種」は、
+   壁に吸われて、据わったものへ変わる。
+   ★据わらせるだけでは駄目だった。実測: 動く種を spd=0 にしただけだと
+   45秒で敵205体・彼女の発情 0→0、150秒でも彼女は据わった相手に
+   123px までしか近づかない(彼女のAIが敵を避けるので、動かない相手には一生触れない)。
+   間合いを持つ種へ置き換えて初めて「待っている」が成立する。
+   ★階級ごとに置き換えるので、夜側が払った EN の格は保たれる */
+const SIT_SUBS={
+  fodder:['flower','lurecap','flower'],   /* hand は spd:58 で這う——この階の法(何も動かない)に反する */
+  mid:   ['flower','lurecap','hugcap'],
+  large: ['seatflesh','heartroot','nichelord','mouth','pot','hugcap'],
+  boss:  null,
+};
 
 /* ---------------- 陣形(出現方法) ---------------- */
 const FORMATIONS={
