@@ -590,8 +590,10 @@ function learn(id,kind){
 /* 絶頂に絡んだ種族: 今ついている/直前5秒に何かしてきた種族 */
 function codexClimax(){
   const B=G.B, h=B.hero, ids=new Set();
-  for(const sl of attachedSlots(h)){ const m=h.limbs[sl].mon; if(m) ids.add(m.id); }
-  for(const sl of suckSlots(h)){ const m=h.suckers[sl].mon; if(m) ids.add(m.id); }
+  /* v6.2 null を踏むと落ちる形。いまは輪の中で壊す物が無いので通るが、
+     この形は三度落ちているので、参照する側で必ず確かめる */
+  for(const sl of attachedSlots(h)){ const a=h.limbs[sl]; const m=a&&a.mon; if(m) ids.add(m.id); }
+  for(const sl of suckSlots(h)){ const a=h.suckers[sl]; const m=a&&a.mon; if(m) ids.add(m.id); }
   if(h.pinBy) ids.add(h.pinBy.id);
   if(h.charmBind&&h.charmBind.mon) ids.add(h.charmBind.mon.id);
   for(const id in B.recentMet){ if(B.time-B.recentMet[id]<5) ids.add(id); }
@@ -2022,7 +2024,7 @@ function aiUpdate(dt){
   // 繋留(蔦)による引き戻し
   for(const sl of attachedSlots(p)){
     const at=p.limbs[sl];
-    if(at.kind!=='tether'||!at.mon||at.mon.dead) continue;
+    if(!at||at.kind!=='tether'||!at.mon||at.mon.dead) continue;
     const anch=at.mon;
     const dx2=p.x-anch.x, dy2=p.y-anch.y;
     const d2=Math.hypot(dx2,dy2)||0.001;
@@ -3825,8 +3827,8 @@ function killEnemy(e){
   // v3.0 誰かの四肢に付いていたら解放(全員を見る)
   for(let i=0;i<B.heroes.length;i++){ const hh=B.heroes[i];
     if(e.limb && hh.limbs[e.limb] && hh.limbs[e.limb].mon===e){ hh.limbs[e.limb]=null; heroBubble(hh,{freila:'……離れた', kuu:'……とれた', yamiko:'……ようやく'}[hh.id]||'とれたっ!'); }
-    for(const sl of attachedSlots(hh)){ if(hh.limbs[sl].mon===e) hh.limbs[sl]=null; }
-    for(const sl of suckSlots(hh)){ if(hh.suckers[sl].mon===e) hh.suckers[sl]=null; }
+    for(const sl of attachedSlots(hh)){ const a=hh.limbs[sl]; if(a&&a.mon===e) hh.limbs[sl]=null; }
+    for(const sl of suckSlots(hh)){ const a=hh.suckers[sl]; if(a&&a.mon===e) hh.suckers[sl]=null; }
     if(hh.pinBy===e) hh.pinBy=null;
     if(hh.charmBind && hh.charmBind.mon===e){ const ci0=B.ci; B.ci=i; releaseCharmBind(false); B.ci=ci0; } }   // 縋りついていた個体が消えれば拘束は解ける
   const col=EN_COLORS[e.id]||['#fff','#aaa'];
