@@ -263,9 +263,9 @@ function drawZone(g,z){
   /* v6.3 闇の刃の残り跡: 円ではなく、宙に浮いたままの一本の線 */
   if(z.seam){
     g.save(); g.lineCap='round';
-    g.globalAlpha=a*0.55; g.strokeStyle='#2a1a3e'; g.lineWidth=z.r*1.7;
+    g.globalAlpha=a*0.34; g.strokeStyle='#2a1a3e'; g.lineWidth=z.r*0.9;
     g.beginPath(); g.moveTo(z.x,z.y); g.lineTo(z.x2,z.y2); g.stroke();
-    g.globalAlpha=a*(0.55+0.35*Math.sin(z.t*7)); g.strokeStyle='#a77dff'; g.lineWidth=2.2;
+    g.globalAlpha=a*(0.45+0.30*Math.sin(z.t*7)); g.strokeStyle='#a77dff'; g.lineWidth=1.8;
     g.shadowColor='#a77dff'; g.shadowBlur=10;
     g.beginPath(); g.moveTo(z.x,z.y); g.lineTo(z.x2,z.y2); g.stroke();
     g.restore();
