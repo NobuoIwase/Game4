@@ -3169,6 +3169,12 @@ function fieldSpawnTick(dt){
 /* 骸の回廊: 倒れた魔物の骨が、しばらくして勝手に組み上がる */
 function boneTick(dt){
   const B=G.B; if(!B||!B.bones||!B.bones.length) return;
+  /* ★魔核戦の最中は組み上がらない。骨兵は EN を使わない「ただの体力」なので、
+     心臓との戦いの最中に湧くと、彼女たちと心臓のあいだに立つ無料の壁になる。
+     実測: 世代4(＝魔核戦が骸の回廊で起きる唯一の世代)だけ毎秒の削りが 85 に落ち、
+     世代2の 120 を下回っていた。生存秒は他と変わらないので、削りだけが薄まっていた。
+     設計でも骨兵は「凹みの上でスタミナを削る」役で、ボス戦の駒ではない */
+  if(B.coreWar){ B.bones.length=0; return; }
   /* ★上限は人数で決める。実測で世代4(2人・骸の回廊)だけが谷になり(削れた29%・討伐0/5)、
      他の世代が 49〜60% だったのに対してここだけ突出して重かった。
      骨兵は EN を使わず、拘束もせず、体力とスタミナだけを削る——
@@ -3185,7 +3191,7 @@ function boneTick(dt){
   }
 }
 function dropBone(x,y){
-  const B=G.B, F=B&&B.floor; if(!B||!F||!(F.affinity||[]).includes('bonesoldier')) return;
+  const B=G.B, F=B&&B.floor; if(!B||!F||B.coreWar||!(F.affinity||[]).includes('bonesoldier')) return;
   (B.bones=B.bones||[]).push({x,y,t:0});
   if(B.bones.length>40) B.bones.shift();
 }
