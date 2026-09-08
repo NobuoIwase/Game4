@@ -1182,6 +1182,38 @@ const FLOORS=[
    era が階層数の上限を超えても深さ倍率(eraMul)は伸び続ける */
 const eraNow=()=>((META&&META.era)|0);
 const openFloors=()=>Math.min(FLOORS.length, BAL.ERA_FLOORS0+eraNow());
+/* ★v6.3c 上位種の解放に「深さの錠」と「深さに応じた値」をかける。
+   それまでの解放は META.essence >= unlock だけで、深さも世代も条件になっていなかった。
+   実測: 住処14階の心根が14日目、11階の帳の番が9日目に買えていた——
+   その階が開くのは、それぞれ12回・9回の巻き戻しの後なのに。
+
+   ・deep     その種が本来住んでいる階(FLOORS[].affinity に載る、いちばん浅い階)。
+              その階が開くまで解放できない。★手で書かずに affinity から引くので、
+              階の顔ぶれを直せば錠も一緒に動く(片方だけ古い事故が起きない)
+   ・unlock   住処の深さで引き上げる。浅い種は据え置き */
+const DEEP_COST=[
+  {to:3,  k:1.0},   /* 1〜3階: 据え置き */
+  {to:7,  k:1.6},
+  {to:11, k:2.6},
+  {to:99, k:4.0},
+];
+(function lockByDepth(){
+  const home={};
+  for(const F of FLOORS) for(const id of (F.affinity||[])) if(home[id]===undefined) home[id]=F.depth;
+  for(const id in MONSTERS){
+    const m=MONSTERS[id];
+    if(m.item||m.variant||m.field) continue;
+    const d=home[id]||0;
+    m.deep=d;
+    if(d>3 && (m.unlock||0)>0){
+      let k=1; for(const row of DEEP_COST){ if(d<=row.to){ k=row.k; break; } }
+      m.unlock=Math.round(m.unlock*k/10)*10;
+    }
+  }
+})();
+/* その種が解放できる深さまで潜れているか(=その階が開いているか) */
+function deepOk(id){ const m=MONSTERS[id]; return !m || !m.deep || openFloors()>=m.deep; }
+
 /* v6.0 世代の深度倍率。ERA_STEEP を 6→10 に後ろへずらし、K0 も 0.05→0.045 に下げた。
    実測で世代4以降 魔核が討てなくなっていた(削れたのが 49.5%→17.4%→10.0%)原因は、
    FLOORS[].mon.hp(階の倍率)と eraMul(世代の倍率)で深さを二重に取っていたこと。

@@ -105,7 +105,8 @@ const UI={
       case 'labclose': this.labSel=null; this.show('lab'); break;
       case 'unlock':{
         const m=MONSTERS[arg];
-        if(META.essence>=m.unlock && !(META.cards[arg]&&META.cards[arg].owned)){
+        /* v6.3c 深さの錠: その種の住処の階が開くまでは、いくら払っても解放できない */
+        if(META.essence>=m.unlock && deepOk(arg) && !(META.cards[arg]&&META.cards[arg].owned)){
           META.essence-=m.unlock;
           META.cards[arg]={owned:true,lv:1};
           saveMeta(); S.buy();
@@ -399,7 +400,9 @@ const UI={
       stat=`<div class="st ${ok&&META.essence>=m.fuseCost?'can':'lock'}">★ 融合</div>`;
     }else{
       cls+=' locked';
-      stat=`<div class="st ${META.essence>=m.unlock?'can':'lock'}">✦${m.unlock}</div>`;
+      stat=deepOk(id)
+        ? `<div class="st ${META.essence>=m.unlock?'can':'lock'}">✦${m.unlock}</div>`
+        : `<div class="st lock">${m.deep}階</div>`;   /* v6.3c まだ届かない深さ */
     }
     return `<div class="${cls}" data-act="labpick" data-arg="${id}"><div class="cnr"></div>${extra}
       <div data-icon="${id}" data-size="38"></div>
@@ -420,6 +423,10 @@ const UI={
       req=`<div class="req">素材: ${m.fusion.map(f=>esc(MONSTERS[f].name)+' Lv3+').join(' × ')}${ok?' — 揃っている':' — まだ足りない'}</div>`;
       act=`<button class="sub" data-act="fuse" data-arg="${id}" ${(!ok||META.essence<m.fuseCost)?'disabled':''}>融合 ✦${m.fuseCost}</button>`;
     }else{
+      if(!deepOk(id)){
+        req=`<div class="req">${m.deep}階の魔物。まだ ${openFloors()}階までしか開いていない — この深さへ届くまで、呼び出しかたが分からない</div>`;
+        act=`<button class="sub" disabled>解放 ✦${m.unlock}</button>`;
+      }else
       act=`<button class="sub" data-act="unlock" data-arg="${id}" ${META.essence<m.unlock?'disabled':''}>解放 ✦${m.unlock}</button>`;
     }
     return `<div class="msheet"><div class="back" data-act="labclose"></div><div class="box">
