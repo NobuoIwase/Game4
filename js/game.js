@@ -1049,10 +1049,13 @@ function burstChance(h){
   c*=1+0.02*(h.will||0);                 /* 負けを重ねた分だけ、底で手が動く */
   return clamp(c, BAL.BURST_MIN, 0.95);
 }
+/* 押し倒されている時は安く払える。高いままだと、押し倒しの条件(スタミナ35未満)と
+   噛み合わずに一度も撃てない。実測で確かめた */
+function burstCost(h){ return h.pinned ? BAL.BURST_STAM_PIN : BAL.BURST_STAM; }
 function burstReady(h){
   const B=G.B; if(!B||h.out) return false;
   if((h.burstCd||0)>B.time) return false;
-  if(h.stamina < h.staminaMax*BAL.BURST_STAM) return false;
+  if(h.stamina < h.staminaMax*burstCost(h)) return false;
   if(h.freezeT>0 || h.climaxT>0) return false;      /* 止まっている間・達している間は力が入らない */
   if(h.hypnoLv>=3) return false;                     /* 催眠Ⅲ: 抗うという考えが浮かばない */
   const held=restraintCount(h);
@@ -1061,7 +1064,7 @@ function burstReady(h){
 function tryBurst(h){
   const B=G.B;
   h.burstCd=B.time+BAL.BURST_CD;
-  h.stamina=Math.max(0, h.stamina - h.staminaMax*BAL.BURST_STAM);
+  h.stamina=Math.max(0, h.stamina - h.staminaMax*burstCost(h));
   const ok=Math.random()<burstChance(h);
   if(ok){
     for(const sl of attachedSlots(h)) detachLimb(sl,{fling:true});
@@ -3064,7 +3067,9 @@ function freilaWeapons(p,dt,atkMult){
       const lvR=p.wp.fwing, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
       const ts=nearEnemiesR(p,1,150+15*lv);
       if(ts.length){ p.fwingT=(4.5-0.35*(lv-1))*ov.cd; const e0=ts[0]; const dxv=e0.x-p.x, dyv=e0.y-p.y, L=Math.hypot(dxv,dyv)||1; const len=Math.min(L+40,120+10*lv); const q=snapFloor(clampMapX(p.x+dxv/L*len,30),clampMapY(p.y+dyv/L*len,30),false,3);
-        if(q && reachableAt(q.x,q.y,false)){ const x0=p.x, y0=p.y, vx=q.x-x0, vy=q.y-y0, LL=Math.hypot(vx,vy)||1, dmg=(10+4*(lv-1))*ov.dmg;
+        /* v6.2 突進も瞬間移動と同じで、reachableAt だけでは壁の向こうへ抜ける。
+           焔の線を引く相手でもあるので、途中に壁が無いことを確かめる */
+        if(q && reachableAt(q.x,q.y,false) && losClear(p.x,p.y,q.x,q.y,false)){ const x0=p.x, y0=p.y, vx=q.x-x0, vy=q.y-y0, LL=Math.hypot(vx,vy)||1, dmg=(10+4*(lv-1))*ov.dmg;
           for(const e of B.enemies){ if(e.dead||e.dormant) continue; const t=Math.max(0,Math.min(1,((e.x-x0)*vx+(e.y-y0)*vy)/(LL*LL))); const px=x0+vx*t, py=y0+vy*t; if(Math.hypot(e.x-px,e.y-py)<(30+3*lv)*areaMult(p)+e.r*0.5){ damageEnemy(e,dmg); e.stun=Math.max(e.stun||0,0.3); } }
           for(let k=0;k<8;k++) parts(x0+vx*k/8,y0+vy*k/8-14,2,['#ff7a3a','#ffd76a'],100,0.4);
           p.fwingAnim=0.25; p.fwingX=x0; p.fwingY=y0; p.x=q.x; p.y=q.y; p.vx=0; p.vy=0; p.path=null; p.ifr=Math.max(p.ifr,0.25); p.face=vx>=0?1:-1; sfx(500,200,0.15,'sawtooth',0.05);
@@ -5605,7 +5610,8 @@ function skillTick(dt){
     if(skillReady(p,'frostveil') && B.time>=(p.blinkRetry||0) && attachCount(p)===0 && !p.pinned && !p.charmBind && p.climaxT<=0 && (nearEnemyCount(p.x,p.y,130)>=6 || (p.press||0)>=1.4)){
       p.blinkRetry=B.time+0.5;
       for(const e of B.enemies){ if(e.dead||e.dormant||e.item) continue; if(Math.hypot(e.x-p.x,e.y-p.y)<170) freezeEnemy(e,1.6); }
-      let best=null, bs=1e9; for(let k=0;k<12;k++){ const a=k*TAU/12; const q=snapFloor(clampMapX(p.x+Math.cos(a)*90,40),clampMapY(p.y+Math.sin(a)*90,40),false,3); if(!q||!reachableAt(q.x,q.y,false)) continue; const sc=nearEnemyCount(q.x,q.y,150,true); if(sc<bs){ bs=sc; best=q; } }
+      /* v6.2 短い滑りでも壁は越えさせない(90px は壁一枚ぶんより広い) */
+      let best=null, bs=1e9; for(let k=0;k<12;k++){ const a=k*TAU/12; const q=snapFloor(clampMapX(p.x+Math.cos(a)*90,40),clampMapY(p.y+Math.sin(a)*90,40),false,3); if(!q||!reachableAt(q.x,q.y,false)||!losClear(p.x,p.y,q.x,q.y,false)) continue; const sc=nearEnemyCount(q.x,q.y,150,true); if(sc<bs){ bs=sc; best=q; } }
       if(best){ p.x=best.x; p.y=best.y; p.vx=p.vy=0; p.path=null; }
       p.ifr=Math.max(p.ifr,0.6);
       B.fx.push({kind:'icering',x:p.x,y:p.y,r:170,t:0,life:0.8});
@@ -8482,12 +8488,28 @@ function sayPartyAs(hi,path,prio,cd,who){
   B.lineCd[key]=B.time; heroBubble(h,arr[(Math.random()*arr.length)|0].split('{o}').join(nm),(prio||0)>=2,prio||0); return true;
 }
 /* 二人が画面に収まる距離に保つ(離れすぎた分を寄せる。拘束されている子は動かさない) */
+/* v6.2 画面内に留める引き寄せは、床を刻んで進める。
+   一息に足すと壁を貫けて、向こう側の袋に落ちる。実測では階層を通して
+   壁越しに動いた跳躍は全部これだった(奥義ではなかった)。
+   壁に当たったらそこで止める。あとは本人の足で回り込ませる */
+function slideXY(h,nx,ny){
+  const x0=h.x, y0=h.y, dx=nx-x0, dy=ny-y0, d=Math.hypot(dx,dy);
+  if(d<0.01) return;
+  const n=Math.min(32,Math.max(1,Math.ceil(d/6)));
+  let bx=x0, by=y0;
+  for(let k=1;k<=n;k++){
+    const tx=x0+dx*k/n, ty=y0+dy*k/n;
+    if(!passAt(tx,ty,false)) break;
+    bx=tx; by=ty;
+  }
+  h.x=bx; h.y=by;
+}
 function partyClamp(){
   const B=G.B, hs=B.heroes.filter(h=>!h.out); if(hs.length<2) return;
   for(let i=0;i<hs.length;i++) for(let j=i+1;j<hs.length;j++){ const a=hs[i], b=hs[j]; const fa=!(a.pinned||attachCount(a)>0||a.charmBind), fb=!(b.pinned||attachCount(b)>0||b.charmBind);
     const dx=b.x-a.x, dy=b.y-a.y;
-    if(Math.abs(dx)>BAL.PARTY_MAXDX){ const ex=(Math.abs(dx)-BAL.PARTY_MAXDX)*Math.sign(dx); if(fa&&fb){ a.x+=ex/2; b.x-=ex/2; } else if(fa) a.x+=ex; else if(fb) b.x-=ex; }
-    if(Math.abs(dy)>BAL.PARTY_MAXDY){ const ey=(Math.abs(dy)-BAL.PARTY_MAXDY)*Math.sign(dy); if(fa&&fb){ a.y+=ey/2; b.y-=ey/2; } else if(fa) a.y+=ey; else if(fb) b.y-=ey; } }
+    if(Math.abs(dx)>BAL.PARTY_MAXDX){ const ex=(Math.abs(dx)-BAL.PARTY_MAXDX)*Math.sign(dx); if(fa&&fb){ slideXY(a,a.x+ex/2,a.y); slideXY(b,b.x-ex/2,b.y); } else if(fa) slideXY(a,a.x+ex,a.y); else if(fb) slideXY(b,b.x-ex,b.y); }
+    if(Math.abs(dy)>BAL.PARTY_MAXDY){ const ey=(Math.abs(dy)-BAL.PARTY_MAXDY)*Math.sign(dy); if(fa&&fb){ slideXY(a,a.x,a.y+ey/2); slideXY(b,b.x,b.y-ey/2); } else if(fa) slideXY(a,a.x,a.y+ey); else if(fb) slideXY(b,b.x,b.y-ey); } }
   for(const h of hs) collideMap(h,h.r+2,false);
 }
 /* 救出: 捕まってその場に残っている子のそばに RESCUE_T 秒立つ */
