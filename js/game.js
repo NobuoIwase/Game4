@@ -2155,6 +2155,7 @@ function cloudWorth(cl){
    思考の拍(aiUpdate)からのみ呼ばれる */
 function aiDecide(foc,dt){
   const B=G.B, p=B.hero;
+  if(B.dbgCands) p.dbgGoal='早い枝(目当ての所まで来ていない)@'+B.time.toFixed(2);   /* 検証用: 判断の拍ごとに訳を残す。思考は THINK_MIN〜MAX 秒に一度しか回らないので、フレームごとに見ると取りこぼす */
   // 詰まりからの脱出: しばらく探索点へ経路で歩く
   if(p.unstickT>0){
     if(!p.explore || B.time>p.exploreUntil) pickExplore(p);
@@ -2418,6 +2419,7 @@ function aiDecide(foc,dt){
     // v1.8 目当て: 行きたい先(光の柱・宝箱・落ちた品・場所・資源・探索)を選ぶ。
     // 脅威が薄ければそこへ歩き、ジェムは進む先の近いものだけ拾う。ジェム畑に長く留まったら(FARM_T)いったん歩き出す
     const goal=(!target && G.map) ? updateGoal(p) : null;
+    if(B.dbgCands) p.dbgGoal=(target?('直接:'+kind):(!G.map?'地図なし':(goal?'':(p.explore?'候補ゼロ・探索点あり':'候補ゼロ・探索点なし'))))+'@'+B.time.toFixed(2);   /* 検証用: 目当てが「なし」になる訳を残す(B.dbgCands=true の時だけ) */
     let walk=false, goalOk=false, atGoal=false;
     if(goal){
       const leaving=!!B.wantExit;
@@ -2437,7 +2439,11 @@ function aiDecide(foc,dt){
       // ジェム回収。ガス溜まりの中のジェムは基本見送る——
       // ただし中のジェムが多ければ、意を決して取りに入る
       const gemFast=B.time<(p.noGemUntil||0), mag=heroStat(p).magnet;
-      let bestGm=null, bd=gemFast?0:(walk?((B.wantExit||pressure()>=1.5)?BAL.GEM_WALK_R_LEAVE:BAL.GEM_WALK_R):430), bestCl=null;   // v2.1 ジェム断ち中は狙わない。降りると決めた後・圧が高い時は、道すがらの半径を狭く
+      /* ★v6.3e 「狭くする」条件から walk を外した。前は目当てへ歩いている時だけ狭めていたので、
+         目当てを失った(あるいは脅威で歩けない)瞬間に半径がいちばん広い 430 に戻り、
+         降りる気のまま延々とジェムを拾って回ることになっていた */
+      const leaveN=(B.wantExit||pressure()>=1.5);
+      let bestGm=null, bd=gemFast?0:(leaveN?BAL.GEM_WALK_R_LEAVE:(walk?BAL.GEM_WALK_R:430)), bestCl=null;   // v2.1 ジェム断ち中は狙わない。降りると決めた後・圧が高い時は、道すがらの半径を狭く
       const gx=goal?goal.x-p.x:0, gy=goal?goal.y-p.y:0, gdn=Math.hypot(gx,gy)||1;
       for(const gm of B.gems){
         const d=Math.hypot(gm.x-p.x,gm.y-p.y);
@@ -5424,6 +5430,22 @@ function updateGoalSolo(p){
     if(!p.explore || B.time>p.exploreUntil || Math.hypot(p.explore.x-p.x,p.explore.y-p.y)<70) pickExplore(p);
     if(p.explore) add('explore','explore',p.explore.x,p.explore.y,0.6,null);
   }
+  /* ★v6.3e 最後の受け皿: 候補が一つも残らない夜がある。
+     諦め(GIVEUP_CD)も怖がり(SCARED_T)も 40秒あるので、嫌な地形の中の物を続けて諦めた直後は、
+     場所も資源も探索点も揃って落ちて cands が空になる。空のまま返すと p.goal は null になり、
+     彼女は行き先を持たないまま足元のジェムだけ拾って夜を潰す
+     (実測: 592秒の夜のうち 198秒が「目当てなし」。稀だが、起きた夜は必ず長い)。
+     ここでは諦めも怖がりも効かせない——出口を諦めたままでは、その階から出られないから */
+  if(!cands.length){
+    const stQ=(!B.floor.final && G.map.pois) ? G.map.pois.find(q=>q.kind==='stairs') : null;
+    if(stQ && M.known[stQ.key] && !B.exitLocked && B.wantExit){
+      cands.push({kind:'poi', sub:'stairs', x:stQ.x, y:stQ.y, ref:stQ, key:stQ.key, d:Math.hypot(stQ.x-p.x,stQ.y-p.y), worth:BAL.EXIT_WORTH_WANT, score:1.0});
+      B.nLastExit=(B.nLastExit||0)+1;
+    }else if(pickExplore(p,true)){
+      cands.push({kind:'explore', sub:'explore', x:p.explore.x, y:p.explore.y, ref:null, key:null, d:Math.hypot(p.explore.x-p.x,p.explore.y-p.y), worth:0.6, score:0.4});
+      B.nLastWalk=(B.nLastWalk||0)+1;
+    }
+  }
   let best=null; for(const c of cands){ if(!best||c.score>best.score) best=c; }
   if(B.dbgCands) B.lastCands=cands.slice().sort((a,b)=>b.score-a.score).slice(0,6).map(c=>c.kind+'/'+(c.sub||'')+':'+c.score.toFixed(2)+'@'+Math.round(c.d));   // 検証用: 目当ての候補
   // v2.1 ふらつき防止: いまの目当てが有効なら、はっきり良い(GOAL_KEEP倍)候補が出るまで乗り換えない
@@ -5498,11 +5520,12 @@ function bossExpected(){
   if(B.bossMark && B.time-B.bossMark.t<BAL.BOSS_MEMORY_T) return true;
   return B.enemies.some(e=>e.boss&&!e.dead&&inSight(e,p));
 }
-function pickExplore(p){
+function pickExplore(p,force){
   const M=META.map, B=G.B; if(!G.map||!M) return null;
+  /* ★v6.3e force: 何も無くなった時の最後の受け皿。嫌な地形も諦めた地形も問わず、足の届く床ならどこでもいい */
   const useSeen=BAL.SEEN_EXPLORE && G.map.seen && seenFrac()<0.97;   // ほぼ見尽くしたら旧来のうろつきへ
   const leaving=!!B.wantExit;   // v2.2 最終階層でも「魔核へ向かう気」になったら同じ
-  const okZone=(q)=>{ const qz=zoneAt(q.x,q.y); return !(zoneFear(qz)>=2 || (p.scared&&p.scared[qz]>B.time)); };   // v2.2 「できれば避けたい」以上の地形の中は探索点にしない
+  const okZone=(q)=>{ if(force) return true; const qz=zoneAt(q.x,q.y); return !(zoneFear(qz)>=2 || (p.scared&&p.scared[qz]>B.time)); };   // v2.2 「できれば避けたい」以上の地形の中は探索点にしない
   const cands=[];
   for(let k=0;k<12;k++){
     const a=rand(TAU), dd=rand(600,1200);
@@ -5519,6 +5542,15 @@ function pickExplore(p){
     let sc=useSeen ? unseenAround(q.x,q.y,7)*BAL.EXPLORE_UNSEEN_W - dist/1200*BAL.EXPLORE_DIST_W : dist/1200;
     for(const po of G.map.pois){ if(!M.known[po.key]){ sc+=Math.max(0,1-Math.hypot(po.x-q.x,po.y-q.y)/700)*(leaving?2:1); if(leaving && (po.kind==='stairs'||po.kind==='core')) sc+=1.5*Math.max(0,1-Math.hypot(po.x-q.x,po.y-q.y)/1600); } }   // まだ見ていない場所の近くを優先
     if(sc>cs){ cs=sc; cand={x:q.x,y:q.y}; }
+  }
+  /* ★v6.3e 受け皿の受け皿: 12方向がぜんぶ壁や崖に当たる隅では、上の候補が一つも残らない。
+     距離をぐっと近くまで許して、届く床を拾えるまで探す */
+  if(!cand && force){
+    for(let k=0;k<40 && !cand;k++){
+      const a=rand(TAU), dd=rand(180,900);
+      const q=snapFloor(clampMapX(p.x+Math.cos(a)*dd,100), clampMapY(p.y+Math.sin(a)*dd,100), false, 8);
+      if(q && Math.hypot(q.x-p.x,q.y-p.y)>90 && reachableAt(q.x,q.y,false)) cand={x:q.x,y:q.y};
+    }
   }
   if(cand && useSeen && unseenAround(cand.x,cand.y,7)>0.5 && Math.random()<0.35) sayLine('exploreNew',0,20);
   p.explore=cand; p.exploreUntil=B.time+30;
