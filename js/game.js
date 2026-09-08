@@ -1488,8 +1488,12 @@ function zoneV6Tick(h,dt,ice){
   /* ---- 糸の床: ゆっくり行けば長く撫でられ、急げば絡む。どちらを選んでも損をする ---- */
   if(z==='silk' && !ice){
     learnZone('silk',dt*0.35);
+    /* v6.2 閾値は 6 だったが、実測で silkT の最大が **ちょうど 6.00** で止まっていた
+       (45戦×四人)。糸の床の上に居る時間は 6.53秒/戦あるのに、溜まるのは
+       「SILK_V 未満で歩いている間」だけなので、越える手前で走り出してしまう。
+       届いている値の少し下に置き直す */
     if(sp<BAL.SILK_V){ applySensit(BAL.SILK_SENS*dt); h.silkT=(h.silkT||0)+dt;
-      if(h.silkT>6){ h.silkT=0; markTrait(h,'attachCalm',1); } }
+      if(h.silkT>BAL.SILK_TRAIT_T){ h.silkT=0; markTrait(h,'attachCalm',1); } }
     else { h.silkT=Math.max(0,(h.silkT||0)-dt*BAL.TRAIT_FADE);
       if((h.silkHold||0)<=0 && (h.silkCd||0)<=0 && Math.random()<dt*0.5){
         h.silkHold=BAL.SILK_TETHER; h.silkRip=BAL.SILK_RIP; h.silkCd=2.4; B.silkN=(B.silkN||0)+1;
