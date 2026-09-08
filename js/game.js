@@ -53,6 +53,7 @@ function newHero(id){
     sanctT:0, sanctPulse:0, bladeT:1.0, thunderT:2.0, holyT:2.4,
     fswordT:1.0, fswordSide:1, fringT:0, fringAng:0, fburstT:3.0, fpillarT:2.2, fwingT:4.5, fwingAnim:0, fwingX:0, fwingY:0,   // v3.0 フレイラの武器
     flameHeat:0, flameT:0,   /* v6.3 前に出て斬り続けるほど溜まる熱。炎の剣と火の輪の両方がこれを読む */
+    sticky:0, wipeT:0, wipeCd:0,   /* v6.3b 媚薬のベタベタ。洗うか拭うまで身体に残る */
     ineedleT:0.9, ifieldT:0, ifieldR:0, ibloomT:2.4, iorbitT:0, iorbAng:0,   // v5.0 クウの武器
     iceCd:0, iceBias:null, iceOrb:null, iceEcho:null, echoCd:0, iceBless:0, iceOn:0,
     hype:0, hypeT:0, meltT:0, meltSaid:0, hoarT:0,
@@ -1642,6 +1643,20 @@ function statesTick(h,dt){
     const dst=Math.max(0,Math.min(2,denStage(h.x,h.y)));
     const pw=denPower();   /* v6.3 浅い階の巣窟は、効きそのものが薄い */
     if(!ice){ learnZone('lewd',dt*0.45); addHeatG(BAL.DEN_HEAT[dst]*pw*dt); applySensit(BAL.DEN_SENS[dst]*pw*dt); }
+    /* ★v6.3b 最奥へ踏み込んだ瞬間(その日一度だけ)。奥はどの階でも奥 */
+    if(dst>=2 && !h.denDeepHit){ h.denDeepHit=true;
+      /* ★この関数の const B=G.B はもっと下にあるので、ここで B を触ると
+         宣言前アクセスで落ちる。G.B を直に読む */
+      const BB=G.B, dp=denDeepPower(), ci0=BB.ci; BB.ci=h.hi;
+      addHeatG(BAL.DEN_DEEP_HEAT*dp); applySensit(BAL.DEN_DEEP_SENS*dp);
+      h.stumbleDur=Math.max(h.stumbleDur,0.6);
+      BB.ci=ci0;
+      floatTxt(h.x,h.y-78,'——奥','#ff5d9e',15,1.5);
+      parts(h.x,h.y-10,18,['#ff5d9e','#c98cff','#ffd0e4'],110,1.0); sfx(140,90,0.4,'sine',0.06);
+      sayPartyOrLine(h,'feat.denDeepIn','おく……におい、ちがう……っ、こ、こまで、きたら…');
+    }
+    /* v6.3b 巣窟の沼(前室より奥)も媚薬沼のうち。身体に残る */
+    if(dst>=1) h.sticky=Math.min(BAL.STICKY_MAX,(h.sticky||0)+BAL.STICKY_GAIN*0.7*pw*dt);
     h.lewdT=(h.lewdT||0)+dt;
     /* 床の手の間隔は、階ごとの多さ(grip)と効きで伸び縮みする。1階は倍以上あく */
     if(h.lewdT>=BAL.DEN_GROPE[dst]/Math.max(0.3,denGrip()*pw)){ h.lewdT=rand(-1.5,0); floorGrope(h); if(dst===0 && Math.random()<BAL.DEN_ABORT) zoneAbort(h); }   // 床から伸びる手は生き物なので、氷でも止まらない
@@ -1820,6 +1835,34 @@ function condTick(h,dt){
     h.stamina=Math.min(h.staminaMax,h.stamina+rg*dt);
     if(h.exhausted && h.stamina>25){ h.exhausted=false; heroBubble(h,'……よし、いける'); }
   }
+  /* ★v6.3b 媚薬のベタベタ: 沼に浸かると身体に残り、洗うか拭うまで火照りが上がり続ける。
+     沼から出た瞬間に何も無かったことになるのは、この作品の芯(残る痕)と噛み合わない */
+  { const mi=mireAt(h.x,h.y);
+    if(mi && !h.out){
+      const dep=(typeof mireDepthAt==='function')?Math.max(0.35,mireDepthAt(h.x,h.y)):(mi.depth||0.5);
+      h.sticky=Math.min(BAL.STICKY_MAX,(h.sticky||0)+BAL.STICKY_GAIN*dep*dt);
+      if(!h.stickySaid && h.sticky>=0.8){ h.stickySaid=true;
+        sayPartyOrLine(h,'feat.sticky','ぬるぬるが、はだにのこって……とれない'); }
+    }
+    if((h.sticky||0)>0){
+      /* 効き: 濃いほど火照りと敏感化が進む(沼の外でも) */
+      addHeatG(BAL.STICKY_HEAT*h.sticky*dt); applySensit(BAL.STICKY_SENS*h.sticky*dt);
+      /* 落ちかた: 何もしなければ乾くだけ。浅瀬を歩けば流れる。清水と泉で一気に落ちる(usePool/泉の側) */
+      let off=BAL.STICKY_DRY;
+      if(h.zone==='water') off+=BAL.STICKY_WADE;
+      h.sticky=Math.max(0,h.sticky-off*dt);
+      if(h.sticky<=0){ h.stickySaid=false; h.wipeCd=0; }
+      /* 拭う: 濃くて手が空いていれば、その場で立ち止まって拭う */
+      if(h.wipeT>0){ h.wipeT-=dt; h.vx=0; h.vy=0;
+        if(h.wipeT<=0){ h.sticky=Math.max(0,h.sticky-BAL.STICKY_WIPE); h.wipeCd=BAL.STICKY_WIPE_CD;
+          parts(h.x,h.y-14,8,['#ff9ec2','#ffd0e4','#fff'],70,0.5); } }
+      else if((h.wipeCd||0)>0){ h.wipeCd-=dt; }
+      else if(h.sticky>=BAL.STICKY_WIPE_TH && !h.pinned && !h.charmBind && h.climaxT<=0
+              && attachCount(h)===0 && !mireAt(h.x,h.y) && nearEnemyCount(h.x,h.y,240)===0){
+        h.wipeT=BAL.STICKY_WIPE_T;
+        heroBubble(h,pickRand(['……ぬぐわなきゃ','べたべた、する……','はやく、おとさないと…']),false,2);
+      }
+    } }
   /* v6.3 フレイラの熱: 当てるのが途切れると冷める(退がると失う) */
   if((h.flameT||0)>0){ h.flameT-=dt; if(h.flameT<=0){ h.flameHeat=Math.max(0,(h.flameHeat||0)-1); if(h.flameHeat>0) h.flameT=BAL.FLAME_KEEP; } }
   /* v6.2 嗅ぐ発作の時間切れ(引き金は下の臭いの雲の所) */
@@ -1882,13 +1925,14 @@ function aiUpdate(dt){
   const B=G.B, p=B.hero, st=heroStat(p);
   p.prevX=p.x; p.prevY=p.y;
 
-  if(p.pinned || p.charmBind || p.climaxT>0 || p.stumbleDur>0 || p.freezeT>0 || p.selfT>0 || p.sniffT>0 || p.bathT>0 || p.poolT>0 || p.readT>0){
+  if(p.pinned || p.charmBind || p.climaxT>0 || p.stumbleDur>0 || p.freezeT>0 || p.selfT>0 || p.sniffT>0 || p.bathT>0 || p.poolT>0 || p.readT>0 || p.wipeT>0){
     p.vx*=Math.pow(0.001,dt); p.vy*=Math.pow(0.001,dt);
     p.moving=false;
     p.aiLabel=p.freezeT>0?'じかんが、とまって……'
       :p.climaxT>0?'ぜっちょう……!!'
       :p.selfT>0?'……(その場で、じぶんを)……'
       :p.bathT>0?'おゆに、つかってる……'
+      :p.wipeT>0?'ぬめりを、ぬぐってる……'
       :p.poolT>0?'清水で、あらってる……'
       :p.readT>0?'石碑を、よんでいる……'
       :p.sniffT>0?'……におい、を……'
@@ -5514,6 +5558,7 @@ function poiTick(dt){
     }
     if(q.kind==='spring' && d<40 && p.springCd<=0 && p.hp<p.maxHp*0.8 && attachCount(p)===0 && !p.pinned && p.climaxT<=0){
       p.springCd=60; p.bathT=3.5;
+      p.sticky=0; p.stickySaid=false;   /* v6.3b 湯に浸かれば、ベタベタも落ちる */
       setBanner('泉で休む','湯があつい。回復するが、身体も火照る','#8fd3ff');
       heroBubble(p,pickRand(['ちょっとだけ、やすも……','あつ……でも、きもちいい……','すぐ、もどるから……']),true,2);
       awardAil('heatg');
@@ -7579,11 +7624,21 @@ function denPower(){
   const F=(G.B&&G.B.floor)||curFloor(); const d=(F&&F.depth)||1;
   return Math.min(BAL.DEN_POW_MAX, BAL.DEN_POW0+BAL.DEN_POW_K*(d-1));
 }
+/* v6.3b 最奥へ踏み込んだ一撃の倍率。浅い階でも重い(奥はどの階でも奥) */
+function denDeepPower(){
+  const F=(G.B&&G.B.floor)||curFloor(); const d=(F&&F.depth)||1;
+  return Math.min(BAL.DEN_POW_MAX, BAL.DEN_DEEP0+BAL.DEN_DEEP_K*(d-1));
+}
+/* v6.3b 一撃のほうの倍率(敷居をまたいだ瞬間・番人の太さ)。積もりより浅い階で軽い */
+function denBurstPower(){
+  const F=(G.B&&G.B.floor)||curFloor(); const d=(F&&F.depth)||1;
+  return Math.min(BAL.DEN_POW_MAX, BAL.DEN_BURST0+BAL.DEN_BURST_K*(d-1));
+}
 /* v6.3 その階の巣窟の床の手の多さ(FLOORS[].lewd.mix.grip) */
 function denGrip(){ const L=denOf(); return (L&&L.grip!==undefined)?L.grip:1; }
 /* 敷居をまたいだ瞬間: 匂いに殴られる */
 function denEnterBurst(h){
-  const B=G.B, ci0=B.ci, pw=denPower(); B.ci=h.hi;
+  const B=G.B, ci0=B.ci, pw=denBurstPower(); B.ci=h.hi;   /* 一撃は別の倍率で */
   addHeatG(BAL.DEN_ENTER_HEAT*pw); applySensit(BAL.DEN_ENTER_SENS*pw);
   h.stumbleDur=Math.max(h.stumbleDur,0.5);
   B.ci=ci0;
@@ -7676,7 +7731,7 @@ function spawnDenGuard(){
   const u=spawnUnit(id,q.x,q.y,{enVal:0,gemMul:2.2});
   if(!u) return;
   u.denGuard=true;
-  { const pw=denPower();   /* v6.3 浅い階の番人は、そこまで太らない */
+  { const pw=denBurstPower();   /* v6.3 浅い階の番人は、そこまで太らない */
     u.maxHp=u.hp=Math.round(Math.max(u.maxHp*(1+(BAL.DEN_GUARD_HP-1)*pw), BAL.DEN_GUARD_MIN*pw*F.mon.hp*(typeof eraMul==='function'?eraMul(F.depth):1)));
     u.dmg=(u.dmg||0)*(1+(BAL.DEN_GUARD_DMG-1)*pw); u.xp=(u.xp||0)*2.2; }
   setBanner('褥の番人 — '+MONSTERS[id].name, (F.lewd&&F.lewd.guardSub)||'奥の主が、身を起こした','#ff6b81');
@@ -8142,10 +8197,11 @@ function revealAround(x,y,r){
   return n;
 }
 /* 清水が欲しい状態: 敏感化・発情ゲージ・粘液・快感のどれかがひどい */
-function poolWant(p){ return p.sensit>=Math.max(35,(p.sensitFloor||0)+10) || (p.heatG||0)>=45 || p.slow>0 || p.aphro>=40; }   // 下限ぶんの敏感化では欲しがらない
+function poolWant(p){ return p.sensit>=Math.max(35,(p.sensitFloor||0)+10) || (p.heatG||0)>=45 || p.slow>0 || p.aphro>=40 || (p.sticky||0)>=1.0; }   /* v6.3b ベタベタも洗いに行く理由になる */   // 下限ぶんの敏感化では欲しがらない
 function usePool(q){
   const B=G.B, p=B.hero; B.poolCd[q.key]=BAL.POOL_CD; B.used.pool++;
   p.sensit=Math.max(p.sensitFloor||0,p.sensit-30); p.heatG=Math.max(0,(p.heatG||0)-50); p.slow=0; p.aphro=Math.max(0,p.aphro-15);   // 祭壇/呪いの下限は割らない
+  p.sticky=0; p.stickySaid=false;   /* v6.3b 媚薬のベタベタは、水で洗えば落ちる */
   parts(q.x,q.y-6,20,['#cffaff','#fff','#8fd3ff'],120,0.9); sfx(900,500,0.4,'sine',0.05);
   floatTxt(p.x,p.y-58,'清水 — 敏感化-30・発情-50','#8fd3ff',12,1.6);
   heroBubble(p,pickRand(['……つめたい。あたま、すっきりした','ぬるぬる、ながれた……よし']),false,1);

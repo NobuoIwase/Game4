@@ -3686,6 +3686,7 @@ function drawHUD(g){
   const slv=sensLvOf(p);
   if(slv>0) chips.push(['sens','敏感'+ROMANS[slv]]);
   if(p.slow>0) chips.push(['slow','粘液']);
+  if((p.sticky||0)>=0.3) chips.push(['aphro','媚薬ぬめり '+(p.sticky).toFixed(1)+(p.wipeT>0?' 拭い中':'')]);   /* v6.3b 洗うまで身体に残る */
   for(const c of p.charms) chips.push(['charm','魅了'+ROMANS[c.lv]+' '+((MONSTERS[c.id]&&MONSTERS[c.id].name)||c.id)+(c.lv<3?' '+Math.round(c.g||0)+'%':'')]);
   if(p.exhausted) chips.push(['pinned','疲弊']);
   if(p.freezeT>0) chips.push(['freeze','時間停止 '+Math.ceil(p.freezeT)+'s']);
