@@ -894,7 +894,8 @@ function attachMonster(mon, kind, opt){
   parts(h.x,h.y-14,10,['#c98cff','#8458d8'],110,0.5);
   awardAil('bound');
   // スタミナが削れた状態での拘束 → 押し倒し
-  if(!h.pinned && h.stamina<BAL.PIN_STAMINA_TH){
+  /* v6.3 押し倒しの敷居は「絶対値」と「最大値の割合」の低い方。浅い階だけが緩む(BAL の注記を参照) */
+  if(!h.pinned && h.stamina<Math.min(BAL.PIN_STAMINA_TH, h.staminaMax*BAL.PIN_STAMINA_FRAC)){
     enterPin(mon);
   }
   return true;
@@ -1638,9 +1639,11 @@ function statesTick(h,dt){
   burstTick(h,dt);        /* v6.2 全身を取られた時・長く押し倒された時の「えいっ」 */
   if(h.zone==='lewd'){   // v3.2 巣窟: 前室→沼→最奥と、奥ほど効きが強い。奥まで来たら引き返さない(前室でだけ「やっぱ無理」が出る)
     const dst=Math.max(0,Math.min(2,denStage(h.x,h.y)));
-    if(!ice){ learnZone('lewd',dt*0.45); addHeatG(BAL.DEN_HEAT[dst]*dt); applySensit(BAL.DEN_SENS[dst]*dt); }
+    const pw=denPower();   /* v6.3 浅い階の巣窟は、効きそのものが薄い */
+    if(!ice){ learnZone('lewd',dt*0.45); addHeatG(BAL.DEN_HEAT[dst]*pw*dt); applySensit(BAL.DEN_SENS[dst]*pw*dt); }
     h.lewdT=(h.lewdT||0)+dt;
-    if(h.lewdT>=BAL.DEN_GROPE[dst]){ h.lewdT=rand(-1.5,0); floorGrope(h); if(dst===0 && Math.random()<BAL.DEN_ABORT) zoneAbort(h); }   // 床から伸びる手は生き物なので、氷でも止まらない
+    /* 床の手の間隔は、階ごとの多さ(grip)と効きで伸び縮みする。1階は倍以上あく */
+    if(h.lewdT>=BAL.DEN_GROPE[dst]/Math.max(0.3,denGrip()*pw)){ h.lewdT=rand(-1.5,0); floorGrope(h); if(dst===0 && Math.random()<BAL.DEN_ABORT) zoneAbort(h); }   // 床から伸びる手は生き物なので、氷でも止まらない
   }else if(h.zone==='haze'){ if(!ice){ learnZone('haze',dt*0.3); addHeatG(BAL.HAZE_HEAT*dt); applySensit(BAL.HAZE_SENS*dt); } h.lewdT=0; }   // v3.2 口の外の澱み
   else h.lewdT=0;
   if(h.zoneEnter && !h.zoneAbortTried && zoneFear(h.zone)>=2 && denStage(h.x,h.y)<=0 && ((h.heatG||0)-(h.zoneHeat0||0)>=15 || (h.sensit||0)-(h.zoneSens0||0)>=10)){ if(Math.random()<0.45) zoneAbort(h); else h.zoneAbortTried=true; }   // 火照りが急に進んだら、半分弱は逃げ出す(v3.2 巣窟の沼・最奥まで来ていたら引き返さない——前室と外だけ)
@@ -2799,11 +2802,16 @@ function weaponsUpdate(dt){
         p.crossT=(evo?1.3:1.7)*Math.pow(0.9,lv-1)*ov.cd;
         const a=Math.atan2((ts[0].y-ts[0].r)-(p.y-12), ts[0].x-p.x);
         const sp=evo?430:360;
-        const nC=1+dupN(p);
+        /* ★v6.3 相手は 500px まで探すのに、折り返しが 0.42秒固定だった。
+           360px/s × 0.42s = 約150px しか飛べず、実測で 260px の的には一度も届いていない。
+           狙った相手まで届く分だけ飛んでから折り返す(上限あり) */
+        const td=Math.hypot(ts[0].x-p.x, (ts[0].y-ts[0].r)-(p.y-12));
+        const retT=Math.max(evo?0.55:0.42, Math.min(BAL.CROSS_RET_MAX, td/sp));
+        const nC=1+Math.floor(lv/3)+dupN(p);   /* 弾数: Lv3で2枚、Lv6以上で3枚 */
         for(let i=0;i<nC;i++){
           const a2=a+(i-(nC-1)/2)*0.4;
           B.bullets.push({kind:'cross', x:p.x, y:p.y-12, vx:Math.cos(a2)*sp, vy:Math.sin(a2)*sp,
-            spd:sp, dmg:(evo?20:9+4*(lv-1))*ov.dmg, retT:evo?0.55:0.42, ret:false, life:2.4, last:null, evo});
+            spd:sp, dmg:(evo?20:9+4*(lv-1))*ov.dmg, retT, ret:false, life:retT*2+0.9, last:null, evo});
         }
         sfx(320,180,0.12,'square',0.04);
         if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN);
@@ -2834,16 +2842,22 @@ function weaponsUpdate(dt){
       const evo=p.evo.kblade>0, lvR=p.wp.blade, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
       p.bladeT=(evo?0.42:0.85)*Math.pow(0.9,lv-1)*ov.cd;
       const n=(evo?4:1+Math.floor(lv/2))+dupN(p);
-      const dirs=evo?[p.face,-p.face]:[p.face];
+      /* ★v6.3 前は vx=±sp、vy≈0 の「真横」にしか飛ばず、少しでも斜めに居る相手には
+         当たらなかった(実測 12秒で 103点。全29本中の最下位)。
+         「むいた方向へ刃をとばす」の「むいた方向」を、狙う相手の方に取り直す */
+      const tg=nearestEnemies(1, BAL.BLADE_R*(1+0.12*(p.ps.reach||0)))[0];
+      const base=tg?Math.atan2(tg.y-(p.y-14), tg.x-p.x):(p.face>=0?0:Math.PI);
+      const dirs=evo?[base, base+Math.PI]:[base];
       for(const dir of dirs){
         for(let i=0;i<n;i++){
           if(B.bullets.length>=170) break;
-          const spread=(i-(n-1)/2)*0.07;
+          const a2=dir+(i-(n-1)/2)*BAL.BLADE_FAN;
           const sp=580;
-          B.bullets.push({kind:'blade', x:p.x+dir*8, y:p.y-14+(i-(n-1)/2)*4, vx:Math.cos(spread)*sp*dir, vy:Math.sin(spread)*sp,
-            dmg:(evo?16:10+3*(lv-1))*ov.dmg, pierce:(evo?3:1)+(p.ps.pierce||0), life:0.9, last:null, evo});
+          B.bullets.push({kind:'blade', x:p.x+Math.cos(dir)*8, y:p.y-14+Math.sin(dir)*8, vx:Math.cos(a2)*sp, vy:Math.sin(a2)*sp,
+            dmg:(evo?16:10+3*(lv-1))*ov.dmg, pierce:(evo?3:1)+(p.ps.pierce||0), life:1.15, last:null, evo});
         }
       }
+      if(tg) p.face=Math.cos(base)>=0?1:-1;
       sfx(700,300,0.06,'square',0.03);
       if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN*0.6);
     }
@@ -3001,7 +3015,7 @@ function kuuWeapons(p,dt,atkMult){
       const evo=p.evo.glacier>0, lvR=p.wp.ibloom, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
       p.ibloomT=(3.0-0.22*(lv-1))*ov.cd;
       const n=1+dupN(p)+(lv>=4?1:0);
-      const ts=nearEnemiesR(p,n,(200+14*lv)*(1+0.12*(p.ps.reach||0)));
+      const ts=nearEnemiesR(p,n,(250+18*lv)*(1+0.12*(p.ps.reach||0)));   /* v6.3 実測で 260px に届いていなかった */
       for(const e of ts){
         if(B.zones.length>24) B.zones.shift();
         const zr=(34+5*lv)*areaMult(p)*ov.area*(evo?1.5:1);
@@ -3119,7 +3133,7 @@ function freilaWeapons(p,dt,atkMult){
     if(p.fpillarT<=0){
       const lvR=p.wp.fpillar, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
       p.fpillarT=(2.6-0.2*(lv-1))*ov.cd;
-      const n=1+(p.ps.dup||0)+(lv>=4?1:0), ts=nearEnemiesR(p,n,(170+12*lv)*(1+0.12*(p.ps.reach||0)));
+      const n=1+(p.ps.dup||0)+(lv>=4?1:0), ts=nearEnemiesR(p,n,(220+16*lv)*(1+0.12*(p.ps.reach||0)));   /* v6.3 実測で 260px に届いていなかった */
       for(const e of ts){ if(B.zones.length>24) B.zones.shift(); B.zones.push({x:e.x, y:e.y, r:(30+4*lv)*areaMult(p)*ov.area, t:0, life:2.2, dmg:(6+2.5*(lv-1))*ov.dmg, tick:0, fire:true}); parts(e.x,e.y-10,10,['#ff7a3a','#ffd76a','#fff'],140,0.5); pushLight(e.x,e.y,170,BAL.DARK_MEM_T*0.8,0.95); }   // v4.0 炎が通った所はしばらく見えている
       if(ts.length) sfx(300,120,0.2,'square',0.04);
     }
@@ -5028,46 +5042,78 @@ function yamiBegTick(p,dt){
 function yamiWeapons(p,dt,atkMult){
   const B=G.B;
   /* 闇の刃: 前を広く薙ぐ(敵だった頃と同じ形。ずっと小さい) */
+  /* v6.3 闇の刃: 振った跡が、闇のまま宙に残る。
+     ★前は「ルミナのムチを紫にしただけ」だった。彼女は斬った線を積み重ねて、
+     自分の周りに通れない檻を組む——追われる側でいるほど強い、という形にする */
   if(p.wp.dblade>0){
     p.dbladeT=(p.dbladeT||0)-dt*atkMult;
     if(p.dbladeT<=0){
       const evo=p.evo.eclipse>0, lvR=p.wp.dblade, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
-      p.dbladeT=(evo?0.7:0.95)*Math.pow(0.92,lv-1)*ov.cd;
+      p.dbladeT=(evo?0.78:1.05)*Math.pow(0.92,lv-1)*ov.cd;
       const range=(evo?150:96+9*lv)*areaMult(p)*ov.area, dmg=(evo?24:11+4.4*(lv-1))*ov.dmg;
-      p.whipAnim=0.16; p.whipDir=p.face; p.whipR=range; p.whipDark=true;
+      /* 斬る向き: 追ってくる者が居ればその線上、居なければ向いている方 */
+      const t0=nearestEnemies(1, range*1.6)[0];
+      const ang=t0?Math.atan2(t0.y-(p.y-10), t0.x-p.x):(p.face>=0?0:Math.PI);
+      p.whipAnim=0.16; p.whipDir=Math.cos(ang)>=0?1:-1; p.whipR=range; p.whipDark=true;
       let hit=false;
       for(const e of B.enemies){ if(e.dead||e.dormant) continue;
         const ex=e.x-p.x, ey=e.y-(p.y-10);
         const inArc=evo?Math.hypot(ex,ey)<range+e.r:(ex*p.whipDir>0 && Math.hypot(ex,ey)<range+e.r);
         if(inArc){ damageEnemy(e,dmg); hit=true; if(evo) e.stun=Math.max(e.stun||0,0.25); } }
+      /* 残る線: 彼女を横切る一本。振った方向に直交して引く(逃げ道を塞ぐ形) */
+      { const na=ang+Math.PI/2, hx=Math.cos(na)*range*0.9, hy=Math.sin(na)*range*0.9;
+        const seams=B.zones.filter(z=>z.seam);
+        while(seams.length>=BAL.DSEAM_MAX){ const old=seams.shift(); const i=B.zones.indexOf(old); if(i>=0) B.zones.splice(i,1); }
+        B.zones.push({seam:true, x:p.x-hx, y:(p.y-10)-hy, x2:p.x+hx, y2:(p.y-10)+hy,
+          r:BAL.DSEAM_W, t:0, life:BAL.DSEAM_T*(evo?1.6:1), dmg:dmg*BAL.DSEAM_DMG, tick:0, dark:true}); }
       if(hit){ sfx(190,80,0.1,'sawtooth',0.05); parts(p.x+(p.whipDir||1)*range*0.5,p.y-10,6,['#a77dff','#2a1a3e'],120,0.4); if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN); }
     }
   }
-  /* 闇の輪: 自分の周りを回る闇 */
+  /* v6.3 闇の輪: 外からゆっくり締まって、触れた者を内側へ引き込む。
+     ★前はフレイラの火の輪と同じ「一定半径を回る輪」だった。
+     こちらは投網。輪が縮みきる頃には、囲った者が刃の間合いに集まっている */
   if(p.wp.dring>0){
     const evo=p.evo.umbra>0, lvR=p.wp.dring, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
     p.dringAng=(p.dringAng||0)+dt*2.0;
-    const R=(evo?92:50+7*lv)*areaMult(p)*ov.area, dmg=(evo?8:3.6+1.4*(lv-1))*ov.dmg;
-    p.dringR=R; p.dringT=(p.dringT||0)-dt*atkMult;
+    p.dringPh=((p.dringPh||0)+dt/(BAL.DRING_CYCLE*(evo?0.78:1)))%1;
+    const Rmax=(evo?128:74+9*lv)*areaMult(p)*ov.area;
+    const R=Rmax-(Rmax-Rmax*BAL.DRING_MIN)*p.dringPh, dmg=(evo?8:3.6+1.4*(lv-1))*ov.dmg;
+    p.dringR=R; p.dringPhase=p.dringPh; p.dringT=(p.dringT||0)-dt*atkMult;
     if(p.dringT<=0){
       p.dringT=0.3*ov.cd;
       for(const e of B.enemies){ if(e.dead||e.dormant||e.item) continue;
-        const d2=Math.hypot(e.x-p.x,(e.y-10)-(p.y-10));
+        const d2=Math.hypot(e.x-p.x,e.y-p.y);
         if(Math.abs(d2-R)<20+e.r){ damageEnemy(e,dmg);
-          if(evo){ const a=Math.atan2(p.y-e.y,p.x-e.x); e.x+=Math.cos(a)*22; e.y+=Math.sin(a)*22; collideMap(e,e.r*0.75,canFly(e.id)); } } }
+          /* 引き込むのは、動ける小物だけ。据わった個体とボスは動かない */
+          if(!e.boss && !isSeated(e.id) && e.state!=='attached'){
+            const a=Math.atan2(p.y-e.y,p.x-e.x), k=BAL.DRING_PULL*(evo?1.5:1);
+            e.x+=Math.cos(a)*k; e.y+=Math.sin(a)*k; collideMap(e,e.r*0.75,canFly(e.id)); } } }
     }
-  } else p.dringR=0;
-  /* 闇の穿ち: 遠くの一体を貫く */
+  } else { p.dringR=0; p.dringPh=0; }
+  /* v6.3 闇の穿ち: いちばん「遠い」的を狙い、その的が暗がりに立っているほど深く貫く。
+     ★前はルミナの刃と同じ「いちばん近い一体へ弾を撃つ」だった。
+     全員が近くを撃つ中で、この子だけが奥の暗がりを撃つ——光を吸う子の役目にする */
   if(p.wp.dspear>0){
     p.dspearT=(p.dspearT||0)-dt*atkMult;
     if(p.dspearT<=0){
       const evo=p.evo.gloom>0, lvR=p.wp.dspear, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
-      const ts=nearestEnemies(1, (evo?760:520)*(1+0.12*(p.ps.reach||0)));
-      if(!ts.length) p.dspearT=0.15;
+      const maxD=(evo?760:520)*(1+0.12*(p.ps.reach||0));
+      let t=null, bd=-1;
+      for(const e of B.enemies){ if(e.dead||e.dormant||e.item||e.state==='attached') continue;
+        const d=Math.hypot(e.x-p.x,e.y-p.y);
+        if(d>maxD||d<40) continue;
+        if(!losClear(p.x,p.y-14,e.x,e.y,true)) continue;
+        /* 遠さと暗さの両方で選ぶ。同じくらい遠いなら、暗い方を撃つ */
+        const sc=d*(1+BAL.DSPEAR_DARK*(1-lightAt(e.x,e.y)));
+        if(sc>bd){ bd=sc; t=e; } }
+      if(!t) p.dspearT=0.15;
       else{
         p.dspearT=(1.5-0.10*(lv-1))*ov.cd;
-        const t=ts[0], a=Math.atan2(t.y-(p.y-14),t.x-p.x), dmg=(14+6*(lv-1))*ov.dmg*(evo?1.4:1);
-        B.bullets.push({x:p.x, y:p.y-14, vx:Math.cos(a)*560, vy:Math.sin(a)*560, dmg, pierce:(evo?3:1)+(p.ps.pierce||0), life:1.4, last:null, dark:true});
+        const a=Math.atan2(t.y-(p.y-14),t.x-p.x);
+        const dk=1-lightAt(t.x,t.y);
+        const dmg=(14+6*(lv-1))*ov.dmg*(evo?1.4:1)*(1+BAL.DSPEAR_DARK*dk);
+        B.bullets.push({x:p.x, y:p.y-14, vx:Math.cos(a)*560, vy:Math.sin(a)*560, dmg, pierce:(evo?3:1)+(p.ps.pierce||0)+(dk>0.6?1:0), life:1.6, last:null, dark:true});
+        if(dk>0.6) floatTxt(p.x,p.y-58,'暗がりを穿つ','#a77dff',10,0.7);
         sfx(320,140,0.14,'triangle',0.05);
         if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN);
       }
@@ -7478,10 +7524,18 @@ function denStage(x,y){
   if(q>1.04) return (zoneAt(x,y)==='lewd')?0:-1;
   return q<0.34?2:(q<0.70?1:0);
 }
+/* v6.3 その階の巣窟の効き。浅い階ほど弱い(1階=0.42 … 15階=1.22)。
+   ★これが無いと、どの階の巣窟も同じ強さで殴ってくる */
+function denPower(){
+  const F=(G.B&&G.B.floor)||curFloor(); const d=(F&&F.depth)||1;
+  return Math.min(BAL.DEN_POW_MAX, BAL.DEN_POW0+BAL.DEN_POW_K*(d-1));
+}
+/* v6.3 その階の巣窟の床の手の多さ(FLOORS[].lewd.mix.grip) */
+function denGrip(){ const L=denOf(); return (L&&L.grip!==undefined)?L.grip:1; }
 /* 敷居をまたいだ瞬間: 匂いに殴られる */
 function denEnterBurst(h){
-  const B=G.B, ci0=B.ci; B.ci=h.hi;
-  addHeatG(BAL.DEN_ENTER_HEAT); applySensit(BAL.DEN_ENTER_SENS);
+  const B=G.B, ci0=B.ci, pw=denPower(); B.ci=h.hi;
+  addHeatG(BAL.DEN_ENTER_HEAT*pw); applySensit(BAL.DEN_ENTER_SENS*pw);
   h.stumbleDur=Math.max(h.stumbleDur,0.5);
   B.ci=ci0;
   floatTxt(h.x,h.y-72,'——むわっ','#ff9ec2',14,1.4);
@@ -7509,6 +7563,18 @@ function spawnDen(){
   }
   { const q=at(L.x-(L.deep.x-L.x)*0.2, L.y-L.ry*0.5); spawnPick('treasure',q.x,q.y,false); }
   { const q=at(L.x+L.rx*0.1, L.y+L.ry*0.72); spawnPick('nectar',q.x,q.y,false); const q2=at(L.x-L.rx*0.15,L.y-L.ry*0.75); spawnPick('nectar',q2.x,q2.y,false); }
+  /* v6.3 その巣窟に住み着いている顔ぶれ。階ごとに違う一種を、輪の中に据える。
+     絵も図鑑も敗北本文も既にある種から選ぶので、新しく書くものは無い */
+  { const MX=(F.lewd&&F.lewd.mix)||{}, sid=MX.seed;
+    if(sid && MONSTERS[sid]){
+      const n=Math.max(0,Math.round((MX.seedN||0)*Math.min(1.4,0.6+0.5*denPower())));
+      for(let k=0;k<n;k++){
+        const a2=(k+0.5)/Math.max(1,n)*TAU+0.4, rr=0.45+0.4*((k%2)?1:0.5);
+        const q=at(L.x+Math.cos(a2)*L.rx*rr, L.y+Math.sin(a2)*L.ry*rr, 4);
+        const u=spawnUnit(sid,q.x,q.y,{enVal:0,gemMul:1.5});
+        if(u) u.denSeed=true;
+      }
+    } }
   const beamKind=(F.lewd&&F.lewd.beam)||'hypno', other=beamKind==='hypno'?'climax':'hypno';
   B.den={
     runes:L.runes.map(q=>{ const s=at(q.x,q.y,3); return {x:s.x,y:s.y,cd:rand(0,3),glow:0}; }),
@@ -7522,7 +7588,7 @@ function denRuneHit(h,r){
   const B=G.B, ci0=B.ci; B.ci=h.hi;
   learnTrap('rune');
   if(crestKnow()>=3 && Math.random()<0.4){ floatTxt(h.x,h.y-70,'紋を、はらった','#8fd3ff',12,1.2); B.ci=ci0; return; }
-  applyPleasure(14); applySensit(8); addHeatG(8);
+  { const pw=denPower(); applyPleasure(14*pw); applySensit(8*pw); addHeatG(8*pw); }
   h.crestLv=Math.min(BAL.CREST_MAX,(h.crestLv||0)+1);
   h.stumbleDur=Math.max(h.stumbleDur,0.9);
   B.ci=ci0;
@@ -7561,8 +7627,9 @@ function spawnDenGuard(){
   const u=spawnUnit(id,q.x,q.y,{enVal:0,gemMul:2.2});
   if(!u) return;
   u.denGuard=true;
-  u.maxHp=u.hp=Math.round(Math.max(u.maxHp*BAL.DEN_GUARD_HP, BAL.DEN_GUARD_MIN*F.mon.hp*(typeof eraMul==='function'?eraMul(F.depth):1)));
-  u.dmg=(u.dmg||0)*BAL.DEN_GUARD_DMG; u.xp=(u.xp||0)*2.2;
+  { const pw=denPower();   /* v6.3 浅い階の番人は、そこまで太らない */
+    u.maxHp=u.hp=Math.round(Math.max(u.maxHp*(1+(BAL.DEN_GUARD_HP-1)*pw), BAL.DEN_GUARD_MIN*pw*F.mon.hp*(typeof eraMul==='function'?eraMul(F.depth):1)));
+    u.dmg=(u.dmg||0)*(1+(BAL.DEN_GUARD_DMG-1)*pw); u.xp=(u.xp||0)*2.2; }
   setBanner('褥の番人 — '+MONSTERS[id].name, (F.lewd&&F.lewd.guardSub)||'奥の主が、身を起こした','#ff6b81');
   const near=B.heroes.filter(h=>!h.out).sort((a,b)=>Math.hypot(a.x-q.x,a.y-q.y)-Math.hypot(b.x-q.x,b.y-q.y))[0];
   if(near) sayPartyOrLine(near,'feat.denGuard','おく、なにか……いる……!');
@@ -8665,7 +8732,10 @@ function battleTick(dt){
       z.tick=0.4;
       for(const e of B.enemies){
         if(e.dead||e.dormant||e.state==='attached') continue;
-        if(Math.hypot(e.x-z.x,e.y-z.y)<z.r+e.r*0.5){ damageEnemy(e,z.dmg);
+        /* v6.3 闇の刃の残り線は、円ではなく線分。跨いだ者を削る */
+        const inZ=z.seam ? (segDist(e.x,e.y,z.x,z.y,z.x2,z.y2)<z.r+e.r*0.5)
+                         : (Math.hypot(e.x-z.x,e.y-z.y)<z.r+e.r*0.5);
+        if(inZ){ damageEnemy(e,z.dmg);
           if(z.ice){ e.chillT=Math.max(e.chillT||0,1.4);   /* v5.0 霜の華: 入った瞬間に一度だけ凍らせる */
             if(z.froze && z.froze.indexOf(e)<0){ z.froze.push(e); freezeEnemy(e,0.8);
               B.fx.push({kind:'iceshatter',x:e.x,y:e.y-e.r*0.5,r:e.r+8,t:0,life:0.45}); } } }

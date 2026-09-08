@@ -274,10 +274,15 @@ function genMap(){
     const den=Object.assign({rx:rx*MAP_T, ry:ry*MAP_T, side:right?'r':'l', dir,
       mouth:P(ci+dir*(rx+L*0.5), cj), apron:P(ax,ay), deep:P(ci-dir*rx*0.5, cj),
       runes:[], flowers:[], beams:[], guard:null, r:Math.max(rx,ry)*MAP_T}, T2(ci,cj));
-    for(let k=0;k<3;k++){ const a=rnd()*TAU, q=0.35+rnd()*0.3; den.runes.push(P(ci+Math.cos(a)*rx*q, cj+Math.sin(a)*ry*q)); }
-    for(let k=0;k<3;k++){ const a=rnd()*TAU, q=0.5+rnd()*0.32; den.flowers.push(P(ci+Math.cos(a)*rx*q, cj+Math.sin(a)*ry*q)); }
-    for(let k=0;k<3;k++){
-      const a=(k/3)*TAU+rnd()*0.6+(right?Math.PI:0);
+    /* v6.3 仕掛けの数は階層ごと(FLOORS[].lewd.mix)。前は全階 3/3/3 で、
+       どの巣窟も同じ顔だった。浅い階は数そのものが少ない */
+    const MX=(F.lewd&&F.lewd.mix)||{rune:3,flower:3,beam:3};   /* F = curFloor()。fl は深さの数字 */
+    den.trait=MX.trait||null; den.grip=(MX.grip===undefined)?1:MX.grip;
+    const nRune=MX.rune|0, nFlower=MX.flower|0, nBeam=MX.beam|0;
+    for(let k=0;k<nRune;k++){ const a=rnd()*TAU, q=0.35+rnd()*0.3; den.runes.push(P(ci+Math.cos(a)*rx*q, cj+Math.sin(a)*ry*q)); }
+    for(let k=0;k<nFlower;k++){ const a=rnd()*TAU, q=0.5+rnd()*0.32; den.flowers.push(P(ci+Math.cos(a)*rx*q, cj+Math.sin(a)*ry*q)); }
+    for(let k=0;k<nBeam;k++){
+      const a=(k/Math.max(1,nBeam))*TAU+rnd()*0.6+(right?Math.PI:0);
       // 壁の内側の面を探す: 縁から中心へ向かって進み、最初に床になった所を光の出どころにする(壁の中から線を引くと自分の壁で遮られる)
       let oi=-1, oj=-1;
       for(let t=0;t<26;t++){ const ii=Math.round(ci+Math.cos(a)*(rx*1.3-t*0.5)), jj=Math.round(cj+Math.sin(a)*(ry*1.3-t*0.5));

@@ -259,8 +259,19 @@ function drawCloud(g,c){
   g.restore();
 }
 function drawZone(g,z){
-  // きよめの泉/せいすい: 聖水の水面。波紋が広がる
   const a=clamp(Math.min(z.t*3,(z.life-z.t)*1.2),0,1);
+  /* v6.3 闇の刃の残り跡: 円ではなく、宙に浮いたままの一本の線 */
+  if(z.seam){
+    g.save(); g.lineCap='round';
+    g.globalAlpha=a*0.55; g.strokeStyle='#2a1a3e'; g.lineWidth=z.r*1.7;
+    g.beginPath(); g.moveTo(z.x,z.y); g.lineTo(z.x2,z.y2); g.stroke();
+    g.globalAlpha=a*(0.55+0.35*Math.sin(z.t*7)); g.strokeStyle='#a77dff'; g.lineWidth=2.2;
+    g.shadowColor='#a77dff'; g.shadowBlur=10;
+    g.beginPath(); g.moveTo(z.x,z.y); g.lineTo(z.x2,z.y2); g.stroke();
+    g.restore();
+    return;
+  }
+  // きよめの泉/せいすい: 聖水の水面。波紋が広がる
   g.save();
   g.globalAlpha=a*0.55;
   const zg=g.createRadialGradient(z.x,z.y,z.r*0.2,z.x,z.y,z.r);
@@ -4218,6 +4229,24 @@ function draw(){
       const seg=p.evo.corona>0?8:5; for(let i=0;i<seg;i++){ const a0=p.fringAng+i*TAU/seg; g.globalAlpha=0.55+0.25*Math.sin(p.anim*9+i); g.strokeStyle=i%2?'#ffd76a':'#ff7a3a'; g.lineWidth=p.evo.corona>0?5:3.5; g.beginPath(); g.ellipse(p.x,p.y-10,p.fringR,p.fringR*0.9,0,a0,a0+TAU/seg*0.62); g.stroke(); }
       g.restore();
     }
+    /* v6.3 闇の輪(ヤミコ)。★これは一度も描かれていなかった——
+       p.dringR は毎フレーム書かれていたのに、読む場所がどこにも無い。
+       外から内へ締まる輪なので、締まりきる寸前ほど濃く見せる */
+    if(p.wp.dring>0 && p.dringR>0){
+      const ph=p.dringPhase||0, evo=p.evo.umbra>0;
+      g.save(); g.lineCap='round'; g.shadowColor='#2a1a3e'; g.shadowBlur=12;
+      const seg=evo?7:5;
+      for(let i=0;i<seg;i++){
+        const a0=p.dringAng+i*TAU/seg;
+        g.globalAlpha=(0.30+0.45*ph)*(0.75+0.25*Math.sin(p.anim*8+i));
+        g.strokeStyle=i%2?'#a77dff':'#2a1a3e'; g.lineWidth=(evo?5:3.5)*(0.8+0.5*ph);
+        g.beginPath(); g.ellipse(p.x,p.y-10,p.dringR,p.dringR*0.9,0,a0,a0+TAU/seg*0.66); g.stroke();
+      }
+      /* 締まる向きが分かるよう、内へ落ちる筋を薄く引く */
+      g.globalAlpha=0.18*(1-ph); g.strokeStyle='#a77dff'; g.lineWidth=1;
+      g.beginPath(); g.ellipse(p.x,p.y-10,p.dringR*1.35,p.dringR*1.22,0,0,TAU); g.stroke();
+      g.restore();
+    }
     // v3.0 焔の翼の残像
     if(p.fwingAnim>0){ g.save(); g.globalAlpha=Math.min(1,p.fwingAnim/0.25)*0.8; g.strokeStyle='#ff9a4a'; g.lineWidth=8; g.lineCap='round'; g.shadowColor='#ff7a3a'; g.shadowBlur=14; g.beginPath(); g.moveTo(p.fwingX,p.fwingY-14); g.lineTo(p.x,p.y-14); g.stroke(); g.restore(); }
     // ノヴァ(フレイラの爆炎は炎の色)
@@ -4342,8 +4371,9 @@ function draw(){
       const pr2=clamp(p.whipAnim/0.16,0,1);
       g.save();
       g.globalAlpha=pr2*0.75;
-      g.strokeStyle=p.whipFire?'#ffb060':'#ffe3f0'; g.lineWidth=5; g.lineCap='round';
-      g.shadowColor=p.whipFire?'#ff6a1a':'#ff9ec2'; g.shadowBlur=12;
+      /* ★v6.3 whipDark を誰も読んでいなかった。ヤミコの闇の刃が、ルミナの桃色の光で描かれていた */
+      g.strokeStyle=p.whipDark?'#a77dff':(p.whipFire?'#ffb060':'#ffe3f0'); g.lineWidth=5; g.lineCap='round';
+      g.shadowColor=p.whipDark?'#2a1a3e':(p.whipFire?'#ff6a1a':'#ff9ec2'); g.shadowBlur=12;
       if(p.whipDir===0){
         g.beginPath(); g.arc(p.x,p.y-10,p.whipR*(1.05-pr2*0.25),0,TAU); g.stroke();
       }else{
