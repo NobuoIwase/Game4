@@ -343,7 +343,11 @@ body.portrait #storybox{ top:5%; font-size:12px; }
 #adv{ position:absolute; inset:0; z-index:30; pointer-events:auto; cursor:pointer; overflow:hidden; }
 #advShade{ position:absolute; inset:0; background:linear-gradient(180deg, rgba(6,4,16,.12) 0%, rgba(6,4,16,.32) 55%, rgba(6,4,16,.86) 100%); }
 #advStand{ position:absolute; left:50%; bottom:0; height:86%; aspect-ratio:832/1216; transform:translateX(-96%); pointer-events:none; transition:filter .25s; }
-#advStand img{ height:100%; width:auto; display:block; filter:drop-shadow(0 10px 24px rgba(0,0,0,.6)); }
+/* ★v6.2 箱は aspect-ratio:832/1216 で固定なのに、立ち絵の比は子ごとに違う
+   (ルミナ/フレイラ 832×1216・ヤミコ 758×1216・クウ 626×1216)。
+   絵は箱の左端に寄って置かれるので、狭いぶんがそのまま左ズレになっていた
+   ——クウは箱より 206px 狭く、いちばん目立つ。箱の中で中央に置く */
+#advStand img{ height:100%; width:auto; display:block; margin-inline:auto; filter:drop-shadow(0 10px 24px rgba(0,0,0,.6)); }
 #advStand.dim{ filter:brightness(.5) saturate(.7); }
 #advStand.speak{ animation:advBob .9s ease-in-out infinite alternate; }
 @keyframes advBob{ from{ transform:translateX(-96%) translateY(0); } to{ transform:translateX(-96%) translateY(-5px); } }

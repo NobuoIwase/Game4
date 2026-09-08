@@ -389,10 +389,76 @@ function storyLineHtml(l){
   if(x.s==='voice') return `<div class="sl"><b class="who v">声</b>「${e(x.t)}」</div>`;
   return `<div class="sn">${e(x.t)}</div>`;
 }
+/* ================= v6.2 その場に居ない子を出さない =================
+   ★v5.4 で「居ない子の名前を呼ぶ台詞」を37箇所直したが、**変奏を選ぶ側**は直っていなかった。
+   STORY_V30.retry(敗北の翌朝)は4本あって、4本ともフレイラ、うち3本はクウが喋る。
+   ルミナ＋フレイラの二人編成でも無作為に選んでいたので、
+   居ないクウが喋り、ルミナがクウに話しかけていた。
+   話者(s)と、本文に出る名前の両方を見る。 */
+function storyPartyIds(){
+  if(typeof META!=='undefined' && META.party && META.party.roster && META.party.roster.length) return META.party.roster.slice();
+  if(G.B && G.B.heroes) return G.B.heroes.map(h=>h.id);
+  return ['lumina'];
+}
+function storyLineFits(l, present, absentNames){
+  const o=(typeof l==='string')?{t:l}:(l||{});
+  if(o.s && o.s!=='n' && typeof HEROES!=='undefined' && HEROES[o.s] && present.indexOf(o.s)<0) return false;
+  const t=o.t||'';
+  for(const nm of absentNames) if(nm && t.indexOf(nm)>=0) return false;
+  return true;
+}
+/* 変奏の一覧から、いま居る顔ぶれに合うものを選ぶ。
+   1. まるごと通る変奏があればそれ
+   2. 無ければ、居ない子の行だけ落として、残りがいちばん多い変奏(地の文が残ることを条件に)
+   3. それも駄目なら空を返す(呼び出し側が一人版へ落ちる) */
+function pickStoryFor(list){
+  if(!Array.isArray(list)||!list.length) return [];
+  const present=storyPartyIds();
+  const absentNames=(typeof HEROES!=='undefined')
+    ? Object.keys(HEROES).filter(id=>present.indexOf(id)<0).map(id=>HEROES[id].name)
+    : [];
+  const whole=list.filter(v=>Array.isArray(v)&&v.every(l=>storyLineFits(l,present,absentNames)));
+  if(whole.length) return whole[(Math.random()*whole.length)|0]||[];
+  let best=null;
+  for(const v of list){
+    if(!Array.isArray(v)) continue;
+    const kept=v.filter(l=>storyLineFits(l,present,absentNames));
+    const hasN=kept.some(l=>{ const o=(typeof l==='string')?{s:'n'}:(l||{}); return !o.s || o.s==='n'; });
+    if(kept.length>=4 && hasN && (!best||kept.length>best.length)) best=kept;
+  }
+  return best||[];
+}
+/* 一本しかなくて、外すわけにいかない塊(結末など)用。
+   居ない子の行だけ落として通す。変奏が無いので選び直せない——
+   幽霊が喋るより、その行が無いほうがましだという判断 */
+function storyKeepFits(lines){
+  if(!Array.isArray(lines)) return lines;
+  const present=storyPartyIds();
+  const absentNames=(typeof HEROES!=='undefined')
+    ? Object.keys(HEROES).filter(id=>present.indexOf(id)<0).map(id=>HEROES[id].name)
+    : [];
+  if(!absentNames.length) return lines;
+  return lines.filter(l=>storyLineFits(l,present,absentNames));
+}
+/* 変奏ではなく一本しかない塊(bothCaptured / leftBehind / rescue など)用。
+   いま居る顔ぶれに合わなければ null を返して、呼び出し側に使わせない。
+   ★bothCaptured は「フレイラ」を直書きしている——二人版として書かれた文が、
+     フレイラの居ない編成でもそのまま出ていた */
+function storyIfFits(block){
+  if(!Array.isArray(block)||!block.length) return null;
+  const present=storyPartyIds();
+  const absentNames=(typeof HEROES!=='undefined')
+    ? Object.keys(HEROES).filter(id=>present.indexOf(id)<0).map(id=>HEROES[id].name)
+    : [];
+  return block.every(l=>storyLineFits(l,present,absentNames)) ? block : null;
+}
 /* retry: 変奏の配列(v2.1: 配列の配列)か、「§」区切りの1本の配列(旧形式)。1つを選んで返す */
 function storyRetry(){
   const two=!!(G.B&&G.B.heroes&&G.B.heroes.length>1);   // v3.0 二人で潜っているなら二人版の朝
-  if(two && typeof STORY_V30!=='undefined' && STORY_V30.retry && STORY_V30.retry.length) return STORY_V30.retry[(Math.random()*STORY_V30.retry.length)|0]||[];
+  if(two && typeof STORY_V30!=='undefined' && STORY_V30.retry && STORY_V30.retry.length){
+    const v=pickStoryFor(STORY_V30.retry);
+    if(v.length) return v;   /* 合う変奏が無ければ一人版へ落ちる(そちらはルミナだけで書いてある) */
+  }
   if(STORY.retry.length && Array.isArray(STORY.retry[0])) return STORY.retry[(Math.random()*STORY.retry.length)|0]||[];
   const groups=[]; let cur=[];
   for(const l of STORY.retry){ if(l.startsWith('§')){ if(cur.length) groups.push(cur); cur=[]; const rest=l.slice(1).trim(); if(rest) cur.push(rest); } else cur.push(l); }

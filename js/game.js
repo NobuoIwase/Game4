@@ -437,7 +437,7 @@ function endBattle(outcome){
     will:META.lumina.will||0, willUp:outcome==='capture', shrines:B.shrineGot, gateT:B.gateT, used:B.used, eventsN:B.eventsN, eventsDone:B.eventsDone,
     floor:B.floor, floorBefore, runNote, fails:META.run.fails, nextFloor:META.run.floor, seals:Object.keys(B.seals).length,
     storyLines: outcome==='clear'?storyClearLines(twoP)
-      :(runNote==='reset'?(((twoP&&V30E.reset)?V30E.reset:STORY.reset).concat((joinId&&V30E.party&&V30E.party.joinHint&&V30E.party.joinHint.length)?[''].concat(V30E.party.joinHint):[])):(outcome==='capture'&&B.captures&&B.captures.length>1&&typeof STORY_V30!=='undefined'&&STORY_V30.party&&STORY_V30.party.bothCaptured?STORY_V30.party.bothCaptured:(outcome==='descend'&&B.heroes.some(h=>h.out)&&typeof STORY_V30!=='undefined'&&STORY_V30.party&&STORY_V30.party.leftBehind?STORY_V30.party.leftBehind:null))), newCurse:newCurse?BOSS_CURSES[newCurse.id]:null,   // v3.1 一人版の結末 / 合流の予兆
+      :(runNote==='reset'?(((twoP&&V30E.reset)?V30E.reset:STORY.reset).concat((joinId&&V30E.party&&V30E.party.joinHint&&V30E.party.joinHint.length)?[''].concat(V30E.party.joinHint):[])):(outcome==='capture'&&B.captures&&B.captures.length>1?storyIfFits(V30E.party&&V30E.party.bothCaptured):(outcome==='descend'&&B.heroes.some(h=>h.out)?storyIfFits(V30E.party&&V30E.party.leftBehind):null))), newCurse:newCurse?BOSS_CURSES[newCurse.id]:null,   // v3.1 一人版の結末 / 合流の予兆
     loopFx: outcome==='clear'?'vortex':(runNote==='reset'?'miracle':null),   // v4.0 結末の文の後に流す演出(赤黒い渦 / 白い奇跡の光)
     join:joinId?HEROES[joinId].name:null, joinWhy:META.run.joinWhy||'',
     captures:B.captures, leftBehind:B.heroes.filter(h=>h.out).map(h=>h.name),
@@ -480,7 +480,9 @@ function partyJoinCheck(runNote){
 /* v3.1 魔核を討った日の物語: 二人なら世代ごとの結末(coreDown)+二人版の結末、一人なら一人版(coreDownSolo: 初回/再び)+従来の結末の続き */
 function storyClearLines(twoP){
   const V=(typeof STORY_V30!=='undefined')?STORY_V30:null, k=Math.max(0,(META.era|0)-1);   // era はもう +1 されている
-  if(twoP){ const cd=(V&&V.era&&V.era.coreDown&&V.era.coreDown.length)?V.era.coreDown[Math.min(V.era.coreDown.length-1,k)]:[]; return cd.concat((V&&V.ending)?V.ending:STORY.ending); }
+  /* ★v6.2 結末は変奏が無いので、居ない子の行だけ落として通す。
+     ルミナ＋フレイラで討った朝に、クウとヤミコが喋っていた */
+  if(twoP){ const cd=(V&&V.era&&V.era.coreDown&&V.era.coreDown.length)?V.era.coreDown[Math.min(V.era.coreDown.length-1,k)]:[]; return storyKeepFits(cd.concat((V&&V.ending)?V.ending:STORY.ending)); }
   const solo=V&&V.era&&V.era.coreDownSolo; const cs=solo?(k===0?solo.first:(solo.again||solo.first)):null;
   if(cs&&cs.length){ const tail=(k>0 && V.era.endingSoloAgain && V.era.endingSoloAgain.length)?V.era.endingSoloAgain:STORY.ending.slice(1); return cs.concat(tail); }   // 一人版は結末の1行目(光が届いた…)を置き換える。二度目以降は短い結び(街の朝の場面は一度きり)
   return STORY.ending;
@@ -488,7 +490,7 @@ function storyClearLines(twoP){
 /* v3.1 組み替わった後の朝: 二人版 loopIntro / 一人版 loopIntroSolo(初回/再び)。無ければ null */
 function storyLoopIntro(n){
   const V=(typeof STORY_V30!=='undefined')?STORY_V30:null; if(!V||!V.era) return null;
-  if(n>1) return (V.era.loopIntro&&V.era.loopIntro.length)?V.era.loopIntro:null;
+  if(n>1) return (V.era.loopIntro&&V.era.loopIntro.length)?storyKeepFits(V.era.loopIntro):null;
   const s=V.era.loopIntroSolo; if(!s) return null; const a=((META.era|0)<=1)?s.first:(s.again||s.first); return (a&&a.length)?a:null;
 }
 /* 世代の夜明け: 彼女の自己強化は BAL.LUMINA_DECAY 段ぶん薄れる。高い系統から1段ずつ。
