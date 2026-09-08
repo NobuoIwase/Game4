@@ -1198,6 +1198,7 @@ function forcedClimax(src){
 const TRAIT_ENGULF=new Set(['slime','slimeking','mistslime','hugcap','seatflesh']);
 const TRAIT_MOUTH =new Set(['mouth','echoer','slugqueen']);
 const TRAIT_URN   =new Set(['pot']);
+const TRAIT_DRAIN =new Set(['leech','heartroot','vampi']);
 /* いま四肢を取っている相手 */
 function binderMons(h){
   const out=[];
@@ -1216,8 +1217,8 @@ function traitAmp(h){
   if(suckCount(h)>0)        n+=traitLv(h,'drainBliss');
   if(h.slow>0)              n+=traitLv(h,'slimeMelt');
   if((h.teaseN||0)>0)       n+=traitLv(h,'impLove');
-  if(h.hp<h.maxHp*0.4)      n+=traitLv(h,'mazoCore');
-  if(h.hypno||h.suitT>0)    n+=traitLv(h,'rhythmSub');
+  if(h.hp<h.maxHp*0.55)     n+=traitLv(h,'mazoCore');
+  if(h.hypnoLv>=1||h.suitT>0||h.dazeT>0||h.freezeT>0) n+=traitLv(h,'rhythmSub');
   if(sensLvOf(h)>=2)        n+=traitLv(h,'nippleHeat');
   const B=binderMons(h);
   if(B.length){
@@ -1252,19 +1253,31 @@ function traitTick(h,dt){
   const B=G.B; if(!B||!h||h.out) return;
   const T=h.trT=h.trT||{};
   const sec=(k,cond,per)=>{ if(!cond){ return; } T[k]=(T[k]||0)+dt; if(T[k]>=per){ T[k]-=per; markTrait(h,k,1); } };
-  sec('publicHeat',  h.watchedT>0,                      7);
-  sec('drainBliss',  suckCount(h)>0,                    6);
-  sec('slimeMelt',   h.slow>0,                          8);
-  sec('impLove',     (h.teaseN||0)>0,                   8);
-  sec('mazoCore',    h.hp<h.maxHp*0.4 && !h.pinned,     7);
-  sec('rhythmSub',   (h.hypno||h.suitT>0),              7);
-  sec('nippleHeat',  sensLvOf(h)>=2,                    9);
-  sec('bindhabit',   attachCount(h)>=3,                 5);
+  /* ★閾値は実測から。110戦で条件が何秒成立したかを測って決めてある(run_traitcond61.js):
+     待ち堕ち 24.0秒/戦・尖りの熱 23.5・見られ熱 9.4・溶ける 9.0・拘束癖 6.7・囃され 2.0。
+     測らずに書いた最初の版は 25件中11件しか刻まれなかった */
   const BD=binderMons(h);
-  sec('waitfall',    BD.some(m=>MONSTERS[m.id]&&MONSTERS[m.id].spd<=0), 6);
-  sec('engulfCalm',  BD.some(m=>TRAIT_ENGULF.has(m.id)),               6);
-  sec('mouthhabit',  BD.some(m=>TRAIT_MOUTH.has(m.id)),                5);
-  sec('urnHabit',    BD.some(m=>TRAIT_URN.has(m.id)),                  5);
+  sec('publicHeat',  h.watchedT>0,                      7);
+  sec('slimeMelt',   h.slow>0,                          8);
+  sec('bindhabit',   attachCount(h)>=3,                 5);
+  sec('waitfall',    BD.some(m=>MONSTERS[m.id]&&MONSTERS[m.id].spd<=0), 12);
+  sec('nippleHeat',  sensLvOf(h)>=2,                   14);
+  sec('impLove',     (h.teaseN||0)>0,                   3);
+  /* ★ここから下は「閾値が厳しい」のではなく、条件そのものが成立しなかった組。
+     110戦で 0〜2秒しか立たなかったので、種を取られている時だけ、から
+     「その相手の間合いに居て、かつ取られている」まで広げる */
+  const near=(set,r)=>{ const B2=G.B; if(!B2) return false;
+    for(const e of B2.enemies){ if(e.dead||!set.has(e.id)) continue;
+      if(Math.hypot(e.x-h.x,e.y-h.y)<r) return true; } return false; };
+  const held=attachCount(h)>0||suckCount(h)>0||h.pinned;
+  sec('drainBliss',  suckCount(h)>0 || (held&&BD.some(m=>m.id==='heartroot')) || (held&&near(TRAIT_DRAIN,190)), 6);
+  sec('engulfCalm',  BD.some(m=>TRAIT_ENGULF.has(m.id)) || (held&&near(TRAIT_ENGULF,190)),                     6);
+  sec('mouthhabit',  BD.some(m=>TRAIT_MOUTH.has(m.id))  || (held&&near(TRAIT_MOUTH,190)),                      5);
+  sec('urnHabit',    BD.some(m=>TRAIT_URN.has(m.id))    || (held&&near(TRAIT_URN,190)),                        5);
+  /* ★体力4割は一度も成立しなかった(その前に押し倒されるか、健康なままか)。5割5分に緩める */
+  sec('mazoCore',    h.hp<h.maxHp*0.55 && !h.pinned,    7);
+  /* ★h.hypno は「電波の源」の入れ物で、掛かっている間の印ではなかった。掛かり具合を見る */
+  sec('rhythmSub',   (h.hypnoLv>=1||h.suitT>0||h.dazeT>0||h.freezeT>0), 7);
 }
 function markTrait(h,key,n){
   const T=TRAITS[key]; if(!T||!h) return;
@@ -1368,7 +1381,7 @@ function zoneV6Tick(h,dt,ice){
       h.mirrorT=(h.mirrorT||0)+dt;
       if(h.mirrorT>7){ h.mirrorT=0; markTrait(h,'exhibit',1); }
     }
-  }else h.mirrorT=0;
+  }else h.mirrorT=Math.max(0,(h.mirrorT||0)-dt*BAL.TRAIT_FADE);
 
   /* ---- 紋の敷石: 踏んだら灯る。灯った数がそのまま淫紋の濃さになる ---- */
   if(z==='glyph' && !ice){
@@ -1391,12 +1404,12 @@ function zoneV6Tick(h,dt,ice){
     learnZone('silk',dt*0.35);
     if(sp<BAL.SILK_V){ applySensit(BAL.SILK_SENS*dt); h.silkT=(h.silkT||0)+dt;
       if(h.silkT>6){ h.silkT=0; markTrait(h,'attachCalm',1); } }
-    else { h.silkT=0;
+    else { h.silkT=Math.max(0,(h.silkT||0)-dt*BAL.TRAIT_FADE);
       if((h.silkHold||0)<=0 && (h.silkCd||0)<=0 && Math.random()<dt*0.5){
         h.silkHold=BAL.SILK_TETHER; h.silkRip=BAL.SILK_RIP; h.silkCd=2.4; B.silkN=(B.silkN||0)+1;
         floatTxt(h.x,h.y-90,'糸に絡んだ!','#ffc8dc',12,1.4);
         heroBubble(h,'……っ、足が',false,1); } }
-  }else h.silkT=0;
+  }else h.silkT=Math.max(0,(h.silkT||0)-dt*BAL.TRAIT_FADE);
   if(h.silkHold>0){ h.silkHold=Math.max(0,h.silkHold-dt); if(h.silkHold<=0) h.silkRip=0; }
   if(h.silkCd>0) h.silkCd=Math.max(0,h.silkCd-dt);
 
@@ -1426,7 +1439,7 @@ function zoneV6Tick(h,dt,ice){
   /* ---- 胎の肉: 沈んで走れない。踏んでいるだけで熱が上がる ---- */
   if(z==='womb' && !ice){ learnZone('womb',dt*0.45); addHeatG(BAL.WOMB_HEAT*dt);
     h.wombT=(h.wombT||0)+dt; if(h.wombT>8){ h.wombT=0; markTrait(h,'sinkCalm',1); } }
-  else h.wombT=0;
+  else h.wombT=Math.max(0,(h.wombT||0)-dt*BAL.TRAIT_FADE);
 
   /* ---- 時の澱: 抵抗だけが遅れて届く。快感・発情・拘束の判定は少しも遅れない ---- */
   h.stallOn=(z==='stall'&&!ice);
@@ -1438,7 +1451,7 @@ function zoneV6Tick(h,dt,ice){
     letheWash(h,dt);
     h.letheT=(h.letheT||0)+dt;
     if(h.letheT>5){ h.letheT=0; heroBubble(h,'……あったかい。ここ、はじめて来た',false,1.2); markTrait(h,'hypnoObey',1); }
-  }else h.letheT=0;
+  }else h.letheT=Math.max(0,(h.letheT||0)-dt*BAL.TRAIT_FADE);
 }
 
 /* 時の澱: もがき・攻撃・回避を BAL.STALL_LAG だけ遅らせる待ち行列。
