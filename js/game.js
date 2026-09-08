@@ -2808,8 +2808,13 @@ function weaponsUpdate(dt){
         const td=Math.hypot(ts[0].x-p.x, (ts[0].y-ts[0].r)-(p.y-12));
         const retT=Math.max(evo?0.55:0.42, Math.min(BAL.CROSS_RET_MAX, td/sp));
         const nC=1+Math.floor(lv/3)+dupN(p);   /* 弾数: Lv3で2枚、Lv6以上で3枚 */
+        /* ★v6.3 扇の開きが「角度の固定値 0.4rad」だったので、枚数が2枚以上になると
+           どの一枚も狙った線に乗らない。260px 先では ±52px ずれて、実測で一度も当たらなかった。
+           ★これは弾数を増やす前からの穴でもある——ふたごの鏡を取ると枚数が増えて、
+           十字が当たらなくなっていた。ずらす量を「的の位置での横のずれ px」で決める */
+        const fan=Math.atan2(BAL.CROSS_FAN_PX, Math.max(60,td));
         for(let i=0;i<nC;i++){
-          const a2=a+(i-(nC-1)/2)*0.4;
+          const a2=a+(i-(nC-1)/2)*fan*2;
           B.bullets.push({kind:'cross', x:p.x, y:p.y-12, vx:Math.cos(a2)*sp, vy:Math.sin(a2)*sp,
             spd:sp, dmg:(evo?20:9+4*(lv-1))*ov.dmg, retT, ret:false, life:retT*2+0.9, last:null, evo});
         }
@@ -2847,11 +2852,14 @@ function weaponsUpdate(dt){
          「むいた方向へ刃をとばす」の「むいた方向」を、狙う相手の方に取り直す */
       const tg=nearestEnemies(1, BAL.BLADE_R*(1+0.12*(p.ps.reach||0)))[0];
       const base=tg?Math.atan2(tg.y-(p.y-14), tg.x-p.x):(p.face>=0?0:Math.PI);
+      /* 扇の開きは、的の位置での横のずれ px で決める(十字と同じ理由。角度固定だと遠いほど外れる) */
+      const td2=tg?Math.max(60,Math.hypot(tg.x-p.x,tg.y-(p.y-14))):160;
+      const fan=Math.atan2(BAL.BLADE_FAN_PX, td2);
       const dirs=evo?[base, base+Math.PI]:[base];
       for(const dir of dirs){
         for(let i=0;i<n;i++){
           if(B.bullets.length>=170) break;
-          const a2=dir+(i-(n-1)/2)*BAL.BLADE_FAN;
+          const a2=dir+(i-(n-1)/2)*fan*2;
           const sp=580;
           B.bullets.push({kind:'blade', x:p.x+Math.cos(dir)*8, y:p.y-14+Math.sin(dir)*8, vx:Math.cos(a2)*sp, vy:Math.sin(a2)*sp,
             dmg:(evo?16:10+3*(lv-1))*ov.dmg, pierce:(evo?3:1)+(p.ps.pierce||0), life:1.15, last:null, evo});
