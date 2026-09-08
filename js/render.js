@@ -1456,7 +1456,13 @@ function drawFirstslug(g,e){
 }
 
 function drawBody(g,e){
-  const aid=e.art||e.id;
+  /* ★v6.2 上位個体(RANK_BASE)は rankPick が「その個体の id」を返すので、
+     ここで base に解決しないと枝に当たらず、汎用のボスの絵に落ちる。
+     設計は「差し替えは種の同一性を壊さない——絵も本文も図鑑も base のまま」なので、
+     本文(sceneForHero)と同じく base を見る。実測で9種(熟れたナメクジ・絡みワーム・
+     双眼・焦らしの熟手・二重傘・深口・据わりの触手王・双条・三重の囃し)が落ちていた */
+  const MD=(typeof MONSTERS!=='undefined')?MONSTERS[e.id]:null;
+  const aid=e.art||(MD&&MD.base)||e.id;
   if(aid==='core') drawCore(g,e);
   else if(aid==='yamiboss') drawYamiBoss(g,e);
   else if(aid==='miretent') drawMiretentBody(g,e);

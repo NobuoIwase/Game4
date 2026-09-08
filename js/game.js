@@ -6509,7 +6509,29 @@ function spawnMires(){
     const depth=pick.d[0]+(pick.d[1]-pick.d[0])*((r-pick.r[0])/Math.max(1,pick.r[1]-pick.r[0]));
     const tents=[];
     const nt=pick.t[0]+((Math.random()*(pick.t[1]-pick.t[0]+1))|0);
-    for(let t=0;t<nt;t++){ const a=rand(TAU); tents.push({a, ph:rand(TAU), cd:rand(0,3), reach:0}); }
+    /* ★v6.2 触手は角度だけで生やしていて、タイルを一度も見ていなかった。
+       液面は mireTiles が solid を飛ばすので壁には入らないのに、触手だけが壁から生えていた
+       (実測: 沼290個・触手655本のうち、根元か先が壁の中にあるもの 133本＝20.3%)。
+       根元(r*0.82)と伸びた先(さらに r*0.85)の両方が床に乗る向きだけを使う。
+       生やせる向きが足りない沼は、無理に生やさず本数を減らす——
+       壁から生えるより、その沼が静かなほうがいい */
+    { const okA=[];
+      for(let k=0;k<48;k++){
+        const a=k*TAU/48+rand(-0.03,0.03);
+        const bx=q.x+Math.cos(a)*r*0.82, by=q.y+Math.sin(a)*r*0.6;
+        if(!passAt(bx,by,false)) continue;
+        const LL=r*0.85, ex=bx+Math.cos(a)*LL, ey=by+Math.sin(a)*LL*0.8-8;
+        if(!passAt(ex,ey,false)) continue;
+        okA.push(a);
+      }
+      shuffle(okA);
+      for(const a of okA){
+        if(tents.length>=nt) break;
+        /* 同じ方角に固まらせない(前は一様乱数だったので、そこは元の見た目に寄せる) */
+        if(tents.some(t=>Math.abs(Math.atan2(Math.sin(t.a-a),Math.cos(t.a-a)))<0.5)) continue;
+        tents.push({a, ph:rand(TAU), cd:rand(0,3), reach:0});
+      }
+    }
     B.mires.push({x:q.x, y:q.y, r, depth, size:SZ.indexOf(pick), tents, seen:false, dry:false, iced:false, t:rand(9)});
   }
   mireInit();

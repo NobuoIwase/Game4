@@ -845,25 +845,25 @@ const MONSTERS={
    魔物だけでも立たない。★間接責め(触れずに軋ませる)を主軸に置くのが v6.0 の芯。 */
 Object.assign(MONSTERS, {
   mirrorling:{
-    name:'映り身', role:'間接責め', cost:0, unlock:0, tier:'fodder', field:true,
+    name:'映り身', role:'間接責め', cost:3, unlock:190, tier:'fodder', field:true,
     hp:22, spd:74, r:11, dmg:0, xp:3,
     desc:'凪いだ水鏡の上にだけ湧く。彼女の姿をそのまま上下に反した影で、本体には決して触れない。触れているのは映り込みなのに、快感だけが本人へ届く。水面が波立つと、自分も一緒に消える。',
     trait:'鏡の上にのみ湧く(夜のENを使わない・上限3)。映り込みを撫でて【快感】。走られると消える',
   },
   glyphmite:{
-    name:'紋喰い', role:'自分が産んだもの', cost:0, unlock:0, tier:'fodder', field:true,
+    name:'紋喰い', role:'自分が産んだもの', cost:3, unlock:200, tier:'fodder', field:true,
     hp:26, spd:66, r:9, dmg:1, xp:3,
     desc:'彼女が自分の足で灯した紋から生まれる。誰が呼んだのでもない。紋の上しか歩けず、触れると紋を一段濃くする。倒せば紋がひとつ消えるが、倒すために走れば新しく灯る。',
     trait:'灯った紋からのみ湧く(ENを使わない・上限5)。接触で【淫紋】が濃くなる。倒すと紋がひとつ消える',
   },
   silkmite:{
-    name:'糸紡ぎ', role:'地形を編む', cost:0, unlock:0, tier:'fodder', field:true,
+    name:'糸紡ぎ', role:'地形を編む', cost:3, unlock:170, tier:'fodder', field:true,
     hp:20, spd:58, r:8, dmg:1, xp:3,
     desc:'歩いた跡に糸を渡していく小さなもの。自分では襲ってこない。二匹が近づくと、その間に糸が張られる。張られた糸は、この虫を倒しても残る。',
     trait:'歩いた跡に糸を張る。糸に触れると擦れて【敏感化】、走って触れると【繋留】',
   },
   frostbud:{
-    name:'霜の芽', role:'冷えの粒', cost:0, unlock:0, tier:'fodder', field:true, item:false,
+    name:'霜の芽', role:'冷えの粒', cost:2, unlock:150, tier:'fodder', field:true, item:false,
     hp:14, spd:0, r:9, dmg:0, xp:3,
     desc:'霜の面から生えた氷の芽。動かない。踏むか触れるかすると割れて、冷たい粒が装束の内側へ入る。冷たさは快感ではない——だから彼女は油断して、追い出そうと身をよじる。',
     trait:'霜の床から生える。割れると【縮こまり】が一気に進み、溶けきるまで敏感化の下限が上がる',
@@ -893,7 +893,7 @@ Object.assign(MONSTERS, {
     trait:'録った声を鳴らす。魔物の狙いがそこへ移り、仲間の足が一瞬それる。倒すと声を落とす',
   },
   bonesoldier:{
-    name:'骨兵', role:'地形産の頭数', cost:0, unlock:0, tier:'fodder', field:true,
+    name:'骨兵', role:'地形産の頭数', cost:3, unlock:210, tier:'fodder', field:true,
     hp:24, spd:58, r:9, dmg:5, xp:2,
     desc:'骸の回廊で倒れたものの骨が、勝手に組み上がったもの。拘束はしない。快感も与えない。ただ体力とスタミナを削る。倒すとまた骨を落とすので、放っておくと増える。',
     trait:'骨から8秒で組み上がる(ENを使わない)。拘束せず、体力とスタミナだけを削る',
@@ -924,19 +924,19 @@ Object.assign(MONSTERS, {
   },
   /* --- ボス3体 --- */
   mirrorqueen:{
-    name:'水鏡の女王', role:'ボス・本体に触れない', cost:0, unlock:0, tier:'boss', boss:true,
+    name:'水鏡の女王', role:'ボス・本体に触れない', cost:17, unlock:850, tier:'boss', boss:true,
     hp:900, spd:0, r:30, dmg:6, xp:40,
     desc:'湖の中央に据わり、周りの水面をすべて凪がせる。以後は水面に映った姿だけを責める。本体に攻撃は通らない。倒すには水面を割るしかない——炎で蒸発させるか、氷で凍らせるか、光で乱反射させるか。頭部に顔は無く、磨かれた鏡面が、覗き込んだ側を映している。',
     trait:'水面を凪がせ、映り身を無限に湧かせる。【水面が割れている間だけ】本体が露出する',
   },
   nevermet:{
-    name:'はじめましての君', role:'ボス・覚えていない', cost:0, unlock:0, tier:'boss', boss:true,
+    name:'はじめましての君', role:'ボス・覚えていない', cost:16, unlock:800, tier:'boss', boss:true,
     hp:820, spd:52, r:22, dmg:7, xp:40,
     desc:'近づくと、丁寧に名乗る。何度倒しても、次に会う時もまったく同じ名乗りから始まる——本人が忘れているから。戦いながら忘れ水の霧を撒くので、彼女もまた毎回これを初めて見る。二人とも覚えていない戦い。',
     trait:'忘れ水の霧を撒いて【知識】を削りながら戦う。名乗りは毎回まったく同じ',
   },
   firstslug:{
-    name:'はじめの夜の主', role:'ボス・抗うほど濃くなる', cost:0, unlock:0, tier:'boss', boss:true,
+    name:'はじめの夜の主', role:'ボス・抗うほど濃くなる', cost:10, unlock:620, tier:'boss', boss:true,
     hp:180, spd:34, r:13, dmg:3, xp:40,
     desc:'第一階層の最初の一体と、同じ姿。大きくない。速くない。素の体力も低い。ただ、与えられた傷の累計に比例して濃くなる——体力の上限が伸び、掴みが外れにくくなり、触れた時の魅了が深くなる。抗わなければ、ただのナメクジのままでいる。',
     trait:'与えたダメージの累計で濃くなる(HP上限+40%/1000・掴み+・魅了が深く)。抗わなければ何も起きない',
