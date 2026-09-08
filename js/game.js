@@ -2606,12 +2606,17 @@ function aiDecide(foc,dt){
     for(const m of B.mires){
       if(m.dry||m.iced) continue;
       const rx=p.x-m.x, ry=(p.y-m.y)/0.78, rd=Math.hypot(rx,ry)||1;
+      /* ★v6.3 この判定を「浸かっている」より先に置く。
+         後ろにあると、沼の中の宝箱へ向かう時だけ避けを切っておきながら、
+         一歩でも浸かった瞬間に押し出しが働いて、縁で行ったり来たりになる。
+         実測(沼の真ん中に宝箱を置く): 縁の出入り 15.4回・届いたのは 3/8・
+         いちばん近づいて 101px。浅瀬(足が鈍る)と重なるとさらに悪い */
+      if(p.goal && mireAt(p.goal.x,p.goal.y)===m) continue;   /* その沼の中に用がある時だけは避けない */
       if(rd<m.r){                                    /* もう浸かっている: 外へ出る */
         const w=BAL.MIRE_OUT_K*(0.55+0.45*m.depth);
         dx+=rx/rd*w; dy+=ry/rd*w*0.78;
         continue;
       }
-      if(p.goal && mireAt(p.goal.x,p.goal.y)===m) continue;   /* その沼の中に用がある時だけは避けない */
       /* v5.8 炎をまとっている間は、触れただけで沼が蒸発して外まで撒き散らす。
          だから炎の届く距離ぶん、大きく回り込む。焚く判断のほうを直しても、
          焚いた後に沼のほうへ歩いて行けば同じことになる——足のほうも直す。 */
@@ -5296,7 +5301,11 @@ function updateGoalSolo(p){
   if(B.dbgCands) B.lastCands=null;   // 検証用: 目当ての候補を覗く(B.dbgCands=true の時だけ)
   const anyCaptive=B.heroes.some(c=>c.out&&c.captive&&c!==p);   // v3.2 仲間が捕まっている間は、寄り道の価値を落とす(木の実を拾いに行かない)
   const add=(kind,sub,x,y,worth,ref,key)=>{ worth*=goalPref(p,kind,sub); if(anyCaptive && kind!=='rescue') worth*=BAL.RESCUE_FOCUS; if(!coreLeashOk(kind,sub,x,y)) return; /* v4.0 魔核戦の間は寄り道しない */ if(worth<=0 || !passAt(x,y,false) || nearKnownTrap(x,y) || ringAvoid(x,y)) return;   /* v4.1 覚えた菌輪の中は目当てにしない */
-    { const mi=mireAt(x,y); if(mi) worth*=(mi.depth>0.75?0.30:0.55); }   /* v5.0 媚薬沼の中の物は割り引く(深いほど嫌う) */
+    /* v5.0 媚薬沼の中の物は割り引く(深いほど嫌う)。
+       ★v6.3 深い沼の 0.30 は厳しすぎた。宝箱(価値3.0)でも 0.9 まで落ちてジェムに負けるので、
+       目当てとして選ばれるのが一瞬だけになり、浸かりかけては別の物へ乗り換える。
+       実測: 沼の真ん中の宝箱を目当てにしていたのは 24秒のうち 2.0秒だけだった */
+    { const mi=mireAt(x,y); if(mi) worth*=(mi.depth>0.75?BAL.MIRE_GOAL_DEEP:BAL.MIRE_GOAL_SHALLOW); }
     if(HEROES[p.id]&&HEROES[p.id].heatShy){ const kh=kuuHeatAt(x,y); if(kh>0.4) worth*=1-0.45*kh; }   /* v5.0 暑がりは、温泉・肉の床・焦げ跡の中の物を避ける */ if(ref && gaveUp(ref)) return; /* v2.1 諦めた目標は外す */
     /* ★v6.3 諦めた地形の中の物も、まるごと外す。これが無いと「宝箱を諦める→同じ巣窟の祠を選ぶ→
        また境で諦める→次はジェム」を繰り返して、口の前を行ったり来たりする(実測 6.6往復・19.8秒) */
@@ -5366,6 +5375,10 @@ function updateGoalSolo(p){
   if(best && best.kind==='explore') best.until=p.exploreUntil;
   if(best && p.goal && best!==p.goal && (best.kind!==p.goal.kind || best.ref!==p.goal.ref) && best.kind!=='explore' && Math.random()<0.25) p.pauseUntil=B.time+0.5+Math.random()*0.6;   // v2.2 目当てを変える時、ときどき一拍考える
   p.goal=best;
+  /* ★v6.3 沼の中に用があると決めたら、渡りきるまで決め直さない。
+     途中で乗り換えると、そのフレームから沼よけが働いて縁へ押し返される——
+     「近づく」と「避ける」が交互に効いて、縁で行ったり来たりになる */
+  if(best && mireAt(best.x,best.y)) p.goalT=B.time+BAL.GOAL_RETHINK*BAL.MIRE_GOAL_HOLD;
   return best;
 }
 function pickDest(p){
