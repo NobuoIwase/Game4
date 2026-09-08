@@ -82,6 +82,10 @@ problems = []
 traits, _, _ = top_keys(DATA, 'TRAITS')
 marked = set(re.findall(r"markTrait\([^,]+,\s*'(\w+)'", ALL))
 secced = set(re.findall(r"sec\('(\w+)'", ALL))
+# ★markTrait を通さずに traits に直接書く道もある(conditionMusk がそれ)。
+#   これを見ていなかった最初の版は musk を「刻む場所が無い」と誤って挙げた
+direct = set(re.findall(r"traits\.(\w+)\s*=[^=]", ALL))
+marked |= direct
 read_tr = set(re.findall(r"traitLv\([^,]+,\s*'(\w+)'", ALL)) | set(re.findall(r"traits\.(\w+)", ALL))
 
 dead_tr = [k for k in traits if k not in marked and k not in secced]

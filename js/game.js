@@ -1786,6 +1786,9 @@ function condTick(h,dt){
     h.stamina=Math.min(h.staminaMax,h.stamina+rg*dt);
     if(h.exhausted && h.stamina>25){ h.exhausted=false; heroBubble(h,'……よし、いける'); }
   }
+  /* v6.2 嗅ぐ発作の時間切れ(引き金は下の臭いの雲の所) */
+  if(h.sniffT>0){ h.sniffT-=dt; h.vx=0; h.vy=0; if(h.sniffT<=0){ h.sniffT=0; h.sniffAt=null; } }
+  if((h.sniffCd||0)>0) h.sniffCd-=dt;
   // 発情の波のふらつき
   if(h.stumbleDur>0) h.stumbleDur-=dt;
   h.stumbleT-=dt;
@@ -1804,6 +1807,15 @@ function condTick(h,dt){
           applySensit(c.rate*(1+0.3*mk)*cm*dt);
           addHeatG(BAL.MUSK_HEAT*(1+0.35*mk)*cm*dt);
           if(h.heatLv>0){ h.muskCond+=BAL.MUSK_COND*dt; if(h.muskCond>=25) conditionMusk(); }
+          /* v6.2 嗅ぐ発作。熱があると、雲の中で足が止まって嗅いでしまう。
+             その間は攻撃も奥義も出ない(反応は既に4箇所に書いてあった) */
+          if(h.heatLv>=BAL.MUSK_SNIFF_HEAT && (h.sniffCd||0)<=0 && h.sniffT<=0
+             && !h.pinned && !h.charmBind && h.climaxT<=0 && h.freezeT<=0 && attachCount(h)===0){
+            h.sniffT=BAL.MUSK_SNIFF*(1+0.25*mk); h.sniffCd=BAL.MUSK_SNIFF_CD; h.sniffAt={x:c.x,y:c.y};
+            h.vx=0; h.vy=0; h.path=null;
+            heroBubble(h,{freila:'……っ、なんで、吸い込んで……', kuu:'……鼻が、動く', yamiko:'……嗅いで、しまった'}[h.id]||'……っ、すっ……ちゃっ……',true,1.4);
+            awardAil('sniff');
+          }
           if(h.muskCd<=0){ h.muskCd=6; heroBubble(h,(h.heatLv>0||mk>0)?pickRand(['……っ、この、におい……','くさい、のに……なんで、からだが……','けものの、におい……あつ……']):pickRand(['くさ……なにこれ、けものみたいな……','う、においが……ちかづかないで……']),h.heatLv>0,1); }
           if(c.boss) B.bossMark={id:c.boss, t:B.time};
           codexMet('goblin');
