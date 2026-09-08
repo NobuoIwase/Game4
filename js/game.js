@@ -188,13 +188,16 @@ function nearestOfId(id){
 
 function heroFocus(h){
   const aph=h.heatLv>0 ? 0.2+0.1*h.heatLv+(h.waveDur>0?0.1:0) : h.aphro/100*0.2;
-  return clamp(1 - aph - h.focusPen - 0.08*Math.min(2,h.teaseN), 0.25, 1);
+  /* v6.1 囃されたがり: 気が散らなくなる / 見られ熱: 見られていても手元が狂わない */
+  const tz=0.08*Math.min(2,h.teaseN)*(1-0.25*traitLv(h,'impLove'));
+  const fp=h.focusPen*(h.watchedT>0?(1-0.12*traitLv(h,'publicHeat')):1);
+  return clamp(1 - aph - fp - tz, 0.25, 1);
 }
 function heroStat(h){
   let spd=h.baseSpeed*(1+0.10*h.ps.speed);
   spd*=Math.pow(0.72, legCount(h));
   spd*=Math.pow(BAL.SUCK_SLOW, suckCount(h));
-  if(h.slow>0) spd*=(h.curse==='slimeking'?0.42:0.55);   // 呪い『粘膜の記憶』: 粘液で更に鈍る
+  if(h.slow>0) spd*=(h.curse==='slimeking'?0.42:0.55)*(1+0.10*traitLv(h,'slimeMelt'));   /* v6.1 溶ける安堵: 沈んでも足取りが鈍らない */
   if(h.zone==='water' && !onIce(h)) spd*=0.88;   // 浅瀬(v5.0 氷の上なら足を取られない)
   if(h.zone==='ruin') spd*=1.06;    // 石畳
   /* v6.0 新しい床。糸は絡み、胎は沈み、絡めとられている間はほとんど進めない */
@@ -694,6 +697,8 @@ function applyPleasure(amount){
   amount*=1+BAL.GLY_PLE*glyphStage();
   /* v6.0 刻まれた性癖のぶん。増えるのは入りだけで、戦力は減らない */
   amount*=1+0.06*(traitLv(h,'exhibit')+traitLv(h,'sigilJoy')+traitLv(h,'attachCalm')+traitLv(h,'bareHabit')+traitLv(h,'sinkCalm')+traitLv(h,'defyBliss'));
+  /* v6.1 履歴が刻んだ性癖のうち、いまの場面に噛み合うものだけ */
+  amount*=1+0.055*traitAmp(h);
   amount*=1+(h.curseAmp||0);                    // 呪い『樹液の余熱』
   amount*=1+(h.tallyAmp||0);                    /* v6.0 帳の番に刻まれた分だけ、次が効く */
   if(h.watchedT>0) amount*=1+BAL.WATCH_AMP;    // 視姦: 見られていると熱が逃げない
@@ -730,6 +735,7 @@ function applyDeny(src){
   if(h.climaxT>0) return;
   if(src&&src.boss) G.B.bossMark={id:src.id, t:G.B.time};
   h.denyT=BAL.DENY_DUR; h.denySrc=src?src.id:null;
+  markTrait(h,'edgeweak',1);   /* v6.1 栓をされた回数が『焦らし弱』になる */
   heroBubble(h,pickRand(['……あ、れ。なんで、とまっ……','からだの、なかで……せんを、され……','いきそう、なのに……いけな……い……?']),true,3);
   parts(h.x,h.y-8,10,['#ff5d9e','#fff'],90,0.6);
   sfx(700,300,0.3,'sine',0.05);
@@ -805,7 +811,8 @@ function climaxTick(dt){
   if(Math.random()<dt*6) parts(h.x+rand(-12,12),h.y-rand(4,26),1,['#ffb3cf','#fff'],60,0.6);
   if(h.climaxT<=0){
     h.climaxT=0;
-    h.refractT=BAL.REFRACT_T;
+    h.refractT=BAL.REFRACT_T*(1-0.12*traitLv(h,'squirthabit'));   /* v6.1 決壊癖: 立ち直りが速い */
+    markTrait(h,'squirthabit',1);
     if(!h.pinned && !h.charmBind) if(B.pinSceneHi===B.ci) B.pinScene=null;
     heatUp();
     if(h.deepClimax){ h.deepClimax=false; heatUp(); }   // 深い絶頂は発情を二段深める
@@ -868,6 +875,9 @@ function attachMonster(mon, kind, opt){
   mon.state='attached'; mon.ti=G.B.ci; mon.limb=slot; mon.stun=0;
   codexMet(mon.id);
   h.resist.bound=(h.resist.bound||0)+1;
+  /* v6.1 覚えたはずの罠に、もう一度掛かった。忘れ潟(13階)はこれを量産する */
+  if(TRAP_SPECIES.has(mon.id)){ const TK=(META.gen&&META.gen.trapKnow)||{};
+    if(TK.ring||TK.rune||TK.hollow||TK.mire||knowLv(mon.id)>=1) markTrait(h,'anticip',1); }
   heroBubble(h, pickRand(['からみついてる…っ!','はなれてっ…!','やだ、脚に…っ!']), true, 2);
   S.bind();
   parts(h.x,h.y-14,10,['#c98cff','#8458d8'],110,0.5);
@@ -976,6 +986,8 @@ function addStruggle(amount){
   amount*=(1+0.02*(hh.will||0))*(hh.curse==='vampi'?0.85:1);
   /* v6.0 「抗いの悦び」は戦力を削らない。もがきの力そのものも上がる */
   amount*=1+0.06*traitLv(hh,'defyBliss')+0.05*traitLv(hh,'attachCalm');
+  /* v6.1 されてきたことへの慣れ。入りが増えるぶん、抜ける手際も上がる */
+  amount*=1+0.05*traitFree(hh);
   /* v6.0 苔(に見えるもの): 出した力を、そのぶんの快感に変える。抗うほど深く軋む */
   shamSoak(hh, amount*BAL.SHAM_STRUG);
   /* v6.0 時の澱: 手は動いているのに、届くのが半拍おそい。快感の側は一拍も遅れない */
@@ -1025,6 +1037,7 @@ function enterPin(mon){
   if(h.charmBind) releaseCharmBind(false);   // 押し倒しは魅了拘束を上書きする
   h.pinned=true; h.pinBy=mon||null; h.worn=(h.worn||0)+BAL.WORN_PIN;   // v5.0 押し倒された分の摩耗
   h.pinT=BAL.PIN_PULSE_T; h.pinEscape=0;
+  markTrait(h,'loser',1);   /* v6.1 押し倒された回数が『負け癖』になる */
   h.vx=0; h.vy=0;
   let sid=mon?mon.id:'default';
   { const lh=h.lastHypno;   // 催眠Ⅱ以上で押し倒された時は、催眠の源(ゲイザー)の場面——抵抗しなかった理由はそこにある
@@ -1177,6 +1190,82 @@ function forcedClimax(src){
 /* 雄臭への発情: 匂いと快感が結びつく(永続の性癖) */
 /* v6.0 性癖の汎用の刻み口。musk と同じ作法(その子の手記に書き、共通の印も上げる)。
    n は「あと何ぶん積んだか」で、TRAITS[key].need に届くごとに一段上がる */
+/* ================= v6.1 履歴が刻む性癖(16件) =================
+   ★上の8件が「床が刻むもの」なのに対し、こちらは「されてきたことが刻むもの」。
+   ★applyPleasure に一律で足さない。一律にすると「何に刻まれたか」が消えて、
+     ただの快感倍率になる——traitAmp が、いまの場面に噛み合う性癖だけを拾う。
+   ★どれも戦力を減らさない。入りが増え、同じ責めへの慣れ(振りほどき・立ち直り)も増える。 */
+const TRAIT_ENGULF=new Set(['slime','slimeking','mistslime','hugcap','seatflesh']);
+const TRAIT_MOUTH =new Set(['mouth','echoer','slugqueen']);
+const TRAIT_URN   =new Set(['pot']);
+/* いま四肢を取っている相手 */
+function binderMons(h){
+  const out=[];
+  for(const sl of attachedSlots(h)){ const a=h.limbs[sl]; const m=a&&a.mon; if(m&&m.id) out.push(m); }
+  return out;
+}
+/* いまの状況に噛み合う性癖の段の合計 */
+function traitAmp(h){
+  if(!h) return 0;
+  let n=0;
+  if(h.pinned)              n+=traitLv(h,'loser');
+  if(attachCount(h)>=3)     n+=traitLv(h,'bindhabit');
+  if(h.denyT>0)             n+=traitLv(h,'edgeweak');
+  if(h.climaxT>0)           n+=traitLv(h,'squirthabit');
+  if(h.watchedT>0)          n+=traitLv(h,'publicHeat');
+  if(suckCount(h)>0)        n+=traitLv(h,'drainBliss');
+  if(h.slow>0)              n+=traitLv(h,'slimeMelt');
+  if((h.teaseN||0)>0)       n+=traitLv(h,'impLove');
+  if(h.hp<h.maxHp*0.4)      n+=traitLv(h,'mazoCore');
+  if(h.hypno||h.suitT>0)    n+=traitLv(h,'rhythmSub');
+  if(sensLvOf(h)>=2)        n+=traitLv(h,'nippleHeat');
+  const B=binderMons(h);
+  if(B.length){
+    if(B.some(m=>MONSTERS[m.id]&&MONSTERS[m.id].spd<=0)) n+=traitLv(h,'waitfall');
+    if(B.some(m=>TRAIT_ENGULF.has(m.id)))                n+=traitLv(h,'engulfCalm');
+    if(B.some(m=>TRAIT_MOUTH.has(m.id)))                 n+=traitLv(h,'mouthhabit');
+    if(B.some(m=>TRAIT_URN.has(m.id)))                   n+=traitLv(h,'urnHabit');
+    const TK=(META.gen&&META.gen.trapKnow)||{};
+    if(B.some(m=>TRAP_SPECIES.has(m.id)) && (TK.ring||TK.rune||TK.hollow||TK.mire)) n+=traitLv(h,'anticip');
+  }
+  return n;
+}
+/* 同じ責めへの慣れ。もがきの力に乗る(戦力は減らさない、という決まりの裏側) */
+function traitFree(h){
+  if(!h) return 0;
+  let n=0;
+  if(h.pinned)          n+=traitLv(h,'loser');
+  if(attachCount(h)>=3) n+=traitLv(h,'bindhabit');
+  const B=binderMons(h);
+  if(B.length){
+    if(B.some(m=>MONSTERS[m.id]&&MONSTERS[m.id].spd<=0)) n+=traitLv(h,'waitfall');
+    if(B.some(m=>TRAIT_ENGULF.has(m.id)))                n+=traitLv(h,'engulfCalm');
+    if(B.some(m=>TRAIT_MOUTH.has(m.id)))                 n+=traitLv(h,'mouthhabit');
+    if(B.some(m=>TRAIT_URN.has(m.id)))                   n+=traitLv(h,'urnHabit');
+    if(B.some(m=>TRAP_SPECIES.has(m.id)))                n+=traitLv(h,'anticip');
+  }
+  if(suckCount(h)>0) n+=traitLv(h,'drainBliss');
+  return n;
+}
+/* 刻み口。秒で貯まるものはここ、出来事で貯まるものは起きた場所で刻む */
+function traitTick(h,dt){
+  const B=G.B; if(!B||!h||h.out) return;
+  const T=h.trT=h.trT||{};
+  const sec=(k,cond,per)=>{ if(!cond){ return; } T[k]=(T[k]||0)+dt; if(T[k]>=per){ T[k]-=per; markTrait(h,k,1); } };
+  sec('publicHeat',  h.watchedT>0,                      7);
+  sec('drainBliss',  suckCount(h)>0,                    6);
+  sec('slimeMelt',   h.slow>0,                          8);
+  sec('impLove',     (h.teaseN||0)>0,                   8);
+  sec('mazoCore',    h.hp<h.maxHp*0.4 && !h.pinned,     7);
+  sec('rhythmSub',   (h.hypno||h.suitT>0),              7);
+  sec('nippleHeat',  sensLvOf(h)>=2,                    9);
+  sec('bindhabit',   attachCount(h)>=3,                 5);
+  const BD=binderMons(h);
+  sec('waitfall',    BD.some(m=>MONSTERS[m.id]&&MONSTERS[m.id].spd<=0), 6);
+  sec('engulfCalm',  BD.some(m=>TRAIT_ENGULF.has(m.id)),               6);
+  sec('mouthhabit',  BD.some(m=>TRAIT_MOUTH.has(m.id)),                5);
+  sec('urnHabit',    BD.some(m=>TRAIT_URN.has(m.id)),                  5);
+}
 function markTrait(h,key,n){
   const T=TRAITS[key]; if(!T||!h) return;
   const HL=heroLife(h.id); HL.traits=HL.traits||{};
@@ -1436,6 +1525,7 @@ function statesTick(h,dt){
   if(h.zone==='flesh' && !ice) addHeatG(BAL.FLESH_HEAT*dt);   // v2.0 肉の床: 脈がうつる
   zoneV6Tick(h,dt,ice);   /* v6.0 鏡・紋・糸・霜・胎・澱・忘れ水・苔もどき */
   breathHeroTick(h,dt);   /* v6.0f 14階: 狭まった壁に擦れる */
+  traitTick(h,dt);        /* v6.1 履歴が刻む性癖 */
   if(h.zone==='lewd'){   // v3.2 巣窟: 前室→沼→最奥と、奥ほど効きが強い。奥まで来たら引き返さない(前室でだけ「やっぱ無理」が出る)
     const dst=Math.max(0,Math.min(2,denStage(h.x,h.y)));
     if(!ice){ learnZone('lewd',dt*0.45); addHeatG(BAL.DEN_HEAT[dst]*dt); applySensit(BAL.DEN_SENS[dst]*dt); }
