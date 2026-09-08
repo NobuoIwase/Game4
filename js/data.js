@@ -225,6 +225,14 @@ const BAL={
   /* v6.3 扇の開きは「角度」ではなく「的の位置での横のずれ px」。
      角度固定だと遠いほど外れ、当たり判定(的のr+5〜7 ≒ 15〜17px)を越えてしまう */
   BLADE_FAN_PX:11,
+  /* v6.3 フレイラの熱。★炎の剣はルミナのムチ、火の輪はルミナのオーブを
+     色替えしただけの形だった。二本を一つの熱で繋いで、
+     「前に出て当て続けるほど強く、退がると失う」という彼女だけの形にする */
+  FLAME_MAX:5,         /* 熱の段数(当てるたび+1) */
+  FLAME_KEEP:1.6,      /* 一段が冷めるまでの秒数(当てるたびに戻る) */
+  FLAME_DMG:0.55,      /* 満ちた時の炎の剣の上乗せ */
+  FLAME_RING:0.45,     /* 満ちた時の火の輪の広がり */
+  FLAME_FLOOR_T:2.2,   /* 満ちた一振りが床に残す火の寿命 */
   DSEAM_T:3.4,         /* 振った跡が宙に残る秒数(進化で1.6倍) */
   DSEAM_W:15,          /* 残った線の太さ */
   DSEAM_DMG:0.42,      /* 線を跨いだ者への削り(振った時の何割か) */
@@ -1430,8 +1438,8 @@ const UPG={
   spirit:{name:'みちびきの精霊',   d1:'ちいさな光が',    d2:'追いかけてはぜる', max:8, kind:'wp', bossW:1.3},
   shield:{name:'ひかりの盾',       d1:'まえに盾が',      d2:'やいて、はじく',  max:8, kind:'wp', bossW:0.9},
   /* v3.0 フレイラの武器(火・近接)。owner が無い武器はルミナのもの */
-  fsword: {name:'炎の剣',           d1:'まえを薙ぐ',      d2:'炎の刃',          max:8, kind:'wp', bossW:1.3,  owner:'freila'},
-  fring:  {name:'火の輪',           d1:'まわりを回る',    d2:'火の輪',          max:8, kind:'wp', bossW:0.9,  owner:'freila'},
+  fsword: {name:'炎の剣',           d1:'当てるほど熱く',   d2:'満ちれば床が燃える', max:8, kind:'wp', bossW:1.3,  owner:'freila'},
+  fring:  {name:'火の輪',           d1:'剣の熱ぶん',      d2:'輪がひろがり速まる', max:8, kind:'wp', bossW:0.9,  owner:'freila'},
   fburst: {name:'爆炎',             d1:'じぶんの周りで',  d2:'炎がはぜる',      max:8, kind:'wp', bossW:0.7,  owner:'freila'},
   fpillar:{name:'火柱',             d1:'ちかい敵の足元に', d2:'火柱がたつ',      max:8, kind:'wp', bossW:1.25, owner:'freila'},
   fwing:  {name:'焔の翼',           d1:'とびこんで',      d2:'やきはらう',      max:8, kind:'wp', bossW:1.15, owner:'freila'},

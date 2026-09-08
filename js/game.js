@@ -52,6 +52,7 @@ function newHero(id){
     whipT:1.1, whipAnim:0, whipDir:1, whipSide:1, whipR:0, rainT:2.2, crossT:1.6,
     sanctT:0, sanctPulse:0, bladeT:1.0, thunderT:2.0, holyT:2.4,
     fswordT:1.0, fswordSide:1, fringT:0, fringAng:0, fburstT:3.0, fpillarT:2.2, fwingT:4.5, fwingAnim:0, fwingX:0, fwingY:0,   // v3.0 フレイラの武器
+    flameHeat:0, flameT:0,   /* v6.3 前に出て斬り続けるほど溜まる熱。炎の剣と火の輪の両方がこれを読む */
     ineedleT:0.9, ifieldT:0, ifieldR:0, ibloomT:2.4, iorbitT:0, iorbAng:0,   // v5.0 クウの武器
     iceCd:0, iceBias:null, iceOrb:null, iceEcho:null, echoCd:0, iceBless:0, iceOn:0,
     hype:0, hypeT:0, meltT:0, meltSaid:0, hoarT:0,
@@ -1819,6 +1820,8 @@ function condTick(h,dt){
     h.stamina=Math.min(h.staminaMax,h.stamina+rg*dt);
     if(h.exhausted && h.stamina>25){ h.exhausted=false; heroBubble(h,'……よし、いける'); }
   }
+  /* v6.3 フレイラの熱: 当てるのが途切れると冷める(退がると失う) */
+  if((h.flameT||0)>0){ h.flameT-=dt; if(h.flameT<=0){ h.flameHeat=Math.max(0,(h.flameHeat||0)-1); if(h.flameHeat>0) h.flameT=BAL.FLAME_KEEP; } }
   /* v6.2 嗅ぐ発作の時間切れ(引き金は下の臭いの雲の所) */
   if(h.sniffT>0){ h.sniffT-=dt; h.vx=0; h.vy=0; if(h.sniffT<=0){ h.sniffT=0; h.sniffAt=null; } }
   if((h.sniffCd||0)>0) h.sniffCd-=dt;
@@ -3108,18 +3111,35 @@ function freilaWeapons(p,dt,atkMult){
       const evo=p.evo.inferno>0, lvR=p.wp.fsword, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
       p.fswordT=(evo?0.6:0.85)*Math.pow(0.91,lv-1)*ov.cd;
       p.fswordSide*=-1;
-      const range=(evo?150:90+10*lv)*areaMult(p)*ov.area, half=(evo?150:50+5*lv)*areaMult(p)*ov.area, dmg=(evo?26:12+5*(lv-1))*ov.dmg;
+      /* v6.3 熱: 前に出て当て続けるほど剣が熱くなる。切れると冷める。
+         ★これが無いと、炎の剣はルミナのムチを橙色にしただけの札だった。
+         「気が強く、前に出る」を数値にする——退がると失う、という形で */
+      const heat=Math.min(1,(p.flameHeat||0)/BAL.FLAME_MAX);
+      const range=(evo?150:90+10*lv)*areaMult(p)*ov.area, half=(evo?150:50+5*lv)*areaMult(p)*ov.area,
+            dmg=(evo?26:12+5*(lv-1))*ov.dmg*(1+BAL.FLAME_DMG*heat);
       p.whipAnim=0.16; p.whipDir=evo?0:(p.fswordSide>0?p.face:-p.face); p.whipR=range; p.whipFire=true;
       let hit=false;
       for(const e of B.enemies){ if(e.dead||e.dormant) continue; const ex=e.x-p.x, ey=e.y-(p.y-10); const inArc=evo?Math.hypot(ex,ey)<range+e.r:(ex*p.whipDir>0 && Math.abs(ex)<range+e.r && Math.abs(ey)<half+e.r); if(inArc){ damageEnemy(e,dmg); hit=true; if(evo) e.burnT=Math.max(e.burnT||0,2.5); } }
       for(const pr of B.props){ const ex=pr.x-p.x, ey=pr.y-(p.y-10); const inArc=evo?Math.hypot(ex,ey)<range:(ex*p.whipDir>0&&Math.abs(ex)<range&&Math.abs(ey)<half); if(inArc) damageProp(pr,dmg); }
-      if(hit){ sfx(200,90,0.1,'sawtooth',0.05); parts(p.x+(p.whipDir||1)*range*0.5,p.y-10,6,['#ff7a3a','#ffd76a'],120,0.4); if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN); }
+      if(hit){ sfx(200,90,0.1,'sawtooth',0.05); parts(p.x+(p.whipDir||1)*range*0.5,p.y-10,6,['#ff7a3a','#ffd76a'],120,0.4); if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN);
+        p.flameHeat=Math.min(BAL.FLAME_MAX,(p.flameHeat||0)+1); p.flameT=BAL.FLAME_KEEP;
+        /* 熱が満ちた一振りは、通った床を焼いて残す */
+        if(p.flameHeat>=BAL.FLAME_MAX){
+          if(B.zones.length>24) B.zones.shift();
+          const fx2=p.x+(p.whipDir||1)*range*0.55;
+          B.zones.push({x:fx2, y:p.y-6, r:(26+3*lv)*areaMult(p), t:0, life:BAL.FLAME_FLOOR_T, dmg:dmg*0.30, tick:0, fire:true});
+          floatTxt(p.x,p.y-62,'焼ける','#ffb060',10,0.6);
+        } }
     }
   }
   if(p.wp.fring>0){
     const evo=p.evo.corona>0, lvR=p.wp.fring, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR);
-    p.fringAng+=dt*(evo?2.6:2.2);
-    const R=(evo?96:52+7*lv)*areaMult(p)*ov.area, band=(evo?22:14)+2*lv, dmg=(evo?9:4+1.5*(lv-1))*ov.dmg;
+    /* v6.3 熱を分け合う: 剣で溜めた熱ぶん、輪が広がって速く回る。
+       ★これが無いと、火の輪はルミナのオーブを線にしただけだった。
+       二本を繋げることで「前に出るほど強い子」という一つの形になる */
+    const fh=Math.min(1,(p.flameHeat||0)/BAL.FLAME_MAX);
+    p.fringAng+=dt*(evo?2.6:2.2)*(1+0.5*fh);
+    const R=(evo?96:52+7*lv)*areaMult(p)*ov.area*(1+BAL.FLAME_RING*fh), band=(evo?22:14)+2*lv, dmg=(evo?9:4+1.5*(lv-1))*ov.dmg*(1+0.35*fh);
     p.fringR=R; p.fringT-=dt*atkMult;
     if(p.fringT<=0){ p.fringT=0.3*ov.cd; for(const e of B.enemies){ if(e.dead||e.dormant) continue; const d=Math.hypot(e.x-p.x,e.y-(p.y-10)); if(Math.abs(d-R)<band+e.r*0.5){ damageEnemy(e,dmg); if(evo) e.stun=Math.max(e.stun||0,0.35); } } }
   } else p.fringR=0;
