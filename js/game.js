@@ -1266,6 +1266,11 @@ const TRAIT_ENGULF=new Set(['slime','slimeking','mistslime','hugcap','seatflesh'
 const TRAIT_MOUTH =new Set(['mouth','echoer','slugqueen']);
 const TRAIT_URN   =new Set(['pot']);
 const TRAIT_DRAIN =new Set(['leech','heartroot','vampi']);
+/* v6.2 雄臭を放つ種。雲の中に居る時間だけを見ると、実測で 0.53秒/戦
+   (しかも熱を持ったまま雲の中に居た時間は 0秒)で、条件が立たない。
+   彼女は雲を避けるので当然だった。v6.1 で他の性癖に入れたのと同じ形——
+   「その相手の間合いに居て、かつ熱がある」まで広げる */
+const TRAIT_MUSK  =new Set(['goblin','gobking']);
 /* いま四肢を取っている相手 */
 function binderMons(h){
   const out=[];
@@ -1316,6 +1321,14 @@ function traitFree(h){
   return n;
 }
 /* 刻み口。秒で貯まるものはここ、出来事で貯まるものは起きた場所で刻む */
+/* v6.2 雄臭を放つ相手が間合いに居るか。臭いの雲そのものより広く取る
+   (雲は小さく短命で、彼女は避ける。それでも「臭いのする所に居た」ことは同じ) */
+function nearMusk(h){
+  const B=G.B; if(!B) return false;
+  for(const e of B.enemies){ if(e.dead||e.dormant||!TRAIT_MUSK.has(e.id)) continue;
+    if(Math.hypot(e.x-h.x,e.y-h.y) < BAL.MUSK_R*2.6) return true; }
+  return false;
+}
 function traitTick(h,dt){
   const B=G.B; if(!B||!h||h.out) return;
   const T=h.trT=h.trT||{};
@@ -1335,7 +1348,7 @@ function traitTick(h,dt){
      一生 0 のままだった。定義を数えるだけでは見つからない——
      『刻む場所があるか』を鍵ごとに突き合わせて出た穴。
      条件は how のとおり「発情したまま、臭いの雲の中」 */
-  sec('musk',        h.inMusk && h.heatLv>0,             6);
+  sec('musk',        (h.inMusk || nearMusk(h)) && h.heatLv>0, 6);
   /* ★ここから下は「閾値が厳しい」のではなく、条件そのものが成立しなかった組。
      110戦で 0〜2秒しか立たなかったので、種を取られている時だけ、から
      「その相手の間合いに居て、かつ取られている」まで広げる */
