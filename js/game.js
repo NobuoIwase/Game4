@@ -212,6 +212,7 @@ function heroStat(h){
   if(h.iceBless>0) spd*=1.30;             // v5.0 静止の一点の加護
   if(h.heatLv>0) spd*=1-0.04*h.heatLv;
   if(h.waveDur>0) spd*=BAL.WAVE_SPD;
+  if((h.chokeT||0)>0) spd*=BAL.EVAP_CHOKE_SPD;   /* ★v6.4b むせながら歩く */
   if(h.exhausted) spd*=0.7;
   if(h.numbT>0) spd*=0.75;        // 痺れ
   if((h.squeeze||0)>0) spd*=1-(1-BAL.BREATH_SPD)*h.squeeze;   /* v6.0f 14階: 壁が寄っている間は走れない */
@@ -1639,6 +1640,7 @@ function statesTick(h,dt){
   breathHeroTick(h,dt);   /* v6.0f 14階: 狭まった壁に擦れる */
   traitTick(h,dt);        /* v6.1 履歴が刻む性癖 */
   burstTick(h,dt);        /* v6.2 全身を取られた時・長く押し倒された時の「えいっ」 */
+  chokeTick(h,dt);        /* ★v6.4b 蒸発した媚薬を吸い込んで、むせている間 */
   if(h.zone==='lewd'){   // v3.2 巣窟: 前室→沼→最奥と、奥ほど効きが強い。奥まで来たら引き返さない(前室でだけ「やっぱ無理」が出る)
     const dst=Math.max(0,Math.min(2,denStage(h.x,h.y)));
     const pw=denPower();   /* v6.3 浅い階の巣窟は、効きそのものが薄い */
@@ -2011,6 +2013,11 @@ function aiUpdate(dt){
     if(bd<80) p.breakOut=null;
     else{ dx=dx*0.15+bx/bd*1.2; dy=dy*0.15+by/bd*1.2; state='breakout'; }
   }
+  /* ★v6.4b むせている間は、噴き出した所から離れる方へ足が向く(息を吸える所まで) */
+  if((p.chokeT||0)>0 && p.chokeFrom){
+    const bx=p.x-p.chokeFrom.x, by=p.y-p.chokeFrom.y, bd=Math.hypot(bx,by)||1;
+    dx=dx*0.15+bx/bd*1.2; dy=dy*0.15+by/bd*1.2; state='choke';
+  }
   // おねだり: 撃つのをやめて、いちばん近い魔物へ寄っていく
   if(p.begT>0){
     let ne=null, nd=1e9;
@@ -2118,6 +2125,7 @@ function aiUpdate(dt){
     prop:'燭台をこわして回復!', chest:'たからばこへ!', kite:'まちうけ・けん制', wait:'けいかい中',
     struggle:'ふりほどこうともがいている!',
     charmwalk:'ふらふらと、ちかづいていく…', heatwalk:'熱にまけて、よろめき寄る…',
+    choke:'むせながら、霧の外へ',
     hypno:'……電波に、あしが……', item:'おちてる品へ!', beg:'……おねだり、なんて……してない……',
     g_event:'光の柱へ!', g_chest:'たからばこへ!', g_boss:'おうさまの箱へ!', g_item:'おちてる品へ!', g_shrine:'祠へ', g_spring:'泉で休みに', g_pool:'清水であらいに',
     g_stele:'石碑をよみに', g_stairs:'降り口へ', g_seal:'封印石を灯しに', g_core:'魔核へ——', g_lantern:'あかりへ', g_shroom:'光茸をとりに', g_nectar:'蜜の花へ', g_treasure:'沈んだ宝へ', g_explore:'たんさく中', g_gems:'ジェムをあつめる', hesitate:'まよっている……', think:'かんがえ中……', abort:'にげだす!', retreat:'逃げに徹する!', kite2:'引き撃ち', talk:'相談中……', assist:'仲間を助ける!', rescue:'救出する!', g_rescue:'仲間を救いに', g_cover:'仲間をかばう!', core:'心臓から離れない', breakout:'……行き直す'};
@@ -2125,6 +2133,7 @@ function aiUpdate(dt){
     heart:'ハートみっけ!', prop:'燭台こわして回復しなきゃ', chest:'たからばこだ〜!',
     kite:'このきょりキープ…', wait:'つぎはどこから…?', struggle:'はなれてよ〜っ!',
     charmwalk:'…なんで、あしが…', heatwalk:'…あつくて、なにも…',
+    choke:'けほっ……そと、そとに……',
     hypno:'……あっち、いかなきゃ……', item:'なにか、おちてる!', beg:'……ちがう……',
     g_event:'あのひかり、いってみる', g_chest:'たからばこだ〜!', g_boss:'おうさまの、たからばこ……!', g_item:'なにか、おちてる!', g_shrine:'ほこら、いこう', g_spring:'ちょっと、やすみたい……',
     g_pool:'あらいたい……べたべた', g_stele:'なにか、かいてある', g_stairs:'……おりる。つぎへ', g_seal:'あれ、ともさなきゃ', g_core:'……あれが、しんぞう', g_lantern:'あかり、あったかそう……', g_shroom:'あのひかり、とろう', g_nectar:'はな……あまいにおい', g_treasure:'みずのなかに、なにか……', g_explore:'こっちは、まだ見てない', g_gems:'キラキラ、ぜんぶひろう♪', hesitate:'……どうしよ', think:'……うーん', abort:'やっぱ、むり!', retreat:'ぜんぶ、にげるっ!', kite2:'さがりながら、うつ!', talk:'どっち、いく?', assist:'いま、たすける!', rescue:'まって、いくから!', g_rescue:'いま、いく!', g_cover:'そっち、やばそう! いく!', core:'はなれちゃ、だめ……', breakout:'……こっちじゃない'};
@@ -6931,6 +6940,33 @@ function miresTick(dt){
     }
   }
 }
+/* ★v6.4b 噴き出した甘い霧を吸い込む。うわっ、と息を詰めて、むせて、霧の外へ足が向く。
+   heat/sens をここで全部入れずに EVAP_NOW ぶんだけ渡し、残りは chokeTick が少しずつ渡す */
+function evapBreathe(h,cx,cy,heat,sens){
+  const B=G.B, ci0=B.ci; B.ci=h.hi;
+  addHeatG(heat*BAL.EVAP_NOW); applySensit(sens*BAL.EVAP_NOW);
+  B.ci=ci0;
+  h.chokeT=BAL.EVAP_CHOKE_T; h.chokeFrom={x:cx,y:cy};
+  h.chokeHeat=heat*(1-BAL.EVAP_NOW); h.chokeSens=sens*(1-BAL.EVAP_NOW); h.chokeSaid=0;
+  h.stumbleDur=Math.max(h.stumbleDur||0, BAL.EVAP_GASP_T);   /* まず、よろける */
+  h.hesit=null;                                              /* 迷っている場合ではない */
+  sayPartyOrLine(h,'feat.evap','しまった……! こんなに、ひろがって……!');
+}
+/* むせている間: 少しずつ吸い込み、途中で咳き込み、抜けたところで「覚えた」 */
+function chokeTick(h,dt){
+  if(!((h.chokeT||0)>0)) return;
+  const B=G.B, ci0=B.ci; B.ci=h.hi;
+  const k=dt/Math.max(0.1,BAL.EVAP_CHOKE_T-BAL.EVAP_GASP_T);
+  if(h.chokeT<=BAL.EVAP_CHOKE_T-BAL.EVAP_GASP_T){
+    addHeatG((h.chokeHeat||0)*k); applySensit((h.chokeSens||0)*k);
+    if(!h.chokeSaid){ h.chokeSaid=1; sayLine('feat.evapCough',2,0,'けほっ……ごほっ、す、すって……'); }
+    if(Math.random()<dt*7) parts(h.x+rand(-8,8), h.y-26, 1, ['#ff9ec2','#ffd0e4'], 40, 0.5);
+  }
+  h.chokeT-=dt;
+  if(h.chokeT<=0){ h.chokeT=0; h.chokeFrom=null; h.chokeSaid=0;
+    sayLine('feat.evapLearn',2,0,'……もう、ここでは やかない'); }
+  B.ci=ci0;
+}
 /* 沼の蒸発: 溜まっていたものが一気に立ちのぼり、広さと深さに比例して外まで噴き出す */
 function mireEvaporate(m){
   const B=G.B; if(m.dry) return;
@@ -6950,10 +6986,7 @@ function mireEvaporate(m){
   for(const h of B.heroes){
     if(h.out) continue;
     const d=Math.hypot(h.x-m.x,h.y-m.y); if(d>R) continue;
-    const ci0=B.ci; B.ci=h.hi;
-    addHeatG(BAL.MIRE_EVAP_HEAT*m.depth*(1-d/R*0.5)); applySensit(9*m.depth);
-    sayPartyOrLine(h,'feat.evap','しまった……! こんなに、ひろがって……!');
-    B.ci=ci0;
+    evapBreathe(h, m.x, m.y, BAL.MIRE_EVAP_HEAT*m.depth*(1-d/R*0.5), 9*m.depth);
   }
   META.gen.dryLesson=(META.gen.dryLesson|0)+1; saveMeta();
 }
@@ -7386,8 +7419,7 @@ function dryEvapCheck(p,d){
   for(const h of B.heroes){
     if(h.out) continue;
     if(Math.hypot(h.x-d.x,h.y-d.y)>BAL.DRY_EVAP_R) continue;
-    const ci0=B.ci; B.ci=h.hi; addHeatG(BAL.DRY_EVAP_HEAT); applySensit(7); B.ci=ci0;
-    sayPartyOrLine(h,'feat.evap','しまった……! こんなに、ひろがって……!');
+    evapBreathe(h, d.x, d.y, BAL.DRY_EVAP_HEAT, 7);
   }
   // これも学習する: 次からは巣窟や澱みの近くで焼かない
   META.gen.dryLesson=(META.gen.dryLesson|0)+1; saveMeta();
