@@ -66,6 +66,9 @@
 | 武器の火力・間隔・範囲 | `js/data.js:UPG`(定義)と `js/game.js:weaponsUpdate()`(実際の挙動)。Lv6〜8 の伸びは `js/game.js:wpOver()` |
 | 拘束のされやすさ | `BAL.PIN_STAMINA_TH` `BAL.PIN_STAMINA_FRAC` と `js/game.js:attachMonster()` |
 | 快感・絶頂の入り | `js/game.js:applyPleasure()` / `js/game.js:applySensit()` / `js/game.js:addHeatG()` |
+| 火照りの「抜けにくさ」 | `BAL.SENSIT_DECAY`(常時)と、v6.7 の**息を整える間** `BAL.CALM_R` `BAL.CALM_WARM` `BAL.CALM_SENS` `BAL.CALM_HEAT`。積むのは `js/game.js:condTick()` の末尾(`h.calmT`/`h.calmK`) |
+| 三人に武器を足す | `js/data.js:UPG` に `owner` 付きで足す → `js/data.js:HEROES` の `wps` に並べる → `js/game.js:freilaWeapons()` / `js/game.js:kuuWeapons()` / `js/game.js:yamiWeapons()` に発射を書く → `js/game.js:heroDpsEst()` の `BASE` に見積りを足す。枠は `BAL.WP_SLOTS` |
+| 氷柱(押し返す壁) | `js/game.js:pikesTick()` と `BAL.PIKE_HP` `BAL.PIKE_T` `BAL.PIKE_MAX`。★`B.props` ではなく `B.pikes`(props はヒロインの弾が当たって消える) |
 | 夜側のEN(手札のコスト) | `BAL.EN_START` と `FLOORS[].en` |
 | 階層ごとの顔つき | `js/data.js:FLOORS`。地形は `zoneW`、巣窟は `lewd.mix`、壁は `wall` |
 | 深淵の圧(時間で増える) | `js/game.js:pressure()` と `BAL.EXIT_PRESS` |

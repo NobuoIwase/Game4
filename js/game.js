@@ -40,6 +40,7 @@ function newHero(id){
     zone:'moss', bathT:0, springCd:0, dest:null, destUntil:0, explore:null, exploreUntil:0,   // v1.6 地形マップ
     poolT:0, readT:0, poolKey:null, readKey:null, goal:null, goalT:0, farmT:0, walkT:0,        // v1.8 清水/石碑/目当て
     lantT2:0, lantHeat:0,                                                                     /* v6.6 催淫灯篭で休んでいる時間と、この滞在で溜まった熱 */
+    calmT:0, calmK:0,                                                                         /* v6.7 誰にも触られていない時間と、そのぶんの「抜けの速さ」 */
     tgtKey:null, tgtBest:0, tgtT:0,                                                              // v2.1 諦めの見張り
     skillCd:(()=>{ const o={}; for(const k in HD.skills) o[k]=0; return o; })(), guardT:0, emberT:0, aiMode:'fight', modeUntil:0, escape:null, dpsEst:20, hesitN:{},   // v2.3 奥義 / 戦闘モード / 地形ごとの迷った回数
     stuckT:0, unstickT:0, path:null, zoneLast:undefined,                                       // v1.7 壁・経路
@@ -281,7 +282,7 @@ function startBattle(){
     fam:deckFam(META.deck),   /* v6.5 この戦闘の系統ボーナス(デッキは戦闘中変わらないので一度だけ数える) */
     auto:META.settings.autoplay, autoT:1.2,
     kills:0, dmgDealt:0, dmgCarry:0, ailCount:0, orbFrag:0, essence:0,
-    bossUsed:false, bossPlayed:{}, bossCd:0, bossMark:null, ebullets:[], shrineGot:[], gateT:0, poiCd:0, capturedBy:null, captureCause:'', captureT:0, winT:0,
+    bossUsed:false, bossPlayed:{}, bossCd:0, bossMark:null, ebullets:[], pikes:[], shrineGot:[], gateT:0, poiCd:0, capturedBy:null, captureCause:'', captureT:0, winT:0,
     ailRateT:{}, chestIdx:0, propT:BAL.PROP_RESPAWN,
     lvCards:null, pinScene:null, pinSceneIdx:0, pinSceneT:0,
     combo:{}, lastPlay:null,
@@ -1832,7 +1833,7 @@ function condTick(h,dt){
   // 快感の自然減衰
   if(h.aphro>0) h.aphro=Math.max(0,h.aphro-BAL.PLEAS_DECAY*dt);
   // 敏感化の自然減衰(祭壇分は下限として残る)
-  if(h.sensit>h.sensitFloor) h.sensit=Math.max(h.sensitFloor,h.sensit-BAL.SENSIT_DECAY*dt);
+  if(h.sensit>h.sensitFloor) h.sensit=Math.max(h.sensitFloor,h.sensit-(BAL.SENSIT_DECAY+BAL.CALM_SENS*(h.calmK||0))*dt);   /* v6.7 息を整える間だけ速く抜ける(calmK は下で立てる) */
   // 発情: レベル制+定期的な波
   if(h.heatLv>0){
     h.heatT-=dt;
@@ -1995,7 +1996,21 @@ function condTick(h,dt){
   }
   if(h.muskCd>0) h.muskCd-=dt;
   if(!h.inMusk) h.muskCond=Math.max(0,h.muskCond-2*dt);          // 匂いから離れると結びつきは薄れる
-  if(!inCloud) h.heatG=Math.max(0,(h.heatG||0)-1.5*dt);           // 雲の外では発情ゲージは徐々に抜ける
+  if(!inCloud) h.heatG=Math.max(0,(h.heatG||0)-(1.5+BAL.CALM_HEAT*(h.calmK||0))*dt);           // 雲の外では発情ゲージは徐々に抜ける(v6.7 息を整えていれば速い)
+  /* ================= v6.7 息を整える間 =================
+     雲の外に居て、魔物が CALM_R より遠く、掴まれても押し倒されてもいない——
+     その全部が揃っている間だけ、敏感化と発情ゲージの抜けが CALM_WARM 秒かけて最大になる。
+     ★狙いは「振り切れた状態を引きずらせない」ことだけで、
+       触られている間の目盛りは一切変えていない。プロファイルの
+       「まだ抗っている心が快感に軋んでいく過程」は攻められている最中の話で、
+       ここはその外側——誰にも触られていない時間の話 */
+  { let calm = !inCloud && !h.pinned && h.climaxT<=0 && h.freezeT<=0 && !h.charmBind
+               && attachCount(h)===0 && (h.sniffT||0)<=0 && (h.poolT||0)<=0 && (h.lantT||0)<=0
+               && denStage(h.x,h.y)<0 && zoneFear(h.zone)<2;
+    if(calm) for(const e of B.enemies){ if(e.dead||e.dormant) continue; if(Math.hypot(h.x-e.x,h.y-e.y)<BAL.CALM_R){ calm=false; break; } }
+    h.calmT=calm?Math.min(BAL.CALM_WARM,(h.calmT||0)+dt):0;
+    h.calmK=h.calmT/BAL.CALM_WARM;
+  }
   if(h.hypnoG>0) h.hypnoG=Math.max(h.hypnoLv===0?(h.hypnoFloor||0):0,h.hypnoG-BAL.HYPNO_DECAY*dt); // 催眠ゲージも抜ける(呪い『残光』の下限まで)
 }
 /* 発情ゲージ(雲・波・口づけ): 100で発情Lvが一段上がる。絶頂経由の発情と違い、快感の位置は動かさない */
@@ -2917,7 +2932,14 @@ function weaponsUpdate(dt){
     *(p.numbT>0?0.5:1)                                                      // 痺れ: 指が動かない
     *(1+0.08*p.ps.haste)                                                    // クイックリボン
     *(p.iceBless>0?1.10:1);                                                 // v5.0 静止の一点の加護
-  if(atkMult<=0) return;
+  /* v6.7 手が止まっている間は、常時効いている札(陽炎の衣・氷鏡・闇の吸い上げ)も切る。
+     ★ここで切らないと、掴まれて武器が止まっても護りだけが残り続ける */
+  if(atkMult<=0){
+    if(p.id==='freila'){ p.shimmer=0; p.shimmerR=0; }
+    if(p.id==='kuu'){ for(const h of B.heroes) h.iceMirror=null; }
+    if(p.id==='yamiko') p.drainK=0;
+    return;
+  }
   if(p.id==='freila') freilaWeapons(p,dt,atkMult);   // v3.0 火の武器
   if(p.id==='kuu') kuuWeapons(p,dt,atkMult);          // v5.0 氷の武器
   if(p.id==='yamiko') yamiWeapons(p,dt,atkMult);      // v5.0 闇の武器
@@ -3330,6 +3352,108 @@ function kuuWeapons(p,dt,atkMult){
     const n=(lv>=5?2:1)+((p.ps.dup||0)>=2?1:0), dmg=(5+2.0*(lv-1))*ov.dmg;
     for(const h of B.heroes) h.iceEcho=(h===p||h.out)?null:{n, dmg, chill:BAL.ICE_CHILL_T};
   } else { for(const h of B.heroes) h.iceEcho=null; }
+  /* ================= v6.7 氷柱 =================
+     追ってくる群れとヒロインのあいだに氷を立て、道を細くする。
+     ★クウは火力ではなく「押し寄せる形」を崩す子。壊せる壁として置く(props に積む) */
+  if(p.wp.ipike>0){
+    p.ipikeT=(p.ipikeT||0)-dt*atkMult;
+    if(p.ipikeT<=0){
+      const lvR=p.wp.ipike, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
+      p.ipikeT=(3.6-0.24*(lv-1))*ov.cd;
+      /* いちばん詰めてきている相手を選び、その相手と守る子の線の途中に立てる */
+      let tgt=null, td=1e9, who=p;
+      for(const h of B.heroes){ if(h.out) continue;
+        for(const e of B.enemies){ if(e.dead||e.dormant||e.item||e.state==='attached') continue;
+          if(!MONSTERS[e.id]||MONSTERS[e.id].spd<=0) continue;
+          const d=Math.hypot(e.x-h.x,e.y-h.y); if(d<td && d<300){ td=d; tgt=e; who=h; } } }
+      if(!tgt) p.ipikeT=0.4;
+      else{
+        const n=1+(lv>=4?1:0)+dupN(p);
+        const ax=Math.atan2(who.y-tgt.y, who.x-tgt.x), px=Math.cos(ax+Math.PI/2), py=Math.sin(ax+Math.PI/2);
+        const mx=(who.x+tgt.x)/2, my=(who.y+tgt.y)/2;
+        let made=0;
+        B.pikes=B.pikes||[];
+        for(let i=0;i<n;i++){
+          const off=(i-(n-1)/2)*30;
+          const q=snapFloor(clampMapX(mx+px*off,26), clampMapY(my+py*off,26), false, 2);
+          if(!q||!reachableAt(q.x,q.y,false)) continue;
+          while(B.pikes.length>=BAL.PIKE_MAX) B.pikes.shift();
+          const hp=BAL.PIKE_HP*(1+0.28*(lv-1));
+          B.pikes.push({x:q.x, y:q.y, r:15, hp, maxHp:hp, t:0, life:BAL.PIKE_T+0.5*lv, hi:p.hi});
+          B.fx.push({kind:'icebloom', x:q.x, y:q.y, r:24, t:0, life:0.45});
+          parts(q.x,q.y-8,7,['#bfeaff','#fff','#7fe8dd'],110,0.5); made++;
+        }
+        if(made) sfx(900,1400,0.14,'triangle',0.045); else p.ipikeT=0.4;
+      }
+    }
+  }
+  /* ================= v6.7 霜解けの息 =================
+     みんなの火照りを、すこしだけ冷ます。★「基本はヒロイン優勢」の側に唯一まっすぐ効く札。
+     祭壇や呪いの下限は割らない(そこは冷ましても戻ってくるもの) */
+  if(p.wp.ithaw>0){
+    p.ithawT=(p.ithawT||0)-dt*atkMult;
+    if(p.ithawT<=0){
+      const lvR=p.wp.ithaw, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
+      p.ithawT=(6.5-0.42*(lv-1))*ov.cd;
+      const ds=BAL.THAW_SENS*(1+0.22*(lv-1)), dh=BAL.THAW_HEAT*(1+0.22*(lv-1));
+      const R=(190+22*lv)*areaMult(p)*ov.area;
+      let any=false;
+      for(const h of B.heroes){
+        if(h.out||Math.hypot(h.x-p.x,h.y-p.y)>R) continue;
+        h.sensit=Math.max(h.sensitFloor||0,(h.sensit||0)-ds);
+        h.heatG=Math.max(0,(h.heatG||0)-dh);
+        h.slow=0; if((h.sticky||0)>0) h.sticky=Math.max(0,h.sticky-0.35);
+        parts(h.x,h.y-16,7,['#bfeaff','#fff','#7fe8dd'],90,0.7); any=true;
+      }
+      if(any){ sfx(1400,900,0.22,'sine',0.035); B.fx.push({kind:'icebloom', x:p.x, y:p.y, r:R*0.5, t:0, life:0.5}); }
+    }
+  }
+  /* ================= v6.7 氷鏡 =================
+     受けた痛みを、凍らせて撃った相手へ返す(hurtHero が読む) */
+  if(p.wp.imirror>0){
+    const lvR=p.wp.imirror, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
+    const R=(210+20*lv)*areaMult(p)*ov.area;
+    const M={k:BAL.MIRROR_K*(0.55+0.09*lv)*ov.dmg, hi:p.hi, chill:BAL.ICE_CHILL_T};
+    for(const h of B.heroes) h.iceMirror=(h.out||Math.hypot(h.x-p.x,h.y-p.y)>R)?null:M;
+    if((p.mirrorCd||0)>0) p.mirrorCd-=dt;
+  } else { for(const h of B.heroes) h.iceMirror=null; }
+}
+/* v6.7 氷柱の毎フレーム。押してきた魔物を押し返し、そのぶん自分が削れる。
+   ★ヒロインは通り抜けられる(味方の足を止める壁は作らない) */
+function pikesTick(dt){
+  const B=G.B; if(!B.pikes||!B.pikes.length) return;
+  for(const k of B.pikes){
+    k.t+=dt;
+    for(const e of B.enemies){
+      if(e.dead||e.dormant||e.state==='attached'||e.item) continue;
+      if(!MONSTERS[e.id]||MONSTERS[e.id].spd<=0) continue;
+      if(e.boss||isSeated(e.id)) continue;
+      const dx=e.x-k.x, dy=e.y-k.y, d=Math.hypot(dx,dy)||0.001, need=k.r+e.r*0.8;
+      if(d>=need) continue;
+      const push=(need-d);
+      e.x+=dx/d*push; e.y+=dy/d*push;
+      collideMap(e,e.r*0.75,canFly(e.id));
+      e.chillT=Math.max(e.chillT||0,0.5);
+      k.hp-=Math.max(4,(e.dmg||6))*dt*2.2;
+      if(Math.random()<dt*3) parts(k.x,k.y-8,1,['#bfeaff','#fff'],60,0.3);
+    }
+    if(k.hp<=0){ B.fx.push({kind:'iceshatter', x:k.x, y:k.y-8, r:22, t:0, life:0.4});
+      parts(k.x,k.y-8,10,['#bfeaff','#fff','#7fe8dd'],140,0.5); sfx(1600,700,0.08,'triangle',0.03); }
+  }
+  B.pikes=B.pikes.filter(k=>k.hp>0 && k.t<k.life);
+}
+/* v6.7 氷鏡の返し。hurtHero から呼ぶ(受けた分の一部を、殴った相手へ凍らせて返す) */
+function iceMirrorBack(h,src,net){
+  const B=G.B, M=h.iceMirror;
+  if(!M||!src||src.dead||src.dormant) return;
+  const own=B.heroes[M.hi]; if(!own||own.out){ h.iceMirror=null; return; }   /* 配り手が連れて行かれたら鏡も消える */
+  if((h.mirrorCd||0)>0) return;
+  h.mirrorCd=BAL.MIRROR_CD;
+  const ci0=B.ci; B.ci=M.hi; damageEnemy(src, net*M.k); B.ci=ci0;
+  src.chillT=Math.max(src.chillT||0, M.chill);
+  B.fx.push({kind:'iceshatter', x:src.x, y:src.y-src.r*0.4, r:src.r+8, t:0, life:0.4});
+  parts(src.x,src.y-8,6,['#bfeaff','#fff'],110,0.4);
+  sfx(1700,800,0.08,'triangle',0.03);
 }
 /* 味方の撃った弾に、氷の伴走弾を並べる(直進弾のみ) */
 function iceEchoSpawn(h,n0,dt){
@@ -3427,6 +3551,71 @@ function freilaWeapons(p,dt,atkMult){
       } else p.fwingT=0.5;
     }
   }
+  /* ================= v6.7 焼き印 =================
+     一体に印を押し、そこだけ深く焼く。相手が倒れると印は近くの一体へ移る——
+     近接の子が「群れの中の一点」を最後まで追える札。ボス相手にいちばん効く */
+  if(p.wp.fbrand>0){
+    p.fbrandT=(p.fbrandT||0)-dt*atkMult;
+    const cur=p.brandOn;
+    if(cur && (cur.dead||cur.dormant)) p.brandOn=null;
+    if(p.fbrandT<=0){
+      const lvR=p.wp.fbrand, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
+      p.fbrandT=(2.4-0.16*(lv-1))*ov.cd;
+      /* 相手選び: 印がまだ生きていればそのまま焼き続ける。切れていたら、
+         いちばん体力の残っている一体(=長く付き合う相手)に押し直す */
+      let t=(p.brandOn && !p.brandOn.dead && (p.brandOn.brandT||0)>0) ? p.brandOn : null;
+      if(!t){ let bh=-1;
+        for(const e of B.enemies){ if(e.dead||e.dormant||e.item||e.state==='attached') continue;
+          if(Math.hypot(e.x-p.x,e.y-p.y)>(300+16*lv)*(1+0.12*(p.ps.reach||0))) continue;
+          const w=e.hp*(e.boss?1.6:1); if(w>bh){ bh=w; t=e; } } }
+      if(!t) p.fbrandT=0.2;
+      else{
+        p.brandOn=t;
+        t.brandT=BAL.BRAND_T; t.brandK=BAL.BRAND_MUL*(1+0.14*(lv-1));
+        const ci0=B.ci; B.ci=p.hi; damageEnemy(t,(9+4.2*(lv-1))*ov.dmg); B.ci=ci0;
+        p.flameHeat=Math.min(BAL.FLAME_MAX,(p.flameHeat||0)+1); p.flameT=BAL.FLAME_KEEP;   /* 焼き印も熱になる */
+        B.fx.push({kind:'brand', x:t.x, y:t.y-t.r*0.4, r:t.r+10, t:0, life:0.55});
+        parts(t.x,t.y-8,8,['#ff7a3a','#ffd76a','#fff'],110,0.5);
+        sfx(240,110,0.16,'square',0.05);
+        if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN);
+      }
+    }
+  }
+  /* ================= v6.7 熾火の轍 =================
+     歩いた跡に熾火が残る。前に出る子が「引きながらでも削れる」ようになる札。
+     熱が満ちているほど長く残る */
+  if(p.wp.fash>0){
+    const lvR=p.wp.fash, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
+    const fh=Math.min(1,(p.flameHeat||0)/BAL.FLAME_MAX);
+    p.ashD=(p.ashD||0)+Math.hypot(p.vx,p.vy)*dt;
+    if(p.ashD>=BAL.EMBER_STEP){
+      p.ashD=0;
+      const embers=B.zones.filter(z=>z.ember);
+      while(embers.length>=BAL.EMBER_MAX){ const old=embers.shift(); const i=B.zones.indexOf(old); if(i>=0) B.zones.splice(i,1); }
+      if(B.zones.length>24) B.zones.shift();
+      B.zones.push({ember:true, x:p.x, y:p.y, r:(19+2.4*lv)*areaMult(p)*ov.area, t:0,
+                    life:BAL.EMBER_LIFE*(1+0.8*fh), dmg:(2.4+1.05*(lv-1))*ov.dmg, tick:0, fire:true});
+      if(Math.random()<0.5) parts(p.x,p.y-4,2,['#ff7a3a','#ffd76a'],50,0.35);
+      pushLight(p.x,p.y,110,BAL.DARK_MEM_T*0.5,0.7);
+    }
+  }
+  /* ================= v6.7 陽炎の衣 =================
+     熱でゆらいだ空気が飛び道具を逸らし、濡れとベタベタを乾かす。
+     ★フレイラ唯一の守りの札で、彼女の水弱点を自分で薄める手でもある */
+  if(p.wp.fveil>0){
+    const lvR=p.wp.fveil, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
+    const fh=Math.min(1,(p.flameHeat||0)/BAL.FLAME_MAX);
+    p.shimmer=(BAL.SHIMMER_DEF*(0.45+0.55*fh))*(0.55+0.09*lv);   /* 弾を逸らす率(hurtHero が読む) */
+    p.shimmerR=(46+5*lv)*areaMult(p)*ov.area;
+    if((p.sticky||0)>0) p.sticky=Math.max(0,p.sticky-BAL.SHIMMER_DRY*0.35*(0.4+0.6*fh)*dt*(0.6+0.08*lv));
+    p.veilT=(p.veilT||0)-dt*atkMult;
+    if(p.veilT<=0){   /* 触れている相手をじりじり焼く(守りだけの札にしない) */
+      p.veilT=0.5*ov.cd;
+      const dmg=(1.8+0.8*(lv-1))*ov.dmg*(0.5+0.5*fh);
+      for(const e of B.enemies){ if(e.dead||e.dormant||e.item) continue;
+        if(Math.hypot(e.x-p.x,e.y-(p.y-10))<p.shimmerR+e.r*0.6){ const ci0=B.ci; B.ci=p.hi; damageEnemy(e,dmg); B.ci=ci0; } }
+    }
+  } else { p.shimmer=0; p.shimmerR=0; }
 }
 function orbPos(i,n){
   const p=G.B.hero;
@@ -4131,6 +4320,7 @@ function damageEnemy(e,dmg){
   { const dm=dryMonMul(e); if(dm) dmg/=dm.hp; }            // v4.0 焼いた床の上のヌルヌル系は、乾いて脆い
   if(iceAt(e.x,e.y)>0.5) dmg*=1+BAL.ICE_MON_VULN;         // v5.0 氷の上は脆い
   if((e.vulnT||0)>0)     dmg*=1+BAL.ICE_VULN;             //      冷気の帳の中
+  if((e.brandT||0)>0)    dmg*=1+(e.brandK||BAL.BRAND_MUL); // v6.7 焼き印の付いた所
   if((e.frozT||0)>0)     dmg*=1+BAL.ICE_FROZ_VULN;        //      凍っている間
   if(e.id==='flower') dmg*=(e.state==='bud'?0.5:1.3);
   if(e.id==='tower') dmg*=0.3;                        // 催眠電波の塔: 骨の骨組みは光を通しにくい
@@ -4154,6 +4344,8 @@ function damageEnemy(e,dmg){
   /* v6.0 はじめの夜の主: 与えたダメージの累計で濃くなる。抗わなければ、ただのナメクジのまま */
   if(e.id==='firstslug') firstslugThicken(e,dmg);
   e.hp-=dmg; e.hitFlash=0.12;
+  /* v6.7 闇の吸い上げ: ヤミコが削ったぶんの一部が、いちばん薄い子の傷へ回る */
+  { const dh=G.B&&G.B.hero; if(dh && (dh.drainK||0)>0) dh.drainPool=(dh.drainPool||0)+dmg*dh.drainK; }
   /* v6.0 苔(に見えるもの)の上では、与えた力そのものが快感に化けて返る。
      ★正しく戦えば戦うほど深く軋む——15階の芯はこの一行 */
   { const sh=G.B&&G.B.hero; if(sh&&!sh.out) shamSoak(sh, dmg*BAL.SHAM_DMG); }
@@ -4415,6 +4607,7 @@ function enemiesUpdate(dt){
     if((e.hasteT||0)>0) e.hasteT-=dt;   // v2.4 王の号令で一時的に速い
     if((e.chillT||0)>0) e.chillT-=dt;
     if((e.vulnT||0)>0) e.vulnT-=dt;
+    if((e.brandT||0)>0) e.brandT-=dt;   /* v6.7 焼き印 */
     if((e.frozT||0)>0) e.frozT-=dt;
     if(eIce){ e.frostTick=(e.frostTick||0)-dt;   /* 凍傷 */
       if(e.frostTick<=0){ e.frostTick=BAL.ICE_DOT_CD;
@@ -5727,6 +5920,80 @@ function yamiWeapons(p,dt,atkMult){
     B.fx.push({kind:'darkring', x:p.stepX, y:p.stepY, r:R, t:0, life:0.5});
     p.stepFx=0;
   }
+  /* ================= v6.7 闇の手 =================
+     遠くの一体を掴んで引き寄せ、短く止める。かつて彼女が魔物の側でやっていた事。
+     ★遠くから撃ってくる相手(眼・触手)を、みんなの間合いへ引き落とす手でもある */
+  if(p.wp.dgrasp>0){
+    p.dgraspT=(p.dgraspT||0)-dt*atkMult;
+    if(p.dgraspT<=0){
+      const lvR=p.wp.dgrasp, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
+      const maxD=(420+22*lv)*(1+0.12*(p.ps.reach||0));
+      /* 遠くて、動けて、据わっていない一体。遠いほど選ばれる */
+      let t=null, bd=-1;
+      for(const e of B.enemies){ if(e.dead||e.dormant||e.item||e.state==='attached') continue;
+        if(e.boss||isSeated(e.id)) continue;
+        if(!MONSTERS[e.id]||MONSTERS[e.id].spd<=0) continue;
+        const d=Math.hypot(e.x-p.x,e.y-p.y);
+        if(d>maxD||d<110) continue;
+        if(!losClear(p.x,p.y-14,e.x,e.y,true)) continue;
+        if(d>bd){ bd=d; t=e; } }
+      if(!t) p.dgraspT=0.25;
+      else{
+        p.dgraspT=(2.8-0.18*(lv-1))*ov.cd;
+        const a=Math.atan2(p.y-t.y, p.x-t.x), pull=BAL.GRASP_PULL*(1+0.12*(lv-1));
+        t.x+=Math.cos(a)*pull; t.y+=Math.sin(a)*pull; collideMap(t,t.r*0.75,canFly(t.id));
+        t.stun=Math.max(t.stun||0,BAL.GRASP_HOLD*(1+0.10*(lv-1)));
+        const ci0=B.ci; B.ci=p.hi; damageEnemy(t,(10+4.4*(lv-1))*ov.dmg); B.ci=ci0;
+        B.fx.push({kind:'darkring', x:t.x, y:t.y-t.r*0.4, r:t.r+16, t:0, life:0.45});
+        for(let k=0;k<6;k++) parts(p.x+(t.x-p.x)*k/6, (p.y-10)+(t.y-(p.y-10))*k/6, 2, ['#2a1a3e','#a77dff'], 70, 0.35);
+        sfx(150,60,0.18,'sawtooth',0.05);
+        if(restraintCount(p)>0) addStruggle(BAL.STRUGGLE_SHOT_GAIN);
+      }
+    }
+  }
+  /* ================= v6.7 闇の吸い上げ =================
+     削ったぶんを、みんなの傷に回す。魔物のやり口をそのまま持ってきている。
+     ★damageEnemy が読む(p.drainK) */
+  if(p.wp.ddrain>0){
+    const lvR=p.wp.ddrain, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
+    p.drainK=BAL.DRAIN_K*(0.6+0.1*lv)*ov.dmg;
+    p.drainPool=(p.drainPool||0);
+    if(p.drainPool>=6){   /* 溜まってから配る(1点ずつの回復では絵にならない) */
+      const heal=p.drainPool; p.drainPool=0;
+      const hs=B.heroes.filter(h=>!h.out && h.hp<h.maxHp);
+      if(hs.length){ hs.sort((a,b)=>(a.hp/a.maxHp)-(b.hp/b.maxHp));
+        const h=hs[0]; h.hp=Math.min(h.maxHp,h.hp+heal);
+        floatTxt(h.x,h.y-46,'+'+Math.round(heal),'#a77dff',10,0.7);
+        parts(h.x,h.y-16,6,['#a77dff','#2a1a3e'],80,0.5); }
+    }
+  } else p.drainK=0;
+  /* ================= v6.7 影盗み =================
+     掴んでいる手を、影がもぎ取る。★三人ぶんの拘束をほどく唯一の武器で、
+     「捕まってから捕獲までの一本道」に横槍を入れる札 */
+  if(p.wp.dsteal>0){
+    p.dstealT=(p.dstealT||0)-dt*atkMult;
+    if(p.dstealT<=0){
+      const lvR=p.wp.dsteal, lv=Math.min(BAL.WP_EVO_LV,lvR), ov=wpOver(lvR,p);
+      const R=(230+24*lv)*areaMult(p)*ov.area;
+      let done=false;
+      for(const h of B.heroes){
+        if(h.out||done) continue;
+        if(Math.hypot(h.x-p.x,h.y-p.y)>R) continue;
+        const slot=LIMBS.find(sl=>h.limbs[sl]);
+        if(!slot) continue;
+        const mon=h.limbs[slot].mon;
+        const ci0=B.ci; B.ci=h.hi; detachLimb(slot); B.ci=ci0;
+        if(mon && !mon.dead){ const ci1=B.ci; B.ci=p.hi; damageEnemy(mon,(8+3.6*(lv-1))*ov.dmg); B.ci=ci1;
+          mon.stun=Math.max(mon.stun||0,0.6); }
+        B.fx.push({kind:'darkring', x:h.x, y:h.y-10, r:34, t:0, life:0.45});
+        parts(h.x,h.y-14,10,['#2a1a3e','#a77dff'],120,0.5);
+        sfx(210,90,0.16,'sawtooth',0.05);
+        B.nSteal=(B.nSteal||0)+1;
+        done=true;
+      }
+      p.dstealT=done?(BAL.STEAL_CD-0.16*(lv-1))*ov.cd:0.35;
+    }
+  }
 }
 /* 影(味方)の毎フレーム */
 function shadesTick(dt){
@@ -6436,7 +6703,9 @@ function skillTick(dt){
 }
 /* v2.3 いまの武器から見た、おおまかな秒間火力(戦う/引き撃ち/逃げるの判断に使う) */
 function heroDpsEst(p){
-  const BASE={bolt:14,orb:10,nova:16,whip:14,rain:13,cross:13,sanct:15,blade:14,thunder:14,holy:9,chain:13,spirit:12,shield:9, fsword:17,fring:12,fburst:15,fpillar:14,fwing:13, ineedle:9,ifield:6,ibloom:10,iorbit:9,iecho:12, dblade:18,dring:11,dspear:19,dcall:10,dstep:8};
+  const BASE={bolt:14,orb:10,nova:16,whip:14,rain:13,cross:13,sanct:15,blade:14,thunder:14,holy:9,chain:13,spirit:12,shield:9, fsword:17,fring:12,fburst:15,fpillar:14,fwing:13, ineedle:9,ifield:6,ibloom:10,iorbit:9,iecho:12, dblade:18,dring:11,dspear:19,dcall:10,dstep:8,
+                fbrand:16,fash:8,fveil:6, ipike:4,ithaw:3,imirror:7, dgrasp:13,ddrain:5,dsteal:4};   /* v6.7 増設9種。守り・支援の札は素の火力が低い(dpsEst は「どれくらい戦えるか」の見積りで、
+                     これが高すぎると AI が守りの札だけで強気になる) */
   let d=0; for(const k in BASE){ const lv=p.wp[k]||0; if(lv<=0) continue; const ov=wpOver(lv,p); const evo=Object.keys(EVOS).some(e=>EVOS[e].base===k && p.evo[e]>0); d+=BASE[k]*(1+0.35*(Math.min(BAL.WP_EVO_LV,lv)-1))*ov.dmg/ov.cd*(evo?1.8:1); }
   return Math.max(8, d*(p.dmgMult||1)*(1+0.08*(p.ps.haste||0))*(1+0.4*(p.ps.dup||0)));
 }
@@ -6778,7 +7047,7 @@ function canPlaceItem(id){
   return {ok:true, cost:it.cost};
 }
 /* 場の座標(x,y)にアイテムを置く。彼女の真上には置けない(最低40px離す) */
-const NIGHT_ITEM_LIFE={mist:9,pool:14,rune:45,suit:45,freeze:45,web:40,tower:40,fake:9999};
+const NIGHT_ITEM_LIFE={mist:7.5,pool:14,rune:45,suit:45,freeze:45,web:40,tower:40,fake:9999};
 function placeItem(id,x,y,opt){
   const B=G.B, p=B.hero; opt=opt||{};
   const chk=canPlaceItem(id);
@@ -6791,7 +7060,7 @@ function placeItem(id,x,y,opt){
   B.itemsUsed++;
   S.summon();
   if(id==='mist'){
-    spawnCloud(x,y,80,9,BAL.SENSIT_GAS*1.1,'mist');
+    spawnCloud(x,y,70,7.5,BAL.SENSIT_GAS*1.1,'mist');   /* v6.7 一本あたりが濃すぎた: 雲全体の 0.6% で発情の 7.8%・敏感化の 12.6% を入れていた(実測)。面積×時間で -32% */
     parts(x,y,14,['#ff9ec2','#ffc2d8'],90,0.8);
   }else if(id==='pool'){
     for(let i=0;i<14;i++){
@@ -7005,6 +7274,10 @@ function hurtHero(dmg,src,opt){
   const mult=p.pinned?BAL.PIN_DMG_MULT:((atk>0||p.charmBind)?BAL.ATTACH_DMG_MULT:1);
   const armor=opt.pierce?0:Math.max(0,p.armor-atk);
   if(p.id==='freila') dmg*=freilaDefMul(p);   // v4.0 水弱点: 濡れていると火の護りが薄い
+  /* v6.7 陽炎の衣: 熱でゆらいだ空気が力を逃がす。掴まれている間は逃がせない
+     ★敵の弾は runeHit/yamiHurt へ行くので「弾だけ逸らす」形にはできない。
+       受ける力そのものを薄める護りにして、弾の方は ebulletTick で別に逸らす */
+  if((p.shimmer||0)>0 && !p.pinned && !p.out && atk===0) dmg*=1-Math.min(0.45,p.shimmer);
   const net=Math.max(0, dmg*mult-armor)*(p.guardT>0?0.3:1);   // v2.3 聖光の壁: 護りを引いた後の被ダメ-70%(小さな当たりまで無効にはしない)
   if(net<=0){
     if(!opt.quiet){
@@ -7015,6 +7288,7 @@ function hurtHero(dmg,src,opt){
     return;
   }
   p.hp-=net;
+  if(p.iceMirror) iceMirrorBack(p,src,net);   /* v6.7 氷鏡: 受けた分を凍らせて撃ち返す */
   B.dmgDealt+=net;
   { const dp=G.B&&G.B.hero; if(dp) dp.recDmg=(dp.recDmg||0)+net; }   /* v5.8 与ダメも各人ぶん */
   B.dmgCarry+=net;
@@ -9725,7 +9999,11 @@ function battleTick(dt){
   // 敵弾(刻印師の呪弾): 直進し、彼女に当たれば淫紋
   for(const b of B.ebullets){
     b.t+=dt; b.x+=b.vx*dt; b.y+=b.vy*dt;
-    for(let i=0;i<B.heroes.length;i++){ const h=B.heroes[i]; if(h.out||b.dead) continue; if(Math.hypot(b.x-h.x,b.y-(h.y-14))<b.r+h.r*0.8 && h.freezeT<=0){ B.ci=i; b.dead=true;
+    for(let i=0;i<B.heroes.length;i++){ const h=B.heroes[i]; if(h.out||b.dead) continue; if(Math.hypot(b.x-h.x,b.y-(h.y-14))<b.r+h.r*0.8 && h.freezeT<=0){ B.ci=i;
+      /* v6.7 陽炎の衣: ゆらいだ空気で弾がずれる */
+      if((h.shimmer||0)>0 && !h.pinned && attachCount(h)===0 && Math.random()<h.shimmer){
+        b.dead=true; parts(b.x,b.y,5,['#ff7a3a','#ffd76a'],80,0.4); floatTxt(h.x+rand(-8,8),h.y-32,'ゆらり','#ffd76a',9,0.55); continue; }
+      b.dead=true;
       if(b.kind==='dark'){ const Y=G.B.yami;
         yamiHurt(Y&&!Y.dead?Y:{id:'yamiboss', x:b.x, y:b.y, r:26, dmg:b.dmg||20}, G.B.hero, b.dmg||20, {pierce:true});
         parts(b.x,b.y,14,['#2a1a3e','#a77dff','#fff'],150,0.6); }   // v5.0 闇の穿ち: 快感ではなく体力を削る(とどめは刺さない)
@@ -9735,6 +10013,7 @@ function battleTick(dt){
   if(B.ebullets.length) B.ebullets=B.ebullets.filter(b=>!b.dead&&b.t<b.life);
   eachHero(()=>poiTick(dt));   // 祠・泉・門(v3.0 ヒロインごと)
   denTick(dt);                 // v3.2 巣窟の魔法陣・媚薬の花・壁の光線・番人(1フレームに1度)
+  pikesTick(dt);               // v6.7 クウの氷柱(押し戻し・寿命)
   lightsTick(dt); lanternTick(dt); bondTick(dt); ringsTick(dt);   // v4.0 灯りの寿命と催淫灯篭 / v4.1 絆の灯り・菌輪
   wornTick(dt); miresTick(dt); dryAuraTick(dt);   // v5.0 すり減り / 媚薬沼 / 炎のエリア
   calmTick(dt);   /* v6.0 凪ぎの鏡: 波立った面が静けさを取り戻していく */

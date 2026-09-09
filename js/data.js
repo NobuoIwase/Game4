@@ -404,6 +404,14 @@ const BAL={
      媚薬は即座に快感を生まず「敏感化」を積む。
      敏感化は快感の入りを増幅し、快感100で発情レベルが上がる。 */
   SENSIT_DECAY:1.1,        // 敏感化ゲージ自然減衰 /s
+  /* v6.7 息を整える間。雲の外・魔物が遠い・掴まれていない、が揃っている間だけ
+     敏感化と発情ゲージの抜けが速まる。触られている間の目盛りは今までどおり。
+     ★これが無いと、巣窟で振り切れた敏感化100 が 91秒(1.1/s)残り、
+       「入って出てきた所を次の魔物に潰される」だけの形になっていた(実測) */
+  CALM_R:200,              // この距離に生きた魔物が居ない事(息を整える条件)
+  CALM_WARM:3.0,           // 条件が揃ってから、抜けが最大になるまでの秒数
+  CALM_SENS:4.0,           // 上乗せされる敏感化の抜け /s(合計 1.1→5.1)
+  CALM_HEAT:6.0,           // 上乗せされる発情ゲージの抜け /s(合計 1.5→7.5)
   SENSIT_GAS:8,            // ガス雲の中 /s(媚薬=敏感化源)
   SENSIT_SLUG:6,           // ナメクジ接触
   SENSIT_TH:[25,55,85],    // 敏感Ⅰ/Ⅱ/Ⅲ の閾値
@@ -729,6 +737,29 @@ const BAL={
   /* v6.0 武器レベルの上限は深さで開く。★開放が「降りる理由」になる */
   WP_CAP_DEPTH:[[13,10],[10,9]],   /* [その深さ以上, 上限] を上から順に見る */
   WP_SLOTS:5, PS_SLOTS:5,          /* 武器枠・パッシブ枠(v5.x は 4 の決め打ちだった) */
+  /* ================= v6.7 増設した9種の武器 =================
+     ★狙いは火力ではなく「選べること」。フレイラ/クウ/ヤミコは武器5種ちょうどで
+       枠が5だったので、毎回まったく同じ構成になっていた(ルミナだけ13種から5枠を選ぶ)。
+     この9種は進化(EVOS)を持たない。覚醒(Lv6〜8)は効く——
+     「進化する3種を伸ばすか、進化しない代わりに噛み合う札を並べるか」も選択にする */
+  BRAND_MUL:0.40,        // 焼き印の付いた敵への追加ダメージ倍率
+  BRAND_T:6.0,           // 焼き印が残る秒数(相手が倒れると近くへ移る)
+  EMBER_STEP:26,         // 熾火の轍: この距離を歩くごとに一つ落ちる
+  EMBER_LIFE:2.6,        // 熾火が残る秒数(熱が満ちていると最大1.8倍)
+  EMBER_MAX:10,          // 同時に残せる熾火の数
+  SHIMMER_DEF:0.34,      // 陽炎の衣: 熱が満ちた時に飛び道具を逸らす率
+  SHIMMER_DRY:2.4,       // 陽炎の衣: 濡れとベタベタを乾かす /s
+  PIKE_HP:34,            // 氷柱一本の耐久
+  PIKE_T:7.0,            // 氷柱が残る秒数
+  PIKE_MAX:6,            // 同時に立てられる氷柱の数
+  THAW_SENS:9,           // 霜解けの息: 一回で削る敏感化
+  THAW_HEAT:14,          //             一回で削る発情ゲージ
+  MIRROR_K:0.55,         // 氷鏡が撃ち返す割合(受けたダメージに対して)
+  MIRROR_CD:0.8,         // 氷鏡の間隔(連打で溶けないように)
+  GRASP_PULL:78,         // 闇の手が一回で引き寄せる距離
+  GRASP_HOLD:0.9,        // 引き寄せた相手が止まる秒数
+  DRAIN_K:0.055,         // 闇の吸い上げ: 与ダメのうち味方のHPに回る割合
+  STEAL_CD:2.6,          // 影盗み: もぎ取りの間隔
   PRAY_DMG:0.04, PRAY_HP:0.03, PRAY_SPD:0.01, PRAY_HEAL:40,
   // v1.8 地形の資源・イベント・目当て
   PICK_SHROOM_N:4, PICK_SHROOM_RESPAWN:30, PICK_SHROOM_MAX:5,       // 光茸: 初期数/追加間隔(s)/上限
@@ -1671,7 +1702,7 @@ const HEROES={
                     halo:{ name:'聖光の環', icon:'◉', lv:70, cd:70, stam:26, desc:'v6.0 全ての拘束を断ち、半径260の魔物を6秒足止めする。栓や窪みの類も、これだけは外から外せる' } },
            pref:{shrine:1.2, stele:1.25, pool:1.1, spring:1.1, shroom:1.15, nectar:1.1, gems:1.1, explore:1.0, chest:1.0, boss:0.95, core:0.85, stairs:0.95},
            desc:'光の投射で戦う見習いの天使。元気で、少し怖がり' },
-  freila:{ name:'フレイラ', col:'#ff7a5a', hair:'#c8434a', sprite:'freila', wps:['fsword','fring','fburst','fpillar','fwing'],
+  freila:{ name:'フレイラ', col:'#ff7a5a', hair:'#c8434a', sprite:'freila', wps:['fsword','fring','fburst','fpillar','fwing','fbrand','fash','fveil'],
            start:{fsword:2,fring:1}, grow:['fsword','fring','fburst'], hpMul:1.12, spdMul:1.02, armor:1, fearMul:0.6, braveAdd:0.2, kiteMul:1.35, lightR:215, lightK:0.85,
            /* v5.7 火力担当なのに与ダメの倍率が一つも無く、素のままだった。
               火は届く所でしか働かない——近いほど強い、という形で近接を得意にする。
@@ -1685,7 +1716,7 @@ const HEROES={
            hot:true,   // v5.0 熱いヒロイン(クウが離れたがる相手)
            desc:'火を操る近接主体の天使。気が強く、前に出る' },
   /* v5.0 三人目。氷の見習い天使。無口でクール、少しませている。妹あつかい。フレイラの隣は苦手 */
-  kuu:{ name:'クウ', col:'#7fe8dd', hair:'#a5e0f5', sprite:'kuu', wps:['ineedle','ifield','ibloom','iorbit','iecho'],
+  kuu:{ name:'クウ', col:'#7fe8dd', hair:'#a5e0f5', sprite:'kuu', wps:['ineedle','ifield','ibloom','iorbit','iecho','ipike','ithaw','imirror'],
         start:{ineedle:2,ifield:1}, grow:['ineedle','ifield','iorbit'], hpMul:0.94, spdMul:1.06, armor:0, dmgMul:0.86, stamMul:0.78,
         fearMul:0.85, braveAdd:0, kiteMul:1.20, lightR:150, lightK:0.72, heatShy:true, follow:'lumina',
         skills:{ frostveil:{ name:'氷結の帳', icon:'❄', lv:22, cd:20, stam:15, desc:'囲まれた時、逃げずにその場で周り半径170を凍らせて止める。0.6秒無敵で90px滑る' },
@@ -1696,7 +1727,7 @@ const HEROES={
         desc:'氷を操る天使。無口で、少しませている。フレイラの隣は苦手' },
   /* v5.0 四人目。渦の中心で、魔核の闇と天使の加護の両方を持って生まれた者。堕天使ではない。
      発光を持たないどころか、周りの光を吸う。ただし吸っているだけなので、えっちな目に遭うと漏れて光る */
-  yamiko:{ name:'ヤミコ', col:'#a77dff', hair:'#2a1a3e', sprite:'yamiko', wps:['dblade','dring','dspear','dcall','dstep'],
+  yamiko:{ name:'ヤミコ', col:'#a77dff', hair:'#2a1a3e', sprite:'yamiko', wps:['dblade','dring','dspear','dcall','dstep','dgrasp','ddrain','dsteal'],
         start:{dblade:5,dring:5}, grow:['dblade','dring','dspear'], hpMul:1.06, spdMul:1.04, armor:1, dmgMul:1.00, stamMul:0.92,
         fearMul:1.25, braveAdd:0.1, kiteMul:1.10, lightR:120, lightK:0.55, dark:true, pickPenalty:0.45, fullBloom:true,   /* v6.4 上限まで育てば、そこから更に大きく伸びる */
         startPs:{ward:2, haste:1, reach:1, pierce:1},   // 最初から育っている(その代わりレベルアップの札に出にくい)
@@ -1744,18 +1775,30 @@ const UPG={
   fburst: {name:'爆炎',             d1:'じぶんの周りで',  d2:'炎がはぜる',      max:8, kind:'wp', bossW:0.7,  owner:'freila'},
   fpillar:{name:'火柱',             d1:'ちかい敵の足元に', d2:'火柱がたつ',      max:8, kind:'wp', bossW:1.25, owner:'freila'},
   fwing:  {name:'焔の翼',           d1:'とびこんで',      d2:'やきはらう',      max:8, kind:'wp', bossW:1.15, owner:'freila'},
+  /* v6.7 フレイラの増設3種。武器枠は5なので、5種ちょうどでは「選ぶ」が成立していなかった */
+  fbrand: {name:'焼き印',           d1:'一体に印をおして', d2:'そこだけ深く焼く',  max:8, kind:'wp', bossW:1.60, owner:'freila'},
+  fash:   {name:'熾火の轍',         d1:'歩いたあとに',    d2:'熾火がのこる',     max:8, kind:'wp', bossW:0.65, owner:'freila'},
+  fveil:  {name:'陽炎の衣',         d1:'熱でゆらぐ空気が', d2:'弾を逸らし、乾かす', max:8, kind:'wp', bossW:0.80, owner:'freila'},
   /* v5.0 クウの武器(氷・支援) */
   ineedle:{name:'氷の針',           d1:'つめたい針が',    d2:'おって ささる',   max:8, kind:'wp', bossW:1.00, owner:'kuu'},
   ifield: {name:'冷気の帳',         d1:'まわりの敵が',    d2:'にぶく もろくなる', max:8, kind:'wp', bossW:1.10, owner:'kuu'},
   ibloom: {name:'霜の華',           d1:'敵の足元に',      d2:'こおる華がひらく', max:8, kind:'wp', bossW:0.70, owner:'kuu'},
   iorbit: {name:'氷衛',             d1:'みんなの まわりを', d2:'氷がまもって回る', max:8, kind:'wp', bossW:0.90, owner:'kuu'},
   iecho:  {name:'氷の追い矢',       d1:'みんなの弾に',    d2:'氷の弾が ならぶ',  max:8, kind:'wp', bossW:1.35, owner:'kuu'},
+  /* v6.7 クウの増設3種 */
+  ipike:  {name:'氷柱',             d1:'あいだに氷が',    d2:'せり上がって ふさぐ', max:8, kind:'wp', bossW:0.55, owner:'kuu'},
+  ithaw:  {name:'霜解けの息',       d1:'みんなの火照りを', d2:'すこし さます',    max:8, kind:'wp', bossW:0.60, owner:'kuu'},
+  imirror:{name:'氷鏡',             d1:'受けた痛みを',    d2:'凍らせて かえす',   max:8, kind:'wp', bossW:1.05, owner:'kuu'},
   /* v5.0 ヤミコの武器(闇)。敵だった頃と同じ形。天使側に触発されて弱まっている */
   dblade: {name:'闇の刃',           d1:'斬った線が',      d2:'闇のまま 宙に残る', max:8, kind:'wp', bossW:1.40, owner:'yamiko'},
   dring:  {name:'闇の輪',           d1:'外から内へ しまり', d2:'触れた者を 引きこむ', max:8, kind:'wp', bossW:1.00, owner:'yamiko'},
   dspear: {name:'闇の穿ち',         d1:'いちばん遠い的を', d2:'暗いほど 深く貫く', max:8, kind:'wp', bossW:1.55, owner:'yamiko'},
   dcall:  {name:'影の招き',         d1:'闇から 影が',      d2:'呼ばれて たたかう', max:8, kind:'wp', bossW:0.85, owner:'yamiko'},
   dstep:  {name:'影渡りの余波',     d1:'消えた場所に',     d2:'闇が はじける',    max:8, kind:'wp', bossW:0.95, owner:'yamiko'},
+  /* v6.7 ヤミコの増設3種。どれも「魔物だった頃のやり口」をそのまま持ってきている */
+  dgrasp: {name:'闇の手',           d1:'遠い一体を掴んで', d2:'引き寄せて 止める', max:8, kind:'wp', bossW:1.20, owner:'yamiko'},
+  ddrain: {name:'闇の吸い上げ',     d1:'削ったぶんを',     d2:'みんなの傷に まわす', max:8, kind:'wp', bossW:0.90, owner:'yamiko'},
+  dsteal: {name:'影盗み',           d1:'掴んでいる手を',   d2:'影が もぎ取る',    max:8, kind:'wp', bossW:0.45, owner:'yamiko'},
   speed: {name:'スピードシューズ', d1:'いどう速度',      d2:'+10%',            max:6, kind:'ps'},
   vital: {name:'マックスハート',   d1:'さいだいHP+25',   d2:'いまも回復する',   max:6, kind:'ps'},
   magnet:{name:'ジェムマグネット', d1:'ジェムの回収',    d2:'はんいUP',        max:6, kind:'ps', bossW:0.8},

@@ -398,6 +398,16 @@ function drawFx(g,f){
     g.strokeStyle='rgba(150,215,245,0.55)'; g.lineWidth=f.w*1.5*(1-pr*0.4);
     g.beginPath(); g.moveTo(f.x,f.y); g.lineTo(f.x+ux*L,f.y+uy*L); g.stroke();
     g.restore();
+  }else if(f.kind==='brand'){   // v6.7 焼き印: 相手の上に橙の環が焼き付く
+    const pr=clamp(f.t/f.life,0,1), R=f.r*(1.5-0.5*pr);
+    g.save(); g.globalAlpha=(1-pr)*0.9;
+    g.strokeStyle='rgba(255,150,60,0.95)'; g.lineWidth=2.4;
+    g.beginPath(); g.ellipse(f.x,f.y,R,R*0.62,0,0,TAU); g.stroke();
+    g.strokeStyle='rgba(255,215,106,0.8)'; g.lineWidth=1.4;
+    for(let i=0;i<3;i++){ const a=i*TAU/3+pr*1.2;
+      g.beginPath(); g.moveTo(f.x+Math.cos(a)*R*0.45, f.y+Math.sin(a)*R*0.28);
+      g.lineTo(f.x+Math.cos(a)*R, f.y+Math.sin(a)*R*0.62); g.stroke(); }
+    g.restore();
   }else if(f.kind==='iceshatter'){   // v5.0 氷が砕ける
     const pr=clamp(f.t/f.life,0,1);
     g.save(); g.globalAlpha=1-pr; g.fillStyle='rgba(232,250,255,0.9)';
@@ -4489,6 +4499,34 @@ function draw(){
         g.fillStyle=b.evo?'#e8f4ff':'#fff6d8';
         star(g,0,0,5.5,2.3,b.evo?5:4,performance.now()*0.02);
         g.fill();
+      }
+      g.restore();
+    }
+    /* v6.7 クウの氷柱: 立った氷。削られるほど細く、薄くなる */
+    for(const k of (B.pikes||[])){
+      const w=k.hp/k.maxHp, fade=Math.min(1,(k.life-k.t)/0.8);
+      g.save(); g.globalAlpha=0.55+0.4*w*fade;
+      g.fillStyle='rgba(190,235,255,0.5)';
+      g.beginPath(); g.ellipse(k.x,k.y+2,k.r*(0.6+0.4*w),5,0,0,TAU); g.fill();
+      g.fillStyle='rgba(232,250,255,0.88)'; g.strokeStyle='rgba(127,232,221,0.9)'; g.lineWidth=1.4;
+      const hgt=30+16*w, hw=k.r*(0.45+0.45*w);
+      g.beginPath(); g.moveTo(k.x-hw,k.y+2); g.lineTo(k.x-hw*0.4,k.y-hgt); g.lineTo(k.x+hw*0.3,k.y-hgt*0.82);
+      g.lineTo(k.x+hw,k.y+2); g.closePath(); g.fill(); g.stroke();
+      g.restore();
+    }
+    /* v6.7 陽炎の衣: 熱でゆらぐ空気の輪 */
+    for(const hh of B.heroes){
+      if(hh.out||!(hh.shimmer>0)||!(hh.shimmerR>0)) continue;
+      const t=performance.now()*0.004;
+      g.save(); g.globalAlpha=0.16+0.16*Math.min(1,hh.shimmer*2.6);
+      g.strokeStyle='rgba(255,170,90,0.95)'; g.lineWidth=1.6;
+      for(let k=0;k<3;k++){
+        const R=hh.shimmerR*(0.72+0.14*k);
+        g.beginPath();
+        for(let i=0;i<=24;i++){ const a=i*TAU/24, w=R+Math.sin(a*3+t*3+k)*3.4;
+          const x=hh.x+Math.cos(a)*w, y=(hh.y-10)+Math.sin(a)*w*0.72;
+          if(i===0) g.moveTo(x,y); else g.lineTo(x,y); }
+        g.stroke();
       }
       g.restore();
     }
