@@ -12,54 +12,94 @@ const ctx = cv.getContext('2d');
 const TS = Math.max(1, Math.min(5, parseInt(new URLSearchParams(location.search).get('ts'),10) || 1));
 
 let dpr=1, viewScale=1, barCover=0;   // barCover: 横持ちで戦闘バーが世界の下端を覆う高さ(世界px)。縦持ちでは重ねないので 0
-/* v1.10 視界の形を端末に合わせる。
-   960x540 の横長のまま縦持ちの画面に収めると、幅で頭打ちになって画面の高さの1/4しか使えない
-   (412x830 の端末で canvas 406x228)。見える世界の"広さ"は 960x540 と同じに保ったまま、
-   縦横比だけ画面に合わせると canvas 410x674 になり、同じ倍率で描いても1体1体が大きく見える。 */
-const VIEW_AREA=960*540, AR_MIN=0.52, AR_MAX=2.60;
-/* v6.7 レール(横持ち推奨)の幅。左右に一本ずつ立てる。
-   ★盤面に残す最低幅を切ってまでは立てない——立てられない窓では、これまでの縦積みに落ちる */
-const RAIL_WIDE=148, RAIL_NARROW=132, RAIL_KEEP_W=360;
+/* v6.8 視界は横持ちで固定する。
+   ★v1.10〜v6.7 は「見える広さ(960x540)は保ったまま、縦横比だけ端末に合わせる」形だった。
+     端末ごとに見える範囲の形が変わるので、同じ階でも見える物の数が違い、
+     カメラの追従・パーティの手綱(PARTY_MAXDX/DY)・ミニマップの位置が全部その上に乗っていた。
+     作者の判断で横持ちを主にしたので、視界は 960x540 に固定する——
+     どの端末でも「見えている世界」がまったく同じになる。 */
+const VIEW_W=960, VIEW_H=540;
+/* v6.7 レール(横持ち)の幅。左右に一本ずつ立てる。
+   ★盤面に残す最低幅を切ってまでは立てない。
+   v6.8 レールを立てるのは「はっきり横長」の窓だけ。正方形に近い窓では
+        レールが横幅を食うので、ボタンは下に置いて盤面の幅を最大にする(作者の指定) */
+const RAIL_WIDE=148, RAIL_NARROW=132, RAIL_KEEP_W=360, RAIL_MIN_AR=1.25;
+/* v6.8 窓が画面いっぱいのデスクトップだけ、盤面をすこし小さくする(作者の指定) */
+const DESK_SHRINK=0.90;
+const isCoarse=()=>!!(window.matchMedia && window.matchMedia('(pointer:coarse)').matches);
+function deskFullWindow(){
+  if(!window.screen || isCoarse()) return false;                 /* 触る端末は対象外 */
+  const sw=screen.availWidth||screen.width||0, sh=screen.availHeight||screen.height||0;
+  if(!sw||!sh) return false;
+  return window.innerWidth>=sw*0.97 && window.innerHeight>=sh*0.86;
+}
 function resize(){
   dpr = Math.min(2, window.devicePixelRatio||1);
   const bb=document.getElementById('battlebar');
-  /* ★v6.7 三通り。
-     rails    : 盤面の左右に札とアイテムを立てる(横長・正方形。作者の推奨する持ち方)
-     portrait : キャンバスを上に、戦闘バーをその下に(縦長、あるいはレールを立てる幅が無い時)
-     どちらでもない = 従来の「下に重ねる」形は、レールが立つ窓では使わない */
+  /* ★v6.8 二通りだけ。
+     rails    : はっきり横長の窓。盤面の左右に札とアイテムを立てる(推奨の持ち方)
+     portrait : それ以外(正方形・縦長)。盤面を上いっぱいの幅にして、ボタンはその下
+     ——「下に重ねる」形(バーが盤面を覆う)は無くした */
   const iw=window.innerWidth, ih=window.innerHeight;
+  W=VIEW_W; H=VIEW_H;                               /* ★視界は固定。端末で形を変えない */
   let rail=0, rails=false;
-  if(iw>=ih*0.92){                                  /* 横長〜正方形 */
-    /* 正方形に近い窓・幅の狭い窓では細いレール。★どちらでも札は二列に収まる幅は残す
-       (一列だと13枚が縦にはみ出して、下のほうの札が見えなくなる) */
-    const want=(iw>=ih*1.35 && iw>=900)?RAIL_WIDE:RAIL_NARROW;
+  if(iw>=ih*RAIL_MIN_AR){                           /* はっきり横長の時だけレール */
+    const want=(iw>=ih*1.55 && iw>=900)?RAIL_WIDE:RAIL_NARROW;
     if(iw-want*2>=RAIL_KEEP_W){ rails=true; rail=want; }
   }
-  const portrait = !rails && (ih > iw*1.05 || ih < 560);
+  const portrait=!rails;
   document.body.classList.toggle('rails', rails);
   document.body.classList.toggle('rails1', rails && rail<RAIL_WIDE);
   document.body.classList.toggle('portrait', portrait);
+  document.body.classList.toggle('canfs', !!fsAvailable() && !fsActive());
+  document.body.classList.toggle('railsShort', rails && ih<620);      /* 背の低い横長では札を小さく */
+  document.body.classList.toggle('tallish', ih>iw*1.15);              /* 縦持ち: 横向きのお願いを出す */
   if(rails) document.documentElement.style.setProperty('--rail', rail+'px');
-  let availH=window.innerHeight;
-  if(portrait && bb && !bb.hidden){ availH=Math.max(220, window.innerHeight-bb.offsetHeight-12); }
-  let availW=Math.max(240, window.innerWidth);
+  let availH=ih, availW=Math.max(240, iw);
+  if(portrait && bb && !bb.hidden) availH=Math.max(200, ih-bb.offsetHeight-10);
   if(rails) availW=Math.max(RAIL_KEEP_W, iw-rail*2-16);   /* 盤面はレールの内側 */
-  let ar=availW/Math.max(200,availH);
-  if(ar<AR_MIN) ar=AR_MIN; else if(ar>AR_MAX) ar=AR_MAX;
-  W = Math.round(Math.sqrt(VIEW_AREA*ar)/2)*2;
-  H = Math.round(Math.sqrt(VIEW_AREA/ar)/2)*2;
-  viewScale = Math.min(availW/W, availH/H) * 0.985;
+  let s=Math.min(availW/W, availH/H)*0.985;
+  /* ★縮めるのは「レールが立つ(＝横に余裕がある)デスクトップ」だけ。
+     正方形や縦長では、そもそも横幅で頭打ちなので、縮めると
+     作者の指定「横のサイズが最大になるように」に逆らうことになる */
+  if(rails && deskFullWindow()) s*=DESK_SHRINK;
+  viewScale=s;
   cv.style.width  = Math.round(W*viewScale)+'px';
   cv.style.height = Math.round(H*viewScale)+'px';
   cv.width  = Math.round(W*viewScale*dpr);
   cv.height = Math.round(H*viewScale*dpr);
-  if(bb){
-    if(rails){ bb.style.width=''; barCover=0; }                                   /* v6.7 レールは盤面を覆わない */
-    else if(portrait){ bb.style.width='100%'; barCover=0; }
-    else{ bb.style.width = Math.min(1100, Math.round(W*viewScale)-24)+'px'; barCover = bb.hidden?0:(bb.offsetHeight+8)/viewScale; }   // 札13枚が一列に収まる幅まで広げる
-  }
+  barCover=0;                                        /* バーは盤面を覆わない(レールも下段も) */
+  if(bb) bb.style.width = rails ? '' : '100%';
   if(typeof makeVignette==='function') makeVignette();   // 周辺減光は画面サイズで焼いているので作り直す
 }
+/* ================= v6.8 全画面 =================
+   ブラウザの上のバーを消せるなら消す(作者の指定)。触る端末では最初のタップで自動、
+   それ以外は右上の ⛶ で切り替える。ホーム画面に置いた時は manifest の
+   display:fullscreen が効くので、ここまで来ない */
+function fsAvailable(){ const e=document.documentElement;
+  return !!(e.requestFullscreen||e.webkitRequestFullscreen||e.mozRequestFullScreen||e.msRequestFullscreen); }
+function fsActive(){ return !!(document.fullscreenElement||document.webkitFullscreenElement||document.mozFullScreenElement||document.msFullscreenElement); }
+function fsEnter(){
+  const e=document.documentElement;
+  const r=e.requestFullscreen||e.webkitRequestFullscreen||e.mozRequestFullScreen||e.msRequestFullscreen;
+  if(!r) return;
+  try{
+    const q=r.call(e,{navigationUI:'hide'});
+    /* 横持ちで固定できる端末なら固定する。できなくても投げっぱなしにしない */
+    if(q&&q.then) q.then(()=>{ try{ screen.orientation&&screen.orientation.lock&&screen.orientation.lock('landscape').catch(()=>{}); }catch(_){} }).catch(()=>{});
+  }catch(_){}
+}
+function fsExit(){ const d=document; const x=d.exitFullscreen||d.webkitExitFullscreen||d.mozCancelFullScreen||d.msExitFullscreen; if(x) try{ x.call(d); }catch(_){} }
+function fsToggle(){ if(fsActive()) fsExit(); else fsEnter(); }
+document.addEventListener('fullscreenchange', ()=>setTimeout(resize,80));
+document.addEventListener('webkitfullscreenchange', ()=>setTimeout(resize,80));
+/* 触る端末は最初のタップで一度だけ自動的に全画面へ(ユーザー操作の中でしか呼べない) */
+if(isCoarse()){
+  const once=()=>{ window.removeEventListener('pointerdown',once,true); if(!fsActive()) fsEnter(); };
+  window.addEventListener('pointerdown',once,true);
+}
+{ const fb=document.getElementById('fsbtn');
+  if(fb) fb.addEventListener('click',e=>{ e.stopPropagation(); fsToggle(); setTimeout(resize,120); }); }
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', ()=>setTimeout(resize,60));
 resize();

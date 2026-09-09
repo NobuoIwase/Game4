@@ -2498,6 +2498,15 @@ function aiDecide(foc,dt){
     if(d<150){ dx*=0.12; dy*=0.12; }
     dx+=ax*1.1; dy+=ay*1.1;
     state='prop';
+  }else if(p.assist && (distressOf(p.assist)+fightNoise(p.assist))>=BAL.ASSIST_HARD
+           && Math.hypot(p.assist.x-p.x,p.assist.y-p.y)>BAL.ASSIST_R
+           && attachCount(p)===0 && !p.pinned && p.hp>p.maxHp*0.3){
+    /* ★v6.8 仲間が本当にまずい時だけ、逃げ・引き撃ちより先に助けに行く。
+       ★これが無いと、逃げ(retreat)と引き撃ち(kite)の枝が上にあるせいで救援に届かない——
+         実測で、仲間が掴まれている時間のうち誰かが動いていたのは 31.6% しかなく、
+         残りはジェム拾い 14.5% / 逃げ 12.5% / 引き撃ち 8.8% だった */
+    const sv=steerTo(p,p.assist.x,p.assist.y); dx=sv.x+ax*0.5; dy=sv.y+ay*0.5; state='assist';
+    B.nHardAssist=(B.nHardAssist||0)+1;
   }else if(BAL.SMART_AI && p.aiMode==='flee'){
     p.propTarget=null;
     // 逃げに徹する: 体力が薄ければ届くハートへ。降り口が開いていればそこへ、降りたいなら探索点へ、無ければ8方向の中で群れから遠く魔物の薄い床へ。細かい目当ては見ない
@@ -2827,6 +2836,9 @@ function aiDecide(foc,dt){
       const sep=(HEROES[p.id]&&HEROES[p.id].heatShy&&HEROES[o.id]&&HEROES[o.id].hot)?BAL.KUU_SEP:BAL.PARTY_SEP;   // v5.0 熱い相方とだけは広く取る
       if(dd>BAL.PARTY_LEASH){ const w=Math.min(1.4,(dd-BAL.PARTY_LEASH)/200); dx+=ddx/dd*w; dy+=ddy/dd*w; }
       else if(dd<sep && attachCount(p)===0 && !p.assist){ const k=BAL.PARTY_SEP_K*(1-dd/sep); sepX=-ddx/dd*k; sepY=-ddy/dd*k; dx+=sepX; dy+=sepY; } } }   // v5.0 くっつきすぎない(かばう時は除く)
+  /* v6.8 画面の縁が近づいたら重心へ戻る力を混ぜる。★硬い引き戻し(partyClamp)は最後の砦で、
+     そこまで行くと「見えない手で引っぱられた」ように見える。手前で自分の足で戻す */
+  { const vp=viewPull(p); if(vp){ dx+=vp.x; dy+=vp.y; } }
   /* v5.0 暑がりは、熱いヒロインが寄ってくると横へ滑って離れる(溶けるので) */
   if(HEROES[p.id]&&HEROES[p.id].heatShy && attachCount(p)===0 && !p.assist){
     const F=B.heroes.find(h=>(HEROES[h.id]||{}).hot&&!h.out);
@@ -5568,6 +5580,20 @@ function partyCenter(){ const B=G.B; let cx=0,cy=0,n=0; for(const h of B.heroes)
 function partyGathered(){ const B=G.B, c=partyCenter(); if(!c||c.n<2) return true; for(const h of B.heroes){ if(h.out) continue; if(Math.hypot(h.x-c.x,h.y-c.y)>BAL.GATHER_R) return false; } return true; }
 function partyDanger(){ const B=G.B; if(B.heroes.some(h=>h.out)) return true;   // v3.1 誰かが捕まっているなら相談どころではない(救出が先。3人以上でも救出の案を潰さない)
   for(const h of B.heroes){ if(h.out) continue; if(attachCount(h)>0 || h.pinned || h.hp<h.maxHp*0.4 || (h.threatV||0)>=BAL.GATHER_DANGER_THREAT || nearEnemyCount(h.x,h.y,BAL.GATHER_DANGER_R,false)>0) return true; } return false; }
+/* ★v6.8 「歩み寄る」の門番と「立ち止まって話す」の門番を分ける。
+   partyDanger は 150px 以内に魔物が一体でも居れば真になるので、
+   洞窟ではほぼ常に真——実測でも、集合を呼べなかった決め直しの内訳は
+   「危ない」16.7% が全部『150px内に魔物』だった。
+   歩きながら近寄るくらいは、小物が一匹居ても構わない。
+   立ち止まって向き合う(talkUntil)ほうだけ、これまでどおり厳しく見る */
+function partyBusy(){ const B=G.B; if(B.heroes.some(h=>h.out)) return true;
+  for(const h of B.heroes){ if(h.out) continue;
+    if(attachCount(h)>0 || h.pinned || h.charmBind || h.climaxT>0) return true;
+    if(h.hp<h.maxHp*0.4) return true;
+    if((h.threatV||0)>=BAL.GATHER_BUSY_THREAT) return true;
+    if(nearEnemyCount(h.x,h.y,BAL.GATHER_BUSY_R,false)>0) return true;
+  }
+  return false; }
 /* ================= v5.0 ヤミコ =================
    渦の中心で、魔核の闇と天使の加護の両方を持って生まれた者。堕天使ではない。
    三段の筋: (1)前回の最下層で眠っている大ボス → (2)淫魔たちに囲まれている所を助けられる → (3)参戦。
@@ -6048,7 +6074,7 @@ function updateGoal(p){
   }
   // v3.1 集合が終わった(揃った・時間切れ・脅威で打ち切り): このあと決めて、向き合って話す
   let gathered=false;
-  if(P.gather){ gathered=partyGathered() && !partyDanger(); P.gather=null; P.gatherDone=B.time; B.nGatherDone=(B.nGatherDone||0)+(gathered?1:0); }
+  if(P.gather){ gathered=partyGathered() && !partyBusy(); P.gather=null; P.gatherDone=B.time; B.nGatherDone=(B.nGatherDone||0)+(gathered?1:0); }
   const ci0=B.ci, props=[];
   for(const h of active){ B.ci=h.hi; const g=updateGoalSolo(h); if(g) props.push({h,g}); }
   B.ci=ci0;
@@ -6059,7 +6085,7 @@ function updateGoal(p){
   const talkable=B.time-P.decidedT>BAL.PARTY_TALK_CD && props.some(x=>x.g.kind!=='explore');
   // v4.0 見えた物を伝えた直後は、いつもの間隔を待たずに「近くで相談」を呼ぶ(敵が薄い時だけ)
   const news=!!(P.sight && B.time-P.sight.at<BAL.SHARE_T && B.time-(P.sightT||-99)>BAL.SHARE_CD);
-  if((talkable||news) && !P.gatherDone && (news || B.time-(P.gatherT||-99)>BAL.GATHER_CD) && !partyGathered() && !partyDanger()){
+  if((talkable||news) && !P.gatherDone && (news || B.time-(P.gatherT||-99)>BAL.GATHER_CD) && !partyGathered() && !partyBusy()){
     if(news){ P.sightT=B.time; P.sightUse=P.sight; P.sightUseT=B.time; P.sight=null; B.nNewsGather=(B.nNewsGather||0)+1; }
     const c=partyCenter(); P.gather={until:B.time+BAL.GATHER_T, x:c.x, y:c.y}; P.gatherT=B.time;
     const gg={kind:'gather', sub:'gather', x:c.x, y:c.y, ref:null, key:'gather', d:0, worth:1.3, score:1.3};
@@ -6106,13 +6132,17 @@ function updateGoal(p){
     }
     x.h.goal=P.goal; x.h.goalT=B.time+BAL.GOAL_RETHINK; x.h.splitG=null; x.h.splitUntil=0; }
   B.nDecide=(B.nDecide||0)+1; if(!same) B.nSplit=(B.nSplit||0)+1;
-  if((B.time-P.decidedT>BAL.PARTY_TALK_CD && P.goal.kind!=='explore') || gathered){   // 集まったのなら(探索でも)必ず一言交わす
+  /* ★v6.8 いちばん多い形は「もう揃っている所で決め直す」(実測 37.5%)なのに、
+     そこでは PARTY_TALK_CD(10秒)に阻まれて何も言わずに歩き出していた。
+     揃っていて案が割れたのなら、それがまさに相談の場面なので、間隔を待たない */
+  const nearTalk=!same && partyGathered() && !partyBusy();
+  if((B.time-P.decidedT>BAL.PARTY_TALK_CD && P.goal.kind!=='explore') || gathered || nearTalk){   // 集まったのなら(探索でも)必ず一言交わす
     P.decidedT=B.time; const kind=goalKindKey(P.goal);
     let t0=0;
     if(gathered){ const arr=active.find(h=>h.hi!==(P.gatherCaller>=0?P.gatherCaller:win.h.hi));   // 呼ばれて歩いてきた子が着いて一言
       if(arr){ pendingLine(arr.hi,'gather.arrive',0.2,1); t0=(arr.hi===win.h.hi)?1.7:0.9; } }   // 着いた子がそのまま言い出す時は、前の吹き出しが消えてから(同じ子の続けざまの台詞は潰れる)
     const said=t0>0?(pendingLine(win.h.hi,'propose.'+kind,t0,1),true):sayPartyAs(win.h.hi,'propose.'+kind,1,0);
-    if(said){ for(const x of props){ if(x===win) continue; pendingLine(x.h.hi, x.split?'split':(same?'same':(x.g.score>win.g.score?'yield':'agree')), t0+0.9, 1, win.h); }   /* v5.3 「{o}が いうなら」の相手は、案が通った子 */ if((!same || gathered) && (gathered || partyGathered())) P.talkUntil=B.time+(gathered?Math.max(BAL.GATHER_TALK_T,t0+1.6):BAL.TALK_T); }   // 集まって話した時は言い終わるまで向き合う。離れたまま(集合できなかった)なら声だけ掛けて足は止めない(v3.1)
+    if(said){ for(const x of props){ if(x===win) continue; pendingLine(x.h.hi, x.split?'split':(same?'same':(x.g.score>win.g.score?'yield':'agree')), t0+0.9, 1, win.h); }   /* v5.3 「{o}が いうなら」の相手は、案が通った子 */ if((!same || gathered) && (gathered || partyGathered())) P.talkUntil=B.time+((gathered||nearTalk)?Math.max(BAL.GATHER_TALK_T,t0+1.6):BAL.TALK_T); }   // 集まって話した時は言い終わるまで向き合う。離れたまま(集合できなかった)なら声だけ掛けて足は止めない(v3.1)
   }
   P.gatherDone=0;
   return p.goal;
@@ -7293,6 +7323,7 @@ function hurtHero(dmg,src,opt){
     return;
   }
   p.hp-=net;
+  p.hurtT=B.time;                              /* v6.8 戦いの音の元(仲間はこれを聞いて駆けつける) */
   if(p.iceMirror) iceMirrorBack(p,src,net);   /* v6.7 氷鏡: 受けた分を凍らせて撃ち返す */
   B.dmgDealt+=net;
   { const dp=G.B&&G.B.hero; if(dp) dp.recDmg=(dp.recDmg||0)+net; }   /* v5.8 与ダメも各人ぶん */
@@ -8554,6 +8585,21 @@ function captiveFor(p){
   }
   return best;
 }
+/* v6.8 戦いの音。★作者の言葉「戦闘が発生したら音を聞いたり見たりで救出に向かう」。
+   掴まれている必要はない——魔物に囲まれている・殴られたばかり、で音は立つ。
+   音は壁を通る(HEAR_R)。見えていれば距離に関わらず気づく */
+function fightNoise(h){
+  const B=G.B; if(!h||h.out) return 0;
+  let v=0;
+  if(B.time-(h.hurtT||-99) < BAL.FIGHT_HURT) v+=BAL.FIGHT_W;
+  if(nearEnemyCount(h.x,h.y,230,false) >= BAL.FIGHT_N) v+=BAL.FIGHT_W;
+  return v;
+}
+function heardBy(p,h){   /* p は h の戦いに気づけるか(音 か 目) */
+  const d=Math.hypot(h.x-p.x,h.y-p.y);
+  if(d<=BAL.HEAR_R) return true;                       /* 音: 壁越しでも届く */
+  return !!(typeof losClear==='function' && losClear(p.x,p.y-12,h.x,h.y-12,true));   /* 目: 見えていれば遠くても */
+}
 function coverTarget(p){
   const B=G.B;
   if(attachCount(p)>0||p.pinned||p.charmBind||p.climaxT>0) return null;   // 自分が動けないなら無理
@@ -8561,7 +8607,8 @@ function coverTarget(p){
   let o=null, th=0;   // v5.0 三人以上: いちばん調子の悪い仲間を選ぶ(素性の follow 相手には少し早く飛ぶ)
   for(const h of B.heroes){
     if(h===p||h.out||h.captive) continue;   // 捕まっているなら救出(rescue)の担当
-    let w=distressOf(h);
+    if(!heardBy(p,h)) continue;             /* v6.8 聞こえも見えもしない戦いには行けない */
+    let w=distressOf(h)+fightNoise(h);      /* v6.8 掴まれていなくても、戦っていれば駆けつける理由になる */
     if(HD.follow) w*=(h.id===HD.follow)?1.25:0.85;
     if(w>th){ th=w; o=h; }
   }
@@ -8569,7 +8616,7 @@ function coverTarget(p){
   /* v5.2 かばい合いを断つ。coverUntil のラッチは両側で立ちうるので、そうなると
      互いを目標にして寄り、PARTY_SEP に押し戻され、その場で回り続ける。
      助けが要るのは調子の悪い方なので、悪い方がかばうのをやめる */
-  if(o.coverOf===p.hi && my>=distressOf(o)){ p.coverUntil=0; p.coverOf=-1; return null; }
+  if(o.coverOf===p.hi && my+fightNoise(p)>=distressOf(o)+fightNoise(o)){ p.coverUntil=0; p.coverOf=-1; return null; }
   if(p.coverUntil>B.time && th>=BAL.COVER_TH*0.7){ p.coverOf=o.hi; return o; }    // ちらつかせない
   if(th>=BAL.COVER_TH && th>my+BAL.COVER_MARGIN){ p.coverUntil=B.time+BAL.COVER_HOLD; p.coverOf=o.hi; return o; }
   p.coverOf=-1;
@@ -9827,12 +9874,38 @@ function slideXY(h,nx,ny){
   h.x=bx; h.y=by;
 }
 function partyClamp(){
-  const B=G.B, hs=B.heroes.filter(h=>!h.out); if(hs.length<2) return;
-  for(let i=0;i<hs.length;i++) for(let j=i+1;j<hs.length;j++){ const a=hs[i], b=hs[j]; const fa=!(a.pinned||attachCount(a)>0||a.charmBind), fb=!(b.pinned||attachCount(b)>0||b.charmBind);
-    const dx=b.x-a.x, dy=b.y-a.y;
-    if(Math.abs(dx)>BAL.PARTY_MAXDX){ const ex=(Math.abs(dx)-BAL.PARTY_MAXDX)*Math.sign(dx); if(fa&&fb){ slideXY(a,a.x+ex/2,a.y); slideXY(b,b.x-ex/2,b.y); } else if(fa) slideXY(a,a.x+ex,a.y); else if(fb) slideXY(b,b.x-ex,b.y); }
-    if(Math.abs(dy)>BAL.PARTY_MAXDY){ const ey=(Math.abs(dy)-BAL.PARTY_MAXDY)*Math.sign(dy); if(fa&&fb){ slideXY(a,a.x,a.y+ey/2); slideXY(b,b.x,b.y-ey/2); } else if(fa) slideXY(a,a.x,a.y+ey); else if(fb) slideXY(b,b.x,b.y-ey); } }
-  for(const h of hs) collideMap(h,h.r+2,false);
+  /* ★v6.8 手綱を「カメラの箱」で直に測る。
+     カメラは main.js で『!out または captive』の子たちの重心を追う。
+     だから画面に入る条件は「重心から半画面より内側」であって、
+     二人ずつの距離(PARTY_MAXDX/DY)ではなかった——三人以上ではこれが守れず、
+     実測で『誰かが画面の外に居た時間 8.0% / 最大 177px はみ出し /
+     二人の開きの最大 851px(手綱は 740)』だった。
+     視界が 960x540 に固定になったので、箱で書ける */
+  const B=G.B;
+  const cam=B.heroes.filter(h=>!h.out||h.captive);
+  if(cam.length<2) return;
+  const cx=cam.reduce((a,h)=>a+h.x,0)/cam.length, cy=cam.reduce((a,h)=>a+h.y,0)/cam.length;
+  const bx=Math.max(160,W/2-BAL.VIEW_KEEP), by=Math.max(110,H/2-BAL.VIEW_KEEP);
+  for(const h of cam){
+    /* 掴まれている子・捕まった子は動かせない。動ける子のほうが寄る */
+    if(h.captive||h.pinned||attachCount(h)>0||h.charmBind) continue;
+    const dx=h.x-cx, dy=h.y-cy;
+    if(Math.abs(dx)>bx) slideXY(h, cx+Math.sign(dx)*bx, h.y);
+    if(Math.abs(dy)>by) slideXY(h, h.x, cy+Math.sign(dy)*by);
+  }
+  for(const h of B.heroes) if(!h.out) collideMap(h,h.r+2,false);
+}
+/* v6.8 箱の縁が近づいたら、歩く向きにも重心へ戻る力を混ぜる(硬い引き戻しに頼らない) */
+function viewPull(p){
+  const B=G.B, cam=B.heroes.filter(h=>!h.out||h.captive);
+  if(cam.length<2) return null;
+  const cx=cam.reduce((a,h)=>a+h.x,0)/cam.length, cy=cam.reduce((a,h)=>a+h.y,0)/cam.length;
+  const bx=Math.max(160,W/2-BAL.VIEW_KEEP), by=Math.max(110,H/2-BAL.VIEW_KEEP);
+  const rx=Math.abs(p.x-cx)/bx, ry=Math.abs(p.y-cy)/by, r=Math.max(rx,ry);
+  if(r<0.74) return null;
+  const k=Math.min(1.6,(r-0.74)/0.26*1.6);
+  const d=Math.hypot(cx-p.x,cy-p.y)||1;
+  return {x:(cx-p.x)/d*k, y:(cy-p.y)/d*k};
 }
 /* v6.6e 捕まってその場に残された子。他の子がまだ立っているあいだ、そこで何が起きているか。
    ★狙い(作者の言葉)は「動いて振りほどいたりはするけど、責め手が変わるだけで
