@@ -1,0 +1,382 @@
+'use strict';
+/* ============================================================
+   core.js — 基盤: 定数 / ユーティリティ / オーディオ / セーブ
+   ルミナ・サバイバーズ v0.2「侵蝕デッキ」
+   debug: ?ts=N でゲーム速度N倍(1-5) / console: __game
+============================================================ */
+const TAU = Math.PI*2;
+let W = 960, H = 540;                                  // 視界の論理サイズ。端末の縦横比に合わせて resize() で決める
+const FONT = '"Hiragino Maru Gothic ProN","Yu Gothic UI","Meiryo",sans-serif';
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const TS = Math.max(1, Math.min(5, parseInt(new URLSearchParams(location.search).get('ts'),10) || 1));
+
+let dpr=1, viewScale=1, barCover=0;   // barCover: 横持ちで戦闘バーが世界の下端を覆う高さ(世界px)。縦持ちでは重ねないので 0
+/* v6.8 視界は横持ちで固定する。
+   ★v1.10〜v6.7 は「見える広さ(960x540)は保ったまま、縦横比だけ端末に合わせる」形だった。
+     端末ごとに見える範囲の形が変わるので、同じ階でも見える物の数が違い、
+     カメラの追従・パーティの手綱(PARTY_MAXDX/DY)・ミニマップの位置が全部その上に乗っていた。
+     作者の判断で横持ちを主にしたので、視界は 960x540 に固定する——
+     どの端末でも「見えている世界」がまったく同じになる。 */
+const VIEW_W=960, VIEW_H=540;
+/* v6.7 レール(横持ち)の幅。左右に一本ずつ立てる。
+   ★盤面に残す最低幅を切ってまでは立てない。
+   v6.8 レールを立てるのは「はっきり横長」の窓だけ。正方形に近い窓では
+        レールが横幅を食うので、ボタンは下に置いて盤面の幅を最大にする(作者の指定) */
+const RAIL_WIDE=148, RAIL_NARROW=132, RAIL_KEEP_W=360, RAIL_MIN_AR=1.25;
+/* v6.8 窓が画面いっぱいのデスクトップだけ、盤面をすこし小さくする(作者の指定) */
+const DESK_SHRINK=0.90;
+const isCoarse=()=>!!(window.matchMedia && window.matchMedia('(pointer:coarse)').matches);
+function deskFullWindow(){
+  if(!window.screen || isCoarse()) return false;                 /* 触る端末は対象外 */
+  const sw=screen.availWidth||screen.width||0, sh=screen.availHeight||screen.height||0;
+  if(!sw||!sh) return false;
+  return window.innerWidth>=sw*0.97 && window.innerHeight>=sh*0.86;
+}
+function resize(){
+  dpr = Math.min(2, window.devicePixelRatio||1);
+  const bb=document.getElementById('battlebar');
+  /* ★v6.8 二通りだけ。
+     rails    : はっきり横長の窓。盤面の左右に札とアイテムを立てる(推奨の持ち方)
+     portrait : それ以外(正方形・縦長)。盤面を上いっぱいの幅にして、ボタンはその下
+     ——「下に重ねる」形(バーが盤面を覆う)は無くした */
+  const iw=window.innerWidth, ih=window.innerHeight;
+  W=VIEW_W; H=VIEW_H;                               /* ★視界は固定。端末で形を変えない */
+  let rail=0, rails=false;
+  if(iw>=ih*RAIL_MIN_AR){                           /* はっきり横長の時だけレール */
+    const want=(iw>=ih*1.55 && iw>=900)?RAIL_WIDE:RAIL_NARROW;
+    if(iw-want*2>=RAIL_KEEP_W){ rails=true; rail=want; }
+  }
+  const portrait=!rails;
+  document.body.classList.toggle('rails', rails);
+  document.body.classList.toggle('rails1', rails && rail<RAIL_WIDE);
+  document.body.classList.toggle('portrait', portrait);
+  document.body.classList.toggle('canfs', !!fsAvailable() && !fsActive());
+  document.body.classList.toggle('railsShort', rails && ih<620);      /* 背の低い横長では札を小さく */
+  document.body.classList.toggle('tallish', ih>iw*1.15);              /* 縦持ち: 横向きのお願いを出す */
+  if(rails) document.documentElement.style.setProperty('--rail', rail+'px');
+  let availH=ih, availW=Math.max(240, iw);
+  if(portrait && bb && !bb.hidden) availH=Math.max(200, ih-bb.offsetHeight-10);
+  if(rails) availW=Math.max(RAIL_KEEP_W, iw-rail*2-16);   /* 盤面はレールの内側 */
+  let s=Math.min(availW/W, availH/H)*0.985;
+  /* ★縮めるのは「レールが立つ(＝横に余裕がある)デスクトップ」だけ。
+     正方形や縦長では、そもそも横幅で頭打ちなので、縮めると
+     作者の指定「横のサイズが最大になるように」に逆らうことになる */
+  if(rails && deskFullWindow()) s*=DESK_SHRINK;
+  viewScale=s;
+  cv.style.width  = Math.round(W*viewScale)+'px';
+  cv.style.height = Math.round(H*viewScale)+'px';
+  cv.width  = Math.round(W*viewScale*dpr);
+  cv.height = Math.round(H*viewScale*dpr);
+  barCover=0;                                        /* バーは盤面を覆わない(レールも下段も) */
+  if(bb) bb.style.width = rails ? '' : '100%';
+  if(typeof makeVignette==='function') makeVignette();   // 周辺減光は画面サイズで焼いているので作り直す
+}
+/* ================= v6.8 全画面 =================
+   ブラウザの上のバーを消せるなら消す(作者の指定)。触る端末では最初のタップで自動、
+   それ以外は右上の ⛶ で切り替える。ホーム画面に置いた時は manifest の
+   display:fullscreen が効くので、ここまで来ない */
+function fsAvailable(){ const e=document.documentElement;
+  return !!(e.requestFullscreen||e.webkitRequestFullscreen||e.mozRequestFullScreen||e.msRequestFullscreen); }
+function fsActive(){ return !!(document.fullscreenElement||document.webkitFullscreenElement||document.mozFullScreenElement||document.msFullscreenElement); }
+function fsEnter(){
+  const e=document.documentElement;
+  const r=e.requestFullscreen||e.webkitRequestFullscreen||e.mozRequestFullScreen||e.msRequestFullscreen;
+  if(!r) return;
+  try{
+    const q=r.call(e,{navigationUI:'hide'});
+    /* 横持ちで固定できる端末なら固定する。できなくても投げっぱなしにしない */
+    if(q&&q.then) q.then(()=>{ try{ screen.orientation&&screen.orientation.lock&&screen.orientation.lock('landscape').catch(()=>{}); }catch(_){} }).catch(()=>{});
+  }catch(_){}
+}
+function fsExit(){ const d=document; const x=d.exitFullscreen||d.webkitExitFullscreen||d.mozCancelFullScreen||d.msExitFullscreen; if(x) try{ x.call(d); }catch(_){} }
+function fsToggle(){ if(fsActive()) fsExit(); else fsEnter(); }
+document.addEventListener('fullscreenchange', ()=>setTimeout(resize,80));
+document.addEventListener('webkitfullscreenchange', ()=>setTimeout(resize,80));
+/* 触る端末は最初のタップで一度だけ自動的に全画面へ(ユーザー操作の中でしか呼べない) */
+if(isCoarse()){
+  const once=()=>{ window.removeEventListener('pointerdown',once,true); if(!fsActive()) fsEnter(); };
+  window.addEventListener('pointerdown',once,true);
+}
+{ const fb=document.getElementById('fsbtn');
+  if(fb) fb.addEventListener('click',e=>{ e.stopPropagation(); fsToggle(); setTimeout(resize,120); }); }
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', ()=>setTimeout(resize,60));
+resize();
+// 戦闘バーの高さが変わったら(表示/非表示・客札の増減)キャンバスの寸法を合わせ直す
+if(window.ResizeObserver){
+  let lastBarH=-1;
+  new ResizeObserver(()=>{ const bb=document.getElementById('battlebar'); const bh=bb.hidden?0:bb.offsetHeight; if(bh!==lastBarH){ lastBarH=bh; resize(); } }).observe(document.getElementById('battlebar'));
+}
+
+/* ---------------- utils ---------------- */
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const lerp=(a,b,t)=>a+(b-a)*t;
+const rand=(a=1,b)=> b===undefined ? Math.random()*a : a+Math.random()*(b-a);
+const pickRand=a=>a[(Math.random()*a.length)|0];
+function hash2(i,j){ let h=(i*374761393 + j*668265263)|0; h=((h^(h>>13))*1274126177)|0; return ((h^(h>>16))>>>0)/4294967295; }
+function rr(g,x,y,w,h,r){
+  r=Math.min(r,w/2,h/2);
+  g.beginPath();
+  g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r);
+  g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath();
+}
+function star(g,x,y,R,r,n,rot){
+  g.beginPath();
+  for(let i=0;i<n*2;i++){
+    const rad=(i%2)?r:R, a=rot+i*Math.PI/n;
+    const px=x+Math.cos(a)*rad, py=y+Math.sin(a)*rad;
+    if(i) g.lineTo(px,py); else g.moveTo(px,py);
+  }
+  g.closePath();
+}
+function heartPath(g,x,y,s){
+  g.beginPath();
+  g.moveTo(x, y+3*s);
+  g.bezierCurveTo(x-6*s, y-2*s, x-3*s, y-7*s, x, y-3*s);
+  g.bezierCurveTo(x+3*s, y-7*s, x+6*s, y-2*s, x, y+3*s);
+  g.closePath();
+}
+function fmt(t){ t=Math.max(0,Math.floor(t)); return Math.floor(t/60)+':'+String(t%60).padStart(2,'0'); }
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } return a; }
+const KANJI_NUM=['0','Ⅰ','Ⅱ','Ⅲ','Ⅳ','Ⅴ','Ⅵ','Ⅶ','Ⅷ','Ⅸ','Ⅹ'];
+const genNum=n=> n<=10 ? KANJI_NUM[n] : String(n);
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ---------------- audio ---------------- */
+let AC=null;
+let muted=false;
+try{ muted = localStorage.getItem('luna_mute')==='1'; }catch(e){}
+let bgm={nodes:null, timer:0, kind:''};
+function initAudio(){
+  if(!AC){ try{ AC=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+  if(AC && AC.state==='suspended') AC.resume();
+}
+function sfx(f0,f1,dur,type,vol,delay){
+  if(!AC||muted) return;
+  try{
+    const t=AC.currentTime+(delay||0);
+    const o=AC.createOscillator(), g=AC.createGain();
+    o.type=type||'sine';
+    o.frequency.setValueAtTime(Math.max(1,f0),t);
+    o.frequency.exponentialRampToValueAtTime(Math.max(1,f1),t+dur);
+    g.gain.setValueAtTime(vol||0.1,t);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g); g.connect(AC.destination);
+    o.start(t); o.stop(t+dur+0.03);
+  }catch(e){}
+}
+const S={
+  pew(){ sfx(760,420,0.09,'triangle',0.03); },
+  hit(){ sfx(220,140,0.05,'square',0.028); },
+  gem(){ sfx(880,1500,0.09,'sine',0.04); },
+  heart(){ sfx(520,900,0.18,'sine',0.08); },
+  hurt(){ sfx(200,90,0.22,'sawtooth',0.1); },
+  nova(){ sfx(90,320,0.3,'sine',0.11); sfx(1200,300,0.25,'triangle',0.05); },
+  lvup(){ [660,880,1320].forEach((f,i)=>sfx(f,f,0.14,'triangle',0.07,i*0.08)); },
+  pick(){ sfx(980,1600,0.12,'triangle',0.08); },
+  boss(){ sfx(120,60,0.5,'sawtooth',0.13); sfx(80,50,0.7,'square',0.08,0.1); },
+  clear(){ [523,659,784,1047,1319].forEach((f,i)=>sfx(f,f,0.2,'triangle',0.08,i*0.09)); },
+  summon(){ sfx(150,70,0.24,'sawtooth',0.07); sfx(420,180,0.2,'triangle',0.05,0.03); },
+  deny(){ sfx(180,140,0.12,'square',0.06); },
+  bind(){ sfx(340,120,0.22,'square',0.08); sfx(900,500,0.1,'triangle',0.04,0.05); },
+  dart(){ sfx(980,620,0.1,'sine',0.045); },
+  charm(){ sfx(620,980,0.2,'sine',0.06); sfx(930,1240,0.18,'sine',0.04,0.08); },
+  capture(){ [392,311,247,196].forEach((f,i)=>sfx(f,f*0.92,0.3,'triangle',0.1,i*0.18)); sfx(70,40,1.1,'sawtooth',0.09,0.2); },
+  chest(){ [523,784,1047].forEach((f,i)=>sfx(f,f,0.13,'triangle',0.07,i*0.07)); },
+  coin(){ sfx(1180,1700,0.08,'triangle',0.05); },
+  buy(){ sfx(660,990,0.13,'triangle',0.08); sfx(990,1320,0.12,'sine',0.05,0.07); },
+  altar(){ sfx(220,110,0.5,'sine',0.09); sfx(440,445,0.6,'sine',0.04,0.1); },
+};
+/* 低音量アンビエントBGM(WebAudio 生成 / 依存なし) */
+function bgmStart(kind){
+  if(!AC||muted||bgm.kind===kind) return;
+  bgmStop();
+  try{
+    const master=AC.createGain(); master.gain.value=0.0; master.connect(AC.destination);
+    master.gain.linearRampToValueAtTime(kind==='battle'?0.045:0.035, AC.currentTime+2.2);
+    const nodes=[master];
+    const mkPad=(f,detune)=>{
+      const o=AC.createOscillator(), g=AC.createGain();
+      o.type='sine'; o.frequency.value=f; o.detune.value=detune;
+      g.gain.value=0.5; o.connect(g); g.connect(master); o.start();
+      nodes.push(o,g);
+    };
+    if(kind==='battle'){ mkPad(55,0); mkPad(82.4,4); mkPad(110,-5); }
+    else { mkPad(65.4,0); mkPad(98,3); mkPad(130.8,-4); }
+    const seq = kind==='battle' ? [220,261.6,329.6,196,220,311.1,261.6,164.8]
+                                : [261.6,329.6,392,329.6,293.7,392,349.2,329.6];
+    let step=0;
+    const iv=setInterval(()=>{
+      if(!AC||muted) return;
+      const t=AC.currentTime;
+      const o=AC.createOscillator(), g=AC.createGain();
+      o.type='triangle'; o.frequency.value=seq[step%seq.length]*(step%16>=8?0.5:1);
+      g.gain.setValueAtTime(0.0001,t);
+      g.gain.linearRampToValueAtTime(0.16,t+0.06);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+1.6);
+      o.connect(g); g.connect(master);
+      o.start(t); o.stop(t+1.7);
+      step++;
+    }, kind==='battle'?900:1400);
+    bgm={nodes, timer:iv, kind};
+  }catch(e){}
+}
+function bgmStop(){
+  if(bgm.timer) clearInterval(bgm.timer);
+  for(const n of bgm.nodes||[]){ try{ n.stop ? n.stop() : n.disconnect(); }catch(e){} }
+  bgm={nodes:null,timer:0,kind:''};
+}
+
+/* ---------------- 永続データ ---------------- */
+const SAVE_KEY='luna2_save';
+function defaultMeta(){
+  return {
+    v:3,
+    essence:0, orbs:0,
+    runs:0, captures:0,
+    gen:{ idx:1, battle:0, know:{}, marks:0, fed:0 },   // 世代(潜行) / 潜行の日数 / 世代内の学習 {id:{met,cap}} / v6.0 石段に刻んだ線(二連敗の回数・巻き戻しでも消えない) / 心根が心臓へ送った分
+    cards:{ slug:{owned:true,lv:1}, worm:{owned:true,lv:1}, ghost:{owned:true,lv:1} },
+    deck:['slug','worm','ghost'],
+    formations:['scatter'],
+    altar:{},                              // {id: lv} 夜側の軍備(共通)
+    altarH:{},                             // v5.8 ヒロインへの弱体化 {ヒロインid:{id: lv}}
+    life:{ dmg:0, ail:0, kills:0, herBoss:0, climax:0, survive:0, bestClimax:0,
+           ailBy:{}, capBy:{}, capCause:{} },   // 通算記録(v1.1: 種別内訳も)
+    streak:0,                                   // 連続生存(捕獲で0に)
+    nightItems:{ mist:true },                   // 夜側のアイテム(解放状態)
+    traits:{},                                  // 身についた性癖(永続) {musk:Lv}
+    codex:{},                                   // 図鑑: {id:{seen,met,climax,capture,kills}}
+    codexH:{},                                  // v5.8 ヒロインごとの手記 {ヒロインid:{魔物id:{seen,met,...}}}
+    readScenes:{},                              // v6.5 一度でも目に触れた押し倒し・敗北の本文 {ヒロインid:{'kind/相手id':1}}。図鑑から読み返せる
+    rot:{ dmg:0, ail:0, captures:0, battles:0 }, // 世代内記録(リセットされる)
+    lifeH:{},                                   // v5.8 ヒロインごとの通算記録 {id:{dmg,ail,kills,climax,captures,capBy,ailBy,...}}
+    rotH:{},                                    // v5.8 ヒロインごとの世代内記録(リセットされる)
+    best:null,
+    lumina:{ coins:0, will:0, upg:{vital:0,guard:0,bless:0,swift:0,grit:0,zeal:0} },  // 彼女の自己強化(永続)・抵抗の意志
+    curse:null,   // ボス敗北の呪い {id,left}
+    map:{ gen:0, floor:0, known:{}, visited:{}, seen:0 },   // 地形マップの記憶(世代・階層ごと)
+    run:{ floor:1, fails:0, day:1, clears:0, deepest:1, storySeen:{}, hero:null },   // hero: v2.1 引き継ぎ(リセットまで残る彼女のLv・武器・パッシブ・進化)   // v2.0 深淵の潜行: 今の階層 / この階層での連敗 / 潜行の日数 / 魔核討伐回数 / 最深到達
+    yami:{ st:0, era:-1, saved:0 },   // v5.0 ヤミコの筋: 0=まだ / 1=前回の最下層で眠っている(ボス) / 2=淫魔に囲まれている(救出待ち) / 3=参戦済み。era はその段に入った世代
+    party:{ roster:['lumina'], joined:{}, resets:0 },   // v3.1 出撃するヒロイン(最初はルミナ一人。二連敗リセット×世代≥1でフレイラが合流) / 合流の記録 {id:{era,gen,why}} / 前の合流からのリセット回数(保険の判定に使う)
+    settings:{ autoplay:true, gfx:'hd', gfxAuto:true, deckMode:'manual', advAuto:true },   // advAuto: v2.1 物語(ADV)の自動送り   // deckMode: manual / auto(階層に合わせておまかせ) / random   // gfx: 'hd'=描き込み / 'pixel'=ドット。gfxAuto: fps低下で装飾を自動で省く
+  };
+}
+let META=defaultMeta();
+function saveMeta(){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify(META)); }catch(e){} }
+function loadMeta(){
+  try{
+    const d=JSON.parse(localStorage.getItem(SAVE_KEY)||'null');
+    if(d && (d.v===2||d.v===3)){
+      META=Object.assign(defaultMeta(), d);
+      if(META.run && META.run.storySeen && META.run.storySeen.join){ META.run.storySeen.join_freila=1; delete META.run.storySeen.join; }   // v5.0 単一フラグからの移行
+      META.v=3;
+      META.gen=Object.assign({idx:1,battle:0,know:{},zoneKnow:{},marks:0,fed:0}, d.gen); META.gen.know=META.gen.know||{}; META.gen.zoneKnow=META.gen.zoneKnow||{}; META.gen.marks=META.gen.marks|0; META.gen.fed=+(META.gen.fed||0);
+      META.life=Object.assign(defaultMeta().life, d.life);
+      for(const k of ['ailBy','capBy','capCause']) META.life[k]=Object.assign({}, (d.life||{})[k]||{});
+      META.nightItems=Object.assign({mist:true}, d.nightItems||{});
+      META.run=Object.assign(defaultMeta().run, d.run||{}); META.run.storySeen=META.run.storySeen||{};
+      { const dp=d.party||null; let roster=(dp&&Array.isArray(dp.roster)&&dp.roster.length)?dp.roster.slice():['lumina'];   // v3.1 出撃の並び
+        if(!dp && d.run && d.run.storySeen && d.run.storySeen.join && !roster.includes('freila')) roster.push('freila');   // v3.0 のセーブ(二人で潜っていた)はフレイラを残す
+        META.party=Object.assign({roster:['lumina'],joined:{},resets:0}, dp||{}); META.party.roster=roster.filter(id=>typeof HEROES==='undefined'||HEROES[id]); if(!META.party.roster.length) META.party.roster=['lumina']; META.party.joined=META.party.joined||{}; }
+      META.map=Object.assign(defaultMeta().map, d.map||{}); if(META.map.floor===undefined) META.map.floor=0;
+      META.traits=Object.assign({}, d.traits||{});
+      META.codex=Object.assign({}, d.codex||{});
+      META.codexH=Object.assign({}, d.codexH||{});
+      if(!d.codexH){ META.codexH.lumina=JSON.parse(JSON.stringify(META.codex)); }   /* v5.8 v5.7 までの手記は、ルミナのもの */
+      /* v5.8 記録をヒロインごとに分けた。v5.7 までの共通の記録は、そのままルミナのものになる */
+      META.lifeH=Object.assign({}, d.lifeH||{});
+      META.rotH=Object.assign({}, d.rotH||{});
+      if(!d.lifeH){
+        const L=META.lifeH.lumina={};
+        const S=META.life||{};
+        L.dmg=S.dmg||0; L.ail=S.ail||0; L.kills=S.kills||0; L.climax=S.climax||0;
+        L.bestClimax=S.bestClimax||0; L.survive=S.survive||0; L.filmed=S.filmed||0; L.herBoss=S.herBoss||0;
+        L.captures=META.captures||0; L.runs=META.runs||0; L.streak=META.streak||0;
+        L.capBy=Object.assign({},S.capBy||{}); L.ailBy=Object.assign({},S.ailBy||{}); L.capCause=Object.assign({},S.capCause||{});
+        L.will=(META.lumina&&META.lumina.will)||0; L.traits=Object.assign({}, META.traits||{});
+        META.rotH.lumina=Object.assign({dmg:0,ail:0,captures:0,battles:0}, META.rot||{});
+      }
+      META.rot=Object.assign(defaultMeta().rot, d.rot);
+      META.settings=Object.assign(defaultMeta().settings, d.settings);
+      META.lumina=Object.assign({coins:0,will:0,upg:{}}, d.lumina);
+      /* v5.8 ヒロインへの弱体化をヒロインごとに分けた。v5.7 までに積んだ分は、そのままルミナのものになる */
+      META.altar=Object.assign({}, d.altar||{});
+      META.altarH=Object.assign({}, d.altarH||{});
+      if(typeof ALTAR!=='undefined'){
+        /* 共通側にヒロインへの弱体化が残っていたら、それは v5.7 までに積んだ分。ルミナへ移す */
+        const L=META.altarH.lumina=Object.assign({}, META.altarH.lumina||{});
+        for(const a of ALTAR){ if(a.side) continue; if(META.altar[a.id]){ L[a.id]=Math.max(L[a.id]||0, META.altar[a.id]); delete META.altar[a.id]; } }
+      }
+      META.curse=(d.curse&&d.curse.id&&d.curse.left>0&&BOSS_CURSES[d.curse.id])?d.curse:null;   /* v6.6 消えたボスの呪いが残っていても引き継がない */
+      META.map=Object.assign({gen:0, floor:0, known:{}, visited:{}, seen:0}, d.map||{});
+      META.map.known=META.map.known||{}; META.map.visited=META.map.visited||{};
+      META.lumina.upg=Object.assign({vital:0,guard:0,bless:0,swift:0,grit:0,zeal:0}, (d.lumina||{}).upg);
+      migrateCards();
+    }
+  }catch(e){}
+}
+/* v2→v3: 廃止カード(こうもり/ゾンビ/宵闇こうもり)を除去し、コストを返金 */
+function migrateCards(){
+  const REFUND={ zombie:120, nightbat:320 };
+  for(const id of Object.keys(META.cards)){
+    if(!MONSTERS[id]){
+      if(META.cards[id].owned && REFUND[id]) META.essence+=REFUND[id];
+      delete META.cards[id];
+    }
+  }
+  // 新スターターを保証
+  for(const id of ['slug','worm','ghost']){
+    if(!META.cards[id]) META.cards[id]={owned:true,lv:1};
+    META.cards[id].owned=true;
+  }
+  /* v6.6 消えた魔物(ヴァンピロード等)が古いセーブに残っていても落ちないよう、まず存在しない id を掃く */
+  for(const id of Object.keys(META.cards)) if(!MONSTERS[id]) delete META.cards[id];
+  META.deck=(META.deck||[]).filter(id=>MONSTERS[id] && META.cards[id] && META.cards[id].owned);
+  // 階級ごとの枠(雑魚2/中型2/大型1/ボス1)に収める(v1.0)
+  const tcnt={};
+  META.deck=META.deck.filter(id=>{ const t=tierOf(id); tcnt[t]=(tcnt[t]||0)+1; return tcnt[t]<=TIER_CAP[t]; });
+  if(!META.deck.length) META.deck=['slug','worm','ghost'];
+  META.formations=(META.formations||['scatter']).filter(f=>FORMATIONS[f]);
+  if(!META.formations.includes('scatter')) META.formations.unshift('scatter');
+}
+function wipeMeta(){ META=defaultMeta(); saveMeta(); }
+
+/* ---------------- ランタイム状態 ---------------- */
+const G = {
+  mode:'home',          // home | battle | levelup | captured | survived | result
+  screen:'home',        // DOM側スクリーン
+  B:null,               // 戦闘状態(battle開始時に生成)
+  cam:{x:0,y:150},
+  parts:[], floats:[],
+  banner:null, shake:0, hurtFlash:0, fps:60,
+  lobby:null,           // ホーム画面のルミナ(装飾)
+  titleT:0,
+};
+window.__game = G;
+window.__meta = ()=>META;
+
+/* ---------------- 共有FX ---------------- */
+function parts(x,y,n,colors,spd,life){
+  for(let i=0;i<n;i++){
+    if(G.parts.length>360) G.parts.shift();
+    const a=rand(TAU), s=rand(0.25,1)*spd;
+    G.parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,t:0,life:life*rand(0.6,1.2),
+      c:colors[(Math.random()*colors.length)|0], r:rand(1.2,3)});
+  }
+}
+function floatTxt(x,y,txt,c,size,life){
+  if(G.floats.length>80) G.floats.shift();
+  G.floats.push({x,y,txt,c,size,t:0,life,vy:-30});
+}
+function floatDmg(x,y,d){ floatTxt(x+rand(-6,6),y,String(Math.round(d)),'#fff',11,0.6); }
+function setBanner(text,sub,color){ G.banner={text,sub,color,t:0,dur:2.4}; }
+function fxTick(dt){
+  for(const q of G.parts){ q.t+=dt; q.x+=q.vx*dt; q.y+=q.vy*dt; q.vx*=Math.pow(0.02,dt); q.vy*=Math.pow(0.02,dt); }
+  G.parts=G.parts.filter(q=>q.t<q.life);
+  for(const f of G.floats){ f.t+=dt; f.y+=f.vy*dt; }
+  G.floats=G.floats.filter(f=>f.t<f.life);
+  if(G.banner){ G.banner.t+=dt; if(G.banner.t>G.banner.dur) G.banner=null; }
+  G.shake=Math.max(0,G.shake-dt*14);
+  G.hurtFlash=Math.max(0,G.hurtFlash-dt);
+}
