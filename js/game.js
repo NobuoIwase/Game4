@@ -3678,6 +3678,28 @@ function fieldSpawnTick(dt){
   near('silkmite',4,()=>tilePick((i,j)=>M.zone[j*MAP_W+i]===zi('silk'), 90,320));
   /* 霜の芽: 霜の面から生える。動かないので少し多め */
   near('frostbud',7,()=>tilePick((i,j)=>M.zone[j*MAP_W+i]===zi('frost'), 100,340));
+  /* v6.6b 咳き茸は札でもあるが、床からも生える。★菌輪の縁を先に探す——
+     きのこの輪にきのこが生えるのは筋が通るし、彼女が「覚えて避けている輪」の上に
+     中毒の目当てが立つことになる。カードとしても使えるので field 印は付けない */
+  near('coughcap',BAL.CAP_FIELD_N,()=>ringRimPick()||tilePick((i,j)=>{
+    const z=M.zone[j*MAP_W+i];
+    return z===zi('moss')||z===zi('nest')||z===zi('flower')||z===zi('womb');
+  }, 90,340));
+}
+/* 菌輪の縁の一点。輪の上は彼女が覚えて避ける場所なので、そこに生える茸は
+   「中毒でなければ近づかないもの」になる */
+function ringRimPick(){
+  const B=G.B; if(!B.rings||!B.rings.length) return null;
+  const h=B.heroes.find(x=>!x.out); if(!h) return null;
+  const near=B.rings.filter(R=>Math.hypot(R.x-h.x,R.y-h.y)<900);
+  if(!near.length) return null;
+  const R=near[(Math.random()*near.length)|0];
+  for(let k=0;k<12;k++){
+    const a=rand(TAU), rr=R.r*rand(0.86,1.04);
+    const x=clampMapX(R.x+Math.cos(a)*rr,40), y=clampMapY(R.y+Math.sin(a)*rr*0.78,40);
+    if(passAt(x,y,false)) return {x,y};
+  }
+  return null;
 }
 /* 骸の回廊: 倒れた魔物の骨が、しばらくして勝手に組み上がる */
 function boneTick(dt){
@@ -5704,6 +5726,14 @@ function updateGoal(p){
   for(const x of props){ if(P.denRole && denWaits(P.denRole).includes(x.h.hi)) continue;
     /* v5.0 互いが見えているなら、譲らず自分の目当てへ。壁を挟んだり危なくなれば、また一緒に動く */
     if(x!==win && !same) B.nSplitTry=(B.nSplitTry||0)+1;
+    /* v6.6b 中毒だけは、相談の結果に関わらず自分で抜ける。
+       ★これが無いと、二人以上のパーティでは中毒の目当てが一度も通らない——
+         updateGoalSolo で候補は作られるのに、相談で毎回負けて消えていた(実測 0.0秒)。
+         「一人だけ、ふらっと茸の方へ逸れていく」が、そもそも欲しかった絵でもある */
+    if(x!==win && x.g.kind==='addict' && P.goal.kind!=='rescue' && partySplitOk(x.h)){
+      x.split=true; x.h.goal=x.g; x.h.goalT=B.time+BAL.GOAL_RETHINK; x.h.splitG=x.g; x.h.splitUntil=B.time+BAL.SPLIT_T;
+      B.nAddictSplit=(B.nAddictSplit||0)+1; continue;
+    }
     if(x!==win && !same && x.g.kind!=='rescue' && P.goal.kind!=='rescue' && x.g.score>=BAL.SPLIT_MIN
        && Math.hypot(x.g.x-P.goal.x,x.g.y-P.goal.y)>BAL.SPLIT_SEP && partySplitOk(x.h)){
       x.split=true; x.h.goal=x.g; x.h.goalT=B.time+BAL.GOAL_RETHINK; x.h.splitG=x.g; x.h.splitUntil=B.time+BAL.SPLIT_T;
@@ -5729,7 +5759,10 @@ function updateGoalSolo(p){
   const cands=[];
   if(B.dbgCands) B.lastCands=null;   // 検証用: 目当ての候補を覗く(B.dbgCands=true の時だけ)
   const anyCaptive=B.heroes.some(c=>c.out&&c.captive&&c!==p);   // v3.2 仲間が捕まっている間は、寄り道の価値を落とす(木の実を拾いに行かない)
-  const add=(kind,sub,x,y,worth,ref,key)=>{ worth*=goalPref(p,kind,sub); if(anyCaptive && kind!=='rescue') worth*=BAL.RESCUE_FOCUS; if(!coreLeashOk(kind,sub,x,y)) return; /* v4.0 魔核戦の間は寄り道しない */ if(worth<=0 || !passAt(x,y,false) || nearKnownTrap(x,y) || ringAvoid(x,y)) return;   /* v4.1 覚えた菌輪の中は目当てにしない */
+  const add=(kind,sub,x,y,worth,ref,key)=>{ worth*=goalPref(p,kind,sub); if(anyCaptive && kind!=='rescue') worth*=BAL.RESCUE_FOCUS; if(!coreLeashOk(kind,sub,x,y)) return; /* v4.0 魔核戦の間は寄り道しない */ if(worth<=0 || !passAt(x,y,false)) return;
+    /* v4.1 覚えた罠と菌輪の中は目当てにしない。★v6.6b 中毒だけは例外——
+       粉の味を憶えた身体は、避けると覚えたはずの輪へ、自分から入っていく */
+    if(kind!=='addict' && (nearKnownTrap(x,y) || ringAvoid(x,y))) return;
     /* v5.0 媚薬沼の中の物は割り引く(深いほど嫌う)。
        ★v6.3 深い沼の 0.30 は厳しすぎた。宝箱(価値3.0)でも 0.9 まで落ちてジェムに負けるので、
        目当てとして選ばれるのが一瞬だけになり、浸かりかけては別の物へ乗り換える。
@@ -5761,7 +5794,10 @@ function updateGoalSolo(p){
     for(const e of B.enemies){
       if(e.dead||e.dormant) continue;
       if(e.id!=='coughcap' && e.id!=='lurecap' && e.id!=='hugcap') continue;
-      if(!inSight(e,p)) continue;
+      /* ★「見えていること」は要らない。中毒は“思い出して探しに行く”もので、
+         偶然出くわすものではない(実測で、中毒 161.7秒 のうち茸が見えていたのは 3.6秒)。
+         代わりに距離で切る——遠すぎる茸のために夜を捨てはしない */
+      if(Math.hypot(e.x-p.x,e.y-p.y)>BAL.ADDICT_R) continue;
       add('addict','addict',e.x,e.y,BAL.ADDICT_WORTH*(1+0.25*((p.addict||0)-BAL.ADDICT_SEEK)),e,'ad'+e.id+((e.x/48)|0)+'_'+((e.y/48)|0));   /* uid は無いので、種と位置から鍵を作る */
     }
   }   // v2.1 降りると決めたら箱は後回し
