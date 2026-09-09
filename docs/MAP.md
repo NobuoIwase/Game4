@@ -129,6 +129,8 @@ BRIEFING §5 に、同じ罠を三度踏んだ記録があります。
 | 解放費と深さの錠 | `MONSTERS[].unlock` と `js/data.js:deepOk()`(`DEEP_COST` の表) |
 | 系統(ヌメリ/触手/淫魔/眼/胞子/霊) | `js/data.js:FAMS`(表示名)と `js/data.js:FAM_OF`(id→系統)。引くのは `js/data.js:famOf()` |
 | 系統ボーナスの効き | `js/game.js:deckFam()` が `{fam,name,n,cap,cut}` を返す。`BAL.FAM_MIN`/`BAL.FAM_MAX` と、系統ごとの上限 `js/data.js:FAM_CAP`(MONSTERS から数える)・一枚あたり `js/data.js:famStep()`。戦闘開始時に `B.fam` へ焼き、`js/game.js:playCard()` の `slot.cdMax` に掛かる |
+| 蒸発を吸ってむせる / 学習 | `js/game.js:evapBreathe()` → `js/game.js:chokeTick()`。学習の行を言うのは焚いた本人だけ(`h.chokeMine`)。DESIGN §3-73 |
+| 焚いた円が巣窟・澱みに掛かるか | `js/game.js:denHazeNear()`。`dryAuraTick`(学習後は炎を落とす)と `dryEvapCheck` の両方から呼ぶ |
 | 捕まった子に起きること | `js/game.js:captiveTick()`。責め手の入れ替え・振りほどき・快感は `BAL.CAP_*`。カメラは `js/main.js` の `!h.out||h.captive` |
 | 捕まった仲間を助けに行く | `js/game.js:captiveFor()` が相手を返し、`aiDecide` の `p.capSave` の枝が向かう。距離を詰めた後は `js/game.js:rescueTick()`。DESIGN §3-67 |
 | 一瞬の絶頂ビーム | `js/game.js:beamerTick()`(絶頂照射触手)。`BAL.BEAM_AIM`/`BAL.BEAM_CD` |

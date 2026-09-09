@@ -7416,10 +7416,11 @@ function miresTick(dt){
 }
 /* ★v6.4b 噴き出した甘い霧を吸い込む。うわっ、と息を詰めて、むせて、霧の外へ足が向く。
    heat/sens をここで全部入れずに EVAP_NOW ぶんだけ渡し、残りは chokeTick が少しずつ渡す */
-function evapBreathe(h,cx,cy,heat,sens){
+function evapBreathe(h,cx,cy,heat,sens,by){
   const B=G.B, ci0=B.ci; B.ci=h.hi;
   addHeatG(heat*BAL.EVAP_NOW); applySensit(sens*BAL.EVAP_NOW);
   B.ci=ci0;
+  h.chokeMine=(by===undefined)?true:(by===h.hi);   /* ★v6.6i 焚いた本人か(学習の台詞の宛先) */
   h.chokeT=BAL.EVAP_CHOKE_T; h.chokeFrom={x:cx,y:cy};
   h.chokeHeat=heat*(1-BAL.EVAP_NOW); h.chokeSens=sens*(1-BAL.EVAP_NOW); h.chokeSaid=0;
   h.stumbleDur=Math.max(h.stumbleDur||0, BAL.EVAP_GASP_T);   /* まず、よろける */
@@ -7438,11 +7439,16 @@ function chokeTick(h,dt){
   }
   h.chokeT-=dt;
   if(h.chokeT<=0){ h.chokeT=0; h.chokeFrom=null; h.chokeSaid=0;
-    sayLine('feat.evapLearn',2,0,'……もう、ここでは やかない'); }
+    /* ★v6.6i 「もう、ここでは やかない」は、焚いた本人の学習。
+       噴き出した霧は近くの全員が吸うので、以前は居合わせた子まで全員この行を言っていた——
+       実測: feat.evapLearn をフレイラ1回・ルミナ1回。火を持たないルミナが
+       「やかない」と言うのは、誰の学習でもない */
+    if(h.chokeMine) sayLine('feat.evapLearn',2,0,'……もう、ここでは やかない');
+    else sayLine('feat.evapOther',2,0,'……いまの、なに……っ、けほ、っ'); }
   B.ci=ci0;
 }
 /* 沼の蒸発: 溜まっていたものが一気に立ちのぼり、広さと深さに比例して外まで噴き出す */
-function mireEvaporate(m){
+function mireEvaporate(m,by){
   const B=G.B; if(m.dry) return;
   m.dry=true;
   if(typeof mireClear==='function') mireClear(m);   /* v5.8 マップチップからも剥がす(液面が消える) */
@@ -7460,7 +7466,7 @@ function mireEvaporate(m){
   for(const h of B.heroes){
     if(h.out) continue;
     const d=Math.hypot(h.x-m.x,h.y-m.y); if(d>R) continue;
-    evapBreathe(h, m.x, m.y, BAL.MIRE_EVAP_HEAT*m.depth*(1-d/R*0.5), 9*m.depth);
+    evapBreathe(h, m.x, m.y, BAL.MIRE_EVAP_HEAT*m.depth*(1-d/R*0.5), 9*m.depth, by);
   }
   META.gen.dryLesson=(META.gen.dryLesson|0)+1; saveMeta();
 }
@@ -7881,18 +7887,40 @@ function dryAuraTick(dt){
         const ci0=B.ci; B.ci=p.hi; sayLine('feat.dryDrop',2,10,'……沼だ。消す'); B.ci=ci0;
         return;
       }
-      mireEvaporate(m);
+      mireEvaporate(m,p.hi);
     }
-    if(!A.evap && dryEvapCheck(p,{x:p.x,y:p.y,r:A.r})) A.evap=true;   /* v5.0 巣窟・澱みに掛かっていれば、そこも蒸発。一つのエリアにつき一度だけ */
+    /* ★v6.6i 巣窟・澱みの蒸発にだけ、学習のゲートが無かった。
+       沼のほうは「一度こぼしたら、触れる前に炎を落とす」が効いていて、実測でも
+       学習が立った後の沼の蒸発は 0回。ところが dryEvapCheck は素通りで、
+       dryLesson が 1 から 2 へ上がっていた——**大きな蒸発の banner が出るのは、こちら**。
+       作者の「フレイラが蒸発を全然学習しない」は、ここを指していた */
+    if(!A.evap){
+      if((META.gen.dryLesson|0)>0 && denHazeNear(p.x,p.y,A.r)){
+        B.dryAura=null; p.dryCd=B.time+BAL.DRY_CD*0.5;
+        floatTxt(p.x,p.y-56,'炎を落とした','#c89050',11,1.4);
+        for(let i=0;i<10;i++){ const a=rand(TAU), rr=rand(A.r*0.6); parts(p.x+Math.cos(a)*rr,p.y+Math.sin(a)*rr,1,['#7a5a44','#c89050'],60,0.6); }
+        const ci0=B.ci; B.ci=p.hi; sayLine('feat.dryDropDen',2,10,'……褥だ。ここで焚いたら、外まで届く'); B.ci=ci0;
+        return;
+      }
+      if(dryEvapCheck(p,{x:p.x,y:p.y,r:A.r})) A.evap=true;   /* v5.0 巣窟・澱みに掛かっていれば、そこも蒸発。一つのエリアにつき一度だけ */
+    }
   }
+}
+/* v6.6i 焼いた円が巣窟・澱みに掛かっているか。dryEvapCheck の当たり判定と同じ形——
+   ★同じ判定を二度書かないよう、両方からこれを呼ぶ */
+function denHazeNear(x,y,r){
+  for(let i=0;i<12;i++){ const a=i*TAU/12;
+    for(const rr of [0, r*0.5, r*0.9]){
+      const z=zoneAt(x+Math.cos(a)*rr, y+Math.sin(a)*rr);
+      if(z==='lewd'||z==='haze') return true;
+    } }
+  return false;
 }
 /* 焼いた円が巣窟か澱みに掛かっていたら、媚薬が蒸発して外へ噴き出す(通常より強い) */
 function dryEvapCheck(p,d){
   const B=G.B;
   if(B.time-(B.evapT||-99)<BAL.DRY_EVAP_CD) return false;   /* v5.0 続けざまには噴かない */
-  let hit=false;
-  for(let i=0;i<12&&!hit;i++){ const a=i*TAU/12; for(const rr of [0, d.r*0.5, d.r*0.9]){ const z=zoneAt(d.x+Math.cos(a)*rr, d.y+Math.sin(a)*rr); if(z==='lewd'||z==='haze'){ hit=true; break; } } }
-  if(!hit) return false;
+  if(!denHazeNear(d.x,d.y,d.r)) return false;
   B.evapT=B.time;
   setBanner('媚薬が蒸発した','熱で膨らんだ甘い霧が、褥の外まで噴き出す','#ff5d9a');
   B.fx.push({kind:'evap', x:d.x, y:d.y, r:BAL.DRY_EVAP_R, t:0, life:1.4});
@@ -7906,7 +7934,7 @@ function dryEvapCheck(p,d){
   for(const h of B.heroes){
     if(h.out) continue;
     if(Math.hypot(h.x-d.x,h.y-d.y)>BAL.DRY_EVAP_R) continue;
-    evapBreathe(h, d.x, d.y, BAL.DRY_EVAP_HEAT, 7);
+    evapBreathe(h, d.x, d.y, BAL.DRY_EVAP_HEAT, 7, p.hi);
   }
   // これも学習する: 次からは巣窟や澱みの近くで焼かない
   META.gen.dryLesson=(META.gen.dryLesson|0)+1; saveMeta();
@@ -8183,7 +8211,10 @@ function dryTick(p,dt){
       if(m.dry||m.iced) continue;
       const R=(BAL.DRY_AURA_R+m.r)*keep;
       if(Math.hypot(p.x-m.x,p.y-m.y)<R || Math.hypot(ax-m.x,ay-m.y)<R){
-        if(lesson){ const ci0=B.ci; B.ci=p.hi; sayLine('feat.dryNoMire',0,26,'……沼がある。ここでは焚かない'); B.ci=ci0; }
+        /* ★v6.6i 実測でこの呼び出しが6夜で1219回。sayLine の間隔で潰れてはいるが、
+           判断のたびに呼ぶ必要は無い——自分の側でも間隔を持つ */
+        if(lesson && B.time>=(p.noMireSaidT||0)){ p.noMireSaidT=B.time+26;
+          const ci0=B.ci; B.ci=p.hi; sayLine('feat.dryNoMire',0,26,'……沼がある。ここでは焚かない'); B.ci=ci0; }
         return;
       }
     }
