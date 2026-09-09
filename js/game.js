@@ -39,6 +39,7 @@ function newHero(id){
     id, name:HD.name, hi:0, out:false, captive:null, assist:null, thanksT:0, seenT:0, lineT:0, lowSaid:false,   // v3.0 素性 / 離脱(捕獲) / 救援 / 個別の台詞タイマー
     zone:'moss', bathT:0, springCd:0, dest:null, destUntil:0, explore:null, exploreUntil:0,   // v1.6 地形マップ
     poolT:0, readT:0, poolKey:null, readKey:null, goal:null, goalT:0, farmT:0, walkT:0,        // v1.8 清水/石碑/目当て
+    lantT2:0, lantHeat:0,                                                                     /* v6.6 催淫灯篭で休んでいる時間と、この滞在で溜まった熱 */
     tgtKey:null, tgtBest:0, tgtT:0,                                                              // v2.1 諦めの見張り
     skillCd:(()=>{ const o={}; for(const k in HD.skills) o[k]=0; return o; })(), guardT:0, emberT:0, aiMode:'fight', modeUntil:0, escape:null, dpsEst:20, hesitN:{},   // v2.3 奥義 / 戦闘モード / 地形ごとの迷った回数
     stuckT:0, unstickT:0, path:null, zoneLast:undefined,                                       // v1.7 壁・経路
@@ -5655,10 +5656,13 @@ function poiTick(dt){
     if(Math.random()<dt*3) parts(p.x+rand(-14,14),p.y-30,1,['#fff','#ffe0f0'],40,1.2);
   }
   // v1.8 清水で流す / 石碑を読む(足が止まる。掴まれたら中断)
-  if(p.poolT>0||p.readT>0){
-    if(attachCount(p)>0||p.pinned||p.charmBind){ p.poolT=0; p.readT=0; }
+  if(p.poolT>0||p.readT>0||p.lantT2>0){
+    if(attachCount(p)>0||p.pinned||p.charmBind){ p.poolT=0; p.readT=0; p.lantT2=0; }
     else{
       p.vx=0; p.vy=0;
+      /* v6.6 灯篭で休む。★ここが無かったので「そばに居る時間」が 2.0秒/夜 しかなく、
+         灯篭は一晩の発情の 1.2% しか作っていなかった。離れる判断は lanternTick(溜まった熱)が持つ */
+      if(p.lantT2>0){ p.lantT2-=dt; if(Math.random()<dt*2) parts(p.x+rand(-14,14),p.y-24,1,['#ffd0e4','#ffe9a8'],40,1.0); }
       if(p.poolT>0){ p.poolT-=dt; if(Math.random()<dt*4) parts(p.x+rand(-12,12),p.y-10,1,['#cffaff','#fff'],40,0.8); if(p.poolT<=0){ const q=G.map.pois.find(o=>o.key===p.poolKey); if(q) usePool(q); } }
       if(p.readT>0){ p.readT-=dt; if(p.readT<=0){ const q=G.map.pois.find(o=>o.key===p.readKey); if(q) readStele(q, !!(B.event&&B.event.key===q.key)); } }
     }
@@ -5711,6 +5715,12 @@ function poiTick(dt){
       p.poolT=BAL.POOL_T; p.poolKey=q.key;
       setBanner('清水で流す','冷たい水。敏感化・発情・粘液が流れる——足が止まる','#8fd3ff');
       heroBubble(p,pickRand(['つめた……でも、ながさなきゃ','ちょっと、あらうだけ……']),true,2);
+    }
+    /* v6.6 催淫灯篭のそばで腰を下ろす。危なくなければ、熱が溜まりきるまで動かない */
+    if(q.kind==='lantern' && d<44 && p.lantT2<=0 && (p.lantCd||0)<B.time && lanternWant(p)
+       && attachCount(p)===0 && !p.pinned && !p.charmBind && p.climaxT<=0 && (p.threatV||0)<BAL.GRIND_THREAT){
+      p.lantT2=BAL.LANTERN_REST;
+      heroBubble(p,pickRand(['ちょっとだけ、やすも……','あかるい……すこし、すわろ','ここなら、へいき']),true,2);
     }
     if(q.kind==='stele' && d<40 && !B.steleRead[q.key] && p.readT<=0 && attachCount(p)===0 && !p.pinned && !p.charmBind && p.climaxT<=0){
       p.readT=BAL.STELE_T; p.readKey=q.key;
@@ -7143,22 +7153,34 @@ function darkSense(x,y){ const l=lightAt(x,y); return BAL.DARK_LAG+(1-BAL.DARK_L
 /* 催淫灯篭: 明るいが、そばに居ると発情と敏感化が進む */
 /* v5.0 灯篭: 着いた時は「明るいから安心」。しばらく居て初めて「あれ、あつい……?」と気づく。
    誘蛾灯のように引っぱるのではなく、暗くて心細い時に休みに寄って、温まって離れる */
+/* v6.6 切り上げの基準を「経った時間」から「溜まった熱」へ。
+   実測(第5層・8夜)で、3.4秒の機械的な打ち切りと52秒のCDのせいで、灯篭は一晩の発情の
+   1.2%・敏感化の 0.3% しか作っていなかった(寄るのは 1.3回・7.5秒/夜)。
+   初めては気づくのが遅く、たっぷり温まる。焼かれるたび learnTrap('lantern') が積もり、
+   気づく閾値も離れる閾値も下がって、LANTERN_KNOW_OFF 回で寄らなくなる。 */
+function lanternKnow(){ return ((META.gen&&META.gen.trapKnow&&META.gen.trapKnow.lantern)||0); }
+function lanternLimit(){ return Math.max(4, BAL.LANTERN_LEAVE*(1-BAL.LANTERN_KNOW_CUT*lanternKnow())); }
 function lanternTick(dt){
   const B=G.B; if(!B.lanterns||!B.lanterns.length) return;
   for(const h of B.heroes){
-    if(h.out){ h.lantT=0; continue; }
+    if(h.out){ h.lantT=0; h.lantHeat=0; continue; }
     let near=null, nd=1e9;
     for(const q of B.lanterns){ const d=Math.hypot(q.x-h.x,q.y-h.y); if(d<nd){ nd=d; near=q; } }
-    if(!near||nd>BAL.LANTERN_R*0.62){ h.lantT=Math.max(0,(h.lantT||0)-dt*0.5); h.lantSaid=0; continue; }
+    if(!near||nd>BAL.LANTERN_R*0.62){ h.lantT=Math.max(0,(h.lantT||0)-dt*0.5); h.lantHeat=Math.max(0,(h.lantHeat||0)-dt*6); h.lantSaid=0; continue; }
     const k=1-nd/(BAL.LANTERN_R*0.62), ci0=B.ci; B.ci=h.hi;
-    addHeatG(BAL.LANTERN_HEAT*k*dt); applySensit(BAL.LANTERN_SENS*k*dt);
+    const add=BAL.LANTERN_HEAT*k*dt;
+    addHeatG(add); applySensit(BAL.LANTERN_SENS*k*dt);
     h.lantT=(h.lantT||0)+dt;
-    if(!h.lantSaid && nd<86){ h.lantSaid=1; sayLine('feat.lanternWarm',1,0,'あかるい……ここなら、だいじょうぶ'); }        // 着いた: 安心
-    else if(h.lantSaid===1 && h.lantT>=BAL.LANTERN_WARM_T){ h.lantSaid=2; sayLine('feat.lantern',1,0,'……あれ? なんか、からだ、ぽかぽかして'); }   // 温まって、やっと気づく
-    if(h.lantT>=BAL.LANTERN_STAY){   // 温もったら切り上げる
-      h.lantT=0; h.lantSaid=0; h.lantCd=B.time+BAL.LANTERN_CD;
+    h.lantHeat=(h.lantHeat||0)+add;                                    /* この滞在で溜まった分 */
+    const notice=Math.max(3, BAL.LANTERN_NOTICE*(1-BAL.LANTERN_KNOW_CUT*lanternKnow()));
+    if(!h.lantSaid && nd<86){ h.lantSaid=1; sayLine('feat.lanternWarm',1,0,'あかるい……ここなら、だいじょうぶ'); }        /* 着いた: 安心 */
+    else if(h.lantSaid===1 && h.lantHeat>=notice){ h.lantSaid=2; sayLine('feat.lantern',1,0,'……あれ? なんか、からだ、ぽかぽかして'); }   /* 温まって、やっと気づく */
+    if(h.lantHeat>=lanternLimit()){   /* 熱が溜まりきったら切り上げる。覚えているほど早い */
+      h.lantT=0; h.lantHeat=0; h.lantSaid=0; h.lantT2=0; h.lantCd=B.time+BAL.LANTERN_CD;
+      learnTrap('lantern');           /* ★焼かれた回数を覚える(世代が巻き戻ると消える) */
+      B.nLantBurn=(B.nLantBurn||0)+1;
       if(h.goal&&h.goal.kind==='poi'&&h.goal.sub==='lantern'){ h.goal=null; h.goalT=0; giveUpOn(h.goal); }
-      sayLine('feat.lanternLeave',0,26,'……ここ、ながく居たら だめなやつだ');
+      sayLine(lanternKnow()>=BAL.LANTERN_KNOW_OFF?'feat.lanternKnown':'feat.lanternLeave',0,26,'……ここ、ながく居たら だめなやつだ');
     }
     B.ci=ci0;
   }
@@ -7168,6 +7190,7 @@ function lanternTick(dt){
    暗い階で、足元が実際に暗く、まだ火照っておらず、直前に離れたばかりでもない時だけ */
 function lanternWant(p){
   const B=G.B;
+  if(lanternKnow()>=BAL.LANTERN_KNOW_OFF) return false;   /* v6.6 何度か焼かれたら「あれは近づかない方がいい」 */
   if(darkLevel()<=0.3 || p.heatLv>=1) return false;
   if((p.aphro||0)>=BAL.LANTERN_HEAT_MAX || (p.sensit||0)>=70) return false;
   if(B.time<(p.lantCd||0)) return false;

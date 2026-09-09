@@ -636,6 +636,23 @@ const KUU_SPR=new Image(); let KUU_OK=false; KUU_SPR.onload=()=>{ KUU_OK=true; }
 const KUU_HD=new Image(); let KUU_HD_OK=false; KUU_HD.onload=()=>{ KUU_HD_OK=true; }; KUU_HD.onerror=()=>{ KUU_HD_OK=false; }; KUU_HD.src='assets/sprites/kuu_hd.png';
 const YAMI_SPR=new Image(); let YAMI_OK=false; YAMI_SPR.onload=()=>{ YAMI_OK=true; }; YAMI_SPR.onerror=()=>{ YAMI_OK=false; }; YAMI_SPR.src='assets/sprites/yamiko.png';
 const YAMI_HD=new Image(); let YAMI_HD_OK=false; YAMI_HD.onload=()=>{ YAMI_HD_OK=true; }; YAMI_HD.onerror=()=>{ YAMI_HD_OK=false; }; YAMI_HD.src='assets/sprites/yamiko_hd.png';
+/* v6.6 淫魔の絵。assets/sprites/imp.png(33×52)と imp_hd.png(154×240)は原画の右下から
+   切り出されて git に入っていたのに、どこからも読まれていなかった。ヒロインと同じ二枚組で繋ぐ。
+   階級ごとの色味は一度だけ焼いて使い回す(毎フレームの ctx.filter を避ける) */
+const IMP_SPR=new Image(); let IMP_OK=false; IMP_SPR.onload=()=>{ IMP_OK=true; }; IMP_SPR.onerror=()=>{ IMP_OK=false; }; IMP_SPR.src='assets/sprites/imp.png';
+const IMP_HD=new Image(); let IMP_HD_OK=false; IMP_HD.onload=()=>{ IMP_HD_OK=true; }; IMP_HD.onerror=()=>{ IMP_HD_OK=false; }; IMP_HD.src='assets/sprites/imp_hd.png';
+const IMP_TINT={};
+function impSprite(tint){
+  const hd=IMP_HD_OK && ((META.settings&&META.settings.gfx)||'hd')==='hd';
+  const img=hd?IMP_HD:(IMP_OK?IMP_SPR:null);
+  if(!img || !img.width) return null;
+  const key=(hd?'h:':'p:')+(tint||'-');
+  if(IMP_TINT[key]) return IMP_TINT[key];
+  const c=document.createElement('canvas'); c.width=img.width; c.height=img.height;
+  const t=c.getContext('2d'); t.imageSmoothingEnabled=false; t.drawImage(img,0,0);
+  if(tint){ t.globalCompositeOperation='source-atop'; t.fillStyle=tint; t.fillRect(0,0,c.width,c.height); }
+  IMP_TINT[key]=c; return c;
+}
 /* v5.0 ヒロインの絵姿は表で引く(三人目からは三項では足りない) */
 const HERO_IMG={
   lumina:{px:()=>LUMINA_SPR, hd:()=>LUMINA_HD, pxOk:()=>LUMINA_OK, hdOk:()=>true},
@@ -1974,6 +1991,18 @@ function drawImp(g,e,pal){
   pal=Object.assign({wing:'#b8548a',tail:'#d86aa0',heart:'#ff86b3',skin:'#ffd9c9',dress:'#e05a92',head:'#ffe3d5',hair:'#d86ab8',horn:'#fff',face:'#5a1f3a',blush:'rgba(255,120,160,0.5)'},pal||{});
   // 小淫魔: 女の子っぽい小悪魔。パタパタと飛んで煽る
   const r=e.r*1.15, fl=Math.sin(e.t*11);
+  /* v6.6 原画のスプライトがあればそちらを使う。読めなければ下のベクタ絵に落ちる */
+  const spr=impSprite(pal.tint);
+  if(spr){
+    const hh=r*3.6, ww=hh*spr.width/spr.height;
+    g.save();
+    g.translate(0,fl*1.6);
+    g.scale(Math.cos(e.orbitA||0)>=0?1:-1,1);
+    g.imageSmoothingEnabled=false;
+    g.drawImage(spr,-ww/2,-hh+r*0.5,ww,hh);
+    g.restore();
+    return;
+  }
   g.save();
   g.translate(0,fl*1.6-r*0.5);
   const dir=Math.cos(e.orbitA||0)>=0?1:-1;
@@ -2518,7 +2547,7 @@ function eyeLookA(e,oy){ const p=G.B&&G.B.hero; if(!p) return -Math.PI/2; return
 function drawSuccubus(g,e){
   // 寸止めの淫魔: 小淫魔の姉。色が深く、指先に「栓」の光
   g.save();
-  drawImp(g,e,{wing:'#7a2a5a',tail:'#b8407a',heart:'#ff5d9e',skin:'#f4d2c4',dress:'#b8306a',head:'#f7dccf',hair:'#5a2a6a',horn:'#f0e0ff',face:'#3a1226',blush:'rgba(255,90,140,0.55)',pattern:'rgba(255,200,230,0.7)'});
+  drawImp(g,e,{tint:'rgba(170,50,120,0.18)',wing:'#7a2a5a',tail:'#b8407a',heart:'#ff5d9e',skin:'#f4d2c4',dress:'#b8306a',head:'#f7dccf',hair:'#5a2a6a',horn:'#f0e0ff',face:'#3a1226',blush:'rgba(255,90,140,0.55)',pattern:'rgba(255,200,230,0.7)'});
   const r=e.r*1.15, ch=Math.max(0,1-((e.denyCd===undefined?8:e.denyCd)/1.5));
   if(ch>0){
     g.globalAlpha=ch;
@@ -2686,7 +2715,7 @@ function drawSuccuqueen(g,e){
   g.fillStyle='#6a1f4a';
   for(const sd of [-1,1]){ const flap=fl*0.4*sd; g.beginPath(); g.moveTo(sd*r*0.3,-r*1.2); g.quadraticCurveTo(sd*r*2.0,-r*2.2-flap*8,sd*r*2.4,-r*0.6-flap*6); g.quadraticCurveTo(sd*r*1.6,-r*0.5,sd*r*0.35,-r*0.3); g.closePath(); g.fill(); }
   g.restore();
-  drawImp(g,e,{wing:'#8a2a6a',tail:'#c8408a',heart:'#ff5d9e',skin:'#f7d8cc',dress:'#7a1f5a',head:'#f9e0d4',hair:'#2a1a3e',horn:'#ffd76a',face:'#3a1226',blush:'rgba(255,90,140,0.6)',pattern:'rgba(255,215,106,0.55)'});
+  drawImp(g,e,{tint:'rgba(130,40,160,0.22)',wing:'#8a2a6a',tail:'#c8408a',heart:'#ff5d9e',skin:'#f7d8cc',dress:'#7a1f5a',head:'#f9e0d4',hair:'#2a1a3e',horn:'#ffd76a',face:'#3a1226',blush:'rgba(255,90,140,0.6)',pattern:'rgba(255,215,106,0.55)'});
   // 冠
   g.save(); g.translate(0,fl*1.6-r*0.5);
   g.fillStyle='#ffd76a';

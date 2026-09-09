@@ -584,6 +584,9 @@ const LINES_Y={
   "lanternLeave": [
    "離れる。長居はしない"
   ],
+  "lanternKnown": [
+   "あの灯りは知ってる。……何度目かも、知ってる"
+  ],
   "denEnter": [
    "濃い。……知ってる匂い"
   ],
