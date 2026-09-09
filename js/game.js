@@ -2133,6 +2133,11 @@ function aiUpdate(dt){
     const m0=Math.hypot(dx,dy), sl=wallSlide(p.x,p.y,dx,dy,BAL.WALL_SLIDE_R,false); dx=sl.x; dy=sl.y;
     if(Math.hypot(dx,dy)<m0*0.35){ p.blockT=(p.blockT||0)+dt; if(p.blockT>0.25){ p.blockT=0; p.strafeDir*=-1; } } else p.blockT=0;
   }
+  /* v6.6e 休んでいる間(清水・石碑・催淫灯篭・湯)は、ここで steer ごと殺す。
+     ★poiTick が毎フレーム vx/vy を 0 にしていたが、速度の積分はそれより前に走るので、
+       毎フレーム「加速→進む→0にされる」を繰り返して、じわじわ滑っていた。
+       灯篭は休みが 16 秒あるので、いちばん目につく(作者の報告: 近くでヌルヌルする) */
+  if(p.poolT>0||p.readT>0||p.lantT2>0||p.bathT>0){ dx=0; dy=0; p.vx=0; p.vy=0; }
   const m=Math.hypot(dx,dy);
   const tvx=m>0.001?dx/m*st.speed:0;
   const tvy=m>0.001?dy/m*st.speed:0;
@@ -2364,6 +2369,29 @@ function aiDecide(foc,dt){
       if(pd<52){ const kk=ck>=2?1.6:1.0; ddx+=px/pd*1.3*kk*baseDodge; ddy+=py/pd*1.3*kk*baseDodge; }
     }
   }
+  /* ★v6.6f 持続する条(レーザー触手)は、避けるものであって耐えるものではない。
+     いま出ている条それぞれについて、線から横へ抜ける向きを足す。
+     溜め(warm)の間にもう動き出せるので、条が点く頃には軸から外れている。
+     ★条の元を断つのは下の「狙う相手」側(rayThreat)。 */
+  if(baseDodge>0.1){
+    p.rayOnT=Math.max(0,(p.rayOnT||0)-dt*0.6);   /* 浴びていなければ薄れる */
+    for(const e of B.enemies){
+      if(e.dead||e.dormant||!e.rays) continue;
+      const ox=e.x, oy=e.y-e.r*1.2;
+      for(const ry of e.rays){
+        if(ry.state==='off'||!ry.len) continue;
+        const ux=Math.cos(ry.ang), uy=Math.sin(ry.ang);
+        const rx=p.x-ox, rry=(p.y-14)-oy, along=rx*ux+rry*uy;
+        if(along<0||along>ry.len) continue;
+        const px=rx-ux*along, py=rry-uy*along, pd=Math.hypot(px,py)||0.001;
+        if(pd<BAL.RAY_AVOID_W){
+          const w=(ry.state==='on'?BAL.RAY_AVOID_ON:BAL.RAY_AVOID_WARM)*baseDodge;
+          ddx+=px/pd*w; ddy+=py/pd*w;
+          if(ry.state==='on'){ p.rayOnT=Math.min(BAL.RAY_SRC_T*2,(p.rayOnT||0)+dt*BAL.RAY_SRC_GAIN); p.rayOnMax=Math.max(p.rayOnMax||0,p.rayOnT); }   /* 浴びた時間(条の元を狙う判断に使う) */
+        }
+      }
+    }
+  }
   if(strong){ ax*=0.4; ay*=0.4; }
   ax+=ddx; ay+=ddy;
 
@@ -2401,6 +2429,8 @@ function aiDecide(foc,dt){
   if(B.wantExit && !exitQ && !B.floor.final && (!p.explore || B.time>p.exploreUntil || Math.hypot(p.explore.x-p.x,p.explore.y-p.y)<70)) pickExplore(p);   // v2.3 逃げに徹していても探索点は切らさない(降り口を探す)
   if(B.wantExit && !exitQ && p.explore && !B.floor.final){ exX=p.explore.x; exY=p.explore.y; exitD=Math.hypot(exX-p.x,exY-p.y)||1; exitGo=exitD>60; }
 
+  p.capSave=captiveFor(p);   /* v6.6e 助けに行く相手(枝の条件で使う) */
+  p.raySrc=rayThreat(p);     /* v6.6f 条の元(浴び続けたら断ちに行く) */
   // HPが危険域なら、多少の脅威があっても燭台へ強行する(回復の隙=攻めどころ)
   let forceProp=null;
   if(p.hp<p.maxHp*0.5 && !bossNear && B.hearts.length===0){
@@ -2426,6 +2456,21 @@ function aiDecide(foc,dt){
   }else if(exitOpen && exitD<70 && threat<1.8 && !p.charmBind){
     // 降り口の上: 多少殴られても立ち続ける(2.5秒で降りる)
     dx=(exitQ.x-p.x)/exitD*0.6+ax*0.4; dy=(exitQ.y-p.y)/exitD*0.6+ay*0.4; state='g_stairs';
+  }else if(p.raySrc){
+    /* ★v6.6f 条を浴び続けたら、避けるのをやめて元へ踏み込む。
+       条は「動けば抜けられるが、抜けた先にもう一本」なので、避け続けても終わらない */
+    p.propTarget=null;
+    const sv=steerTo(p,p.raySrc.x,p.raySrc.y);
+    dx=sv.x+ax*0.5; dy=sv.y+ay*0.5; state='raysrc';
+    B.nRaySrc=(B.nRaySrc||0)+1;
+  }else if(p.capSave && threat<BAL.CAP_SAVE_THREAT){
+    /* ★v6.6e 捕まった仲間のそばへ。逃げ・引き撃ち・直接目標より上に置く——
+       救出は「目当て」として書かれていたが、目当ての枝は threat>0.9 の下にあり、
+       仲間が捕まった直後は脅威が濃いので、一度も評価されていなかった */
+    p.propTarget=null;
+    const c=p.capSave, sv=steerTo(p,c.x,c.y);
+    dx=sv.x+ax*0.5; dy=sv.y+ay*0.5; state='g_rescue';
+    B.nCapGo=(B.nCapGo||0)+1;
   }else if(forceProp){
     p.propTarget=forceProp;
     const d=Math.hypot(forceProp.x-p.x,forceProp.y-p.y)||1;
@@ -2441,7 +2486,17 @@ function aiDecide(foc,dt){
     else{
       if(!p.escape || B.time>p.escape.until || Math.hypot(p.escape.x-p.x,p.escape.y-p.y)<50){
         let best=null, bs=-1e9;
-        if(exitGo){ best={x:exX,y:exY}; }
+        /* ★v6.6e 逃げに徹する枝は updateGoal まで届かない——救出の候補は作られていたのに、
+           一度も見られていなかった(実測: 相方が救出へ向かう 0.0% / dbgGoal は 100% 早い枝)。
+           捕まった子が近く、自分の体力が残っているなら、逃げる先を「その子のそば」にする */
+        let cpt=null;
+        for(const c of B.heroes){ if(!c.out||!c.captive||c===p) continue;
+          if(Math.hypot(c.x-p.x,c.y-p.y)>BAL.CAP_SAVE_R) continue;
+          if(p.hp<=p.maxHp*BAL.CAP_SAVE_HP) continue;
+          if(G.map && !reachableAt(c.x,c.y,false)) continue;
+          cpt=c; break; }
+        if(cpt){ best={x:cpt.x,y:cpt.y}; B.nCapFlee=(B.nCapFlee||0)+1; }
+        else if(exitGo){ best={x:exX,y:exY}; }
         else for(let k=0;k<8;k++){ const a=k*TAU/8+Math.sin(B.time)*0.2, ca=Math.cos(a), sa=Math.sin(a); const q=snapFloor(clampMapX(p.x+ca*420,80),clampMapY(p.y+sa*320,80),false,6); if(!q||!reachableAt(q.x,q.y,false)) continue; const sc=-nearEnemyCount(q.x,q.y,220,true)*1.0-nearEnemyCount((p.x+q.x)/2,(p.y+q.y)/2,140,true)*0.7+(awx*ca+awy*sa)*2.5-(zoneFear(zoneAt(q.x,q.y))>=2?3:0); if(sc>bs){ bs=sc; best=q; } }
         p.escape=best?{x:best.x,y:best.y,until:B.time+2.5}:null;
       }
@@ -3609,7 +3664,8 @@ function spawnUnit(id, x, y, o){
   if(id==='succubus'){ u.orbitA=rand(TAU); u.orbitDir=Math.random()<0.5?-1:1; u.denyCd=rand(2,4); }
   if(id==='web'){ u.grabCd=0; u.life=40; }
   if(id==='gazer'){ u.gzState='idle'; u.gzT=rand(1.5,3); u.gzAng=rand(TAU); u.lookA=0; }
-  if(id==='beamer'){ u.bmState='idle'; u.bmT=rand(2,4); u.bmAng=0; u.lookA=0; u.wakeT=BAL.BEAM_WAKE; u.rays=null; }   /* v6.6 湧いた直後は撃たない */
+  if(id==='beamer'){ u.bmState='idle'; u.bmT=rand(2,4); u.bmAng=0; u.lookA=0; }
+  if(id==='raytent'){ u.lookA=0; u.wakeT=BAL.BEAM_WAKE; u.rays=null; }   /* v6.6 湧いた直後は条を出さない */
   if(id==='peeper'){ u.fanA=rand(TAU); u.driftA=rand(TAU); u.shyT=0; }
   if(id==='bossgazer'){
     u.bstate='chase'; u.bt=99; u.lookA=0;
@@ -4404,6 +4460,8 @@ function enemiesUpdate(dt){
       bossgazerTick(e,dt,d,dx,dy);
     }else if(e.id==='gazer'){
       gazerTick(e,dt,d,dx,dy);
+    }else if(e.id==='raytent'){
+      raytentTick(e,dt,d,dx,dy);
     }else if(e.id==='beamer'){
       beamerTick(e,dt,d,dx,dy);
     }else if(e.id==='slimeking'){
@@ -4553,7 +4611,7 @@ function enemiesUpdate(dt){
     // 接触
     if(!e.dead && !e.dormant && e.state!=='attached' && p.ifr<=0
        && e.id!=='flower' && e.id!=='imp' && e.id!=='gas' && e.id!=='pot' && e.id!=='tower' && e.id!=='web' && e.id!=='eye'
-       && e.id!=='gazer' && e.id!=='beamer' && e.id!=='mouth' && e.id!=='guardian' && e.id!=='suiyou' && e.id!=='inyoku' && e.id!=='sentinel'
+       && e.id!=='gazer' && e.id!=='beamer' && e.id!=='raytent' && e.id!=='mouth' && e.id!=='guardian' && e.id!=='suiyou' && e.id!=='inyoku' && e.id!=='sentinel'
        && Math.hypot(e.x-p.x,e.y-p.y)<e.r+p.r){
       contactHit(e);
     }
@@ -5183,19 +5241,52 @@ function rayStep(e,ray,dt,d,dx,dy,off){
     }
   }
 }
-function beamerTick(e,dt,d,dx,dy){
+/* v6.6f レーザー触手: 狙わず、壁に当たるまで条を流し続ける。三方向。
+   ★絶頂照射触手(beamerTick)とは別の魔物——あちらは一瞬で達させる照準ビーム。
+     ★湧いた直後は出さない(BEAM_WAKE)——出た瞬間に条が乗る事故を潰す */
+function raytentTick(e,dt,d,dx,dy){
   const B=G.B, p=B.hero;
   e.lookA=Math.atan2(dy,dx);
-  /* v6.6 「照準して撃つ」から「壁に当たるまで流し続ける」へ。大型は三方向。
-     ★湧いた直後は撃たない(BEAM_WAKE)——出た瞬間に条が乗って即絶頂する事故を潰す */
   if((e.wakeT||0)>0){ e.wakeT-=dt; if(d>240){ e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt; } return; }
   if(!e.rays){
-    const n=(e.rBeams||0)>=2?3:3;   /* 大型は三方向。双条(熟れた個体)は広がりが大きい */
+    const n=3;   /* 三方向 */
     e.rays=[]; for(let k=0;k<n;k++) e.rays.push({ang:Math.atan2(dy,dx), state:'off', t:rand(0.2,1.6)+k*0.5, len:0});
   }
   if(d>240){ e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt; }
   const spread=(e.rBeams||0)>=2?0.62:0.40;
   e.rays.forEach((r,k)=>rayStep(e,r,dt,d,dx,dy,(k-1)*spread));
+}
+/* 絶頂照射触手: 照準1秒(最後の0.25秒は固定)→細い光条→命中で強制絶頂。撃ったらCD9秒 */
+function beamerTick(e,dt,d,dx,dy){
+  const B=G.B, p=B.hero;
+  e.lookA=Math.atan2(dy,dx);
+  e.bmT-=dt;
+  const ox=e.x, oy=e.y-e.r*1.4;
+  const want=Math.atan2((p.y-14)-oy, p.x-ox);
+  if(e.bmState==='idle'){
+    if(d>200){ e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt; }
+    if(e.bmT<=0 && d<BAL.BEAM_LEN-30 && inSight(e,p) && p.climaxT<=0 && p.refractT<=0 && p.freezeT<=0){ e.bmState='aim'; e.bmT=BAL.BEAM_AIM; e.bmAng=want; sfx(900,1400,0.15,'sine',0.04); }
+  }else if(e.bmState==='aim'){
+    let da=((want-e.bmAng+Math.PI*3)%TAU)-Math.PI;
+    if(e.bmT>0.25) e.bmAng+=clamp(da,-1.2*dt,1.2*dt);   // 照準は1秒。最後の0.25秒は固定——見て横へ跳べば外れる
+    if(e.bmT<=0){
+      e.bmState='fire'; e.bmT=0.22;
+      const ux=Math.cos(e.bmAng), uy=Math.sin(e.bmAng);
+      const rx=p.x-ox, ry=(p.y-14)-oy, along=clamp(rx*ux+ry*uy,0,BAL.BEAM_LEN);
+      const pd=Math.hypot(rx-ux*along, ry-uy*along);
+      B.fx.push({kind:'beam', x:ox, y:oy, ang:e.bmAng, len:BAL.BEAM_LEN, t:0, life:0.3});
+      /* v6.0 双条(熟れた個体): 片方を避けた先に、もう一本 */
+      if((e.rBeams||0)>=2){ const a2=e.bmAng+0.34;
+        B.fx.push({kind:'beam', x:ox, y:oy, ang:a2, len:BAL.BEAM_LEN, t:0, life:0.3});
+        const u2x=Math.cos(a2), u2y=Math.sin(a2), r2x=p.x-ox, r2y=(p.y-14)-oy, al2=clamp(r2x*u2x+r2y*u2y,0,BAL.BEAM_LEN);
+        if(Math.hypot(r2x-u2x*al2, r2y-u2y*al2)<BAL.BEAM_W/2+p.r*0.7 && !p.pinned && losClear(ox,oy,p.x,p.y-14,true)) forcedClimax(e); }
+      sfx(1600,400,0.3,'sawtooth',0.07);
+      if(pd<BAL.BEAM_W/2+p.r*0.7 && !p.pinned && losClear(ox,oy,p.x,p.y-14,true)) forcedClimax(e);
+      else floatTxt(p.x,p.y-60,'かわした!','#ffd76a',10,0.9);
+    }
+  }else if(e.bmState==='fire'){
+    if(e.bmT<=0){ e.bmState='cd'; e.bmT=BAL.BEAM_CD; }
+  }else{ if(e.bmT<=0) e.bmState='idle'; }
 }
 
 function nearGem(p,r){ for(const gm of G.B.gems){ if(Math.hypot(gm.x-p.x,gm.y-p.y)<r) return true; } return false; }
@@ -6228,7 +6319,7 @@ function skillTick(dt){
       if(Math.hypot(L.x-p.x,L.y-p.y)>240) continue; got+=8; B.lights.splice(k,1); }
     for(const e of B.enemies){ if(e.dead||e.dormant||e.item) continue;
       if(Math.hypot(e.x-p.x,e.y-p.y)>240) continue;
-      if(e.id==='eye'||e.id==='gallery'||e.id==='gazer'||e.id==='beamer'||e.id==='bossgazer'){ damageEnemy(e,60*(1+0.06*p.level)); got+=24; }
+      if(e.id==='eye'||e.id==='gallery'||e.id==='gazer'||e.id==='beamer'||e.id==='raytent'||e.id==='bossgazer'){ damageEnemy(e,60*(1+0.06*p.level)); got+=24; }
       e.stun=Math.max(e.stun||0,e.boss?0.5:1.4); }
     p.watchedT=0; p.hp=Math.min(p.maxHp,p.hp+Math.round(Math.max(30,got)));
     useSkill(p,'devour'); parts(p.x,p.y-14,50,['#2a1a3a','#c98cff','#fff'],300,1.0); G.shake=Math.min(9,G.shake+5);
@@ -6733,12 +6824,20 @@ function placeItem(id,x,y,opt){
 /* v2.2 オート指揮の設置: 状況で品を選ぶ。歩いているなら進路の先に罠(粘沼/淫紋/触手服/時間停止/淫糸)、止まっている・捕まっているなら足元に霧壺、
    目当ての箱が無ければ視界の先に偽りの宝箱、ENが潤沢なら塔。解放済みで置ける品だけ。戻り値 {id,x,y} か null */
 function chooseNightItem(p,held){
-  const B=G.B, cands=[]; const ok=id=>canPlaceItem(id).ok; const add=(id,x,y,w)=>{ if(!ok(id)||w<=0) return; const q=snapFloor(x,y,false,4); if(!q) return; cands.push({id,x:q.x,y:q.y,w}); };
+  const B=G.B, cands=[]; const ok=id=>canPlaceItem(id).ok;
+  /* ★v6.6g 置きは外れる。夜の側は「そこに居そうな所」しか読めない——
+     実測で媚薬の霧壺の中央距離が 5px(最小 0px)で、毎回きっちり足元に置いていた。
+     狂いは相手の速さで広がり、組み伏せている間だけ小さくなる */
+  const mw=held?ITEM_MISS_HELD:((Math.hypot(p.vx,p.vy)>60)?ITEM_MISS_WALK:ITEM_MISS_STAND);
+  const add=(id,x,y,w)=>{ if(!ok(id)||w<=0) return;
+    const a=rand(TAU), r=mw*Math.sqrt(rand(0.12,1));
+    const q=snapFloor(x+Math.cos(a)*r, y+Math.sin(a)*r*0.8, false, 4); if(!q) return;
+    cands.push({id,x:q.x,y:q.y,w}); };
   const spd=Math.hypot(p.vx,p.vy), walking=spd>60 && !held;
   if(walking){ const ax=p.x+p.vx*1.1, ay=p.y+p.vy*1.1;   // 進路の先
     add('pool',ax,ay,3); add('rune',ax,ay,2.5); add('suit',ax,ay,2); add('freeze',ax,ay,2.5); if(p.path&&p.path.length) add('web',p.x+p.vx*1.6,p.y+p.vy*1.6,2); }
   if(held){ add('mist',p.x,p.y,4); }
-  else if(!walking){ add('mist',p.x+rand(-20,20),p.y+rand(-20,20),3); if(B.en>enMax()*0.6){ const a=rand(TAU); add('tower',p.x+Math.cos(a)*240,p.y+Math.sin(a)*180,1.2); } }
+  else if(!walking){ add('mist',p.x,p.y,3); if(B.en>enMax()*0.6){ const a=rand(TAU); add('tower',p.x+Math.cos(a)*240,p.y+Math.sin(a)*180,1.2); } }
   if(B.time>40 && !B.chests.some(c=>c.fake&&!c.taken) && !(p.goal&&p.goal.kind==='chest')){ const a=Math.atan2(p.vy,p.vx)||rand(TAU); const dd=rand(420,560); add('fake',p.x+Math.cos(a)*dd,p.y+Math.sin(a)*dd*0.8,1.5); }
   if(!cands.length) return null;
   let tot=0; for(const c of cands) tot+=c.w; let r=Math.random()*tot; for(const c of cands){ r-=c.w; if(r<=0) return c; } return cands[cands.length-1];
@@ -6962,10 +7061,13 @@ function beginCapture(src,cause){
   const others=B.heroes.filter(x=>x!==h && !x.out);
   if(others.length){
     // v3.0 一人が捕まっても日は終わらない: その場に捕まったまま残る(そばに立てば救出できる)。魔物は残った子へ向かう
-    for(const sl of attachedSlots(h)) detachLimb(sl,{});
-    for(const sl of suckSlots(h)) detachSucker(sl,{});
-    if(h.charmBind) releaseCharmBind(false);
-    h.out=true; h.pinned=true; h.pinBy=null; h.climaxT=0; h.vx=0; h.vy=0; h.captive={x:h.x,y:h.y,by,cause,t:B.time,rescue:0};
+    /* ★v6.6e ここで縛めを全部ほどいていた。捕まった子は、何にも押さえられていない姿で
+       その場に寝ているだけになっていた(実測: 捕獲後の四肢拘束 0.0% / 責め手 0.0%)。
+       いまは取られたまま残し、captiveTick が責め手を入れ替えながら続ける */
+    if(h.charmBind) releaseCharmBind(false);   /* 魅了拘束だけは解く(拍が回らないので凍りつく) */
+    h.out=true; h.pinned=true; h.climaxT=0; h.vx=0; h.vy=0;
+    { const sl=attachedSlots(h); const at=sl.length?h.limbs[sl[0]]:null; h.pinBy=(at&&at.mon&&!at.mon.dead)?at.mon:(src&&!src.dead?src:null); }
+    h.captive={x:h.x,y:h.y,by,cause,t:B.time,rescue:0};
     if(B.pinScene && B.pinSceneHi===B.ci) B.pinScene=null;
     B.bullets=B.bullets.filter(b=>b.hi!==B.ci);
     setBanner(h.name+'、捕まった!', others[0].name+'は救い出すか、置いて降りるか','#c98cff');
@@ -8006,6 +8108,26 @@ function meltTick(p,dt){
   }
 }
 /* 引く判断 */
+/* v6.6f クウが自分から架ける橋。目当てまでの直線が沼・浅瀬で埋まっているなら、
+   敵が居なくてもそこを凍らせる。返すのは引く角度(引かないなら null) */
+function iceBridge(p){
+  const B=G.B;
+  const lead=B.heroes[leaderIdx()];
+  const g=p.goal||(lead&&!lead.out&&lead.goal)||null; if(!g) return null;
+  const gx=g.x-p.x, gy=g.y-p.y, gd=Math.hypot(gx,gy)||1;
+  if(gd<BAL.ICE_BRIDGE_MIN) return null;
+  const ux=gx/gd, uy=gy/gd;
+  let wet=0, n=0;
+  for(let s=44; s<Math.min(gd,BAL.ICE_LEN); s+=48){
+    const x=p.x+ux*s, y=p.y+uy*s;
+    if(!passAt(x,y,false)) return null;      /* 壁があるなら、橋では抜けられない */
+    n++;
+    if(iceAt(x,y)>0.5) continue;             /* もう凍っている所は数えない */
+    if(mireAt(x,y) || zoneAt(x,y)==='water') wet++;
+  }
+  if(n<2 || wet/n < BAL.ICE_BRIDGE_WET) return null;
+  return Math.atan2(uy,ux);
+}
 function iceTick(p,dt){
   const B=G.B;
   if(p.hypeT>0){ p.hypeT-=dt; if(p.hypeT<=0){ p.hype=0;
@@ -8021,6 +8143,11 @@ function iceTick(p,dt){
   if(attachCount(p)>0||p.pinned||p.charmBind||p.climaxT>0||p.hypnoLv>=2) return;
   if(B.dryAura){ const F=B.heroes[B.dryAura.hi];
     if(F && Math.hypot(p.x-F.x,p.y-F.y)<BAL.DRY_AURA_R*1.1){ sayLine('feat.iceNo',0,30,'……そこ、あついから。むり'); return; } }
+  /* ★v6.6f 先に「渡るための橋」を見る。敵の点数では沼越えは要求されない——
+     戦うためではなく、通るために引く */
+  { const br=iceBridge(p);
+    if(br!==null){ sayLine('feat.iceBridge',1,0,'……ここ、こおらせる。そのほうが、はやい');
+      if(kuuIce(p,br)){ G.B.nIceBridge=(G.B.nIceBridge||0)+1; return; } } }
   const b=icePick(p); if(!b) return;
   const want=p.hypeT>0?BAL.ICE_HYPE_WANT:BAL.ICE_WANT;
   if(b.sc<want && nearEnemyCount(p.x,p.y,240,false)<3) return;
@@ -8086,6 +8213,37 @@ function distressOf(h){
   return v;
 }
 /* いま相方をカバーすべきか(入ったら COVER_HOLD 秒は続ける) */
+/* v6.6f 条を流している元。しばらく浴びたら、避けるのをやめて元を断ちに行く。
+   ★作者の指定「AIは持続的な方は避けたり大元のモンスターを倒そうとしたり」 */
+function rayThreat(p){
+  const B=G.B;
+  if((p.rayOnT||0)<BAL.RAY_SRC_T) return null;
+  if(attachCount(p)>1||p.pinned||p.charmBind||p.climaxT>0||p.out) return null;
+  let best=null, bd=BAL.RAY_SRC_R;
+  for(const e of B.enemies){
+    if(e.dead||e.dormant||!e.rays) continue;
+    const d=Math.hypot(e.x-p.x,e.y-p.y);
+    if(d<bd && losClear(p.x,p.y-10,e.x,e.y-10,false)){ bd=d; best=e; }
+  }
+  return best;
+}
+/* v6.6e 助けに行くべき「捕まった子」。近く・届く・自分の体力が残っている時だけ */
+function captiveFor(p){
+  const B=G.B;
+  /* 片手を取られたままでも向かう(rescueTick 側も 1本までは進捗を認める)。
+     両手足を取られている・押し倒されている・達している間は無理 */
+  if(attachCount(p)>1||p.pinned||p.charmBind||p.climaxT>0||p.out) return null;
+  if(p.hp<=p.maxHp*BAL.CAP_SAVE_HP) return null;
+  let best=null, bd=BAL.CAP_SAVE_R;
+  for(const c of B.heroes){
+    if(c===p||!c.out||!c.captive) continue;
+    const d=Math.hypot(c.x-p.x,c.y-p.y);
+    if(d>=bd) continue;
+    if(G.map && !reachableAt(c.x,c.y,false)) continue;
+    bd=d; best=c;
+  }
+  return best;
+}
 function coverTarget(p){
   const B=G.B;
   if(attachCount(p)>0||p.pinned||p.charmBind||p.climaxT>0) return null;   // 自分が動けないなら無理
@@ -9076,7 +9234,7 @@ function playCard(id, formId){
 /* ================= オート指揮 ================= */
 const BINDERS=['worm','serpent','gtent','flower','pot','dreamtree','ghosthand'];
 const PRESSURE=['ghost','goblin','hand','spore','ghosthand','serpent','mistslime','slime','slug'];
-const FLUSH_ORDER=['gtent','ghost','serpent','ghosthand','goblin','hand','spore','mistslime','slime','worm','slug','leech','slugqueen','moth','succubus','gazer','beamer'];
+const FLUSH_ORDER=['gtent','ghost','serpent','ghosthand','goblin','hand','spore','mistslime','slime','worm','slug','leech','slugqueen','moth','succubus','gazer','beamer','raytent'];
 const REFILL_ORDER=['goblin','hand','spore','slug','worm','ghost','slime','serpent','ghosthand'];
 /* v6.5 オート指揮は「魔物の名前」を直に見て手を選ぶ。だから特化デッキ——眼だけ、ヌメリだけ——を
    組むと、名指しのカードが手札に無く、指揮官が黙ってしまう。
@@ -9221,11 +9379,15 @@ function autoDirector(dt){
     const chk=canPlay('eye',f);
     if(chk.ok && B.en>=chk.cost+4){ playCard('eye',f); return; }
   }
-  // 5) 小淫魔を1体まとわりつかせる
-  if(!saving && has('imp') && !alive.some(e=>e.id==='imp')){
+  // 5) 小淫魔は現場指揮官。部下が居る時だけ、間を置いて呼ぶ
+  /* ★v6.6g 死ぬたび出し直していたので、コスト8・HP20 の一体が一晩のENの 13.5% を
+     独りで食っていた(10回で120EN。ゴブリンは65回で130EN)。
+     作者の報告「コストの重い小淫魔を連続で出しまくって、モンスターの集団という感じにならない」 */
+  if(!saving && has('imp') && !alive.some(e=>e.id==='imp') && B.time>=(B.impPlayT||0)
+     && alive.filter(e=>tierOf(e.id)==='fodder').length>=BAL.IMP_NEED_FODDER){
     const f=bestForm(['single','scatter']);
     const chk=canPlay('imp',f);
-    if(chk.ok && B.en>=chk.cost+4){ playCard('imp',f); return; }
+    if(chk.ok && B.en>=chk.cost+14){ B.impPlayT=B.time+BAL.IMP_RECALL; playCard('imp',f); return; }
   }
 
   // 5.5) 大型: 積極的に。場の大型が手札の大型枚数(最大2)より少なければ精鋭/双璧で置く
@@ -9362,13 +9524,116 @@ function partyClamp(){
     if(Math.abs(dy)>BAL.PARTY_MAXDY){ const ey=(Math.abs(dy)-BAL.PARTY_MAXDY)*Math.sign(dy); if(fa&&fb){ slideXY(a,a.x,a.y+ey/2); slideXY(b,b.x,b.y-ey/2); } else if(fa) slideXY(a,a.x,a.y+ey); else if(fb) slideXY(b,b.x,b.y-ey); } }
   for(const h of hs) collideMap(h,h.r+2,false);
 }
+/* v6.6e 捕まってその場に残された子。他の子がまだ立っているあいだ、そこで何が起きているか。
+   ★狙い(作者の言葉)は「動いて振りほどいたりはするけど、責め手が変わるだけで
+     えっちなことをされ続けてる」。手を呼び、絡ませ、CAP_SWAP_T ごとに責め手を替え、
+     CAP_SHAKE_T ごとに一本ほどいて這う——そしてまた取られる。
+   B.ci は呼ぶ側で切り替えてあること(h = B.hero が捕まった子) */
+function captiveTick(dt){
+  const B=G.B, h=B.hero, C=h.captive; if(!C) return;
+  h.pinned=true; h.vx=0; h.vy=0;
+  condTick(h,dt);                        /* 発情・敏感化・粉・中毒は、倒れていても進む */
+  if(h.climaxT>0) climaxTick(dt);
+  if(B.pinSceneHi===B.ci) B.pinSceneT+=dt;
+  if(B.pinScene && B.pinSceneHi===B.ci && B.pinSceneT>BAL.AFTER_BEAT_T){ B.pinSceneT=0; B.pinSceneIdx++; }
+  C.swapT=(C.swapT===undefined?BAL.CAP_SWAP_T:C.swapT)-dt;
+  C.shakeT=(C.shakeT===undefined?BAL.CAP_SHAKE_T:C.shakeT)-dt;
+  C.pulse=(C.pulse===undefined?BAL.CAP_PULSE:C.pulse)-dt;
+  C.bubT=(C.bubT===undefined?BAL.CAP_BUB_T:C.bubT)-dt;
+
+  /* --- 責め手を呼ぶ。足りなければ、いちばん近い手が寄ってきて絡む --- */
+  const slots=attachedSlots(h);
+  if(slots.length<BAL.CAP_HOLD){
+    let best=null, bd=BAL.CAP_CALL_R;
+    for(const e of B.enemies){
+      if(e.dead||e.dormant||e.state==='attached'||MONSTERS[e.id].item) continue;
+      if((e.grabCd||0)>0) continue;
+      const d=Math.hypot(e.x-h.x,e.y-h.y); if(d<bd){ bd=d; best=e; }
+    }
+    if(best){
+      if(bd>24 && MONSTERS[best.id].spd>0){
+        const sp=Math.max(46,MONSTERS[best.id].spd)*dt;
+        best.x+=(h.x-best.x)/bd*sp; best.y+=(h.y-best.y)/bd*sp;
+        collideMap(best,best.r*0.75,canFly(best.id));
+      }else if(bd<=44) attachMonster(best,'cling',{noDodge:true});
+    }
+  }
+  /* --- 責め手が変わる。一本外して、次の手が入る隙をつくる --- */
+  if(C.swapT<=0){
+    C.swapT=BAL.CAP_SWAP_T*rand(0.8,1.3);
+    const sl=attachedSlots(h);
+    if(sl.length){
+      const s0=sl[(Math.random()*sl.length)|0], at=h.limbs[s0], m=at&&at.mon;
+      detachLimb(s0,{});
+      if(m&&!m.dead){ m.grabCd=Math.max(m.grabCd||0,2.4);
+        const a=rand(TAU); m.x=h.x+Math.cos(a)*48; m.y=h.y+Math.sin(a)*48; collideMap(m,m.r*0.75,canFly(m.id)); }
+      C.swaps=(C.swaps||0)+1;
+    }
+  }
+  /* --- 身を捩って一本ほどき、少しだけ這って逃げる。すぐまた取られる --- */
+  if(C.shakeT<=0){
+    C.shakeT=BAL.CAP_SHAKE_T*rand(0.75,1.3);
+    const sl=attachedSlots(h);
+    if(sl.length) detachLimb(sl[(Math.random()*sl.length)|0],{fling:true});
+    const a=rand(TAU);
+    slideXY(h, h.x+Math.cos(a)*BAL.CAP_SHAKE_D, h.y+Math.sin(a)*BAL.CAP_SHAKE_D);
+    C.x=h.x; C.y=h.y; C.shakes=(C.shakes||0)+1;
+    parts(h.x,h.y-14,7,['#fff','#c98cff'],110,0.45);
+    heroBubble(h, pickRand({
+      lumina:['……っ、まだ……うごけ、る……','はな、して……! まだ、いける……','やだ……そこ、ちが……っ'],
+      freila:['……どけ、って……! まだ、燃やせる……','っ、離せ……! わたしは、まだ……','……調子に、乗るな……っ'],
+      kuu:['……まだ、こおる……','……はなして。……おねがい','……や、……つめたく、したい……'],
+      yamiko:['……ふざけ、ないで……','……その手、あとで憶えていなさい','……まだ、闇は残ってる……'],
+    }[h.id]||['……や、だ……']), true, 3);
+  }
+  /* --- 責められ続ける。責め手が替わったら、その相手の本文を控える --- */
+  if(C.pulse<=0){
+    C.pulse=BAL.CAP_PULSE;
+    const sl=attachedSlots(h);
+    if(sl.length){
+      applyPleasure(BAL.CAP_PLE);
+      C.held=(C.held||0)+BAL.CAP_PULSE;
+      parts(h.x+rand(-10,10),h.y-rand(4,22),3,['#fff','#c98cff'],90,0.4);
+    }
+  }
+  /* --- 責め手と本文 --- */
+  { const sl=attachedSlots(h);
+    const at=sl.length?h.limbs[sl[0]]:null, m=at&&at.mon;
+    h.pinBy=(m&&!m.dead)?m:null;
+    if(m && C.by!==m.id){
+      C.by=m.id;
+      recordScene(h.id,'pin',m.id);   /* 図鑑には必ず控える(画面では読めなくても、後で読める) */
+      C.scenes=(C.scenes||0)+1;
+      /* 場面の箱が空いている時だけ、こちらの本文を出す
+         (立っている子の本文を横取りしない——四人ぶんを同時には読めない) */
+      if(!B.pinScene){ B.pinScene=sceneForHero(h,'pin',m.id); B.pinSceneHi=B.ci; B.pinSceneIdx=0; B.pinSceneT=0; }
+    } }
+  /* --- 声 --- */
+  if(C.bubT<=0){
+    C.bubT=BAL.CAP_BUB_T*rand(0.7,1.5);
+    if(attachedSlots(h).length) heroBubble(h, pickRand({
+      lumina:['……や、ぁ……そこ、ずっと……','だめ、また……きちゃ……','……たすけ、て……だれか……'],
+      freila:['……っ、ふ……ぅ……','……見る、な……こんなの……','……熱、が……逃げな……'],
+      kuu:['……ん……ぁ……','……とけ、る……','……いや……もう、いや……'],
+      yamiko:['……はぁ……っ、また……','……好きに、しなさい……もう……','……闇が、うすい……'],
+    }[h.id]||['……あ……っ']), false, 3);
+  }
+}
 /* 救出: 捕まってその場に残っている子のそばに RESCUE_T 秒立つ */
 function rescueTick(dt){
   const B=G.B, p=B.hero; if(p.out) return;
   if(p.thanksT>0){ p.thanksT-=dt; if(p.thanksT<=0) sayPartyAs(B.ci,'rescue.thanks',3,0); }
   for(const c of B.heroes){ if(!c.out||!c.captive) continue; const d=Math.hypot(c.x-p.x,c.y-p.y);
-    if(d<BAL.RESCUE_R && attachCount(p)===0 && !p.pinned && !p.charmBind && p.climaxT<=0){ if(c.captive.rescue<=0) sayPartyAs(B.ci,'rescue.start',2,15); c.captive.rescue+=dt; if(c.captive.rescue>=BAL.RESCUE_T) rescueHero(c,p); }
-    else c.captive.rescue=Math.max(0,c.captive.rescue-dt*0.7); }
+    /* ★v6.6e 「四肢が一本も取られていないまま3秒」は、群れの中では成立しない——
+       実測で救出できる距離には 15.1% 立てていたのに、成立は 0回だった。
+       片手を取られたまま引き剥がすのは許す(その分ゆっくり)。離れた時の目減りも半分に */
+    const grabbed=attachCount(p);
+    if(d<BAL.RESCUE_R && grabbed<=1 && !p.pinned && !p.charmBind && p.climaxT<=0){
+      if(c.captive.rescue<=0) sayPartyAs(B.ci,'rescue.start',2,15);
+      c.captive.rescue+=dt*(grabbed?BAL.RESCUE_GRAB_K:1);
+      if(c.captive.rescue>=BAL.RESCUE_T) rescueHero(c,p);
+    }
+    else c.captive.rescue=Math.max(0,c.captive.rescue-dt*0.35); }
 }
 function rescueHero(c,by){
   const B=G.B; c.out=false; c.pinned=false; c.pinBy=null; c.pinEscape=0; c.struggle=0; c.captive=null; B.captures=(B.captures||[]).filter(x=>x.hi!==c.hi); /* 救い出した子の捕獲記録は消す */ c.hp=Math.max(c.hp,Math.round(c.maxHp*0.5)); c.stamina=Math.max(c.stamina,Math.round(c.staminaMax*0.6)); c.ifr=1.5; c.aiMode='fight'; c.goal=null; c.path=null; c.exhausted=false; c.thanksT=1.3;
@@ -9383,7 +9648,8 @@ function battleTick(dt){
   // v2.0 時間制限は無い。その日は「降り口に着く」「魔核を討つ」「捕まる」で終わる
   // v3.0 ヒロインごとの更新(文脈 B.ci を切り替えながら)。捕まってその場に残っている子は飛ばす
   for(let i=0;i<B.heroes.length;i++){
-    B.ci=i; const p=B.hero; if(p.out){ p.anim+=dt; continue; }
+    B.ci=i; const p=B.hero;
+    if(p.out){ p.anim+=dt; if(p.captive) captiveTick(dt); continue; }   /* v6.6e 捕まった子はここで責められ続ける(以前は anim だけだった) */
     p.anim+=dt;
     if(p.ifr>0) p.ifr-=dt;
     if(p.bubbleT>0) p.bubbleT-=dt;

@@ -329,6 +329,7 @@ const TITLE_BY={
 const SPECIES_TITLE_BY={
   freila:{
     beamer:"振りかぶる前に落ちた焔",
+    raytent:"消えない条に炙り尽くされた熾",
     bonesoldier:"斬るほど増える骨に燃え尽きた火",
     bossgazer:"三つを一度に潰せない焔",
     core:"根に繋がれたまま消えた焔",
@@ -386,6 +387,7 @@ const SPECIES_TITLE_BY={
   },
   kuu:{
     beamer:"一秒を測り切れない氷",
+    raytent:"三本目を数え損ねた氷",
     bonesoldier:"湧く数を計算から外した氷",
     bossgazer:"三つの拍を取り違えた氷",
     core:"脈の間合いを測り違えた氷",
@@ -443,6 +445,7 @@ const SPECIES_TITLE_BY={
   },
   yamiko:{
     beamer:"一条の光に暴かれた夜",
+    raytent:"闇ごと照らし抜かれた夜",
     bonesoldier:"余力だけ削られて座り込む闇",
     bossgazer:"どの眼から伏せるか迷った夜",
     core:"古巣の心臓に膝を折った夜",

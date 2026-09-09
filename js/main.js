@@ -42,7 +42,10 @@ function frame(now){
   }
   if(G.B){
     // v3.0 カメラは(離脱していない)ヒロインたちの重心を追う
-    const hs=(G.B.heroes||[G.B.hero]).filter(h=>!h.out); const p=G.B.hero;
+    /* v6.6e 捕まってその場に残された子も画面に入れる。
+       ★以前は !h.out だけを追っていたので、捕まった子はカメラの外へ置き去りになっていた
+         (実測: 捕獲後54秒のうち 25.6% は画面の外。カメラの追う点から最大 675px) */
+    const hs=(G.B.heroes||[G.B.hero]).filter(h=>!h.out||h.captive); const p=G.B.hero;
     const cx=hs.length?hs.reduce((a,h)=>a+h.x,0)/hs.length:p.x, cy=hs.length?hs.reduce((a,h)=>a+h.y,0)/hs.length:p.y;
     const k2=Math.min(1,dt*5*steps);
     G.cam.x+=(cx-G.cam.x)*k2; G.cam.y+=(cy-G.cam.y)*k2;

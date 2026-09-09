@@ -30,7 +30,7 @@ const EN_COLORS={
   core:['#c2456f','#7a1f44','#3a0b20'],                          // v2.0 魔核
   spore:['#c9ecff','#7fb8e0'], ghosthand:['#dfe4ff','#aab4e8'], eye:['#f0e8ff','#7a3ff2'],
   succubus:['#ff86b3','#5a1f3a'], web:['#ffb3cf','#fff'],
-  gazer:['#b46cff','#3a1f5a','#f4efff'], beamer:['#d8c8ff','#5a3a7a'], bossgazer:['#b46cff','#2a1a3e','#f4efff'],
+  gazer:['#b46cff','#3a1f5a','#f4efff'], beamer:['#d8c8ff','#5a3a7a'], raytent:['#ffe9a8','#4a5a2a','#fff6d8'], bossgazer:['#b46cff','#2a1a3e','#f4efff'],
   slimeking:['#5fd0c0','#1a4a48','#ffd76a'], runemage:['#ff86b3','#3a1a3e','#ffd0e4'], succuqueen:['#ff5d9e','#3a1226','#ffd76a'], gobking:['#8fd36a','#2a3a1a','#ffd76a'],
   hand:['#d8d0f0','#a89ccf'], serpent:['#b07ae8','#5a3a8a'], moth:['#ffb3cf','#c9a0b8'],
   pot:['#b07890','#5a2a44'], slugqueen:['#e0a0c0','#8fae4a'], dreamtree:['#e86a9c','#3a2a3a'],
@@ -1552,6 +1552,7 @@ function drawBody(g,e){
   else if(aid==='web') drawWeb(g,e);
   else if(aid==='gazer') drawGazer(g,e);
   else if(aid==='beamer') drawBeamer(g,e);
+  else if(aid==='raytent') drawRaytent(g,e);
   else if(aid==='bossgazer') drawBossgazer(g,e);
   else drawBoss(g,e);
 }
@@ -2682,6 +2683,25 @@ function drawGazer(g,e){
   g.fillStyle='#3a1f5a';
   g.beginPath(); g.ellipse(0,-r*0.35,r*0.8,r*0.5,0,0,TAU); g.fill();
   drawEyeball(g,0,-r,r*0.95,e.lookA||0,glow);
+  g.restore();
+}
+/* v6.6f レーザー触手: 絶頂照射触手より太い胴。先端に三つの水晶が輪になって据わり、
+   そこから条が流れ出る。狙っていないので、瞳は動かない */
+function drawRaytent(g,e){
+  const r=e.r, t=e.t;
+  g.save();
+  g.strokeStyle='#3d4a22'; g.lineWidth=r*0.78; g.lineCap='round';
+  g.beginPath(); g.moveTo(0,0); g.quadraticCurveTo(Math.sin(t*0.9)*3,-r*0.85, Math.sin(t*0.7)*2,-r*1.35); g.stroke();
+  g.strokeStyle='#6d8a3a'; g.lineWidth=r*0.42;
+  g.beginPath(); g.moveTo(0,-r*0.1); g.quadraticCurveTo(Math.sin(t*0.9)*3,-r*0.85, Math.sin(t*0.7)*2,-r*1.3); g.stroke();
+  /* 先端の三つの水晶 */
+  const cx=Math.sin(t*0.7)*2, cy=-r*1.35;
+  for(let k=0;k<3;k++){
+    const a=t*0.5+k*TAU/3, px=cx+Math.cos(a)*r*0.34, py=cy+Math.sin(a)*r*0.20;
+    g.fillStyle='#2a3316'; g.beginPath(); g.ellipse(px,py,r*0.26,r*0.26,0,0,TAU); g.fill();
+    g.fillStyle='#ffe9a8'; g.beginPath(); g.ellipse(px,py,r*0.17,r*0.17,0,0,TAU); g.fill();
+    g.fillStyle='#fff6d8'; g.beginPath(); g.ellipse(px-r*0.05,py-r*0.05,r*0.07,r*0.07,0,0,TAU); g.fill();
+  }
   g.restore();
 }
 function drawBeamer(g,e){
