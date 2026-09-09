@@ -12,9 +12,12 @@ const BAL={
   EN_REGEN:1.0, EN_REGEN_LV:0.08,      // v1.1: 初期回復を少し上げた
   EN_START:12,
   CARD_CD_BASE:1.2, CARD_CD_COST:0.09,   /* カードCD = BASE + コスト×COST */
-  /* 系統ボーナス: デッキの最多系統が FAM_MIN 枚から効きはじめ、1枚増えるごとに FAM_STEP ずつ
-     その系統のカードのCDが縮む(上限 FAM_MAX)。他系統のカードには乗らない */
-  FAM_MIN:5, FAM_STEP:0.06, FAM_MAX:0.30,
+  /* 系統ボーナス: デッキの最多系統が FAM_MIN 枚から効きはじめ、その系統のカードのCDが縮む
+     (他系統のカードには乗らない)。★v6.6b 伸びしろは系統ごとに割る——
+     「その系統をデッキ枠いっぱいに詰めたら、どの系統も必ず FAM_MAX」。
+     一枚あたりの効きは FAM_CAP(系統ごとの詰められる枚数)で割って決まるので、
+     枠の少ない触手系も枠の多いヌメリ系も、満枠の到達点は同じ */
+  FAM_MIN:5, FAM_MAX:0.30,
 
   /* --- ヒロインの視界と思考(v0.4.1: 人間らしさ) --- */
   SIGHT_MARGIN:30,         // 画面端+これだけが視界。外の敵は存在に気づかない
@@ -918,8 +921,8 @@ const MONSTERS={
   beamer:{
     name:'絶頂照射触手', role:'強制絶頂', cost:8, unlock:620, tier:'large',
     hp:120, spd:20, r:13, dmg:0, xp:10,
-    desc:'先端に水晶の眼を持つ細長い触手。照準線が彼女に触れてから発射までが速く、細い光条に当たった者は身体の準備を待たずに達してしまう。',
-    trait:'照準1.0秒(最後の0.25秒は固定)→細い光条(射程300)。命中で【強制絶頂】。CD9秒',
+    desc:'先端に水晶の眼を持つ細長い触手。狙って撃つのではなく、三方向へ光条を流しっぱなしにして壁まで届かせる。向きの変わりが遅いので歩けば抜けられるが、抜けた先にもう一本ある。浴びている間、快感だけが黙って積もっていく。',
+    trait:'三方向へ持続する光条(壁まで)。2.2秒点いて3.4秒消える。浴びている間ずっと快感。★第9層より深いと絶頂しても照らし続け、連続絶頂になる(仲間が遮るか運び出すしかない)',
   },
   bossgazer:{
     name:'ボスゲイザー', role:'ボス・多眼', cost:26, unlock:1200, tier:'boss',
@@ -1406,6 +1409,32 @@ const FAM_OF={
   bonesoldier:'ghost',
 };
 const famOf=id=>FAM_OF[id]||null;
+/* v6.6b 系統ごとの「デッキに詰められる最大枚数」。
+   カードになるのは ownedIds と同じ条件(熟れた個体・設置物・番人・地形産は除く)で、
+   段ごとの枠は TIER_CAP(雑魚3/中型3/大型2/ボス5)。
+   ★手で書かず MONSTERS から数える——種を増減しても、系統ボーナスの到達点が
+   自動で揃う(片方だけ古い数字が残る事故が起きない)。
+   実測(v6.6): 触手系は大型が6種いても枠が2なので上限6枚、ヌメリ系と胞子系は8枚。
+   以前は一枚 6% 固定だったので、満枠の到達点が 12%〜24% とばらついていた */
+const FAM_CAP=(function(){
+  const per={};
+  for(const id in MONSTERS){
+    const m=MONSTERS[id];
+    if(m.item||m.guardian||m.variant||m.field) continue;
+    const f=famOf(id); if(!f) continue;
+    const t=tierOf(id);
+    (per[f]=per[f]||{})[t]=((per[f]&&per[f][t])||0)+1;
+  }
+  const cap={};
+  for(const f in FAMS){
+    const q=per[f]||{};
+    let n=0; for(const t in TIER_CAP) n+=Math.min(q[t]||0, TIER_CAP[t]);
+    cap[f]=n;
+  }
+  return cap;
+})();
+/* その系統を満枠まで詰めたときの一枚あたりの効き。FAM_MIN 枚目で最初の一段が乗る */
+const famStep=f=>BAL.FAM_MAX/Math.max(1,(FAM_CAP[f]||BAL.FAM_MIN)-BAL.FAM_MIN+1);
 /* ヒロインの学習(v1.5): 種族の脅威度(0-3)と、知ったあとの警戒半径。未知の相手は一律120で扱う */
 const SPEC_THREAT={
   slug:1, goblin:0, leech:1, worm:1, ghost:0, slime:0, gas:1, imp:1, flower:2, mistslime:1, gtent:2,

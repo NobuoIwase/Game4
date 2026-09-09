@@ -128,7 +128,10 @@ BRIEFING §5 に、同じ罠を三度踏んだ記録があります。
 | どの階に出るか | `js/data.js:FLOORS` の `affinity` |
 | 解放費と深さの錠 | `MONSTERS[].unlock` と `js/data.js:deepOk()`(`DEEP_COST` の表) |
 | 系統(ヌメリ/触手/淫魔/眼/胞子/霊) | `js/data.js:FAMS`(表示名)と `js/data.js:FAM_OF`(id→系統)。引くのは `js/data.js:famOf()` |
-| 系統ボーナスの効き | `js/game.js:deckFam()` が `{fam,name,n,cut}` を返す。`BAL.FAM_MIN`/`BAL.FAM_STEP`/`BAL.FAM_MAX`。戦闘開始時に `B.fam` へ焼き、`js/game.js:playCard()` の `slot.cdMax` に掛かる |
+| 系統ボーナスの効き | `js/game.js:deckFam()` が `{fam,name,n,cap,cut}` を返す。`BAL.FAM_MIN`/`BAL.FAM_MAX` と、系統ごとの上限 `js/data.js:FAM_CAP`(MONSTERS から数える)・一枚あたり `js/data.js:famStep()`。戦闘開始時に `B.fam` へ焼き、`js/game.js:playCard()` の `slot.cdMax` に掛かる |
+| 系統ボーナスの天井を揃える | `js/data.js:FAM_CAP` が「その系統に詰められる枚数」。満枠でどの系統も `BAL.FAM_MAX`。DESIGN §3-64 |
+| 研究所に並ぶ種の絞り込み | `js/ui.js:htmlLab()` の頭。`item`/`guardian`/`variant`/`field` を弾く(`js/game.js:ownedIds()` と同じ条件にすること) |
+| 居ない子の台詞を落とす | `js/story.js:storyKeepFits()`(変奏なしの塊)/ `js/story.js:pickStoryFor()`(変奏あり)/ `js/story.js:storyIfFits()`(合わなければ使わない)。DESIGN §3-65 |
 | 淫魔の指揮(一個下の階級を強化) | `BAL.DEMON_R`/`BAL.DEMON_PW`/`BAL.DEMON_SPD`/`BAL.DEMON_ACT`、`js/game.js:DEMON_CMD`(誰が何を指揮するか)と `js/game.js:demonCmdAt()`。★`e.spd` はフレームごとに戻す |
 | 絶頂禁止(旧・寸止め) | `js/game.js:applyDeny()`/`js/game.js:releaseDeny()`、溜まりは `h.denyOver`、`BAL.DENY_OVER_STAM` |
 | おあずけ(夢魔の女王) | `js/game.js:applyOmazuke()`(見張りの更新)と `js/game.js:omazukeEdge()`(寸前で止めた瞬間)。`BAL.OMAZUKE_NEED` |

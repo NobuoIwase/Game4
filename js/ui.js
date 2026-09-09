@@ -380,13 +380,15 @@ const UI={
       return `<h2 style="font-size:14px" class="tier-h t-${t}">${esc(TIER_NAMES[t])} <span style="font-size:11px;color:var(--dim)">(${inDeck.length}/${TIER_CAP[t]}) 陣形: ${forms}</span></h2>
         <div class="cards">${slots}${pool.map(id=>card(id,false)).join('')}</div>`;
     }).join('');
-    /* v6.5 同系統ボーナスの現在地。届いていない時は「あと何枚」まで言う */
-    const famList=Object.keys(FAMS).map(f=>esc(FAMS[f].name)).join('・');
+    /* v6.5 同系統ボーナスの現在地。届いていない時は「あと何枚」まで言う
+       v6.6b 系統ごとに枠の数が違うので、満枠までの残り枚数も出す(到達点はどの系統も −FAM_MAX) */
+    const famList=Object.keys(FAMS).map(f=>`${esc(FAMS[f].name)}(最大${FAM_CAP[f]}枚)`).join('・');
     const famNote=fb.fam
-      ? `<b style="color:var(--gold)">${esc(fb.name)} ${fb.n}枚</b> — この系統だけカードのCDが <b>−${Math.round(fb.cut*100)}%</b>。${fb.cut<BAL.FAM_MAX?'まだ伸びる。':'ここが上限。'}`
+      ? `<b style="color:var(--gold)">${esc(fb.name)} ${fb.n}/${fb.cap}枚</b> — この系統だけカードのCDが <b>−${Math.round(fb.cut*100)}%</b>。`
+        + (fb.n<fb.cap?`あと${fb.cap-fb.n}枚で上限の −${Math.round(BAL.FAM_MAX*100)}%。`:`ここが上限(満枠)。`)
       : (()=>{ const c={}; for(const id of META.deck){ const f=famOf(id); if(f) c[f]=(c[f]||0)+1; }
           let top=null,n=0; for(const f in c){ if(c[f]>n){ top=f; n=c[f]; } }
-          return `系統ボーナス: <b>効いていない</b>。同じ系統を${BAL.FAM_MIN}枚そろえると、その系統だけCDが縮む`
+          return `系統ボーナス: <b>効いていない</b>。同じ系統を${BAL.FAM_MIN}枚そろえると、その系統だけCDが縮む(満枠でどの系統も −${Math.round(BAL.FAM_MAX*100)}%)`
             + (top?`(いまの最多は<b>${esc(FAMS[top].name)}</b> ${n}枚、あと${BAL.FAM_MIN-n}枚)`:'')
             + `。系統: ${famList}`; })();
     return `
@@ -466,6 +468,11 @@ const UI={
     for(const id in MONSTERS){
       const m=MONSTERS[id];
       if(m.item||m.guardian) continue;
+      /* ★v6.6b 熟れた個体と地形産はカードにならない(ownedIds が弾く)。
+         研究所にだけ並んでいたので、買えてしまうのにデッキにも手札にも来なかった——
+         実測で9体(双眼・双条・三重の囃し・熟れたナメクジ・絡みワーム・焦らしの熟手・
+         二重傘・深口・据わりの触手王)。エッセンスの捨て場になっていた */
+      if(m.variant||m.field) continue;
       if(!(META.cards[id]&&META.cards[id].owned) && m.unlock<0 && !m.fusion) continue;   // 手に入らないものは並べない
       (byTier[tierOf(id)]=byTier[tierOf(id)]||[]).push(id);
     }

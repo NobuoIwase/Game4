@@ -259,9 +259,11 @@ function deckFam(deck){
   for(const id of d){ const f=famOf(id); if(f) cnt[f]=(cnt[f]||0)+1; }
   let fam=null, n=0;
   for(const f in cnt){ if(cnt[f]>n){ fam=f; n=cnt[f]; } }
-  if(!fam || n<BAL.FAM_MIN) return {fam:null, name:'', n:(fam?n:0), cut:0};
-  const cut=Math.min(BAL.FAM_MAX, (n-BAL.FAM_MIN+1)*BAL.FAM_STEP);
-  return {fam, name:FAMS[fam].name, n, cut};
+  const cap=fam?(FAM_CAP[fam]||BAL.FAM_MIN):0;
+  if(!fam || n<BAL.FAM_MIN) return {fam:null, name:'', n:(fam?n:0), cap, cut:0, top:fam};
+  /* v6.6b 伸びしろは系統ごとに割る。満枠(cap)で必ず FAM_MAX に届く */
+  const cut=Math.min(BAL.FAM_MAX, (n-BAL.FAM_MIN+1)*famStep(fam));
+  return {fam, name:FAMS[fam].name, n, cap, cut, top:fam};
 }
 function applyDeckMode(){ const mode=(META.settings&&META.settings.deckMode)||'manual'; if(mode==='manual') return null; META.deck=buildDeck(mode); saveMeta(); return mode; }
 /* ================= 戦闘開始/終了 ================= */
@@ -336,7 +338,7 @@ function startBattle(){
   bgmStart('battle');
   // v2.0 物語: 初めての出撃は序章、階層に降り立った導入(潜行ごとに1度)、敗北の翌朝は再挑戦の文
   { const F=G.B.floor, sf=storyFloor(F.depth); let lines=null;
-    const V30=(typeof STORY_V30!=='undefined')?STORY_V30:null, PRO=(V30&&V30.prologue&&V30.prologue.length&&G.B.heroes.length>1)?V30.prologue:STORY.prologue;   // v3.0 二人の序章
+    const V30=(typeof STORY_V30!=='undefined')?STORY_V30:null, PRO=storyKeepFits((V30&&V30.prologue&&V30.prologue.length&&G.B.heroes.length>1)?V30.prologue:STORY.prologue);   /* v3.0 二人の序章 / ★v6.6b 居ない子の行は落とす */
     const fIntro=(!META.run.storySeen['f'+F.depth]&&sf.intro.length)?['' ].concat(sf.intro):[];
     const loopI=((META.era|0)>0 && !META.run.storySeen['loop'+META.era])?storyLoopIntro(G.B.heroes.length):null;   // v3.1 組み替わった後の朝(一人版/二人版)
     if(!META.run.storySeen.prologue && PRO.length){ lines=PRO.concat(fIntro); META.run.storySeen.prologue=1; if(G.B.heroes.length>1) for(const id of partyIds()) if(id!=='lumina') META.run.storySeen['join_'+id]=1; META.run.storySeen['f'+F.depth]=1; saveMeta(); }   // v3.1 一人で始めたなら合流の朝はまだ
@@ -457,7 +459,7 @@ function endBattle(outcome){
     will:META.lumina.will||0, willUp:outcome==='capture', shrines:B.shrineGot, gateT:B.gateT, used:B.used, eventsN:B.eventsN, eventsDone:B.eventsDone,
     floor:B.floor, floorBefore, runNote, fails:META.run.fails, nextFloor:META.run.floor, seals:Object.keys(B.seals).length,
     storyLines: outcome==='clear'?storyClearLines(twoP)
-      :(runNote==='reset'?(((twoP&&V30E.reset)?V30E.reset:STORY.reset).concat((joinId&&V30E.party&&V30E.party.joinHint&&V30E.party.joinHint.length)?[''].concat(V30E.party.joinHint):[])):(outcome==='capture'&&B.captures&&B.captures.length>1?storyIfFits(V30E.party&&V30E.party.bothCaptured):(outcome==='descend'&&B.heroes.some(h=>h.out)?storyIfFits(V30E.party&&V30E.party.leftBehind):null))), newCurse:newCurse?BOSS_CURSES[newCurse.id]:null,   // v3.1 一人版の結末 / 合流の予兆
+      :(runNote==='reset'?(storyKeepFits((twoP&&V30E.reset)?V30E.reset:STORY.reset).concat((joinId&&V30E.party&&V30E.party.joinHint&&V30E.party.joinHint.length)?[''].concat(V30E.party.joinHint):[])):(outcome==='capture'&&B.captures&&B.captures.length>1?storyIfFits(V30E.party&&V30E.party.bothCaptured):(outcome==='descend'&&B.heroes.some(h=>h.out)?storyIfFits(V30E.party&&V30E.party.leftBehind):null))), newCurse:newCurse?BOSS_CURSES[newCurse.id]:null,   // v3.1 一人版の結末 / 合流の予兆
     loopFx: outcome==='clear'?'vortex':(runNote==='reset'?'miracle':null),   // v4.0 結末の文の後に流す演出(赤黒い渦 / 白い奇跡の光)
     join:joinId?HEROES[joinId].name:null, joinWhy:META.run.joinWhy||'',
     captures:B.captures, leftBehind:B.heroes.filter(h=>h.out).map(h=>h.name),
@@ -6010,7 +6012,7 @@ function poiTick(dt){
       sayLine('poi.'+q.kind,1,0,q.kind==='stairs'?'おりぐち、みっけ! でも、まだ見てないとこあるし':pickRand(['あそこ、なにかある……','あれ、なんだろ','おぼえておこう']));   // v2.1 場所ごとの台詞
       partyShare(p,'poi',q.x,q.y);   // v3.0 相手に伝える
       if(q.kind==='stairs') setBanner('降り口を見つけた',exitGuarded()?'石の番兵が守っている。彼女は他を見てから降りる':'彼女は見るものを見てから降りる','#8fd3ff');
-      if(q.kind==='core'){ setBanner('魔核の間','深淵の心臓。彼女は挑むだろう','#ff6b81'); { const two=B.heroes.length>1, V=(typeof STORY_V30!=='undefined')?STORY_V30:null; let fe=(two&&V&&V.finalEncounter&&V.finalEncounter.length)?V.finalEncounter:STORY.finalEncounter;   // v3.0 二人で魔核を見る
+      if(q.kind==='core'){ setBanner('魔核の間','深淵の心臓。彼女は挑むだろう','#ff6b81'); { const two=B.heroes.length>1, V=(typeof STORY_V30!=='undefined')?STORY_V30:null; let fe=storyKeepFits((two&&V&&V.finalEncounter&&V.finalEncounter.length)?V.finalEncounter:STORY.finalEncounter);   // v3.0 二人で魔核を見る
         /* v5.2 二周目以降: 彼女たちは一日目のつもりで来ている。だから「弱いはず」の心臓の厚みに説明がつかない。
            そして心臓の側も、落としきる寸前だったはずが供が増えていることに説明がつかない。互いに、覚えていない */
         /* ★v6.4 認知は、ループの向きごとに出す。前は era>=1 で二つとも出していたので、
@@ -9372,7 +9374,7 @@ function rescueHero(c,by){
   const B=G.B; c.out=false; c.pinned=false; c.pinBy=null; c.pinEscape=0; c.struggle=0; c.captive=null; B.captures=(B.captures||[]).filter(x=>x.hi!==c.hi); /* 救い出した子の捕獲記録は消す */ c.hp=Math.max(c.hp,Math.round(c.maxHp*0.5)); c.stamina=Math.max(c.stamina,Math.round(c.staminaMax*0.6)); c.ifr=1.5; c.aiMode='fight'; c.goal=null; c.path=null; c.exhausted=false; c.thanksT=1.3;
   B.rescues=(B.rescues||0)+1; setBanner(c.name+'を救い出した!', by.name+'が縛めを解いた','#8fd3ff'); parts(c.x,c.y-14,30,['#fff','#8fd3ff','#ffd76a'],200,0.8); S.lvup();
   sayPartyAs(by.hi,'rescue.done',3,0,c); B.party.goal=null;
-  if(typeof STORY_V30!=='undefined' && STORY_V30.party && STORY_V30.party.rescue && !B.rescueStorySeen){ B.rescueStorySeen=true; UI.showStory(STORY_V30.party.rescue,{dur:5}); }
+  if(typeof STORY_V30!=='undefined' && STORY_V30.party && STORY_V30.party.rescue && !B.rescueStorySeen){ B.rescueStorySeen=true; const rs=storyKeepFits(STORY_V30.party.rescue); if(rs.length) UI.showStory(rs,{dur:5}); }
 }
 function battleTick(dt){
   const B=G.B;
