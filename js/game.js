@@ -1833,7 +1833,11 @@ function condTick(h,dt){
   // 快感の自然減衰
   if(h.aphro>0) h.aphro=Math.max(0,h.aphro-BAL.PLEAS_DECAY*dt);
   // 敏感化の自然減衰(祭壇分は下限として残る)
-  if(h.sensit>h.sensitFloor) h.sensit=Math.max(h.sensitFloor,h.sensit-(BAL.SENSIT_DECAY+BAL.CALM_SENS*(h.calmK||0))*dt);   /* v6.7 息を整える間だけ速く抜ける(calmK は下で立てる) */
+  /* v6.7 息を整える間の速い抜けは、CALM_SENS_FLOOR より上の帯だけ。下地はいつもどおり */
+  if(h.sensit>h.sensitFloor){
+    const fast=(h.sensit>BAL.CALM_SENS_FLOOR)?BAL.CALM_SENS*(h.calmK||0):0;
+    h.sensit=Math.max(h.sensitFloor,h.sensit-(BAL.SENSIT_DECAY+fast)*dt);
+  }
   // 発情: レベル制+定期的な波
   if(h.heatLv>0){
     h.heatT-=dt;
@@ -1996,7 +2000,8 @@ function condTick(h,dt){
   }
   if(h.muskCd>0) h.muskCd-=dt;
   if(!h.inMusk) h.muskCond=Math.max(0,h.muskCond-2*dt);          // 匂いから離れると結びつきは薄れる
-  if(!inCloud) h.heatG=Math.max(0,(h.heatG||0)-(1.5+BAL.CALM_HEAT*(h.calmK||0))*dt);           // 雲の外では発情ゲージは徐々に抜ける(v6.7 息を整えていれば速い)
+  if(!inCloud){ const fastH=((h.heatG||0)>BAL.CALM_HEAT_FLOOR)?BAL.CALM_HEAT*(h.calmK||0):0;
+    h.heatG=Math.max(0,(h.heatG||0)-(1.5+fastH)*dt); }                                         // 雲の外では発情ゲージは徐々に抜ける(v6.7 息を整えていれば、上の帯だけ速い)
   /* ================= v6.7 息を整える間 =================
      雲の外に居て、魔物が CALM_R より遠く、掴まれても押し倒されてもいない——
      その全部が揃っている間だけ、敏感化と発情ゲージの抜けが CALM_WARM 秒かけて最大になる。
