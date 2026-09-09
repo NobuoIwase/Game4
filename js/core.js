@@ -250,7 +250,7 @@ function loadMeta(){
         const L=META.altarH.lumina=Object.assign({}, META.altarH.lumina||{});
         for(const a of ALTAR){ if(a.side) continue; if(META.altar[a.id]){ L[a.id]=Math.max(L[a.id]||0, META.altar[a.id]); delete META.altar[a.id]; } }
       }
-      META.curse=(d.curse&&d.curse.id&&d.curse.left>0)?d.curse:null;
+      META.curse=(d.curse&&d.curse.id&&d.curse.left>0&&BOSS_CURSES[d.curse.id])?d.curse:null;   /* v6.6 消えたボスの呪いが残っていても引き継がない */
       META.map=Object.assign({gen:0, floor:0, known:{}, visited:{}, seen:0}, d.map||{});
       META.map.known=META.map.known||{}; META.map.visited=META.map.visited||{};
       META.lumina.upg=Object.assign({vital:0,guard:0,bless:0,swift:0,grit:0,zeal:0}, (d.lumina||{}).upg);
@@ -272,7 +272,9 @@ function migrateCards(){
     if(!META.cards[id]) META.cards[id]={owned:true,lv:1};
     META.cards[id].owned=true;
   }
-  META.deck=(META.deck||[]).filter(id=>META.cards[id]&&META.cards[id].owned);
+  /* v6.6 消えた魔物(ヴァンピロード等)が古いセーブに残っていても落ちないよう、まず存在しない id を掃く */
+  for(const id of Object.keys(META.cards)) if(!MONSTERS[id]) delete META.cards[id];
+  META.deck=(META.deck||[]).filter(id=>MONSTERS[id] && META.cards[id] && META.cards[id].owned);
   // 階級ごとの枠(雑魚2/中型2/大型1/ボス1)に収める(v1.0)
   const tcnt={};
   META.deck=META.deck.filter(id=>{ const t=tierOf(id); tcnt[t]=(tcnt[t]||0)+1; return tcnt[t]<=TIER_CAP[t]; });

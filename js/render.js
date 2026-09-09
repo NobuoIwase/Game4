@@ -15,9 +15,11 @@ const EN_COLORS={
   slime:['#8fe8c9','#3fae86'], worm:['#c9a06a','#7a5a3a'], imp:['#ff86b3','#b8548a'],
   gas:['#ff9ec2','#d86aa0'], flower:['#e86a9c','#8fe8c9'],
   mistslime:['#ffc2d8','#8fe8c9'], gtent:['#a06ac9','#5a3a7a'],
-  vampi:['#c04a6a','#ffd76a','#fff'],
   goblin:['#8fd36a','#4a7a3a'], leech:['#ffb3a0','#d87a6a'],
   sentinel:['#9aa3c8','#5a6284'],
+  peeper:['#dcd0ff','#7a5aa8','#2a1030'],   /* v6.6 覗き子(眼系の雑魚) */
+  fluff:['#eaf7d0','#c8e86a','#8aa84a'],    /* v6.6 綿毛 */
+  coughcap:['#e8dcc0','#c8e86a','#8a7a4a'], /* v6.6 咳き茸 */
   coreling:['#ffc2d8','#a03a62'],   // v4.0 核の落とし子
   lurecap:['#9fe8c8','#c85682'], hugcap:['#f0e0bc','#b89468'],   // v4.1 きのこ
   miretent:['#e08ac0','#8a3a62'],   // v5.0 沼の触手
@@ -1542,6 +1544,9 @@ function drawBody(g,e){
   else if(aid==='bonesoldier') drawBonesoldier(g,e);
   else if(aid==='spore') drawSpore(g,e);
   else if(aid==='ghosthand') drawGhosthand(g,e);
+  else if(aid==='peeper') drawPeeper(g,e);
+  else if(aid==='fluff') drawFluff(g,e);
+  else if(aid==='coughcap') drawCoughcap(g,e);
   else if(aid==='eye') drawEye(g,e);
   else if(aid==='succubus') drawSuccubus(g,e);
   else if(aid==='web') drawWeb(g,e);
@@ -2522,6 +2527,61 @@ function drawGhosthand(g,e){
   }
   g.restore();
 }
+/* v6.6 覗き子: 掌ほどの目玉。翼はなく、ふわりと浮いている。
+   見ている扇を薄く描く——どこを見られているかが、画面から分かるように */
+/* v6.6 綿毛: 白緑の綿。触れると弾ける */
+function drawFluff(g,e){
+  const r=e.r, t=e.t;
+  g.save(); g.translate(0,-r*0.9+Math.sin(t*1.5)*2);
+  glow(g,0,0,r*1.8,'200,232,106',0.22);
+  g.fillStyle='#eaf7d0';
+  for(let k=0;k<7;k++){ const a=k/7*TAU+t*0.4; g.beginPath(); g.arc(Math.cos(a)*r*0.55,Math.sin(a)*r*0.45,r*0.42,0,TAU); g.fill(); }
+  g.fillStyle='#c8e86a';
+  g.beginPath(); g.arc(0,0,r*0.4,0,TAU); g.fill();
+  g.restore();
+}
+/* v6.6 咳き茸: 動かない。傘が裂けかけている */
+function drawCoughcap(g,e){
+  const r=e.r, t=e.t, ready=(e.puffCd||0)<=0;
+  g.save();
+  g.fillStyle='#e8dcc0';
+  g.beginPath(); g.moveTo(-r*0.22,0); g.lineTo(-r*0.14,-r*0.9); g.lineTo(r*0.14,-r*0.9); g.lineTo(r*0.22,0); g.closePath(); g.fill();
+  glow(g,0,-r*0.95,r*1.4,'200,232,106',ready?0.30:0.10);
+  g.fillStyle=ready?'#c8e86a':'#9aa87a';
+  g.beginPath(); g.ellipse(0,-r*0.95,r*0.95,r*0.55,0,Math.PI,TAU); g.fill();
+  g.fillStyle='rgba(90,110,50,0.45)';
+  for(let k=-2;k<=2;k++){ g.beginPath(); g.ellipse(k*r*0.3,-r*0.95,r*0.07,r*0.2+Math.sin(t*2+k)*r*0.03,0,Math.PI,TAU); g.fill(); }
+  g.restore();
+}
+function drawPeeper(g,e){
+  const r=e.r, t=e.t;
+  g.save();
+  g.translate(0,-r*1.1+Math.sin(t*2.4)*1.6);
+  /* 視線の扇(見ている時だけ濃く) */
+  if(e.fanA!==undefined){
+    const on=e.watching?0.20:0.07;
+    const a0=e.fanA-BAL.EYE_FAN_ANG, a1=e.fanA+BAL.EYE_FAN_ANG;
+    const gr=g.createRadialGradient(0,0,r,0,0,BAL.EYE_FAN_R);
+    gr.addColorStop(0,'rgba(220,208,255,'+(on*1.6)+')');
+    gr.addColorStop(1,'rgba(220,208,255,0)');
+    g.fillStyle=gr;
+    g.beginPath(); g.moveTo(0,0); g.arc(0,0,BAL.EYE_FAN_R,a0,a1); g.closePath(); g.fill();
+  }
+  glow(g,0,0,r*1.5,'201,140,255',e.watching?0.55:0.25);
+  g.fillStyle='#f4efff';
+  g.beginPath(); g.arc(0,0,r*0.95,0,TAU); g.fill();
+  g.fillStyle='rgba(60,20,90,0.28)';
+  g.beginPath(); g.arc(0,0,r*0.95,0.2*Math.PI,0.8*Math.PI); g.fill();
+  /* 虹彩は見ている向きへ寄る */
+  const ix=Math.cos(e.fanA||0)*r*0.3, iy=Math.sin(e.fanA||0)*r*0.3;
+  g.fillStyle=e.watching?'#ff86b3':'#7a5aa8';
+  g.beginPath(); g.arc(ix,iy,r*0.42,0,TAU); g.fill();
+  g.fillStyle='#2a1030';
+  g.beginPath(); g.arc(ix,iy,r*0.2,0,TAU); g.fill();
+  g.fillStyle='rgba(255,255,255,0.9)';
+  g.beginPath(); g.arc(ix-r*0.18,iy-r*0.2,r*0.12,0,TAU); g.fill();
+  g.restore();
+}
 function drawEye(g,e){
   // 覗き目玉: 瞼のない眼球に小さな翼。凝視の直前に虹彩が光る
   const r=e.r, t=e.t, gl=clamp(1-((e.gazeCd===undefined?3:e.gazeCd)/1.2),0,1);
@@ -2779,6 +2839,27 @@ function drawBossgazer(g,e){
 function drawSightSectors(g,B){
   for(const e of B.enemies){
     if(e.dead||e.dormant) continue;
+    /* v6.6 眼系の「条」: 壁に当たるまで流れ続ける光。溜め(warm)は細く、出ている間(on)は太い */
+    if(e.rays){
+      for(const ry of e.rays){
+        if(ry.state==='off' || !ry.len) continue;
+        const ox=e.x, oy=e.y-e.r*1.2, ex=ox+Math.cos(ry.ang)*ry.len, ey=oy+Math.sin(ry.ang)*ry.len;
+        if(ry.state==='warm'){
+          const k=1-clamp(ry.t/BAL.RAY_WARM,0,1);
+          g.globalAlpha=0.30+k*0.35; g.strokeStyle='#ffd76a'; g.lineWidth=1.4;
+          g.beginPath(); g.moveTo(ox,oy); g.lineTo(ox+Math.cos(ry.ang)*ry.len*k, oy+Math.sin(ry.ang)*ry.len*k); g.stroke();
+        }else{
+          g.globalAlpha=0.85; g.strokeStyle='#fff6d8'; g.lineWidth=BAL.RAY_W; g.lineCap='round';
+          g.shadowColor='#ffd76a'; g.shadowBlur=14;
+          g.beginPath(); g.moveTo(ox,oy); g.lineTo(ex,ey); g.stroke();
+          g.shadowBlur=0;
+          g.strokeStyle='#ff5d9e'; g.lineWidth=2.4;
+          g.beginPath(); g.moveTo(ox,oy); g.lineTo(ex,ey); g.stroke();
+        }
+        g.globalAlpha=1;
+      }
+      continue;
+    }
     if(e.id==='beamer'){
       // 絶頂照射の照準: 光条の通り道(幅=BEAM_W)を淡く示し、中心に流れる破線。最後の0.25秒(固定)は白く締まる
       if(e.bmState!=='aim') continue;

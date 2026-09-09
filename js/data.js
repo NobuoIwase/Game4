@@ -430,7 +430,21 @@ const BAL={
   LOGEM_CURVE:[[30,1.0],[50,0.9],[70,0.8],[90,0.75],[110,0.7],[150,0.6],[200,0.5]],   // 場の魔物数→ロージェムの経験値倍率(100%→…→50%)
   LUMINA_DECAY:5,          // 世代の夜明けで薄れる自己強化の段数(ゼロには戻らない)
   /* v1.2 状態異常拡張(放置系エロトラップダンジョンの機構を参考に、独自に再構成) */
-  DENY_DUR:7,              // 寸止め(絶頂禁止)の持続。快感は99で止められ、切れた瞬間に溜めた分が来る
+  DENY_DUR:7,              /* 絶頂禁止の持続。快感は99で止められ、切れた瞬間に溜めた分が来る */
+  /* v6.6 淫魔は特化系統ではなく現場指揮官。自分の一個下の階級までを強化する。
+     コスト高め・CD長めで、盤の上に「指揮官が居るかどうか」を作る。
+     DEMON_R が届く距離 / DEMON_PW が強化の濃さ。強化は速度と行動の速さに乗る */
+  DEMON_R:{imp:190, succubus:280, succuhigh:300, succuqueen:380},
+  DEMON_PW:{imp:0.35, succubus:0.50, succuhigh:0.58, succuqueen:0.72},
+  DEMON_SPD:0.70, DEMON_ACT:1.20,   /* v6.6 0.45/0.55 では実測 9回 vs 8回で誤差に埋もれた。指揮官が居ることが見て分かる強さに */
+  /* 小淫魔は、掴まれている彼女の耳元へ寄って囁く。責めそのものは持たないが、入りが増える */
+  DEMON_WHISPER_R:74, DEMON_WHISPER:1.45,
+  /* 絶頂禁止で溢れた快感は身体に溜まる。解放でまとめて来るが、★スタミナの削れは控えめに
+     (いまでも十分に削れやすいので、溜めた分がそのまま削りになると即死する) */
+  DENY_OVER_MAX:140, DENY_OVER_STAM:0.055,
+  /* 夢魔の女王のおあずけ: 責めを一瞬止めて絶頂の寸前で堰き止める。
+     OMAZUKE_NEED 回ねだらせたら満足して、イかせてやる */
+  OMAZUKE_R:220, OMAZUKE_NEED:3, OMAZUKE_HOLD:1.1, OMAZUKE_HOLD_T:1.4, OMAZUKE_TH:82,
   DENY_DEEP_TH:85,         // 切れた時に快感がこれ以上なら「深い絶頂」
   DEEP_MULT:1.6,           // 深い絶頂の硬直倍率
   NUMB_DUR:3,              // 痺れ: 攻撃速度半減・移動-25%
@@ -453,7 +467,39 @@ const BAL={
   GAZE_AIM:1.4, GAZE_CD:5.5,
   HYPNO_LV_DUR:30,         // 催眠Lvが1段薄れるまでの秒数
   SELF_DUR:3.2, SELF_CD:9, // 催眠Ⅲ: その場で自慰を始める(秒)と再発の間隔
-  BEAM_AIM:1.0, BEAM_CD:9, BEAM_LEN:300, BEAM_W:14,   // 絶頂照射: 照準1秒→発射。彼女が見て判断できる速さ(学習で避ける)
+  BEAM_AIM:1.0, BEAM_LEN:300, BEAM_W:14,   /* 巣窟の壁の光線が使う照準の値。★v6.6 で絶頂照射触手は「条」に変わり、BEAM_CD は誰も読まなくなったので消した */
+  /* ===== v6.6 ボスは「深いところで会うほど、技が増える」 =====
+     これまでは深層個体(熟れた個体)による一律の底上げだけだった。魔核の coreSkill と同じ形で、
+     ボスごとに段を持たせる。段は「そのボスに会った深さ」で決まる(浅い階で出しても増えない)。
+       ボスゲイザー: 目玉が三つ→四つ→五つ / 夢魔の女王: 呼ぶ小淫魔が3→4→5体、届く距離も伸びる
+       粘獣王: 粘液の跡が濃く / 淫紋の刻印師: 陣が一つ増える / ゴブリンの王: 雄臭の雲が濃い
+       淫夢の樹: 根が一本増える / 三体のループボス: 出会いの階に合わせて硬く */
+  BOSS_RANK_D:[0, 5, 9, 13],   /* この深さを越えるごとに一段 */
+  BOSS_RANK_HP:0.22,           /* 一段ごとの体力の上乗せ(能力の追加とは別に、少しだけ) */
+  /* ===== v6.6 胞子系: 吸うと一時的にハイになり、抜けると疲れて、癖になる =====
+     ★作者の懸念「綿毛は指数関数的に増えないか」への答え: 増えるのは上限つき。
+       FLUFF_MAX 体を超えたら分かれない・確率も低い。実測で場の数を数えてある(BRIEFING §7) */
+  FLUFF_MAX:10, FLUFF_SPLIT:0.35, FLUFF_PUFF_R:96,   /* v6.6 66px では、壊した所(71px)に粉が届かず一度も吸えなかった */
+  /* 粉を吸った直後: 元気になる(足も攻めも上がる)。同時に発情も乗る */
+  HIGH_T:9, HIGH_SPD:1.22, HIGH_DMG:1.18, HIGH_HEAT:26, HIGH_SENS:10,
+  /* 抜けたあとの疲れ。★ここでスタミナが一定量落ちる */
+  CRASH_STAM:11, CRASH_T:3.0,
+  /* 中毒: 吸うたび一つ積もり、時間で薄れる。深いほど自分から罠を踏みに行く */
+  ADDICT_MAX:5, ADDICT_DECAY:0.009, ADDICT_SEEK:1,   /* v6.6 閾値2では一晩に一度も届かなかった(最大1.9→1)。作者の言う「終わると中毒になる」は一巡で成立させる */   /* この段から、きのこ系の罠を目当てにする */
+  ADDICT_WORTH:2.2,                                  /* 中毒で罠に寄る時の目当ての重み */
+  /* ===== v6.6 眼系は「見る」のではなく、壁に当たるまで光を流し続ける =====
+     ・弱い個体の条は快感が溜まるだけ。深いところの個体は絶頂させ、そこから連続絶頂に入る
+       (=仲間の助けが要る)
+     ・大型は三方向。★湧いた瞬間に条が出て即絶頂しないよう、必ず BEAM_WAKE の硬直を置く */
+  RAY_WARM:0.55,          /* 条が出るまでの溜め(細い光が伸びる) */
+  RAY_LEN:900, RAY_W:11,  /* 壁に当たるまで。当たり判定の幅 */
+  RAY_ON:2.2, RAY_OFF:3.4,/* 出ている時間 / 消えている時間 */
+  RAY_PLE:16,             /* 条に浴びている間の快感(毎秒)。★浴び続けても「溜まるだけ」 */
+  RAY_TURN:0.5,           /* 条が向きを変える速さ(rad/秒)。遅いので歩けば抜けられる */
+  RAY_DEEP:9,             /* この深さから、条が絶頂まで持っていく個体になる */
+  BEAM_WAKE:2.4,          /* ★湧いてからこの秒数は撃たない(出た瞬間の事故を潰す) */
+  EYE_FAN_R:210, EYE_FAN_ANG:0.55, EYE_FAN_PLE:2.6,   /* 小型の目玉: 扇形の視界に入っている間だけ、ほんの少しずつ。数で重なる */
+  EYE_SHY_R:120,          /* 戦いづらいなと離れる距離 */
   MUSK_R:64,               // 雄臭が「する」と感じる距離。性癖の刻み口はこの 2.6 倍で見る(雲そのものは MUSK_CLOUD_R)
   /* v6.2 嗅ぐ発作。状態表示(AIL.sniff)も反応も4箇所に書いてあったのに、
      引き金だけが無く sniffT に代入する場所が一つも無かった(check_dead.py で発覚)。
@@ -750,10 +796,10 @@ const MONSTERS={
     trait:'媚薬ガス滞留(吸うと蓄積)',
   },
   imp:{
-    name:'小淫魔', role:'煽り・じらし', cost:5, unlock:280, tier:'mid',
+    name:'小淫魔', role:'現場指揮・煽り', cost:8, unlock:280, tier:'mid',
     hp:20, spd:120, r:8, dmg:0, xp:5, solo:true,
-    desc:'攻撃はしない。ヒロインの周りをパタパタと飛び回って煽り、集中を乱し、媚薬を薫らせる。すばしこく撃ち落としにくい。',
-    trait:'まとわり煽り(媚薬+集中低下)',
+    desc:'自分では何もしない。雑魚たちを操って動かす、いちばん下の指揮官。周りを飛び回って煽り、集中を乱し、媚薬を薫らせる。組み伏せられた彼女の耳元まで来て、囁く。',
+    trait:'【指揮】そばの雑魚が速く・手数が増える。掴まれている間は耳元で囁いて快感の入りを増やす(×1.45)',
   },
   flower:{
     name:'触手花', role:'設置罠・蔦', cost:5, unlock:450, tier:'mid',
@@ -826,6 +872,27 @@ const MONSTERS={
     desc:'夜気が手の形に凝った霊。触れると彼女の腕に憑き、その腕は彼女の意志を離れて彼女自身を撫ではじめる。腕が奪われた分だけ攻撃は乱れる。',
     trait:'接触で腕に【憑依】(自分の手で快感・攻撃低下)。空きが無ければまさぐり',
   },
+  /* v6.6 眼系にはこれまで雑魚が一枚も無く、雑魚枠3つが他系統の群れで埋まっていた。
+     責めも攻撃も持たない「見るだけ」の一枚を足す——一撃火力は一切増えない */
+  /* v6.6 胞子系の雑魚。どちらも攻撃力0で、撒くだけ */
+  fluff:{
+    name:'綿毛', role:'漂う・弾ける', cost:2, unlock:220, tier:'fodder',
+    hp:10, spd:38, r:7, dmg:0, xp:3, deep:2,
+    desc:'胞子の綿。ゆっくり漂ってくるだけで、掴みも噛みもしない。触れると弾け、倒しても弾ける。息を止めない限り吸ってしまう。',
+    trait:'接触・撃破のどちらでも粉を撒く。★撃破時にまれに一つ分かれる(場に'+'10体まで)。攻撃力0',
+  },
+  coughcap:{
+    name:'咳き茸', role:'設置・粉', cost:2, unlock:200, tier:'fodder',
+    hp:26, spd:0, r:9, dmg:0, xp:3, deep:2, solo:true,
+    desc:'膝ほどの茸。動かない。踏むか、近くで暴れると傘が破れて粉が上がる。中毒になった身体は、これを見つけると自分から寄っていく。',
+    trait:'踏むと粉。動かない。攻撃力0',
+  },
+  peeper:{
+    name:'覗き子', role:'見るだけ', cost:2, unlock:180, tier:'fodder',
+    hp:12, spd:64, r:6, dmg:0, xp:3, deep:2,
+    desc:'掌ほどの目玉。責めない、掴まない、噛まない。ただ扇形にじっと見ている。見られている間だけ、熱がわずかに逃げなくなる。近づかれると、すっと下がる。',
+    trait:'扇形の視界に入っている間だけ快感がわずかに増える(数で重なる)。【視姦】。攻撃力0',
+  },
   eye:{
     name:'覗き目玉', role:'視姦', cost:4, unlock:320, tier:'mid',
     hp:30, spd:50, r:10, dmg:0, xp:4, solo:true,
@@ -833,10 +900,10 @@ const MONSTERS={
     trait:'距離を保って【視姦】(快感+20%)。6秒ごとの凝視で羞恥・敏感化。絶頂を「撮影」',
   },
   succubus:{
-    name:'寸止めの淫魔', role:'寸止め', cost:8, unlock:600, tier:'large',
+    name:'寸止めの淫魔', role:'現場指揮・絶頂禁止', cost:11, unlock:600, tier:'large',
     hp:150, spd:60, r:13, dmg:3, xp:10,
-    desc:'指先ひとつで快感の栓を閉める淫魔。近くにいる彼女の絶頂を7秒だけ禁じ、溜まりきったところで栓を抜く。抜かれた瞬間の絶頂は深く、長い。',
-    trait:'8秒ごとに【寸止め】(絶頂禁止7秒→切れた時に深い絶頂)。接触で快感',
+    desc:'中型までを遠くから操る指揮官。ふだんは離れて眺めているが、彼女がえっちな目に遭っていると見物に寄ってくる。指先ひとつで快感の栓を閉め、溢れた分を身体に溜めさせてから抜く。',
+    trait:'【指揮】そばの中型以下が速く・手数が増える。8秒ごとに【絶頂禁止】(7秒。溢れた分が溜まり、抜かれた時にスタミナを持っていく)',
   },
   gazer:{
     name:'催眠ゲイザー', role:'催眠・視界', cost:5, unlock:420, tier:'mid',
@@ -868,12 +935,6 @@ const MONSTERS={
     hp:420, spd:0, r:14, dmg:0, xp:0,
     desc:'骨と肉で組まれた小さな塔。頂の眼球が数秒ごとに紫の電波を放ち、浴びた者の思考をざらつかせて塔のほうへ足を向けさせる。',
     trait:'3.5秒ごとに催眠電波(思考鈍化+引き寄せ)',
-  },
-  vampi:{
-    name:'ヴァンピロード', role:'ボス', cost:26, unlock:900, tier:'boss',
-    hp:1900, spd:55, r:28, dmg:22, xp:90, boss:true,
-    desc:'夜の統率者。突進で薙ぎ払い、掠めた相手をよろめかせる。召喚は1戦に1度。',
-    trait:'突進(370px/s)。突進の直後、45%で二段目の突進。接触よろめき。呪い『吸われ癖』',
   },
   /* ---- v2.0 新種 ---- */
   inyoku:{
@@ -962,10 +1023,10 @@ const MONSTERS={
     trait:'呪弾3.8秒ごと(命中で淫紋Lv+1・快感)。HP半分を切ると三方向の呪弾、罠を2つずつ伏せる。呪い『淫紋焼き付け』',
   },
   succuqueen:{
-    name:'夢魔の女王', role:'ボス・甘い夢', cost:25, unlock:1250, tier:'boss',
+    name:'夢魔の女王', role:'ボス・おあずけ', cost:30, unlock:1250, tier:'boss',
     hp:1800, spd:48, r:26, dmg:3, xp:90, boss:true,
-    desc:'淫魔たちの女王。周りを舞いながら甘い夢の波を放ち、発情を深め、火照った身体に寸止めをかける。口づけで敏感にし、小淫魔を呼ぶ。',
-    trait:'5.2秒ごとの甘い波(発情ゲージ+。発情中なら寸止め)。接触で口づけ(敏感化・発情中なら寸止め)。小淫魔を3体ずつ(8体まで)。呪い『甘い夢の残り香』',
+    desc:'淫魔たちの女王。大型までを従える。栓はしない——責めを一瞬だけ止めて、絶頂の寸前で引き戻す。繰り返されるほど彼女はねだるようになり、女王が満足したとき、ようやく許しが出る。',
+    trait:'【指揮】そばの大型以下が速く・手数が増える。甘い波と口づけで【おあずけ】(寸前で止める)。3回ねだらせると満足して、イかせる。小淫魔を3体ずつ(8体まで)。呪い『甘い夢の残り香』',
   },
   gobking:{
     name:'ゴブリンの王', role:'ボス・雄臭', cost:24, unlock:950, tier:'boss',
@@ -1178,7 +1239,7 @@ const ZONE_WET={ water:1.0, damp:0.65, hotspring:0.85, moss:0.3, flesh:0.35, lew
   mirror:1.0, lethe:1.0, frost:0.5, womb:0.6, silk:0.2, glyph:0.2, stall:0.3, sham:0.3 };
 /* v4.0 種族の質: 1 に近いほどヌルヌル(火が通りにくい) / -1 に近いほどカラカラ・薄っぺら(よく燃える) */
 const MON_WET={ slime:1, mistslime:1, slimeking:1, slug:0.9, leech:0.9, worm:0.8, suiyou:1, pot:0.6, gtent:0.5, hand:0.4, mouth:0.5, slugqueen:0.8, ghosthand:0.3,
-  moth:-1, spore:-0.9, web:-1, flower:-0.7, imp:-0.6, gas:-0.5, ghost:-0.4, dreamtree:-0.7, tower:-0.6, goblin:-0.2, gobking:-0.2, succubus:-0.3, inyoku:-0.4, vampi:-0.3 };
+  moth:-1, spore:-0.9, web:-1, flower:-0.7, imp:-0.6, gas:-0.5, ghost:-0.4, dreamtree:-0.7, tower:-0.6, goblin:-0.2, gobking:-0.2, succubus:-0.3, inyoku:-0.4 };
 const FREILA_WET_K=0.30, FREILA_DRY_K=0.55;   // その質が与ダメに効く強さ(ヌルヌルには弱く、カラカラにはめっぽう強い)
 const ZONE_HP_MON={ damp:{slug:1.25,leech:1.25,worm:1.25,slimeking:1.25}, nest:{'*':1.15}, flesh:{gtent:1.2,hand:1.2,pot:1.2,worm:1.2,ghosthand:1.2,slugqueen:1.2}, lewd:{'*':1.1},
   /* v6.0 その地形の主が居る帯。三点セット(WET/HP/SPD)は必ず同時に書き足す */
@@ -1209,16 +1270,16 @@ const FLOORS=[
   { id:'f2', name:'水鏡の洞',   sub:'凪いだ浅瀬。自分が、足元に居る',        depth:2, dark:0.55, zoneW:{water:4,damp:3,mirror:3,moss:2,hotspring:1}, wall:'rock',  en:{start:1.1,base:1.15,regen:1.15,max:1.15}, hero:{hp:1.05,dmg:1.05,stam:1.05}, mon:{hp:1.15,dmg:1.05}, affinity:['mirrorling','slime','mistslime','leech','slimeking','worm','suiyou'], col:'#7fe0ff', lewd:{name:'湯けむりの隠れ湯', sub:'湯気の濃い隠れ湯。火照りが止まらない。奥に王の宝箱', mix:{rune:0, flower:2, beam:1, grip:0.85, seed:'mistslime', seedN:2, trait:'steam'}, /* v6.3 湯気: 陣は無く、湯気がじわじわ効く */ guard:'suiyou', beam:'hypno', guardSub:'湯の中から、白い腕がいくつも伸びている'} },
   { id:'f3', name:'蜜の花園',   sub:'花と温泉。甘い匂いが濃い',              depth:3, dark:0.62, zoneW:{flower:5,moss:2,hotspring:2,damp:1},        wall:'rock',  en:{start:1.2,base:1.3,regen:1.3,max:1.3},     hero:{hp:1.12,dmg:1.12,stam:1.12}, mon:{hp:1.3,dmg:1.1},   affinity:['flower','moth','gas','imp','succubus','dreamtree','inyoku','lurecap','hugcap'], col:'#ffb3cf', lewd:{name:'花の褥', sub:'花びらが敷き詰められた褥。花粉が濃い。奥に王の宝箱', mix:{rune:1, flower:4, beam:1, grip:0.9,  seed:'flower', seedN:2, trait:'pollen'}, /* v6.3 花粉: 花だらけ。雲が途切れない */ guard:'succubus', beam:'climax', guardSub:'花に埋もれて、寸止めの淫魔が眠っている'} },
   { id:'f4', name:'沈んだ回廊', sub:'石畳の遺跡。封印石を灯さねば降り口は開かない', depth:4, dark:0.70, zoneW:{ruin:6,damp:2,water:1,moss:1,glyph:1},  wall:'brick', en:{start:1.3,base:1.5,regen:1.5,max:1.5},     hero:{hp:1.20,dmg:1.20,stam:1.20}, mon:{hp:1.5,dmg:1.15},  affinity:['glyphmite','echoer','gazer','beamer','eye','runemage','tower','bossgazer','guardian'], puzzle:'seals', col:'#cbd5ff', lewd:{name:'淫紋の間', sub:'床いちめんに紋が刻まれた間。踏むほど身体が疼く。奥に王の宝箱', mix:{rune:5, flower:1, beam:2, grip:0.7,  seed:'runemage', seedN:1, trait:'rune'}, /* v6.3 紋: 床が陣で埋まっている。花は少ない */ guard:'guardian', beam:'hypno', guardSub:'紋の中心に、遺跡の番人が据わっている'} },
-  { id:'f5', name:'肉の巣',     sub:'壁も床も脈打つ。深淵の心臓に近い',    depth:5, dark:0.76, zoneW:{flesh:5,nest:3,flower:1,damp:1},           wall:'flesh', en:{start:1.5,base:1.75,regen:1.75,max:1.75}, hero:{hp:1.30,dmg:1.30,stam:1.30}, mon:{hp:1.75,dmg:1.25}, affinity:['gtent','hand','pot','worm','slugqueen','succuqueen','gobking','vampi','mouth','hugcap'], col:'#ff6b81', lewd:{name:'肉の褥', sub:'脈打つ肉の褥。横になれば、もう起きられない。奥に王の宝箱', mix:{rune:2, flower:2, beam:1, grip:1.8,  seed:'hand', seedN:3, trait:'grip'}, /* v6.3 肉: 床の手が絶えない */ guard:'gtent', beam:'climax', guardSub:'褥の奥から、太い触手が幾本も生えている'} },
+  { id:'f5', name:'肉の巣',     sub:'壁も床も脈打つ。深淵の心臓に近い',    depth:5, dark:0.76, zoneW:{flesh:5,nest:3,flower:1,damp:1},           wall:'flesh', en:{start:1.5,base:1.75,regen:1.75,max:1.75}, hero:{hp:1.30,dmg:1.30,stam:1.30}, mon:{hp:1.75,dmg:1.25}, affinity:['gtent','hand','pot','worm','slugqueen','succuqueen','gobking','mouth','hugcap'], col:'#ff6b81', lewd:{name:'肉の褥', sub:'脈打つ肉の褥。横になれば、もう起きられない。奥に王の宝箱', mix:{rune:2, flower:2, beam:1, grip:1.8,  seed:'hand', seedN:3, trait:'grip'}, /* v6.3 肉: 床の手が絶えない */ guard:'gtent', beam:'climax', guardSub:'褥の奥から、太い触手が幾本も生えている'} },
   /* v3.0 追加の階層(世代=魔核の討伐回数で開く) */
   { id:'f6', name:'骸の回廊',   sub:'骨と糸。凹みには、前の形が残っている',  depth:6, dark:0.82, zoneW:{ruin:4,silk:3,flesh:2,damp:2,nest:1},    wall:'bone', en:{start:1.6,base:2.0,regen:2.0,max:2.0},     hero:{hp:1.52,dmg:1.42,stam:1.55}, mon:{hp:2.0,dmg:1.35},  affinity:['silkmite','bonesoldier','guardian','sentinel','gazer','beamer','ghost','ghosthand','eye','runemage'], col:'#d9d2ff', lewd:{name:'骸の寝台', sub:'骨で組んだ寝台。横たえられた者の形に凹んでいる。奥に王の宝箱', mix:{rune:2, flower:1, beam:3, grip:1.0,  seed:'silkmite', seedN:3, trait:'silk'}, /* v6.3 糸: 寝台の周りに糸が張ってある */ guard:'guardian', beam:'hypno', guardSub:'寝台の主が、骨の椅子から立ち上がる'} },
   { id:'f7', floorBoss:'mirrorqueen', name:'星の湖底',   sub:'天井の星が水に映る。映った中に、彼女が立つ', depth:7, dark:0.86, zoneW:{water:4,mirror:4,damp:2,moss:1,hotspring:1}, wall:'obsidian',  en:{start:1.7,base:2.3,regen:2.3,max:2.3},     hero:{hp:1.66,dmg:1.52,stam:1.70}, mon:{hp:2.3,dmg:1.45},  affinity:['mirrorling','gallery','suiyou','slime','mistslime','leech','slimeking','inyoku','moth','succubus'], col:'#9fd8ff', lewd:{name:'星の浅瀬', sub:'星が映る浅瀬。水が腕の形になって待っている。奥に王の宝箱', mix:{rune:2, flower:2, beam:3, grip:1.0,  seed:'mirrorling', seedN:3, trait:'mirror'}, /* v6.3 水鏡: 浅瀬に映った自分が起き上がる */ guard:'suiyou', beam:'hypno', guardSub:'星を映す水が、腕の形に立ち上がる'} },
-  { id:'f8', name:'深淵の底',   sub:'床いちめんの紋。歩いた分だけ、濃くなる', depth:8, dark:0.90, zoneW:{glyph:5,flesh:3,nest:2,ruin:1,flower:1},  wall:'flesh', en:{start:1.9,base:2.6,regen:2.6,max:2.6},     hero:{hp:1.80,dmg:1.64,stam:1.85}, mon:{hp:2.6,dmg:1.55},  affinity:['glyphmite','gtent','hand','pot','mouth','succuqueen','gobking','vampi','core','runemage'], col:'#ff5d9a', lewd:{name:'底の褥', sub:'紋の刻まれた肉の褥。深淵の底で、二人ぶんの窪みが待つ。奥に王の宝箱', mix:{rune:5, flower:2, beam:3, grip:1.3,  seed:'glyphmite', seedN:3, trait:'rune'}, /* v6.3 紋: 底いちめん。踏まずには歩けない */ guard:'mouth', beam:'climax', guardSub:'底の肉が裂けて、大きな口がひらく'} },
+  { id:'f8', name:'深淵の底',   sub:'床いちめんの紋。歩いた分だけ、濃くなる', depth:8, dark:0.90, zoneW:{glyph:5,flesh:3,nest:2,ruin:1,flower:1},  wall:'flesh', en:{start:1.9,base:2.6,regen:2.6,max:2.6},     hero:{hp:1.80,dmg:1.64,stam:1.85}, mon:{hp:2.6,dmg:1.55},  affinity:['glyphmite','gtent','hand','pot','mouth','succuqueen','gobking','core','runemage'], col:'#ff5d9a', lewd:{name:'底の褥', sub:'紋の刻まれた肉の褥。深淵の底で、二人ぶんの窪みが待つ。奥に王の宝箱', mix:{rune:5, flower:2, beam:3, grip:1.3,  seed:'glyphmite', seedN:3, trait:'rune'}, /* v6.3 紋: 底いちめん。踏まずには歩けない */ guard:'mouth', beam:'climax', guardSub:'底の肉が裂けて、大きな口がひらく'} },
   /* v5.0 追加の階層(世代がさらに進むと開く。氷の天使が降り、渦の縁で闇が眠っている) */
   { id:'f9',  name:'凍る水路',   sub:'濡れたまま入れば、床に貼りつく',        depth:9,  dark:0.92, zoneW:{frost:5,water:3,damp:2,ruin:2,moss:1},   wall:'ice', en:{start:2.0,base:2.9,regen:2.9,max:2.9},     hero:{hp:1.96,dmg:1.76,stam:2.00}, mon:{hp:2.9,dmg:1.65},  affinity:['frostbud','suiyou','slime','mistslime','sentinel','gazer','ghost','leech','slimeking'], col:'#bfeaff', lewd:{name:'凍らない淀み', sub:'ここだけ凍らない、生温い淀み。踏み込めば足が抜けない。奥に王の宝箱', mix:{rune:2, flower:3, beam:2, grip:1.4,  seed:'frostbud', seedN:3, trait:'mire'}, /* v6.3 淀み: 凍らない水が足を離さない */ guard:'suiyou', beam:'hypno', guardSub:'凍らない水の底から、白い腕が幾本も立ち上がる'} },
-  { id:'f10', name:'胎の回廊',   sub:'達することが、許可制になる',            depth:10, dark:0.94, zoneW:{womb:5,nest:3,flesh:2,ruin:1,flower:1},  wall:'flesh', en:{start:2.2,base:3.2,regen:3.2,max:3.2},     hero:{hp:2.12,dmg:1.90,stam:2.18}, mon:{hp:3.2,dmg:1.75},  affinity:['nichelord','gtent','pot','hand','mouth','succuqueen','vampi','inyoku','hugcap','worm'], col:'#ff8fb3', lewd:{name:'産みの褥', sub:'いくつもの窪みが並ぶ褥。どれも、ちょうど人の形をしている。奥に王の宝箱', mix:{rune:3, flower:2, beam:3, grip:1.7,  seed:'pot', seedN:3, trait:'niche'}, /* v6.3 窪み: 人の形の窪みが並び、そのいくつかは壺 */ guard:'mouth', beam:'climax', guardSub:'窪みの一つが裂けて、内側から口がひらく'} },
+  { id:'f10', name:'胎の回廊',   sub:'達することが、許可制になる',            depth:10, dark:0.94, zoneW:{womb:5,nest:3,flesh:2,ruin:1,flower:1},  wall:'flesh', en:{start:2.2,base:3.2,regen:3.2,max:3.2},     hero:{hp:2.12,dmg:1.90,stam:2.18}, mon:{hp:3.2,dmg:1.75},  affinity:['nichelord','gtent','pot','hand','mouth','succuqueen','inyoku','hugcap','worm'], col:'#ff8fb3', lewd:{name:'産みの褥', sub:'いくつもの窪みが並ぶ褥。どれも、ちょうど人の形をしている。奥に王の宝箱', mix:{rune:3, flower:2, beam:3, grip:1.7,  seed:'pot', seedN:3, trait:'niche'}, /* v6.3 窪み: 人の形の窪みが並び、そのいくつかは壺 */ guard:'mouth', beam:'climax', guardSub:'窪みの一つが裂けて、内側から口がひらく'} },
   { id:'f11', name:'渦の縁',     sub:'抗いだけが遅れて届く。快感は遅れない',  depth:11, dark:0.96, zoneW:{stall:4,ruin:3,glyph:2,flesh:2,nest:1,damp:1}, wall:'brick', en:{start:2.4,base:3.6,regen:3.6,max:3.6},     hero:{hp:2.30,dmg:2.04,stam:2.36}, mon:{hp:3.6,dmg:1.90},  affinity:['stiller','tallykeeper','gallery','echoer','glyphmite','guardian','sentinel','runemage','gazer','beamer','eye','ghost','ghosthand','tower'], col:'#b09aff', lewd:{name:'澱みの寝台', sub:'同じ夜が何度も繰り返された寝台。凹みだけが増えていく。奥に王の宝箱', mix:{rune:3, flower:2, beam:4, grip:1.2,  seed:'stiller', seedN:2, trait:'stall'}, /* v6.3 澱み: 抗いだけが遅れて届く */ guard:'guardian', beam:'hypno', guardSub:'寝台の脇の石像が、いま目を開けた'} },
-  { id:'f12', name:'渦の中心',   sub:'三つの喉。選ばなければ、進めない',      depth:12, dark:0.97, zoneW:{flesh:4,nest:3,ruin:2},                  wall:'flesh', en:{start:2.6,base:4.0,regen:4.0,max:4.0},     hero:{hp:2.48,dmg:2.18,stam:2.54}, mon:{hp:4.0,dmg:2.05},  affinity:['seatflesh','frostbud','stiller','silkmite','core','gtent','mouth','pot','hand','succuqueen','gobking','vampi','runemage'], col:'#ff4d7f', lewd:{name:'巻き戻しの褥', sub:'ここで何をされても、朝には無かったことになる褥。だから際限がない。奥に王の宝箱', mix:{rune:3, flower:3, beam:5, grip:1.4,  seed:'gtent', seedN:2, trait:'beam'}, /* v6.3 光線: 壁じゅうが目になっている */ guard:'gtent', beam:'climax', guardSub:'褥の奥から、幾度も同じ形をなぞってきた触手が伸びる'} },
+  { id:'f12', name:'渦の中心',   sub:'三つの喉。選ばなければ、進めない',      depth:12, dark:0.97, zoneW:{flesh:4,nest:3,ruin:2},                  wall:'flesh', en:{start:2.6,base:4.0,regen:4.0,max:4.0},     hero:{hp:2.48,dmg:2.18,stam:2.54}, mon:{hp:4.0,dmg:2.05},  affinity:['seatflesh','frostbud','stiller','silkmite','core','gtent','mouth','pot','hand','succuqueen','gobking','runemage'], col:'#ff4d7f', lewd:{name:'巻き戻しの褥', sub:'ここで何をされても、朝には無かったことになる褥。だから際限がない。奥に王の宝箱', mix:{rune:3, flower:3, beam:5, grip:1.4,  seed:'gtent', seedN:2, trait:'beam'}, /* v6.3 光線: 壁じゅうが目になっている */ guard:'gtent', beam:'climax', guardSub:'褥の奥から、幾度も同じ形をなぞってきた触手が伸びる'} },
   /* ===== v6.0 追加の三階層。ここから先は「特化階層」——一階につき一つの問いだけに賭ける =====
      13 忘却 / 14 待ち / 15 抵抗。深さの数字だけでなく、責め方そのものが階ごとに変わる */
   { id:'f13', floorBoss:'nevermet', rewind:1, name:'忘れ潟',   sub:'巻き戻すたびに零れた夜が、ここに溜まっている', depth:13, dark:0.97, zoneW:{lethe:6,damp:2,moss:1,ruin:1},            wall:'strata', en:{start:2.8,base:4.4,regen:4.4,max:4.4}, hero:{hp:2.66,dmg:2.32,stam:2.72}, mon:{hp:4.4,dmg:2.20}, affinity:['lethemoth','ghost','ghosthand','moth','gas','dreamtree','mistslime','succubus','inyoku','runemage'], col:'#d8c8d0', lewd:{name:'覚えのない褥', sub:'何度も横たわった跡があるのに、初めて見る褥。だから何度でも新しく怖がれる。奥に王の宝箱', mix:{rune:3, flower:3, beam:3, grip:1.4,  seed:'lethemoth', seedN:3, trait:'forget'}, /* v6.3 忘れ: 何度目でも初めての顔で待っている */ guard:'succuqueen', beam:'hypno', guardSub:'褥の主が、初対面の顔で微笑んでいる'} },
@@ -1291,7 +1352,6 @@ const EVENT_DEF={
 const BOSS_CURSES={
   dreamtree: { name:'樹液の余熱',   desc:'敏感化の下限+20。快感の入り+10%' },
   bossgazer: { name:'残光',         desc:'催眠ゲージ40で始まる(一度の閃光でⅠが入る)。思考間隔+15%' },
-  vampi:     { name:'吸われ癖',     desc:'スタミナ上限-15。振りほどきが15%鈍る' },
   slimeking: { name:'粘膜の記憶',   desc:'敏感化の下限+15。粘液で足が更に鈍る' },
   runemage:  { name:'淫紋焼き付け', desc:'淫紋Ⅰで始まる。焼けるような快感——疼きが常に来る' },
   succuqueen:{ name:'甘い夢の残り香', desc:'発情Ⅰで始まる。おねだりが発情Ⅱから起きる' },
@@ -1301,7 +1361,7 @@ const BOSS_CURSES={
 const TIERS=['fodder','mid','large','boss'];
 const TIER_NAMES={fodder:'雑魚', mid:'中型', large:'大型', boss:'ボス'};
 const TIER_CAP={fodder:3, mid:3, large:2, boss:5};          // デッキ枠(計13)。ボスは同時に1体・同じボスは1戦1回・次のボスまで60秒(1分ごとに1体なので5体まで編成できる)
-const SPECIES_MAX={gazer:4};                                  // 同時に場に出せる上限(種族)
+const SPECIES_MAX={gazer:4, fluff:14, coughcap:8, peeper:6};   /* v6.6 実測で綿毛が場に65体まで増えた。分裂ではなく、オート指揮が安いカード(コスト2)を連打していたのが原因。カード側にも上限を置く */                                  // 同時に場に出せる上限(種族)
 const DECK_CAP=Object.values(TIER_CAP).reduce((a,b)=>a+b,0);
 const TIER_FORMS={fodder:null, mid:null, large:['single','duo'], boss:['single']};  // null=全陣形
 const tierOf=id=>MONSTERS[id].tier||(MONSTERS[id].boss?'boss':'mid');
@@ -1328,13 +1388,13 @@ const FAM_OF={
   nichelord:'tent', seatflesh:'tent', heartroot:'tent', dreamtree:'tent', silkmite:'tent',
 
   goblin:'demon', imp:'demon', impchoir:'demon', inyoku:'demon', succubus:'demon',
-  succuhigh:'demon', succuqueen:'demon', vampi:'demon', gobking:'demon', runemage:'demon',
+  succuhigh:'demon', succuqueen:'demon', gobking:'demon', runemage:'demon',
   glyphmite:'demon',
 
-  eye:'eye', gazer:'eye', gazerpair:'eye', gallery:'eye', beamer:'eye', beamtwin:'eye',
+  peeper:'eye', eye:'eye', gazer:'eye', gazerpair:'eye', gallery:'eye', beamer:'eye', beamtwin:'eye',
   guardian:'eye', sentinel:'eye', bossgazer:'eye',
 
-  spore:'spore', gas:'spore', lurecap:'spore', lethemoth:'spore', moth:'spore',
+  fluff:'spore', coughcap:'spore', spore:'spore', gas:'spore', lurecap:'spore', lethemoth:'spore', moth:'spore',
   hugcap:'spore', hugcapelder:'spore', frostbud:'spore',
 
   hand:'ghost', ghost:'ghost', ghosthand:'ghost', stiller:'ghost', echoer:'ghost',
@@ -1345,7 +1405,7 @@ const famOf=id=>FAM_OF[id]||null;
 /* ヒロインの学習(v1.5): 種族の脅威度(0-3)と、知ったあとの警戒半径。未知の相手は一律120で扱う */
 const SPEC_THREAT={
   slug:1, goblin:0, leech:1, worm:1, ghost:0, slime:0, gas:1, imp:1, flower:2, mistslime:1, gtent:2,
-  hand:1, serpent:2, moth:1, pot:2, slugqueen:2, dreamtree:2, vampi:2,
+  hand:1, serpent:2, moth:1, pot:2, slugqueen:2, dreamtree:2,
   spore:1, ghosthand:2, eye:1, succubus:3, gazer:3, beamer:3, bossgazer:3, web:2, tower:2,
   slimeking:2, runemage:3, succuqueen:3, gobking:2, inyoku:1, suiyou:2, mouth:2, guardian:3, core:3, sentinel:2,
   lurecap:2, hugcap:2, coreling:1 };   // v4.0/v4.1
@@ -1692,7 +1752,7 @@ const AILMENTS={
   hypno:{ name:'催眠', color:'#c98cff', icon:'📡' },
   rune:{ name:'淫紋の罠', color:'#c98cff', icon:'✧' },
   fake:{ name:'偽宝箱', color:'#ffd76a', icon:'🎁' },
-  deny:{ name:'寸止め', color:'#ff5d9e', icon:'✋' },
+  deny:{ name:'絶頂禁止', color:'#ff5d9e', icon:'✋' },
   ache:{ name:'疼き', color:'#ff86b3', icon:'✿' },
   numb:{ name:'痺れ', color:'#ffe066', icon:'⚡' },
   possess:{ name:'憑依', color:'#dfe4ff', icon:'👻' },
@@ -1701,6 +1761,10 @@ const AILMENTS={
   freeze:{ name:'時間停止', color:'#8fd3ff', icon:'⏳' },
   suit:{ name:'触手服', color:'#ff9ec2', icon:'🎀' },
   beg:{ name:'おねだり', color:'#ff5d9e', icon:'♡' },
+  omazuke:{ name:'おあずけ', color:'#ffb3cf', icon:'⏸' },
+  high:{ name:'ハイ', color:'#9fe8c8', icon:'✿' },       /* v6.6 粉を吸った直後 */
+  addict:{ name:'中毒', color:'#c8e86a', icon:'☣' },     /* v6.6 抜けたあとに残るもの */   /* v6.6 夢魔の女王。絶頂の寸前で止められた回数 */
+  demoncmd:{ name:'淫魔の指揮', color:'#ff86b3', icon:'✧' },   /* v6.6 一個下の階級が強化されている */
   web:{ name:'淫糸', color:'#ffb3cf', icon:'🕸' },
   hypnolv:{ name:'催眠', color:'#b46cff', icon:'◉' },
   self:{ name:'自慰', color:'#ff5d9e', icon:'♡' },

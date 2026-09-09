@@ -129,6 +129,13 @@ BRIEFING §5 に、同じ罠を三度踏んだ記録があります。
 | 解放費と深さの錠 | `MONSTERS[].unlock` と `js/data.js:deepOk()`(`DEEP_COST` の表) |
 | 系統(ヌメリ/触手/淫魔/眼/胞子/霊) | `js/data.js:FAMS`(表示名)と `js/data.js:FAM_OF`(id→系統)。引くのは `js/data.js:famOf()` |
 | 系統ボーナスの効き | `js/game.js:deckFam()` が `{fam,name,n,cut}` を返す。`BAL.FAM_MIN`/`BAL.FAM_STEP`/`BAL.FAM_MAX`。戦闘開始時に `B.fam` へ焼き、`js/game.js:playCard()` の `slot.cdMax` に掛かる |
+| 淫魔の指揮(一個下の階級を強化) | `BAL.DEMON_R`/`BAL.DEMON_PW`/`BAL.DEMON_SPD`/`BAL.DEMON_ACT`、`js/game.js:DEMON_CMD`(誰が何を指揮するか)と `js/game.js:demonCmdAt()`。★`e.spd` はフレームごとに戻す |
+| 絶頂禁止(旧・寸止め) | `js/game.js:applyDeny()`/`js/game.js:releaseDeny()`、溜まりは `h.denyOver`、`BAL.DENY_OVER_STAM` |
+| おあずけ(夢魔の女王) | `js/game.js:applyOmazuke()`(見張りの更新)と `js/game.js:omazukeEdge()`(寸前で止めた瞬間)。`BAL.OMAZUKE_NEED` |
+| 眼の条(壁まで流れる光) | `js/game.js:rayStep()`/`js/game.js:rayLen()`/`js/game.js:rayDeep()`、`BAL.RAY_LEN`/`BAL.RAY_DEEP`/`BAL.BEAM_WAKE` |
+| ハイと中毒 | `js/game.js:puffSpores()`/`js/game.js:inhaleSpore()`/`js/game.js:highTick()`/`js/game.js:addictSeek()`、`BAL.HIGH_T`/`BAL.CRASH_STAM`/`BAL.ADDICT_SEEK` |
+| 魔物が増えすぎる | `js/data.js:SPECIES_MAX`(カードの同時上限)。★オート指揮は安いカードを連打するので、雑魚を足したらここも見る |
+| ボスが深さで強くなる | `js/game.js:bossRank()` と `u.brank`(★熟れた個体の `u.rank` とは別物)、`BAL.BOSS_RANK_D` |
 | オート指揮が特化デッキで黙る | `js/game.js:handOrder()`。`PRESSURE`/`FLUSH_ORDER`/`REFILL_ORDER` の名指しが尽きたら手札から継ぎ足す |
 
 ### 2-5. 文章(台詞・本文・図鑑・物語)

@@ -61,6 +61,7 @@ function newHero(id){
     dazeT:0, hypno:null,                 // 催眠電波(v1.1)
     denyT:0, denySrc:null, deepClimax:false, acheCd:2, numbT:0, watchedT:0, gazeCd:6,
     crestLv:0, freezeT:0, frozenAcc:0, suitT:0, suitPulse:0, begT:0, begCd:6, possessCd:0,   // v1.2 状態異常拡張
+    denyOver:0, omazuke:0, omazukeT:0, omazukeHold:0, whisperT:0,   /* v6.6 絶頂禁止で溜まった分 / おあずけの回数と停止 / 耳元の囁き */
     hypnoLv:0, hypnoT:0, selfT:0, selfCd:4, selfPhase:0, dodging:0,                          // v1.3 催眠Lv・自慰
     sniffT:0, sniffCd:0, sniffAt:null, muskCd:0, muskNear:false, muskCond:0, muskDone:false, aphroPrev:0,   // 雄臭
     lastHypno:null, lastBeam:null,       // 直前の催眠/強制絶頂の源 {id,t}: 敗北・押し倒しの場面の帰属に使う
@@ -121,7 +122,6 @@ function newHero(id){
   h.curse=cu;
   if(cu==='dreamtree'){ h.sensitFloor+=20; h.sensit=Math.max(h.sensit,h.sensitFloor); h.curseAmp=0.10; }
   if(cu==='bossgazer'){ h.hypnoG=40; h.hypnoFloor=40; }   // 催眠Ⅰが入るまで、ゲージは40より下がらない
-  if(cu==='vampi'){ h.staminaMax=Math.max(30,h.staminaMax-15); }
   if(cu==='slimeking'){ h.sensitFloor+=15; h.sensit=Math.max(h.sensit,h.sensitFloor); }
   if(cu==='runemage'){ h.crestLv=1; h.curseAche=true; }
   if(cu==='succuqueen'){ h.heatLv=1; h.heatT=9999; }
@@ -213,7 +213,9 @@ function heroStat(h){
   if(h.iceBless>0) spd*=1.30;             // v5.0 静止の一点の加護
   if(h.heatLv>0) spd*=1-0.04*h.heatLv;
   if(h.waveDur>0) spd*=BAL.WAVE_SPD;
-  if((h.chokeT||0)>0) spd*=BAL.EVAP_CHOKE_SPD;   /* ★v6.4b むせながら歩く */
+  if((h.chokeT||0)>0) spd*=BAL.EVAP_CHOKE_SPD;
+  if((h.highT||0)>0) spd*=BAL.HIGH_SPD;        /* v6.6 ハイの間は足が速い(そのぶん危ない所へ踏み込む) */
+  if((h.crashT||0)>0) spd*=0.72;              /*      抜けた直後は足がもつれる */   /* ★v6.4b むせながら歩く */
   if(h.exhausted) spd*=0.7;
   if(h.numbT>0) spd*=0.75;        // 痺れ
   if((h.squeeze||0)>0) spd*=1-(1-BAL.BREATH_SPD)*h.squeeze;   /* v6.0f 14階: 壁が寄っている間は走れない */
@@ -717,6 +719,8 @@ function applySensit(amount){
 /* 快感: 敏感化で増幅され、100で発情レベルが上がる */
 function applyPleasure(amount){
   const h=G.B.hero;
+  if((h.omazukeT||0)>0 && amount>0) return;    /* v6.6 女王のおあずけ: 責めそのものが一瞬止まる */
+  if((h.whisperT||0)>0) amount*=BAL.DEMON_WHISPER;   /* v6.6 小淫魔が耳元で囁いている */
   if(h.refractT>0) amount*=BAL.REFRACT_MULT;   // 不応期: 達した直後は入りが鈍い
   amount*=1+BAL.CREST_AMP*(h.crestLv||0);      // 淫紋: 入りが増す
   /* v6.0 床に灯した紋は、そのまま淫紋の濃さとして全ての入りに効く */
@@ -748,9 +752,23 @@ function applyPleasure(amount){
     checkStaminaCollapse();
     if(G.mode!=='battle'&&G.mode!=='levelup') return;
   }
+  /* v6.6 おあずけ(状態): 女王が見張っている間は、100に届いても絶頂させてもらえない。
+     届くたびに「おあずけ」が一つ増え、責めが一瞬止まり、彼女はねだるようになる。
+     ★最初は「一回ごとの出来事」として書いたが、実測で aphro を戻した2秒後に達してしまい、
+       回数が二つ以上積まれなかった。堰き止め続ける形でなければ成立しない。 */
+  if((h.omazukeHold||0)>0 && h.climaxT<=0){
+    if(h.aphro>=100){ h.aphro=99; omazukeEdge(); }
+    return;
+  }
   if(h.denyT>0){
-    // 寸止め: 99で栓をされる。溢れた分は身体に溜まる
-    if(h.aphro>=99){ h.aphro=99; if(before>=99 && amount>0 && Math.random()<0.25) heroBubble(h,pickRand(['いか、せて……ちがう、いかせないで……','とまってる、のに……あつい、のが……','ぬけない……なんで、いけな……']),false,3); }
+    /* 絶頂禁止: 99で栓をされる。★溢れた分は身体に溜まる——v6.6 まで、この溜めは
+       コメントに書いてあるだけで実装が無く、超過分はそのまま捨てられていた */
+    if(h.aphro>=99){
+      const over=Math.max(0,(before+amount*h.sense*(1+BAL.SENSIT_AMP*sensLvOf(h)))-99);
+      h.aphro=99;
+      h.denyOver=Math.min(BAL.DENY_OVER_MAX,(h.denyOver||0)+over);
+      if(before>=99 && amount>0 && Math.random()<0.25) heroBubble(h,pickRand(['いか、せて……ちがう、いかせないで……','とまってる、のに……あつい、のが……','ぬけない……なんで、いけな……']),false,3);
+    }
     return;
   }
   if(h.aphro>=100 && h.climaxT<=0) enterClimax();
@@ -772,6 +790,14 @@ function releaseDeny(){
   const h=G.B.hero;
   h.denyT=0;
   if(h.denySrc) codexMet(h.denySrc);
+  /* v6.6 栓を抜かれると、溜めた分がまとめて来る。★係数は控えめ(DENY_OVER_STAM 0.055)——
+     いまでもスタミナは十分に削れやすいので、溜めた分をそのまま削りにすると即死する */
+  const over=h.denyOver||0; h.denyOver=0;
+  if(over>4){
+    const cost=over*BAL.DENY_OVER_STAM;
+    h.stamina=Math.max(0,h.stamina-cost);
+    floatTxt(h.x,h.y-72,'溜まっていた分 −'+cost.toFixed(0),'#ff5d9e',12,1.3);
+  }
   if(h.aphro>=BAL.DENY_DEEP_TH && h.climaxT<=0){
     h.deepClimax=true;
     h.aphro=100;
@@ -779,6 +805,39 @@ function releaseDeny(){
     enterClimax();
   }else heroBubble(h,'……はぁ、はぁ……なに、いまの……',false,2);
   h.denySrc=null;
+}
+/* v6.6 おあずけ(夢魔の女王)。絶頂禁止(deny)とは別物:
+   栓をして溜めさせるのではなく、責めを一瞬だけ止めて絶頂の寸前で引き戻す。
+   繰り返されるほど彼女はねだるようになり、女王が満足したら——イかせてもらえる。 */
+function applyOmazuke(src){
+  const B=G.B, h=B.hero;
+  if(h.climaxT>0 || h.denyT>0) return false;
+  h.omazukeHold=BAL.OMAZUKE_HOLD_T;      /* 女王が見張っている間だけ続く(離れれば切れる) */
+  if(src) codexMet(src.id);
+  if(h.aphro>=100){ h.aphro=99; omazukeEdge(); return true; }
+  return true;
+}
+/* 100に届いた瞬間、寸前で止められる */
+function omazukeEdge(){
+  const B=G.B, h=B.hero;
+  h.omazuke=(h.omazuke||0)+1;
+  h.omazukeT=BAL.OMAZUKE_HOLD;           /* 責めが一瞬止まる */
+  awardAil('omazuke');
+  markTrait(h,'edgeweak',1);             /* 焦らし弱は、おあずけでも刻まれる */
+  h.begCd=0;                             /* 次のおねだりがすぐ来る */
+  B.nOmazuke=(B.nOmazuke||0)+1;
+  if(h.omazuke>=BAL.OMAZUKE_NEED){
+    /* 三度ねだらせて、女王は満足した。許しが出る */
+    h.omazuke=0; h.omazukeT=0; h.omazukeHold=0;
+    heroBubble(h,pickRand(['い……いかせて、ください……っ','おねがい、もう……いかせて……','ゆるして……いかせて、ほし……']),true,3);
+    floatTxt(h.x,h.y-78,'——許された','#ffd76a',13,1.5);
+    h.aphro=100; enterClimax();
+  }else{
+    heroBubble(h,pickRand(['……なん、で……とめ、るの……','あと、すこし……だったのに……','やだ、やだ……とめない、で……']),true,3);
+    floatTxt(h.x,h.y-72,'おあずけ ×'+h.omazuke,'#ffb3cf',12,1.3);
+    parts(h.x,h.y-10,10,['#ffb3cf','#fff'],90,0.6);
+    sfx(520,240,0.28,'sine',0.05);
+  }
 }
 /* ================= 絶頂 =================
    快感100で絶頂。脚が止まり、痙攣して動けない。終わると発情が一段深まる */
@@ -1017,7 +1076,7 @@ function addStruggle(amount){
   const wf=0.02*(hh.will||0);                       // 抵抗の意志: 負けを重ねた分だけ、催眠の底でも手が動く
   if(hh.hypnoLv>=3){ if(wf<=0) return; amount*=wf; } // 催眠Ⅲ: 抵抗という考えが浮かばない(意志の分だけ残る)
   else if(hh.hypnoLv>=2) amount*=0.35+wf*0.5;
-  amount*=(1+0.02*(hh.will||0))*(hh.curse==='vampi'?0.85:1);
+  amount*=(1+0.02*(hh.will||0));
   /* v6.0 「抗いの悦び」は戦力を削らない。もがきの力そのものも上がる */
   amount*=1+0.06*traitLv(hh,'defyBliss')+0.05*traitLv(hh,'attachCalm');
   /* v6.1 されてきたことへの慣れ。入りが増えるぶん、抜ける手際も上がる */
@@ -1147,7 +1206,7 @@ function pinTick(dt){
   if(h.pinT<=0){
     h.pinT=BAL.PIN_PULSE_T;
     h.stamina-=BAL.PIN_PULSE_COST;
-    h.pinEscape+=BAL.PIN_ESCAPE_GAIN*(h.heatLv>0?1-0.1*h.heatLv:1)*(h.climaxT>0?0.25:1)*(h.hypnoLv>=3?0.02*(h.will||0):(h.hypnoLv>=2?0.35+0.01*(h.will||0):1))*(1+0.02*(h.will||0))*(h.curse==='vampi'?0.85:1)*rand(0.85,1.15);   // 催眠Ⅱ+: もがかない(意志の分だけ残る)
+    h.pinEscape+=BAL.PIN_ESCAPE_GAIN*(h.heatLv>0?1-0.1*h.heatLv:1)*(h.climaxT>0?0.25:1)*(h.hypnoLv>=3?0.02*(h.will||0):(h.hypnoLv>=2?0.35+0.01*(h.will||0):1))*(1+0.02*(h.will||0))*rand(0.85,1.15);   // 催眠Ⅱ+: もがかない(意志の分だけ残る)
     applyPleasure(BAL.PLEAS_PIN);
     parts(h.x+rand(-10,10),h.y-rand(4,22),3,['#fff','#c98cff'],90,0.4);
     // 絡みつき中のモンスターがじわじわ削る(貫通)
@@ -1289,7 +1348,7 @@ function forcedClimax(src){
 const TRAIT_ENGULF=new Set(['slime','slimeking','mistslime','hugcap','seatflesh']);
 const TRAIT_MOUTH =new Set(['mouth','echoer','slugqueen']);
 const TRAIT_URN   =new Set(['pot']);
-const TRAIT_DRAIN =new Set(['leech','heartroot','vampi']);
+const TRAIT_DRAIN =new Set(['leech','heartroot']);
 /* v6.2 雄臭を放つ種。雲の中に居る時間だけを見ると、実測で 0.53秒/戦
    (しかも熱を持ったまま雲の中に居た時間は 0秒)で、条件が立たない。
    彼女は雲を避けるので当然だった。v6.1 で他の性癖に入れたのと同じ形——
@@ -1748,10 +1807,15 @@ function statesTick(h,dt){
     }
     if(h.suitT<=0){ h.suitT=0; heroBubble(h,'……とれた。ぜんぶ、ぬめぬめ……',false,2); }
   }
+  if((h.omazukeT||0)>0) h.omazukeT-=dt;       /* v6.6 責めが止まっている間 */
+  highTick(h,dt);                            /* v6.6 ハイ → 疲れ → 中毒 */
+  if((h.crashT||0)>0) h.crashT-=dt;
+  if((h.omazukeHold||0)>0){ h.omazukeHold-=dt; if(h.omazukeHold<=0) h.omazuke=0; }   /* 女王が離れれば、堰も数えも解ける */
+  if((h.whisperT||0)>0) h.whisperT-=dt;       /* v6.6 耳元の囁きが効いている間 */
   // おねだり: 発情Ⅲ+(催眠/淫紋Ⅱ+/寸止め明け)で、撃つのをやめて寄っていってしまう
   if(h.begCd>0) h.begCd-=dt;
   if(h.begT>0){ h.begT-=dt; }
-  else if(h.begCd<=0 && h.heatLv>=(h.curse==='succuqueen'?2:3) && h.climaxT<=0 && !h.pinned && !h.charmBind && (h.dazeT>0 || h.crestLv>=2 || h.refractT>BAL.REFRACT_T-0.5)){
+  else if(h.begCd<=0 && h.heatLv>=(h.curse==='succuqueen'?2:3) && h.climaxT<=0 && !h.pinned && !h.charmBind && (h.dazeT>0 || h.crestLv>=2 || (h.omazuke||0)>0 || h.refractT>BAL.REFRACT_T-0.5)){   /* v6.6 おあずけされていると、ねだる */
     if(B.enemies.some(e=>!e.dead&&!e.dormant&&Math.hypot(e.x-h.x,e.y-h.y)<260)){
       h.begT=BAL.BEG_DUR; h.begCd=BAL.BEG_CD;
       heroBubble(h,pickRand(['……や、やめ……て、ほし……くない……','こないで……こっち、きて……ちがう……','もう、いい、から……いいって、なに……']),true,3);
@@ -2144,6 +2208,7 @@ function aiUpdate(dt){
     struggle:'ふりほどこうともがいている!',
     charmwalk:'ふらふらと、ちかづいていく…', heatwalk:'熱にまけて、よろめき寄る…',
     choke:'むせながら、霧の外へ',
+    addict:'……もう一回だけ、って足が','g_addict':'……もう一回だけ、って足が',   /* v6.6 中毒 */
     hypno:'……電波に、あしが……', item:'おちてる品へ!', beg:'……おねだり、なんて……してない……',
     g_event:'光の柱へ!', g_chest:'たからばこへ!', g_boss:'おうさまの箱へ!', g_item:'おちてる品へ!', g_shrine:'祠へ', g_spring:'泉で休みに', g_pool:'清水であらいに',
     g_stele:'石碑をよみに', g_stairs:'降り口へ', g_seal:'封印石を灯しに', g_core:'魔核へ——', g_lantern:'あかりへ', g_shroom:'光茸をとりに', g_nectar:'蜜の花へ', g_treasure:'沈んだ宝へ', g_explore:'たんさく中', g_gems:'ジェムをあつめる', hesitate:'まよっている……', think:'かんがえ中……', abort:'にげだす!', retreat:'逃げに徹する!', kite2:'引き撃ち', talk:'相談中……', assist:'仲間を助ける!', rescue:'救出する!', g_rescue:'仲間を救いに', g_cover:'仲間をかばう!', core:'心臓から離れない', breakout:'……行き直す'};
@@ -3503,9 +3568,11 @@ function spawnUnit(id, x, y, o){
     rid:RV?id:null,                     /* 熟れた個体の id(名札と観測記録だけが使う) */
     art:baseId,                         /* 絵は base で引く(熟れた個体でも骨格は同じ) */
     rank:RV?RV.rank:0,                  /* 段: 輪郭の発光と体色の沈みだけが変わる */
+    brank:MONSTERS[id].boss?bossRank():0,   /* v6.6 ボスの段(会った深さで決まる)。★熟れた個体の rank とは別物 */
     rLimbs:RV&&RV.limbs||0, rFans:RV&&RV.fans||0, rBeams:RV&&RV.beams||0,
     rCaps:RV&&RV.caps||0, rDeny:RV&&RV.deny||0, rChoir:RV&&RV.choir||0,
-    hp:d.hp*elite*pm*flesh*fhp*bossm, maxHp:d.hp*elite*pm*flesh*fhp*bossm, spd:MONSTERS[id].spd, r:MONSTERS[id].r*(elite>1?1.2:1),
+    hp:d.hp*elite*pm*flesh*fhp*bossm*(MONSTERS[id].boss?1+BAL.BOSS_RANK_HP*bossRank():1),
+    maxHp:d.hp*elite*pm*flesh*fhp*bossm*(MONSTERS[id].boss?1+BAL.BOSS_RANK_HP*bossRank():1), spd:MONSTERS[id].spd, r:MONSTERS[id].r*(elite>1?1.2:1),
     dmg:d.dmg*elite*pm*fdm, xp:Math.round(MONSTERS[id].xp*(1+0.1*(d.lv-1))*(elite>1?1.6:1)),
     enVal:o.enVal||0, gemMul:o.gemMul!==undefined?o.gemMul:1,
     boss:!!MONSTERS[id].boss, lv:d.lv, elite:elite>1,
@@ -3540,7 +3607,8 @@ function spawnUnit(id, x, y, o){
   if(id==='succubus'){ u.orbitA=rand(TAU); u.orbitDir=Math.random()<0.5?-1:1; u.denyCd=rand(2,4); }
   if(id==='web'){ u.grabCd=0; u.life=40; }
   if(id==='gazer'){ u.gzState='idle'; u.gzT=rand(1.5,3); u.gzAng=rand(TAU); u.lookA=0; }
-  if(id==='beamer'){ u.bmState='idle'; u.bmT=rand(2,4); u.bmAng=0; u.lookA=0; }
+  if(id==='beamer'){ u.bmState='idle'; u.bmT=rand(2,4); u.bmAng=0; u.lookA=0; u.wakeT=BAL.BEAM_WAKE; u.rays=null; }   /* v6.6 湧いた直後は撃たない */
+  if(id==='peeper'){ u.fanA=rand(TAU); u.driftA=rand(TAU); u.shyT=0; }
   if(id==='bossgazer'){
     u.bstate='chase'; u.bt=99; u.lookA=0;
     u.eyes=[0,1,2].map(i=>({ base:(-Math.PI/2)+(i-1)*1.05, dx:0, dy:0, ang:rand(TAU), state:'idle', t:1.2+i*1.9 }));
@@ -3975,6 +4043,7 @@ function damageEnemy(e,dmg){
   /* v5.7 ヒロイン側の底上げ(スタミナを削ったぶんの釣り合い)と、素性ごとの火力。
      フレイラは近いほど強い——火は届く所でしか働かない */
   dmg*=BAL.HERO_DMG_K;
+  if(G.B&&(G.B.hero.highT||0)>0) dmg*=BAL.HIGH_DMG;   /* v6.6 ハイの間は攻めも強い */
   if(G.B){ const hh=G.B.hero, HD=HEROES[hh.id]||{};
     if(HD.dmgMul) dmg*=HD.dmgMul;
     if(HD.closeK){ const d0=Math.hypot(e.x-hh.x,e.y-hh.y); dmg*=1+HD.closeK*Math.max(0,1-d0/BAL.CLOSE_R); } }
@@ -4031,6 +4100,19 @@ function killEnemy(e){
   if(e.dead) return;
   const B=G.B, h=B.hero;
   e.dead=true; B.kills++;
+  /* v6.6 綿毛は倒しても撒く。★分かれるのは場が FLUFF_MAX 体未満の時だけ——
+     上限を置かないと、自動戦闘では倒すたびに増えて際限がなくなる(作者の懸念どおり) */
+  /* 咳き茸も、壊された時に粉を上げる。★実測で、中毒のヒロインは踏む手前(42px)で
+     刃が届いてしまい、寄っていったのに一度も吸えていなかった */
+  if(e.id==='coughcap') puffSpores(e.x,e.y,'coughcap');
+  if(e.id==='fluff'){
+    puffSpores(e.x,e.y,'fluff');
+    const n=B.enemies.filter(q=>!q.dead&&q.id==='fluff').length;
+    if(n<BAL.FLUFF_MAX && Math.random()<BAL.FLUFF_SPLIT && B.enemies.length<fieldCap()){
+      spawnUnit('fluff', e.x+rand(-24,24), e.y+rand(-18,18), {enVal:0, gemMul:0});
+      B.nFluffSplit=(B.nFluffSplit||0)+1;
+    }
+  }
   { const kp=G.B&&G.B.hero; if(kp) kp.recKills=(kp.recKills||0)+1; }   /* v5.8 討った数も、その時の文脈のヒロインの分として数える */
   /* v6.0 骸の回廊: 倒れたものが骨を落とす。8秒で勝手に組み上がるので、放っておくと増える */
   if(typeof dropBone==='function' && e.id!=='bonesoldier' && !MONSTERS[e.id].item && !e.field) dropBone(e.x,e.y);
@@ -4114,11 +4196,40 @@ function spawnCloud(x,y,r,life,rate,src){
   return c;
 }
 
+/* ================= v6.6 淫魔の指揮 =================
+   淫魔は特化系統ではなく「現場指揮官」。自分の一個下の階級までを、届く距離のぶんだけ強化する。
+   淫魔そのものは責めをほとんど持たない——強くなるのは、周りに居る他の魔物の方。
+     小淫魔(中型)   → 雑魚を操る
+     寸止めの淫魔(大型) → 中型まで
+     夢魔の女王(ボス)   → 大型まで
+   強化の中身は「速さ」と「手数」: 足が速くなり、掴み・責めの間合いが詰まる。
+   ★ダメージや快感の係数には掛けない。掛けると盤面が壊れる(指揮官が居るだけで倍になる) */
+const DEMON_CMD={imp:['fodder'], succubus:['fodder','mid'], succuhigh:['fodder','mid'], succuqueen:['fodder','mid','large']};
+/* 指揮で早回しする待ち時間。★行動の間合いだけ。持続時間(life/burnT など)には触らない */
+const CMD_CDS=['biteCd','bladeCd','callCd','castCd','charmCd','crossCd','gropeCd','grabCd','hornCd','kissCd',
+               'meltCd','muskCd','nuzzleCd','orbCd','pounceCd','pulseCd','rootCd','runeCd','spawnCd','spearCd','swoopCd','whipCd','teaseT'];
+function demonCmdAt(e){
+  const B=G.B;
+  if(!B.demons || !B.demons.length) return 0;
+  if(MONSTERS[e.id].boss || MONSTERS[e.id].item) return 0;   /* ボスと設置物は指揮されない */
+  const t=tierOf(e.id);
+  let best=0;
+  for(const c of B.demons){
+    const tiers=DEMON_CMD[c.id]; if(!tiers || tiers.indexOf(t)<0) continue;
+    const R=BAL.DEMON_R[c.id]||200, dd=Math.hypot(c.x-e.x, c.y-e.y);
+    if(dd>R) continue;
+    const w=(BAL.DEMON_PW[c.id]||0.4)*(1-dd/R*0.55);
+    if(w>best) best=w;
+  }
+  return best;
+}
 function enemiesUpdate(dt){
   const B=G.B; let p=B.hero;
+  B.demons=B.enemies.filter(q=>!q.dead && DEMON_CMD[q.id]);   /* v6.6 いま盤に居る指揮官 */
   for(const e of B.enemies){
     if(e.dead) continue;
     e.t+=dt;
+    e.cmd=demonCmdAt(e);   /* v6.6 指揮の濃さ(0〜0.72)。速さと手数に乗る */
     // v3.0 標的のヒロイン: 掴んでいる/押し倒している/縋りつかれている相手は固定。それ以外はときどき最も近い(離脱していない)子へ
     { const th=(e.ti!==undefined)?B.heroes[e.ti]:null; const locked=e.state==='attached' || (th && !th.out && (th.pinBy===e || (th.charmBind&&th.charmBind.mon===e)));
       if(!locked){ e.retgT=(e.retgT||0)-dt; if(e.ti===undefined || e.retgT<=0 || !th || th.out){ e.ti=nearestHeroIdx(e.x,e.y); e.retgT=0.5+Math.random()*0.4; } } }
@@ -4233,6 +4344,12 @@ function enemiesUpdate(dt){
     if((e.burnT||0)>0){ e.burnT-=dt; e.burnTick=(e.burnTick||0)-dt; if(e.burnTick<=0){ e.burnTick=0.4; damageEnemy(e,3+0.08*p.level); if(Math.random()<0.5) parts(e.x,e.y-e.r*0.5,1,['#ff7a3a','#ffd76a'],40,0.4); } }   // v3.0 煉獄の剣の燃焼
     if(e.dead) continue;   // 燃え尽きた個体はこのフレームの行動をしない
     e.x=clampMapX(e.x,e.r); e.y=clampMapY(e.y,e.r);
+    const spd0=e.spd;
+    if(e.cmd>0){
+      e.spd*=1+e.cmd*BAL.DEMON_SPD;                          /* 足が速くなる */
+      const ex=dt*e.cmd*BAL.DEMON_ACT;                        /* 待ちが縮む=手数が増える */
+      for(const k of CMD_CDS) if(e[k]>0) e[k]=Math.max(0,e[k]-ex);
+    }
     if(e.stun>0){ e.stun-=dt; }
     else if((e.frozT||0)>0){ /* v5.0 凍っている間は何もしない */ }
     else if(e.id==='inyoku'){
@@ -4289,6 +4406,12 @@ function enemiesUpdate(dt){
       wormTick(e,dt,d,dx,dy);
     }else if(e.id==='gas'){
       gasTick(e,dt,d,dx,dy);
+    }else if(e.id==='fluff'){
+      fluffTick(e,dt,d,dx,dy);
+    }else if(e.id==='coughcap'){
+      coughcapTick(e,dt,d);
+    }else if(e.id==='peeper'){
+      peeperTick(e,dt,d,dx,dy);
     }else if(e.id==='imp'){
       impTick(e,dt,d,dx,dy);
     }else if(e.id==='flower'){
@@ -4376,6 +4499,7 @@ function enemiesUpdate(dt){
         }
       }
     }
+    e.spd=spd0;   /* v6.6 指揮ぶんの速さは、このフレームだけ。戻さないと毎フレーム掛け算になる */
     if((e.id==='slug'||e.id==='slugqueen') && e.charmCd>0) e.charmCd-=dt;
 
     // オーブ被弾
@@ -4507,6 +4631,25 @@ function impTick(e,dt,d,dx,dy){
         break;
       }
     }
+  }
+  /* v6.6 掴まれている・押し倒されている間は、耳元まで寄って囁く。
+     小淫魔は責めを持たない(dmg 0)——増えるのは、他の魔物がしていることの「入り」の方 */
+  const held=(p.pinned||p.charmBind||attachCount(p)>0||p.climaxT>0);
+  if(held){
+    const tx2=p.x+Math.cos(e.t*1.6)*22, ty2=p.y-18+Math.sin(e.t*1.6)*8;
+    const md2=Math.hypot(tx2-e.x,ty2-e.y)||0.001;
+    e.x+=(tx2-e.x)/md2*Math.min(md2,e.spd*1.5*dt);
+    e.y+=(ty2-e.y)/md2*Math.min(md2,e.spd*1.5*dt);
+    if(d<BAL.DEMON_WHISPER_R){
+      p.whisperT=Math.max(p.whisperT||0, 0.35);
+      e.whisCd=(e.whisCd||0)-dt;
+      if(e.whisCd<=0){
+        e.whisCd=rand(2.4,4.0);
+        floatTxt(e.x,e.y-e.r-10,pickRand(['ほら、きこえてる♡','がんばってるね♡','もうすこしだよ♡','こえ、でてるよ♡']),'#ff86b3',10,1.3);
+        heroBubble(p,pickRand(['みみもと、で……やめ、て……','きこえ、な……きこえて、る……','いわない、で……そんな、こと……']),false,3);
+      }
+    }
+    return;
   }
   // 煽り(近くにいるだけで媚薬と集中低下)
   if(d<120){
@@ -4742,6 +4885,51 @@ function ghosthandTick(e,dt,d,dx,dy){
   const tx=dx+ox, ty=dy-14+oy, td=Math.hypot(tx,ty)||0.001;
   e.x+=tx/td*e.spd*rush*dt; e.y+=ty/td*e.spd*rush*dt;
 }
+/* v6.6 覗き子(小型の目玉・雑魚)。責めも攻撃も持たない。
+   扇形の視界に彼女が入っている間だけ、ほんの少しずつ快感が乗る。数が並べば重なる。
+   近づかれると「戦いづらいな」と離れる——倒しにくいが、脅威でもない。 */
+/* 綿毛: ただ漂う。触れれば弾け、倒されても弾ける。
+   ★分かれるのは場に FLUFF_MAX 体未満の時だけ——上限が無いと自動戦闘で際限なく増える */
+function fluffTick(e,dt,d,dx,dy){
+  const B=G.B, p=B.hero;
+  e.driftA=(e.driftA||0)+dt*0.7;
+  const w=0.55+Math.sin(e.t*0.9+e.joff)*0.2;
+  e.x+=(dx/d*e.spd*w+Math.cos(e.driftA)*16)*dt;
+  e.y+=(dy/d*e.spd*w+Math.sin(e.driftA)*11)*dt;
+  if(d<e.r+p.r+3 && !e.dead){ e.dead=true; puffSpores(e.x,e.y,'fluff'); }
+}
+/* 咳き茸: 動かない。踏むと粉 */
+function coughcapTick(e,dt,d){
+  const B=G.B, p=B.hero;
+  e.puffCd=(e.puffCd||0)-dt;
+  if(d<e.r+p.r+8 && e.puffCd<=0){
+    e.puffCd=5.5;
+    puffSpores(e.x,e.y,'coughcap');
+    heroBubble(p,pickRand(['け、ほっ……ふんだ……','わ、ぷ……こな、が……','けほっ、けほ……すって、しま……']),true,2);
+  }
+}
+function peeperTick(e,dt,d,dx,dy){
+  const B=G.B, p=B.hero;
+  /* 見ている向きはゆっくり彼女を追う */
+  const want=Math.atan2(dy,dx);
+  let da=((want-e.fanA+Math.PI*3)%TAU)-Math.PI;
+  e.fanA+=clamp(da,-1.1*dt,1.1*dt);
+  /* 間合い: 近すぎたら離れ、遠すぎたら寄る。彼女が刃を振るうと余計に下がる */
+  const shy=(p.climaxT>0||p.pinned)?0:1;
+  if(d<BAL.EYE_SHY_R*shy){ e.x-=dx/d*e.spd*1.25*dt; e.y-=dy/d*e.spd*1.25*dt; e.shyT=1.2; }
+  else if(d>BAL.EYE_FAN_R*0.85){ e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt; }
+  else{ e.driftA+=dt*0.9; e.x+=Math.cos(e.driftA)*12*dt; e.y+=Math.sin(e.driftA)*9*dt; }
+  if(e.shyT>0) e.shyT-=dt;
+  /* 扇の中に居るか */
+  if(d<BAL.EYE_FAN_R && Math.abs(((want-e.fanA+Math.PI*3)%TAU)-Math.PI)<BAL.EYE_FAN_ANG && losClear(e.x,e.y-e.r,p.x,p.y-14,true)){
+    e.watching=1;
+    applyPleasure(BAL.EYE_FAN_PLE*dt);
+    p.watchedT=Math.max(p.watchedT||0,0.3);       /* 既存の【視姦】と同じ扱い */
+    e.seeT=(e.seeT||0)+dt;
+    if(e.seeT>3.5){ e.seeT=0; awardAil('watched'); codexMet('peeper');
+      heroBubble(p,pickRand(['み、みないで……','ずっと、みてる……なんで……','め、そらして……よ……']),false,2); }
+  }else{ e.watching=0; e.seeT=0; }
+}
 function eyeTick(e,dt,d,dx,dy){
   const B=G.B, p=B.hero;
   // 近づかず、離れず。彼女が寄れば逃げ、離れれば追う
@@ -4763,8 +4951,11 @@ function succubusTick(e,dt,d,dx,dy){
   const B=G.B, p=B.hero;
   if(e.blocked){ e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt; return; }   // 壁で視線が切れている: 旋回せず流れ場に沿って回り込む
   // 彼女の周りをゆったり回る(小淫魔より大きく、ゆっくり)
+  /* v6.6 ふだんは遠くから中型までを指揮している。彼女がえっちな目に遭っている時だけ、
+     見物に(そして栓をしに)近寄ってくる */
+  const lewd=(p.pinned||p.charmBind||attachCount(p)>0||p.aphro>=70||p.climaxT>0);
   e.orbitA+=e.orbitDir*0.7*dt;
-  const R=90+Math.sin(e.t*1.1+e.joff)*16;
+  const R=(lewd?52:150)+Math.sin(e.t*1.1+e.joff)*16;
   const tx=p.x+Math.cos(e.orbitA)*R, ty=p.y-16+Math.sin(e.orbitA)*R*0.7;
   const md=Math.hypot(tx-e.x,ty-e.y)||0.001;
   const sp=Math.min(md,e.spd*1.4*dt);
@@ -4774,7 +4965,7 @@ function succubusTick(e,dt,d,dx,dy){
   e.denyCd-=dt;
   if(e.denyCd<=0){
     e.denyCd=8;
-    if(d<130 && p.denyT<=0 && p.climaxT<=0 && p.aphro>=35){
+    if(d<130 && p.denyT<=0 && p.climaxT<=0 && p.aphro>=35 && (p.omazukeT||0)<=0){
       applyDeny(e);
       B.fx.push({kind:'pulse', x:e.x, y:e.y-e.r, t:0, life:0.6, r:60, col:'#ff5d9e'});
       floatTxt(e.x,e.y-e.r-12,pickRand(['まだ、だめ♡','とめてあげる♡','おあずけ♡']),'#ff86b3',10,1.1);
@@ -4843,6 +5034,11 @@ function bossgazerTick(e,dt,d,dx,dy){
   const p=G.B.hero;
   e.lookA=Math.atan2(dy,dx);
   { const sp=e.spd*(p.hypnoLv>=1?1.5:1); if(d>120){ e.x+=dx/d*sp*dt; e.y+=dy/d*sp*dt; } }   // v2.4 催眠にかかった彼女へは速く迫る
+  /* v6.6 深い階で会うほど、目が増える */
+  if(e.eyes && (e.brank||0)>0 && e.eyes.length<3+e.brank){
+    const n=e.eyes.length;
+    e.eyes.push({base:(n/(3+e.brank))*TAU, ang:0, state:'idle', t:rand(0.5,2.0), dx:0, dy:0});
+  }
   for(const ey of e.eyes){
     // 眼柄の位置(胴の周りに三つ)
     // 触手の先端に眼球。真ん中は本人を狙い、両脇は本人の周りをばらばらに狙う(逃げ先を潰す)
@@ -4853,39 +5049,131 @@ function bossgazerTick(e,dt,d,dx,dy){
     ey.ang=eo.ang; ey.state=eo.state; ey.t=eo.t; ey.off=eo.off;
   }
 }
+/* ================= v6.6 ボスの段(深いところで会うほど技が増える) =================
+   深層個体(熟れた個体)による一律の底上げとは別に、ボス自身が段を持つ。
+   段は「いま何層で出したか」で決まるので、浅い階に連れ出しても強くならない。 */
+function bossRank(){
+  const d=curFloor().depth;
+  let r=0; for(const th of BAL.BOSS_RANK_D) if(d>=th) r++;
+  return Math.max(0,r-1);
+}
+/* ================= v6.6 胞子系: ハイ → 疲れ → 中毒 =================
+   吸うと一時的に元気になる(足も攻めも上がる)。同時に発情が乗るので、
+   「強くなったつもりで、いちばん危ない所へ踏み込む」形になる。
+   抜けると疲れてスタミナが落ち、身体に中毒が一つ残る。中毒が進むと、
+   自分からきのこ系の罠を踏みに行くようになる——時間で薄れるが、その日のうちは戻らない。 */
+function puffSpores(x,y,src){
+  const B=G.B;
+  spawnCloud(x,y,BAL.FLUFF_PUFF_R,4.0,BAL.SENSIT_GAS*0.7,'mistslime');
+  parts(x,y,10,['#c8e86a','#9fe8c8','#fff'],80,0.8);
+  for(const h of B.heroes){
+    if(h.out) continue;
+    if(Math.hypot(h.x-x,h.y-y)>BAL.FLUFF_PUFF_R) continue;
+    inhaleSpore(h,src);
+  }
+}
+function inhaleSpore(h,src){
+  const B=G.B, ci0=B.ci; B.ci=h.hi;
+  const first=!(h.highT>0);
+  h.highT=BAL.HIGH_T;
+  addHeatG(BAL.HIGH_HEAT); applySensit(BAL.HIGH_SENS);
+  if(first){
+    awardAil('high');
+    B.nHigh=(B.nHigh||0)+1;
+    heroBubble(h,pickRand(['……あれ? からだ、かるい……','いける、いけるよ! なんか、すごく……','あたま、ふわって……でも、うごける……']),true,2);
+    floatTxt(h.x,h.y-70,'ハイ','#9fe8c8',12,1.2);
+    if(src) codexMet(src);
+  }
+  B.ci=ci0;
+}
+/* ハイの持続と、抜けたあとの疲れ */
+function highTick(h,dt){
+  const B=G.B;
+  if((h.highT||0)<=0){ if((h.addict||0)>0) h.addict=Math.max(0,h.addict-BAL.ADDICT_DECAY*dt); return; }
+  h.highT-=dt;
+  if(h.highT<=0){
+    /* 抜けた。疲れが来て、身体に一つ残る */
+    const ci0=B.ci; B.ci=h.hi;
+    h.stamina=Math.max(0,h.stamina-BAL.CRASH_STAM);
+    h.crashT=BAL.CRASH_T;
+    h.addict=Math.min(BAL.ADDICT_MAX,(h.addict||0)+1);
+    awardAil('addict');
+    B.nCrash=(B.nCrash||0)+1;
+    heroBubble(h,pickRand(['……あ、れ……ちから、ぬけ……','はぁっ……はぁ……いま、の……なに……','もう、いっかい……ううん、ちがう、ちがう……']),true,3);
+    floatTxt(h.x,h.y-70,'—— 疲れ  スタミナ −'+BAL.CRASH_STAM,'#c8e86a',12,1.4);
+    B.ci=ci0;
+  }
+}
+/* 中毒が進むと、きのこ系の罠が「目当て」になる。咳き茸が居ない階でも媚茸・抱き茸・菌輪を探す */
+function addictSeek(p){ return (p.addict||0)>=BAL.ADDICT_SEEK; }
+/* ================= v6.6 眼系の「条(すじ)」 =================
+   見るのではなく、決めた方向へ壁に当たるまで光を流し続ける。
+   ・向きの変わりは遅い(RAY_TURN)ので、歩けば抜けられる——立ち止まると浴び続ける
+   ・浅いところの個体は「快感が溜まるだけ」。深いところ(RAY_DEEP 階〜)の個体は絶頂まで運び、
+     そこから連続絶頂に入るので、仲間に引き剥がしてもらうしかない
+   ・★湧いた瞬間に条が出て事故になるのを防ぐため、必ず BEAM_WAKE の硬直を置く */
+function rayDeep(){ return curFloor().depth>=BAL.RAY_DEEP; }
+/* 条の一本ぶん。ang は絶対角。壁で止まる長さを返す */
+function rayLen(x,y,ang){
+  const ux=Math.cos(ang), uy=Math.sin(ang);
+  let L=0;
+  while(L<BAL.RAY_LEN){
+    const nx=x+ux*(L+16), ny=y+uy*(L+16);
+    if(solidAt(nx,ny)) break;   /* 壁に当たったらそこで止まる */
+    L+=16;
+  }
+  return Math.max(24,L);
+}
+/* 一本の条を進め、浴びている間の効きを入れる。ray は {ang,state,t} を持つ器 */
+function rayStep(e,ray,dt,d,dx,dy,off){
+  const B=G.B, p=B.hero;
+  const ox=e.x, oy=e.y-e.r*1.2;
+  const want=Math.atan2((p.y-14)-oy,(p.x)-ox)+(off||0);
+  /* 向きの変わりは遅い。歩けば抜けられる */
+  let da=((want-ray.ang+Math.PI*3)%TAU)-Math.PI;
+  ray.ang+=clamp(da,-BAL.RAY_TURN*dt,BAL.RAY_TURN*dt);
+  ray.t-=dt;
+  if(ray.state==='off'){ if(ray.t<=0){ ray.state='warm'; ray.t=BAL.RAY_WARM; sfx(700,1200,0.2,'sine',0.03); } return; }
+  if(ray.state==='warm'){ if(ray.t<=0){ ray.state='on'; ray.t=BAL.RAY_ON; sfx(1500,900,0.2,'sawtooth',0.05); } }
+  const L=rayLen(ox,oy,ray.ang);
+  ray.len=L;
+  if(ray.state==='on'){
+    if(ray.t<=0){ ray.state='off'; ray.t=BAL.RAY_OFF*rand(0.8,1.2); return; }
+    /* 浴びているか: 条の線分と彼女の距離 */
+    const ux=Math.cos(ray.ang), uy=Math.sin(ray.ang);
+    const rx=p.x-ox, ry=(p.y-14)-oy, along=clamp(rx*ux+ry*uy,0,L);
+    const pd=Math.hypot(rx-ux*along, ry-uy*along);
+    if(pd<BAL.RAY_W/2+p.r*0.7 && !p.pinned && losClear(ox,oy,p.x,p.y-14,true)){
+      const deep=rayDeep();
+      applyPleasure(BAL.RAY_PLE*dt*(e.rBeams?1.25:1));
+      /* ★浅いところの条は「溜まるだけ」。99で頭打ちにしないと、深さの差が消える
+         (実測で第3層と第12層がまったく同じ挙動になっていた) */
+      if(!deep && p.aphro>=99 && p.climaxT<=0) p.aphro=99;
+      if(deep && p.aphro>=100 && p.climaxT<=0) forcedClimax(e);
+      /* 深いところの条は、達しても照らし続ける——そのまま連続絶頂へ入る。
+         剥がすには仲間が条を遮るか、彼女を運び出すしかない */
+      if(Math.random()<dt*3) parts(p.x+rand(-8,8),p.y-rand(6,26),1,['#ffd76a','#fff'],60,0.5);
+      e.rayHitT=(e.rayHitT||0)+dt;
+      if(e.rayHitT>0.8){ e.rayHitT=0;
+        heroBubble(p,pickRand(['ひ、かり、が……きえ、ない……','うご、かな……あたって、る……','そこ、ずっと……やめ、て……']),false,3); }
+    }
+  }
+}
 function beamerTick(e,dt,d,dx,dy){
   const B=G.B, p=B.hero;
   e.lookA=Math.atan2(dy,dx);
-  e.bmT-=dt;
-  const ox=e.x, oy=e.y-e.r*1.4;
-  const want=Math.atan2((p.y-14)-oy, p.x-ox);
-  if(e.bmState==='idle'){
-    if(d>200){ e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt; }
-    if(e.bmT<=0 && d<BAL.BEAM_LEN-30 && inSight(e,p) && p.climaxT<=0 && p.refractT<=0 && p.freezeT<=0){ e.bmState='aim'; e.bmT=BAL.BEAM_AIM; e.bmAng=want; sfx(900,1400,0.15,'sine',0.04); }
-  }else if(e.bmState==='aim'){
-    let da=((want-e.bmAng+Math.PI*3)%TAU)-Math.PI;
-    if(e.bmT>0.25) e.bmAng+=clamp(da,-1.2*dt,1.2*dt);   // 照準は1秒。最後の0.25秒は固定——見て横へ跳べば外れる
-    if(e.bmT<=0){
-      e.bmState='fire'; e.bmT=0.22;
-      const ux=Math.cos(e.bmAng), uy=Math.sin(e.bmAng);
-      const rx=p.x-ox, ry=(p.y-14)-oy, along=clamp(rx*ux+ry*uy,0,BAL.BEAM_LEN);
-      const pd=Math.hypot(rx-ux*along, ry-uy*along);
-      B.fx.push({kind:'beam', x:ox, y:oy, ang:e.bmAng, len:BAL.BEAM_LEN, t:0, life:0.3});
-      /* v6.0 双条(熟れた個体): 片方を避けた先に、もう一本 */
-      if((e.rBeams||0)>=2){ const a2=e.bmAng+0.34;
-        B.fx.push({kind:'beam', x:ox, y:oy, ang:a2, len:BAL.BEAM_LEN, t:0, life:0.3});
-        const u2x=Math.cos(a2), u2y=Math.sin(a2), r2x=p.x-ox, r2y=(p.y-14)-oy, al2=clamp(r2x*u2x+r2y*u2y,0,BAL.BEAM_LEN);
-        if(Math.hypot(r2x-u2x*al2, r2y-u2y*al2)<BAL.BEAM_W/2+p.r*0.7 && !p.pinned && losClear(ox,oy,p.x,p.y-14,true)) forcedClimax(e); }
-      sfx(1600,400,0.3,'sawtooth',0.07);
-      if(pd<BAL.BEAM_W/2+p.r*0.7 && !p.pinned && losClear(ox,oy,p.x,p.y-14,true)) forcedClimax(e);
-      else floatTxt(p.x,p.y-60,'かわした!','#ffd76a',10,0.9);
-    }
-  }else if(e.bmState==='fire'){
-    if(e.bmT<=0){ e.bmState='cd'; e.bmT=BAL.BEAM_CD; }
-  }else{ if(e.bmT<=0) e.bmState='idle'; }
+  /* v6.6 「照準して撃つ」から「壁に当たるまで流し続ける」へ。大型は三方向。
+     ★湧いた直後は撃たない(BEAM_WAKE)——出た瞬間に条が乗って即絶頂する事故を潰す */
+  if((e.wakeT||0)>0){ e.wakeT-=dt; if(d>240){ e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt; } return; }
+  if(!e.rays){
+    const n=(e.rBeams||0)>=2?3:3;   /* 大型は三方向。双条(熟れた個体)は広がりが大きい */
+    e.rays=[]; for(let k=0;k<n;k++) e.rays.push({ang:Math.atan2(dy,dx), state:'off', t:rand(0.2,1.6)+k*0.5, len:0});
+  }
+  if(d>240){ e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt; }
+  const spread=(e.rBeams||0)>=2?0.62:0.40;
+  e.rays.forEach((r,k)=>rayStep(e,r,dt,d,dx,dy,(k-1)*spread));
 }
 
-/* ================= 地形マップ: 生成・当たり・経路は js/map.js。ここは彼女の目的地と場所の効果 ================= */
 function nearGem(p,r){ for(const gm of G.B.gems){ if(Math.hypot(gm.x-p.x,gm.y-p.y)<r) return true; } return false; }
 /* 門に挑むのは、2日目以降か、3種以上を理解してから(初日の初見では巣の奥まで行こうとしない) */
 function gateAllowed(){ return true; }   // (v2.0: 門は降り口に置き換わった。互換のため残す)
@@ -4904,6 +5192,7 @@ function goalValid(p,g){
   if(g.kind==='item') return B.items.includes(g.ref);
   if(g.kind==='pick') return B.picks.includes(g.ref) && !g.ref.dead;
   if(g.kind==='lure') return !!(g.ref && !g.ref.dead && lureLooksReal(g.ref));   // v4.1 見破ったら用はない
+  if(g.kind==='addict') return !!(g.ref && !g.ref.dead) && addictSeek(p) && (p.highT||0)<=0;   /* v6.6 粉が抜けている間だけ、きのこを探す */
   if(g.kind==='poi'){ const q=g.ref; if(!M.known[q.key]) return false;
     if(q.kind==='shrine') return !M.visited[q.key];
     if(q.kind==='spring') return p.hp<p.maxHp*0.7 && p.springCd<=0;
@@ -5465,7 +5754,17 @@ function updateGoalSolo(p){
   for(const it of B.items){ if(it.known) add('item',it.kind,it.x,it.y,3.0,it); }
   for(const c of B.heroes){ if(c.out && c.captive && c!==p) add('rescue','rescue',c.x,c.y,BAL.RESCUE_WORTH,c,'rescue'+c.hi); }   // v3.0 捕まった仲間の救出は最優先の目当て(v3.2 価値を上げ、他を割り引く)
   { const cv=coverTarget(p); if(cv) add('cover','cover',cv.x,cv.y,BAL.COVER_WORTH,cv,'cover'+cv.hi); }   // v4.0 調子の悪い相方のそばへ(探索に流れない)
-  for(const c of B.chests){ if(c.known && !c.taken) add('chest',c.bossChest?'boss':'chest',c.x,c.y,(c.bossChest?3.0:2.6)*(leaving?0.3:1),c); }   // v2.1 降りると決めたら箱は後回し
+  for(const c of B.chests){ if(c.known && !c.taken) add('chest',c.bossChest?'boss':'chest',c.x,c.y,(c.bossChest?3.0:2.6)*(leaving?0.3:1),c); }
+  /* v6.6 中毒: 粉の味を憶えた身体は、きのこ系を見つけると自分から寄っていく。
+     ★咳き茸が居ない階でも、媚茸・抱き茸を探して踏みに行く——これが「癖」の姿 */
+  if(addictSeek(p) && (p.highT||0)<=0){
+    for(const e of B.enemies){
+      if(e.dead||e.dormant) continue;
+      if(e.id!=='coughcap' && e.id!=='lurecap' && e.id!=='hugcap') continue;
+      if(!inSight(e,p)) continue;
+      add('addict','addict',e.x,e.y,BAL.ADDICT_WORTH*(1+0.25*((p.addict||0)-BAL.ADDICT_SEEK)),e,'ad'+e.id+((e.x/48)|0)+'_'+((e.y/48)|0));   /* uid は無いので、種と位置から鍵を作る */
+    }
+  }   // v2.1 降りると決めたら箱は後回し
   for(const q of G.map.pois){
     if(!M.known[q.key]) continue; let w=0;
     if(q.kind==='shrine') w=M.visited[q.key]?0:2.2;
@@ -6195,7 +6494,7 @@ function coreTick(e,dt,d,dx,dy){
   }
 }
 /* ================= v1.6 ボス4種 ================= */
-/* 汎用ボスの追跡→予兆→突進(ヴァンピロードと同じ) */
+/* 汎用ボスの追跡→予兆→突進 */
 function bossChargeTick(e,dt,d,dx,dy){
   e.bt-=dt;
   if(e.bstate==='chase'){
@@ -6207,8 +6506,7 @@ function bossChargeTick(e,dt,d,dx,dy){
     e.x+=e.cdx*370*dt; e.y+=e.cdy*370*dt;   // v2.4 340→370
     parts(e.x,e.y,1,['#c04a6a','#7a2a4a'],40,0.3);
     if(e.bt<=0){
-      if(e.id==='vampi' && !e.dash2 && d<420 && Math.random()<0.45){ e.dash2=true; e.bstate='tele'; e.bt=0.35; floatTxt(e.x,e.y-e.r-16,'二段突進!','#ff6b81',11,1.0); }   // v2.4 ヴァンピロード: 45%で二段目
-      else { e.dash2=false; e.bstate='chase'; e.bt=rand(3.2,4.7); }
+      e.dash2=false; e.bstate='chase'; e.bt=rand(3.2,4.7);
     }
   }
 }
@@ -6276,26 +6574,34 @@ function succuqueenTick(e,dt,d,dx,dy){
   const mv=Math.min(td, e.spd*dt*1.6); e.x+=tdx/td*mv; e.y+=tdy/td*mv;
   e.lookA=Math.atan2(dy,dx);
   e.pulseCd-=dt; e.spawnCd-=dt; e.kissCd-=dt;
+  /* v6.6 ★おあずけは「周期」では成立しない。5.2秒の波を待っている間に彼女が100へ届いてしまい、
+     実測で一度も発火しなかった。絶頂の寸前を常に見張って、その瞬間に止める。 */
+  if(d<BAL.OMAZUKE_R && p.climaxT<=0 && p.aphro>=BAL.OMAZUKE_TH){
+    const n0=p.omazuke||0;
+    applyOmazuke(e);
+    if((p.omazuke||0)!==n0){ B.fx.push({kind:'pulse', x:e.x, y:e.y-e.r, t:0, life:0.7, r:110, col:'#ffb3cf'}); B.bossMark={id:'succuqueen',t:B.time}; }
+  }
   if(e.pulseCd<=0){
     e.pulseCd=5.2;   // v2.4 6→5.2
     B.fx.push({kind:'pulse', x:e.x, y:e.y-e.r, t:0, life:1.0, r:170, col:'#ff9ec2'});
     sfx(600,300,0.5,'sine',0.05);
     if(d<170 && p.climaxT<=0 && p.freezeT<=0){
       addHeatG(45);
-      if(p.heatLv>=1) applyDeny(e);
-      heroBubble(p,pickRand(['あま、い……ゆめ、みたいな……','だめ、これ、ゆだんしたら……','あたま、とろ、けそ……']),true,2);
+      /* v6.6 女王は栓をしない。責めを一瞬止めて、絶頂の寸前で引き戻す(おあずけ) */
+      if(!applyOmazuke(e)) heroBubble(p,pickRand(['あま、い……ゆめ、みたいな……','だめ、これ、ゆだんしたら……','あたま、とろ、けそ……']),true,2);
       B.bossMark={id:'succuqueen',t:B.time}; codexMet('succuqueen');
     }
   }
   if(e.kissCd<=0 && d<e.r+p.r+8 && p.climaxT<=0){
-    e.kissCd=5; applySensit(10); addHeatG(20); if(p.heatLv>=1) applyDeny(e);   // v2.4 火照っていれば口づけでも寸止め
-    heroBubble(p,'んっ……!? くち、に……',true,2);
+    e.kissCd=5; applySensit(10); addHeatG(20);
+    if(!applyOmazuke(e)) heroBubble(p,'んっ……!? くち、に……',true,2);   /* v6.6 口づけでもおあずけ */
     B.bossMark={id:'succuqueen',t:B.time}; codexMet('succuqueen');
   }
   if(e.spawnCd<=0){
     e.spawnCd=15;
-    if(aliveOf('imp')<8 && B.enemies.length<fieldCap()-3){
-      for(let i=0;i<3 && aliveOf('imp')<8;i++){ const a=rand(TAU); spawnUnit('imp', e.x+Math.cos(a)*30, e.y+Math.sin(a)*30, {parent:e, enVal:0, gemMul:0}); }   // v2.4 3体ずつ・8体まで(超えない)
+    const cap=8+2*(e.brank||0), n=3+(e.brank||0);   /* v6.6 深い階の女王ほど、呼ぶ数が多い */
+    if(aliveOf('imp')<cap && B.enemies.length<fieldCap()-3){
+      for(let i=0;i<n && aliveOf('imp')<cap;i++){ const a=rand(TAU); spawnUnit('imp', e.x+Math.cos(a)*30, e.y+Math.sin(a)*30, {parent:e, enVal:0, gemMul:0}); }   // v2.4 3体ずつ・8体まで(超えない)
       setBanner('女王の呼び声','小淫魔が集う','#ff9ec2');
     }
   }
