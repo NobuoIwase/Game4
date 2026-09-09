@@ -127,6 +127,9 @@ BRIEFING §5 に、同じ罠を三度踏んだ記録があります。
 | 動かない個体(据わり) | `js/data.js:isSeated()` と `js/data.js:SEATED_FORCE` |
 | どの階に出るか | `js/data.js:FLOORS` の `affinity` |
 | 解放費と深さの錠 | `MONSTERS[].unlock` と `js/data.js:deepOk()`(`DEEP_COST` の表) |
+| 系統(ヌメリ/触手/淫魔/眼/胞子/霊) | `js/data.js:FAMS`(表示名)と `js/data.js:FAM_OF`(id→系統)。引くのは `js/data.js:famOf()` |
+| 系統ボーナスの効き | `js/game.js:deckFam()` が `{fam,name,n,cut}` を返す。`BAL.FAM_MIN`/`BAL.FAM_STEP`/`BAL.FAM_MAX`。戦闘開始時に `B.fam` へ焼き、`js/game.js:playCard()` の `slot.cdMax` に掛かる |
+| オート指揮が特化デッキで黙る | `js/game.js:handOrder()`。`PRESSURE`/`FLUSH_ORDER`/`REFILL_ORDER` の名指しが尽きたら手札から継ぎ足す |
 
 ### 2-5. 文章(台詞・本文・図鑑・物語)
 

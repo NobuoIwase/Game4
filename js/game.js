@@ -247,6 +247,19 @@ function buildDeck(mode){
   if(!deck.length) deck.push('slug');
   return deck;
 }
+/* v6.5 系統の特化。デッキの最多系統を数え、その系統のカードだけCDを縮める。
+   deck を渡さなければ META.deck を見る(編成画面の下見と、戦闘中の適用で同じ関数を使う)。
+   戻り: {fam, name, n, cut}。fam が null なら効いていない */
+function deckFam(deck){
+  const d=deck||META.deck||[];
+  const cnt={};
+  for(const id of d){ const f=famOf(id); if(f) cnt[f]=(cnt[f]||0)+1; }
+  let fam=null, n=0;
+  for(const f in cnt){ if(cnt[f]>n){ fam=f; n=cnt[f]; } }
+  if(!fam || n<BAL.FAM_MIN) return {fam:null, name:'', n:(fam?n:0), cut:0};
+  const cut=Math.min(BAL.FAM_MAX, (n-BAL.FAM_MIN+1)*BAL.FAM_STEP);
+  return {fam, name:FAMS[fam].name, n, cut};
+}
 function applyDeckMode(){ const mode=(META.settings&&META.settings.deckMode)||'manual'; if(mode==='manual') return null; META.deck=buildDeck(mode); saveMeta(); return mode; }
 /* ================= 戦闘開始/終了 ================= */
 function startBattle(){
@@ -260,6 +273,7 @@ function startBattle(){
     en:BAL.EN_START*curFloor().en.start, spawnFx:[],
     floor:curFloor(), seals:{}, exitLocked:false, exitT:0, cleared:false, descending:false,   // v2.0 階層
     hand:META.deck.map(id=>({id, cdT:0, cdMax:1})),
+    fam:deckFam(META.deck),   /* v6.5 この戦闘の系統ボーナス(デッキは戦闘中変わらないので一度だけ数える) */
     auto:META.settings.autoplay, autoT:1.2,
     kills:0, dmgDealt:0, dmgCarry:0, ailCount:0, orbFrag:0, essence:0,
     bossUsed:false, bossPlayed:{}, bossCd:0, bossMark:null, ebullets:[], shrineGot:[], gateT:0, poiCd:0, capturedBy:null, captureCause:'', captureT:0, winT:0,
@@ -6605,7 +6619,7 @@ function beginCapture(src,cause){
     B.party.goal=null; B.party.pending=[]; B.party.talkUntil=0; B.party.gather=null; B.party.gatherDone=0; B.party.denRole=null;   // v3.1 相談は中断(言いかけの台詞と足止めを捨てる) / v3.2 待つ役も解く
     return;
   }
-  G.mode='captured'; B.captureT=2.8; h.pinned=true;
+  G.mode='captured'; B.captureT=BAL.AFTER_FIRST; h.pinned=true;   /* v6.5 ここを過ぎたら観測フェーズへ */
   const sub={stamina:h.name+'は力尽き、組み伏せられた', charm:h.name+'は魅了に蕩けたまま、力尽きた', hp:h.name+'は魔物たちに捕らえられた'};
   setBanner(B.captures.length>1?'全員捕獲 — 観測終了':'敗北 — 観測終了', sub[cause]||sub.hp,'#c98cff');
 }
@@ -8617,7 +8631,9 @@ function playCard(id, formId){
   const p=B.hero, f=FORMATIONS[formId], cost=chk.cost;
   B.en-=cost;
   const slot=handSlot(id);
-  slot.cdMax=(BAL.CARD_CD_BASE+cost*BAL.CARD_CD_COST)*(1-0.12*altarLv('cdcut'));
+  const fb=B.fam||{fam:null,cut:0};   /* v6.5 同系統で固めたデッキは、その系統だけ続けて出せる */
+  const famCut=(fb.fam && famOf(id)===fb.fam) ? fb.cut : 0;
+  slot.cdMax=(BAL.CARD_CD_BASE+cost*BAL.CARD_CD_COST)*(1-0.12*altarLv('cdcut'))*(1-famCut);
   slot.cdT=slot.cdMax;
   S.summon();
 
@@ -8693,6 +8709,22 @@ function playCard(id, formId){
 /* ================= オート指揮 ================= */
 const BINDERS=['worm','serpent','gtent','flower','pot','dreamtree','ghosthand'];
 const PRESSURE=['ghost','goblin','hand','spore','ghosthand','serpent','mistslime','slime','slug'];
+const FLUSH_ORDER=['gtent','ghost','serpent','ghosthand','goblin','hand','spore','mistslime','slime','worm','slug','leech','slugqueen','moth','succubus','gazer','beamer'];
+const REFILL_ORDER=['goblin','hand','spore','slug','worm','ghost','slime','serpent','ghosthand'];
+/* v6.5 オート指揮は「魔物の名前」を直に見て手を選ぶ。だから特化デッキ——眼だけ、ヌメリだけ——を
+   組むと、名指しのカードが手札に無く、指揮官が黙ってしまう。
+   実測(同じデッキで効きだけ入切・8夜×3系統): CDを縮めても召喚回数は増えなかった(×0.94/0.97/0.94)。
+   縮んだCDより先に、出す手そのものが無かった。
+   そこで「何でもいいから出す」場面(畳みかけ・放出・補充)だけ、名指しが尽きたら手札から継ぎ足す。
+   系統ボーナスが効いている時は、その系統を先に並べる——これが「特化階層」の中身。 */
+function handOrder(names){
+  const B=G.B, fb=B.fam||{fam:null};
+  const named=names.filter(id=>B.hand.some(h=>h.id===id));
+  const rest=B.hand.filter(sl=>!MONSTERS[sl.id].boss && !MONSTERS[sl.id].solo && names.indexOf(sl.id)<0).map(sl=>sl.id);
+  const all=named.concat(rest);
+  if(!fb.fam) return all;
+  return all.filter(id=>famOf(id)===fb.fam).concat(all.filter(id=>famOf(id)!==fb.fam));
+}
 function bestForm(prefer){
   for(const f of prefer){ if(META.formations.includes(f)) return f; }
   return META.formations[0];
@@ -8753,7 +8785,7 @@ function autoDirector(dt){
   // 1) 拘束中・押し倒し中は畳みかける(最大2プレイ)
   if(held){
     let plays=0;
-    for(const id of PRESSURE.concat(['worm'])){
+    for(const id of handOrder(PRESSURE.concat(['worm']))){
       if(plays>=2) break;
       if(!has(id)) continue;
       for(const f of [bestForm((B.ringCd||0)<=0?['ring','burst','wave','scatter']:['burst','wave','scatter']), 'scatter']){   // v2.2 包囲円陣は RING_CD 秒に1度だけ
@@ -8848,7 +8880,7 @@ function autoDirector(dt){
   // 7) ENが溢れそうなら全力放出(1tickで最大4プレイ・半分まで使い切る)
   if(flush){
     let plays=0;
-    for(const id of ['gtent','ghost','serpent','ghosthand','goblin','hand','spore','mistslime','slime','worm','slug','leech','slugqueen','moth','succubus','gazer','beamer']){
+    for(const id of handOrder(FLUSH_ORDER)){
       if(plays>=4 || B.en<enMax()*0.5) break;
       if(!has(id)) continue;
       const f=bestForm(['burst','wave','scatter']);   // v2.2 放出時は包囲円陣を使わない
@@ -8859,7 +8891,7 @@ function autoDirector(dt){
 
   // 8) 圧が切れているなら安価に補充(ただし大物ぶんのENは温存)
   if(alive.length<10){
-    for(const id of ['goblin','hand','spore','slug','worm','ghost','slime','serpent','ghosthand']){
+    for(const id of handOrder(REFILL_ORDER)){
       if(!has(id)) continue;
       const chk=canPlay(id,'scatter');
       if(chk.ok && B.en-chk.cost>=Math.min(reserve*0.7,14)){ playCard(id,'scatter'); return; }

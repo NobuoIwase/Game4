@@ -11,7 +11,10 @@ const BAL={
   EN_BASE:14, EN_PER_LV:3, EN_MAX:80,
   EN_REGEN:1.0, EN_REGEN_LV:0.08,      // v1.1: 初期回復を少し上げた
   EN_START:12,
-  CARD_CD_BASE:1.2, CARD_CD_COST:0.09,   // カードCD = BASE + コスト×COST
+  CARD_CD_BASE:1.2, CARD_CD_COST:0.09,   /* カードCD = BASE + コスト×COST */
+  /* 系統ボーナス: デッキの最多系統が FAM_MIN 枚から効きはじめ、1枚増えるごとに FAM_STEP ずつ
+     その系統のカードのCDが縮む(上限 FAM_MAX)。他系統のカードには乗らない */
+  FAM_MIN:5, FAM_STEP:0.06, FAM_MAX:0.30,
 
   /* --- ヒロインの視界と思考(v0.4.1: 人間らしさ) --- */
   SIGHT_MARGIN:30,         // 画面端+これだけが視界。外の敵は存在に気づかない
@@ -1297,6 +1300,43 @@ const SPECIES_MAX={gazer:4};                                  // 同時に場に
 const DECK_CAP=Object.values(TIER_CAP).reduce((a,b)=>a+b,0);
 const TIER_FORMS={fodder:null, mid:null, large:['single','duo'], boss:['single']};  // null=全陣形
 const tierOf=id=>MONSTERS[id].tier||(MONSTERS[id].boss?'boss':'mid');
+
+/* v6.5 系統(デッキの特化)。同じ系統でデッキを固めるほど、その系統のカードだけCDが縮む。
+   狙いは「プレイヤーの思う特化階層」——淫魔だけの階、眼だけの階、を組めるようにすること。
+   系統は絵と名前から読めるものにしてある(機能ではなく見た目で括る)。
+   枠は雑魚3/中型3/大型2/ボス5なので、どの系統も枠の上限まで詰めれば FAM_MIN には届く。
+   魔核とその眷属(core/coreling/yamiboss)はこちらの本体なので、どの系統にも属さない。 */
+const FAMS={
+  slime: { name:'ヌメリ系', note:'濡れて吸いつくもの' },
+  tent:  { name:'触手系',   note:'絡んで縛るもの' },
+  demon: { name:'淫魔系',   note:'人の形をした魔' },
+  eye:   { name:'眼系',     note:'見て、射るもの' },
+  spore: { name:'胞子系',   note:'粉と霧をまくもの' },
+  ghost: { name:'霊系',     note:'触れずに触るもの' },
+};
+const FAM_OF={
+  slug:'slime', slugelder:'slime', slime:'slime', leech:'slime', mistslime:'slime',
+  suiyou:'slime', slugqueen:'slime', slimeking:'slime', firstslug:'slime',
+
+  worm:'tent', wormcoil:'tent', miretent:'tent', flower:'tent', serpent:'tent',
+  gtent:'tent', gtentking:'tent', pot:'tent', mouth:'tent', mouthdeep:'tent',
+  nichelord:'tent', seatflesh:'tent', heartroot:'tent', dreamtree:'tent', silkmite:'tent',
+
+  goblin:'demon', imp:'demon', impchoir:'demon', inyoku:'demon', succubus:'demon',
+  succuhigh:'demon', succuqueen:'demon', vampi:'demon', gobking:'demon', runemage:'demon',
+  glyphmite:'demon',
+
+  eye:'eye', gazer:'eye', gazerpair:'eye', gallery:'eye', beamer:'eye', beamtwin:'eye',
+  guardian:'eye', sentinel:'eye', bossgazer:'eye',
+
+  spore:'spore', gas:'spore', lurecap:'spore', lethemoth:'spore', moth:'spore',
+  hugcap:'spore', hugcapelder:'spore', frostbud:'spore',
+
+  hand:'ghost', ghost:'ghost', ghosthand:'ghost', stiller:'ghost', echoer:'ghost',
+  tallykeeper:'ghost', nevermet:'ghost', mirrorqueen:'ghost', mirrorling:'ghost',
+  bonesoldier:'ghost',
+};
+const famOf=id=>FAM_OF[id]||null;
 /* ヒロインの学習(v1.5): 種族の脅威度(0-3)と、知ったあとの警戒半径。未知の相手は一律120で扱う */
 const SPEC_THREAT={
   slug:1, goblin:0, leech:1, worm:1, ghost:0, slime:0, gas:1, imp:1, flower:2, mistslime:1, gtent:2,

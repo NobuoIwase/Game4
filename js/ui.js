@@ -358,13 +358,17 @@ const UI={
   },
   htmlDeck(){
     // 階級ごとに枠がある: 雑魚2 / 中型2 / 大型1 / ボス1(大型は精鋭・双璧のみ、ボスは単騎)
+    /* v6.5 系統。いま効いている系統には金の縁がつくので、何枚目で届くかが見て分かる */
+    const fb=deckFam(META.deck);
+    const famTag=id=>{ const f=famOf(id); return f?`<div class="fam${fb.fam===f?' on':''}">${esc(FAMS[f].name)}</div>`:''; };
     const card=(id,sel)=>{
       const m=MONSTERS[id], lv=(META.cards[id]&&META.cards[id].lv)||1;
       return `<div class="mcard ${sel?'sel':''} t-${tierOf(id)}" data-act="${sel?'deckRem':'deckAdd'}" data-arg="${id}" style="cursor:pointer" title="${sel?'クリックで外す':'クリックで追加'}">
         <div class="cost">${cardCost(id,lv)}</div><div class="lv">Lv${lv}</div>
         <div data-icon="${id}" data-size="44"></div>
         <div class="nm">${esc(m.name)}</div>
-        <div class="st">${sel?'クリックで外す':esc(m.role)+(m.trait?'<br>'+esc(m.trait):'')}</div></div>`;
+        <div class="st">${sel?'クリックで外す':esc(m.role)+(m.trait?'<br>'+esc(m.trait):'')}</div>
+        ${famTag(id)}</div>`;
     };
     const sections=TIERS.map(t=>{
       const inDeck=META.deck.filter(id=>tierOf(id)===t);
@@ -376,11 +380,21 @@ const UI={
       return `<h2 style="font-size:14px" class="tier-h t-${t}">${esc(TIER_NAMES[t])} <span style="font-size:11px;color:var(--dim)">(${inDeck.length}/${TIER_CAP[t]}) 陣形: ${forms}</span></h2>
         <div class="cards">${slots}${pool.map(id=>card(id,false)).join('')}</div>`;
     }).join('');
+    /* v6.5 同系統ボーナスの現在地。届いていない時は「あと何枚」まで言う */
+    const famList=Object.keys(FAMS).map(f=>esc(FAMS[f].name)).join('・');
+    const famNote=fb.fam
+      ? `<b style="color:var(--gold)">${esc(fb.name)} ${fb.n}枚</b> — この系統だけカードのCDが <b>−${Math.round(fb.cut*100)}%</b>。${fb.cut<BAL.FAM_MAX?'まだ伸びる。':'ここが上限。'}`
+      : (()=>{ const c={}; for(const id of META.deck){ const f=famOf(id); if(f) c[f]=(c[f]||0)+1; }
+          let top=null,n=0; for(const f in c){ if(c[f]>n){ top=f; n=c[f]; } }
+          return `系統ボーナス: <b>効いていない</b>。同じ系統を${BAL.FAM_MIN}枚そろえると、その系統だけCDが縮む`
+            + (top?`(いまの最多は<b>${esc(FAMS[top].name)}</b> ${n}枚、あと${BAL.FAM_MIN-n}枚)`:'')
+            + `。系統: ${famList}`; })();
     return `
       <h2>🃏 デッキ編成 <span style="font-size:12px;color:var(--dim)">(${META.deck.length}/${DECK_CAP})</span></h2>
       <div class="note">次は<b>第${curFloor().depth}層 ${esc(curFloor().name)}</b>。この階層で硬くなる種(HP×${BAL.FLOOR_AFFINITY}): ${curFloor().affinity.filter(id=>MONSTERS[id]).map(id=>esc(MONSTERS[id].name)).join('・')}。EN: 上限×${curFloor().en.max}・回復×${curFloor().en.regen}
         <span data-act="deckMode" style="cursor:pointer;text-decoration:underline;margin-left:8px">編成モード: ${({manual:'手動',auto:'おまかせ',random:'ランダム'})[META.settings.deckMode||'manual']}</span></div>
       <div class="note">雑魚・中型は全陣形で出せる。大型は<b>精鋭/双璧</b>の少数精鋭のみ、ボスは<b>単騎</b>。戦闘中に彼女が開けた宝箱からは、ランダムな魔物がこちらの手札に加わる(その戦闘限り・枚数制限なし)。</div>
+      <div class="note">${famNote}</div>
       ${sections}
       <div class="note">陣形は戦闘中に選択します。解放済み: ${META.formations.map(f=>esc(FORMATIONS[f].name)).join(' / ')}</div>
       <div class="row"><button data-act="go" data-arg="home">← もどる</button><button class="gold" data-act="battle">▶ このデッキで出撃</button></div>`;
@@ -709,6 +723,23 @@ const UI={
         }
         if(hstg>=3 && book.after) entries.push(`<div class="after">${esc(book.after)}</div>`);
       }
+      /* ★v6.5 見た場面: 一度でも目に触れた押し倒し・敗北の本文を、ここから読み返せる。
+         本文そのものではなく鍵を控えているので、組み直して出す(sceneReplay) */
+      const RS=((META.readScenes||{})[cwho])||{};
+      const KINDN={pin:'押し倒された', charmbind:'魅了に縋った', climax:'絶頂'};
+      const beatTxt=(b)=> (typeof b==='string')?b:(b&&typeof b==='object'?Object.keys(b).map(k=>b[k]).filter(v=>typeof v==='string').join(' '):'');
+      const scParts=[];
+      for(const kind of ['pin','charmbind']){
+        const key=kind+'/'+sel;
+        if(!RS[key]) continue;
+        const sc=(typeof sceneReplay==='function')?sceneReplay(cwho,key):null;
+        if(!sc||!sc.beats||!sc.beats.length) continue;
+        const body=sc.beats.map(b=>'<div class="mline '+pen.cls+'">'+esc(beatTxt(b))+'</div>').join('');
+        scParts.push('<div class="entry"><span class="lbl">'+esc(KINDN[kind]||kind)+'</span>'+body+'</div>');
+      }
+      const scAll=Object.keys(RS).length;
+      const sceneBox=`<h3 style="margin-top:12px">見た場面 — ${esc((HEROES[cwho]||{}).name||cwho)} <span style="color:var(--dim);font-weight:normal">(この子が目にした本文 ${scAll} 件)</span></h3>
+        <div class="notebook ${pen.cls}">${scParts.join('')||'<div class="locked">（'+esc((HEROES[cwho]||{}).name||cwho)+'は、この魔物にまだ組み伏せられていない）</div>'}</div>`;
       const bookTitle=(cwho==='lumina')?((cx&&cx.note&&cx.note.title)||m.name):m.name;
       detail=`<div class="stcard" style="text-align:left">
         <div style="display:flex;gap:12px;align-items:center">
@@ -734,11 +765,12 @@ const UI={
           <div>この種族への敗北 <b>${hrec.capture||0}</b></div>
         </div>
         <div class="notebook ${pen.cls}"><h4>${esc(bookTitle)}</h4>${entries.join('')||'<div class="locked">（'+esc((HEROES[cwho]||{}).name||cwho)+'は、この魔物の頁をまだ持っていない）</div>'}</div>
+        ${sceneBox}
       </div>`;
     }
     return `
       <h2>📖 図鑑 <span style="font-size:12px;color:var(--dim)">夜側の解説と、それぞれの手記</span></h2>
-      <div class="note">上は夜側から見た解説。手記は<b>各人が自分の帳面に</b>書いたもので、<b>その子が</b>その種族に何かされる／その種族が絡んだ絶頂／その種族への敗北を経るたびに追記が増える。追記は三度まで。<br>同じ魔物でも、負けた子の頁だけが三段目まで進む——誰が何を知っているかは、四人で食い違う。</div>
+      <div class="note">上は夜側から見た解説。手記は<b>各人が自分の帳面に</b>書いたもので、<b>その子が</b>その種族に何かされる／その種族が絡んだ絶頂／その種族への敗北を経るたびに追記が増える。追記は三度まで。<br>同じ魔物でも、負けた子の頁だけが三段目まで進む——誰が何を知っているかは、四人で食い違う。<br><b>見た場面</b>は、実際にその子が組み伏せられた時に流れた本文。一度でも目にしたものだけが、ここに残る。</div>
       ${detail}
       <div class="codex-grid">${cards}</div>
       <div class="row"><button data-act="go" data-arg="status">👁 観測記録</button><button data-act="go" data-arg="home">← もどる</button></div>`;
@@ -862,6 +894,7 @@ const UI={
     row.innerHTML=''; grow.innerHTML='';
     const sc=document.createElement('div'); sc.id='guestscroll';
     const guests=G.B.hand.filter(h=>h.temp);
+    const fbB=G.B.fam||{fam:null, name:'', cut:0};   /* v6.5 系統ボーナスが乗る札に金の下線 */
     for(const slot of G.B.hand){
       const m=MONSTERS[slot.id];
       const el=document.createElement('div');
@@ -878,6 +911,10 @@ const UI={
         el.innerHTML=`<div class="cost"></div><div class="tg">${tg}</div><div class="combo" hidden></div><div class="cnt"></div><div class="nm">${esc(m.name)}</div><div class="cd" style="height:0%"></div>`;
         el.insertBefore(makeIconCanvas(slot.id,44), el.firstChild);
         row.appendChild(el);
+      }
+      if(fbB.fam && famOf(slot.id)===fbB.fam){
+        el.classList.add('famon');
+        el.title=m.name+' — '+fbB.name+'のデッキ: 出し直しが '+Math.round(fbB.cut*100)+'% 速い';
       }
     }
     row.classList.toggle('dense', G.B.hand.filter(h=>!h.temp).length>9);   // v1.9 札が多い時は小さめで一列
