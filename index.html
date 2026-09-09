@@ -377,6 +377,44 @@ body.portrait #advBox{ bottom:2%; width:96%; font-size:13.5px; padding:14px 14px
 .storytext .sl{ margin:4px 0 4px 6px; }
 .storytext .who{ display:inline-block; min-width:3.2em; margin-right:6px; padding:0 8px; border-radius:8px; font-size:11px; color:#3a2a10; background:linear-gradient(180deg,#ffd76a,#e8a53a); }
 .storytext .who.f{ background:linear-gradient(180deg,#ffb08a,#e0603a); } .storytext .who.k{ background:linear-gradient(180deg,#bff0ea,#3fb0a4); } .storytext .who.y{ background:linear-gradient(180deg,#c9aaff,#5a2ea8); color:#fff; } .storytext .who.t{ background:linear-gradient(180deg,#a8e0ff,#5aa8e0); } .storytext .who.v{ background:linear-gradient(180deg,#d8b0ff,#8a5ad8); color:#fff; }
+/* ===== v6.7 横持ち(レール): 盤面の左右に札とアイテムを立てる =====
+   作者の指定:「もういっその事横持ち推奨にできないかな、短縦×横長の画面で、
+   左右にモンスターや罠のボタンを配置。真四角の画面やウィンドウの場合にも対応して」。
+   ★DOM は触らない。#battlebar を三列のグリッドにして、既存の子を左右の列へ置くだけ——
+   JS(UI.tickBattleBar など)は同じ id を書き換え続けられる。
+   盤面ぶんの幅は core.js:resize() が RAIL×2 を引いて確保する */
+body.rails #battlebar{
+  position:absolute; inset:0; left:0; bottom:auto; transform:none; width:100% !important;
+  display:grid; grid-template-columns:var(--rail) 1fr var(--rail);
+  grid-template-rows:auto auto 1fr auto; align-items:start; justify-items:stretch;
+  gap:6px; padding:8px 8px 10px; box-sizing:border-box; pointer-events:none;
+}
+body.rails #battlebar > *{ pointer-events:auto; }
+/* 左のレール: 札(縦に積む。多ければ二列)と、宝箱の客札 */
+body.rails #handrow{
+  grid-column:1; grid-row:1 / span 3; align-content:flex-start; align-items:flex-start;
+  justify-content:flex-start; gap:5px; overflow-y:auto; overflow-x:hidden; max-height:100%;
+  scrollbar-width:thin; scrollbar-color:rgba(201,140,255,.5) transparent;
+}
+body.rails #guestrow{ grid-column:1; grid-row:4; flex-wrap:wrap; max-width:100%; }
+body.rails #guestscroll{ flex-wrap:wrap; overflow:visible; }
+/* 右のレール: EN・アイテム・陣形・操作 */
+body.rails #enwrap{ grid-column:3; grid-row:1; flex-direction:column; align-items:stretch; gap:3px; }
+body.rails #entext{ text-align:center; min-width:0; }
+body.rails #itemrow{ grid-column:3; grid-row:2; flex-wrap:wrap; overflow:visible; justify-content:center; }
+body.rails #battlebar .spread{
+  grid-column:3; grid-row:4; width:auto !important; display:flex; flex-direction:column; gap:6px; align-items:stretch;
+}
+body.rails #formrow{ flex-wrap:wrap; justify-content:center; }
+body.rails #battlebar .side{ flex-wrap:wrap; justify-content:center; }
+body.rails .hcard{ width:62px; height:78px; }
+body.rails .ichip{ font-size:10px; padding:4px 8px; }
+body.rails .fchip{ font-size:10px; padding:3px 8px; }
+/* 狭いレール(正方形・幅の狭い窓)。★13枚が二列で縦に収まる寸法にする——
+   一列だと下の札が畳の外へ出て、スクロールしないと見えなくなる */
+body.rails.rails1 .hcard{ width:52px; height:66px; }
+body.rails.rails1 .hcard .nm{ font-size:8px; }
+body.rails.rails1 .gchip{ width:44px; height:54px; }
 /* ===== 縦持ち(v1.9): 戦闘バーを世界の上に重ねず、キャンバスの下に置く。札は小さく一列(横スクロール) ===== */
 body.portrait #stage{ flex-direction:column; justify-content:flex-start; align-items:center; padding-top:4px; box-sizing:border-box; }
 body.portrait canvas#cv{ flex:0 0 auto; }

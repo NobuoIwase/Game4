@@ -17,16 +17,33 @@ let dpr=1, viewScale=1, barCover=0;   // barCover: 横持ちで戦闘バーが�
    (412x830 の端末で canvas 406x228)。見える世界の"広さ"は 960x540 と同じに保ったまま、
    縦横比だけ画面に合わせると canvas 410x674 になり、同じ倍率で描いても1体1体が大きく見える。 */
 const VIEW_AREA=960*540, AR_MIN=0.52, AR_MAX=2.60;
+/* v6.7 レール(横持ち推奨)の幅。左右に一本ずつ立てる。
+   ★盤面に残す最低幅を切ってまでは立てない——立てられない窓では、これまでの縦積みに落ちる */
+const RAIL_WIDE=148, RAIL_NARROW=132, RAIL_KEEP_W=360;
 function resize(){
   dpr = Math.min(2, window.devicePixelRatio||1);
   const bb=document.getElementById('battlebar');
-  // v1.9 縦持ち: キャンバスを上に、戦闘バーをその下に(重ねない)。キャンバスは残りの高さに収める
-  // v1.10 横持ちでも画面が低い端末(高さ560px未満)は同じ扱い。重ねると盤面の6割が隠れてしまうため
-  const portrait = window.innerHeight > window.innerWidth*1.05 || window.innerHeight < 560;
+  /* ★v6.7 三通り。
+     rails    : 盤面の左右に札とアイテムを立てる(横長・正方形。作者の推奨する持ち方)
+     portrait : キャンバスを上に、戦闘バーをその下に(縦長、あるいはレールを立てる幅が無い時)
+     どちらでもない = 従来の「下に重ねる」形は、レールが立つ窓では使わない */
+  const iw=window.innerWidth, ih=window.innerHeight;
+  let rail=0, rails=false;
+  if(iw>=ih*0.92){                                  /* 横長〜正方形 */
+    /* 正方形に近い窓・幅の狭い窓では細いレール。★どちらでも札は二列に収まる幅は残す
+       (一列だと13枚が縦にはみ出して、下のほうの札が見えなくなる) */
+    const want=(iw>=ih*1.35 && iw>=900)?RAIL_WIDE:RAIL_NARROW;
+    if(iw-want*2>=RAIL_KEEP_W){ rails=true; rail=want; }
+  }
+  const portrait = !rails && (ih > iw*1.05 || ih < 560);
+  document.body.classList.toggle('rails', rails);
+  document.body.classList.toggle('rails1', rails && rail<RAIL_WIDE);
   document.body.classList.toggle('portrait', portrait);
+  if(rails) document.documentElement.style.setProperty('--rail', rail+'px');
   let availH=window.innerHeight;
   if(portrait && bb && !bb.hidden){ availH=Math.max(220, window.innerHeight-bb.offsetHeight-12); }
-  const availW=Math.max(240, window.innerWidth);
+  let availW=Math.max(240, window.innerWidth);
+  if(rails) availW=Math.max(RAIL_KEEP_W, iw-rail*2-16);   /* 盤面はレールの内側 */
   let ar=availW/Math.max(200,availH);
   if(ar<AR_MIN) ar=AR_MIN; else if(ar>AR_MAX) ar=AR_MAX;
   W = Math.round(Math.sqrt(VIEW_AREA*ar)/2)*2;
@@ -37,7 +54,8 @@ function resize(){
   cv.width  = Math.round(W*viewScale*dpr);
   cv.height = Math.round(H*viewScale*dpr);
   if(bb){
-    if(portrait){ bb.style.width='100%'; barCover=0; }
+    if(rails){ bb.style.width=''; barCover=0; }                                   /* v6.7 レールは盤面を覆わない */
+    else if(portrait){ bb.style.width='100%'; barCover=0; }
     else{ bb.style.width = Math.min(1100, Math.round(W*viewScale)-24)+'px'; barCover = bb.hidden?0:(bb.offsetHeight+8)/viewScale; }   // 札13枚が一列に収まる幅まで広げる
   }
   if(typeof makeVignette==='function') makeVignette();   // 周辺減光は画面サイズで焼いているので作り直す
