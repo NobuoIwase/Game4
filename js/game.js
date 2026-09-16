@@ -134,6 +134,8 @@ function newHero(id){
    夜側もこれに連動する: 夜の深まり(彼女のLv連動の魔物強化・頭数)と EN上限(Lv連動)が階層を経るごとに積み上がる */
 function applyRunHero(h){
   const R=META.run&&((META.run.heroes&&META.run.heroes[h.id])||(h.id==='lumina'?META.run.hero:null)); if(!R||!R.level) return;   // v3.0 ヒロインごと
+  /* v6.9 巻き戻りで武器だけ持って戻った時(kept)は Lv1 のまま。
+     ★Lv を上書きしないよう、下の h.level=R.level が 1 を入れるのは正しい */
   for(const k in h.wp) h.wp[k]=0; for(const k in h.ps) h.ps[k]=0;
   h.level=R.level; h.xp=R.xp||0; h.xpNeed=need(h.level);
   if(R.taste) Object.assign(h.taste,R.taste);
@@ -443,6 +445,7 @@ function endBattle(outcome){
     else runNote='retry';
   }else if(outcome==='descend'){
     META.run.fails=0; META.run.floor=Math.min(openFloors(),floorBefore+1); META.run.deepest=Math.max(META.run.deepest||1,META.run.floor); runNote='descend';
+    META.deepest=Math.max(META.deepest||1, META.run.floor);   /* v6.9 巻き戻しでも消えない「いちばん深く行った階」 */
     if(B.heroes.some(h=>h.out)) META.run.leftBehind=true;   // v3.0 一人を置いて降りた
   }else if(outcome==='clear'){
     META.run.clears=(META.run.clears||0)+1; META.era=(META.era|0)+1; runReset(true); rotReset=true; decay=luminaDecay(); runNote='clear';   // v3.0 深淵が組み替わる(世代+1: 階層が増え、魔核が太る) / v5.0 魔核が巻き戻すので、彼女たちは何も知らない朝に立つ
@@ -465,6 +468,7 @@ function endBattle(outcome){
     join:joinId?HEROES[joinId].name:null, joinWhy:META.run.joinWhy||'',
     captures:B.captures, leftBehind:B.heroes.filter(h=>h.out).map(h=>h.name),
     carryLv:(META.run.hero&&META.run.hero.level)||0,
+    keptWeapons:!!META.run.keptWeapons,   /* v6.9 巻き戻りで武器を持って戻ったか */
     curseGone:(oldCurse&&!META.curse&&!newCurse)?BOSS_CURSES[oldCurse.id]:null});
 }
 
@@ -472,7 +476,25 @@ function endBattle(outcome){
    v5.0 巻き戻りの向き: 魔核を討たれた時は魔核が時を巻き戻すので、彼女たちの覚えたことは書き換えられる(wipeKnow)。
         彼女たちが捕まって巻き戻る時、巻き戻すのは彼女たちの側——魔核は何も知らないままで、覚えたことはそのまま残る */
 function runReset(wipeKnow){
+  /* ★v6.9 彼女たちの意思で巻き戻った時(二連敗)は、武器だけは持って戻る。
+     作者の指定:「二日連続でやられてヒロインの意思で過去に戻った時は武器も引き継ぎにするか」。
+     ループの筋にも合う——巻き戻すのは負けた側で、忘れるのは勝った側。
+     彼女たちは覚えているのだから、手に馴染んだ形だけは残る。
+     ★Lv と経験値は残さない(それを残すと巻き戻りが「ただの続き」になる)。
+       残すのは武器・パッシブ・進化・祈りの積み上げと、今夜の好み。
+     ★魔核を討った側の巻き戻り(wipeKnow)では、彼女たちが忘れる側なので何も残らない */
+  const keep=(!wipeKnow && META.run.heroes) ? META.run.heroes : null;
   META.run.floor=1; META.run.fails=0; META.run.day=1; META.run.hero=null; META.run.heroes={}; META.run.seen={}; META.run.bossSeen=false;   // v2.1 引き継ぎも消える / v2.4 見た範囲とボスの記憶も
+  if(keep){
+    META.run.heroes={};
+    for(const id in keep){ const R=keep[id]; if(!R) continue;
+      META.run.heroes[id]={ level:1, xp:0, pray:R.pray||0,
+        wp:Object.assign({},R.wp||{}), ps:Object.assign({},R.ps||{}),
+        evo:Object.assign({},R.evo||{}), taste:Object.assign({},R.taste||{}), kept:true };
+    }
+    META.run.hero=META.run.heroes.lumina||null;
+    META.run.keptWeapons=true;   /* 結果画面と朝の文で「持って戻った」と言えるように */
+  } else META.run.keptWeapons=false;
   META.gen.battle=0; META.gen.idx++;
   META.rot={dmg:0, ail:0, captures:0, battles:0};
   rotHClear();   /* v5.8 各人ぶんの世代内記録も一緒に流す */
@@ -496,7 +518,13 @@ function partyJoin(id,why){
 function partyJoinCheck(runNote){
   if(typeof PARTY_JOIN==='undefined') return null; META.party=META.party||{roster:['lumina'],joined:{},resets:0};
   const rule=PARTY_JOIN.find(j=>HEROES[j.id]&&!META.party.roster.includes(j.id)); if(!rule) return null;
-  if(runNote==='reset'){ META.party.resets=(META.party.resets||0)+1; if((META.era|0)>=rule.minEra || META.party.resets>=rule.resets){ if(partyJoin(rule.id,'reset')) return rule.id; } }
+  if(runNote==='reset'){ META.party.resets=(META.party.resets||0)+1;
+    /* ★v6.9 作者の報告「8層で加入するイメージだったクウが6層攻略時に加入した」。
+       いままでは巻き戻りの回数だけで来ていたので、浅い所で連敗し続けると早く来る。
+       「どこまで潜ったか」の目安(rule.deep)を足す——ただし、浅い所で足踏みしても
+       永久に来ないのは別の不幸なので、目安を +2回の巻き戻しで越えられるようにする */
+    const deepOk=!rule.deep || (META.deepest||1)>=rule.deep || META.party.resets>=(rule.resets+2);
+    if(deepOk && ((META.era|0)>=rule.minEra || META.party.resets>=rule.resets)){ if(partyJoin(rule.id,'reset')) return rule.id; } }
   else if(runNote==='clear' && (META.era|0)>=rule.lateEra){ if(partyJoin(rule.id,'late')) return rule.id; }
   return null;
 }
@@ -2238,7 +2266,7 @@ function aiUpdate(dt){
     addict:'……もう一回だけ、って足が','g_addict':'……もう一回だけ、って足が',   /* v6.6 中毒 */
     hypno:'……電波に、あしが……', item:'おちてる品へ!', beg:'……おねだり、なんて……してない……',
     g_event:'光の柱へ!', g_chest:'たからばこへ!', g_boss:'おうさまの箱へ!', g_item:'おちてる品へ!', g_shrine:'祠へ', g_spring:'泉で休みに', g_pool:'清水であらいに',
-    g_stele:'石碑をよみに', g_stairs:'降り口へ', g_seal:'封印石を灯しに', g_core:'魔核へ——', g_lantern:'あかりへ', g_shroom:'光茸をとりに', g_nectar:'蜜の花へ', g_treasure:'沈んだ宝へ', g_explore:'たんさく中', g_gems:'ジェムをあつめる', hesitate:'まよっている……', think:'かんがえ中……', abort:'にげだす!', retreat:'逃げに徹する!', kite2:'引き撃ち', talk:'相談中……', assist:'仲間を助ける!', rescue:'救出する!', g_rescue:'仲間を救いに', g_cover:'仲間をかばう!', core:'心臓から離れない', breakout:'……行き直す'};
+    g_stele:'石碑をよみに', g_stairs:'降り口へ', g_seal:'封印石を灯しに', g_core:'魔核へ——', g_lantern:'あかりへ', g_shroom:'光茸をとりに', g_nectar:'蜜の花へ', g_treasure:'沈んだ宝へ', g_explore:'たんさく中', g_gems:'ジェムをあつめる', hesitate:'まよっている……', plan:'支度してから入る', think:'かんがえ中……', abort:'にげだす!', retreat:'逃げに徹する!', kite2:'引き撃ち', talk:'相談中……', assist:'仲間を助ける!', rescue:'救出する!', g_rescue:'仲間を救いに', g_cover:'仲間をかばう!', core:'心臓から離れない', breakout:'……行き直す'};
   const BBL={flee:'にげなきゃ〜!', boss:'おっきいのこわい!!', dodge:'あれは…だめ、よけなきゃ!', gem:'キラキラかいしゅう♪', poi:'あそこまで、いってみる', explore:'こっちは、まだ見てない',
     heart:'ハートみっけ!', prop:'燭台こわして回復しなきゃ', chest:'たからばこだ〜!',
     kite:'このきょりキープ…', wait:'つぎはどこから…?', struggle:'はなれてよ〜っ!',
@@ -2694,8 +2722,39 @@ function aiDecide(foc,dt){
             sayLine(aroused?'mireResign':'mireGo',1,0,'……ちょっとだけ。すぐ、でるから');
             p.hesit=null;
           }
+          /* ★v6.9 えちえちエリアだけは、決める前に「支度できないか」を見る。
+             作者の指定「無策で突っ込みすぎる」への答えで、選択肢を三つにする */
+          else if(p.hesit.zone==='lewd' && (()=>{ const pl=denPrepPlan(p); return pl && !denPrepDone(); })()){
+            const pl=B.denPlan;
+            p.hesit.until=B.time+BAL.DEN_PREP_STEP;    /* もうひと呼吸おく(支度が済むまで繰り返す) */
+            state='plan';
+            if(!pl.said){ pl.said=true; B.nDenPrep=(B.nDenPrep||0)+1;
+              const who=B.heroes[pl.hi];
+              const key={ice:'denPlanIce', rest:'denPlanRest', cool:'denPlanCool', gather:'denPlanGather'}[pl.kind];
+              sayPartyOrLine(who&&!who.out?who:p,'feat.'+key,
+                {ice:'……先に、道を凍らせる。濡れてるままじゃ、渡れない',
+                 rest:'……ちょっと待って。息、整えてから',
+                 cool:'……このまま入ったら、もたない。冷ましてから',
+                 gather:'ひとりで入らない。揃ってから'}[pl.kind]); }
+            /* 支度の場所へ寄る。凍らせる役は自分で線を引くので、そちらは iceTick が見る */
+            if(pl.kind==='gather'||pl.kind==='ice'){ const sv=steerTo(p,pl.x,pl.y); dx=sv.x*0.5+dx*0.5; dy=sv.y*0.5+dy*0.5; }
+            else { dx*=-0.25; dy*=-0.25; }              /* 休む・冷ますなら、境から離れて待つ */
+          }
           else{
+            if(p.hesit.zone==='lewd') denPrepClear(true);
             const nz=p.hesit.zone, worth=p.hesit.worth||(p.goal&&p.goal.worth)||1.5, hpR=p.hp/p.maxHp, aroused=p.aphro>=45||p.heatLv>0||p.sensit>=60;
+            /* ★v6.9 支度しても直らないほど傷んでいるなら、確率を回さずに諦める。
+               「無策で突っ込む」の最後の一枚がこれだった——aroused が +0.25 の加点
+               として効くので、火照っているほど入りやすかった */
+            const veto = nz==='lewd' && ((p.stamina<p.staminaMax*BAL.DEN_VETO_STAM)||((p.heatLv||0)>=BAL.DEN_VETO_HEAT));
+            if(veto){
+              p.scared=p.scared||{}; p.scared[nz]=B.time+BAL.SCARED_T;
+              B.nDenVeto=(B.nDenVeto||0)+1;
+              giveUpOn(target);
+              if(p.goal && (giveUpKey(p.goal)===giveUpKey(target)||p.goal===target)){ if(p.goal.kind==='explore'){ p.explore=null; p.exploreUntil=0; } p.goal=null; p.goalT=0; }
+              sayLine('denVeto',1,0,'……いまは、むり。この身体で入ったら 出られない');
+              dx=0; dy=0; state='hesitate';
+            }
             const hn=(p.hesitN&&p.hesitN[nz])||0;   // v2.3 同じ地形で何度も迷った回数(迷うたびに入る確率が上がる→迷い続けない)
             /* ★v6.3 入るかどうかは「どれだけ知っているか」で決まる。段(fear)ではなく zoneKnow を直に読む。
                知らない所へは軽い気持ちで入り、覚えた所では宝の魅力も元気さも割り引かれる。
@@ -2706,7 +2765,8 @@ function aiDecide(foc,dt){
               +(hpR>0.7?0.15:-0.1)*(1-kn)
               +(aroused?0.25:0)+BAL.HESIT_ESC*hn
               +(growthDone()?BAL.FULL_BRAVE:0);   // v2.2 媚薬まみれなら「もういいや」 / ★v6.4 伸びしろが尽きた=いまが最強、だから踏み込む
-            if(Math.random()<pe){ p.brave=p.brave||{}; p.brave[nz]=B.time+60; B.nBrave=(B.nBrave||0)+1; if(p.hesitN) p.hesitN[nz]=0; sayLine(aroused?'resign':(growthDone()?'fullBrave':(hn>=2?'braveFinally':'brave')),1,0,'……いく! ちょっとだけ!'); }
+            if(veto){ /* もう決まっている(上で諦めた) */ }
+            else if(Math.random()<pe){ p.brave=p.brave||{}; p.brave[nz]=B.time+60; B.nBrave=(B.nBrave||0)+1; if(p.hesitN) p.hesitN[nz]=0; sayLine(aroused?'resign':(growthDone()?'fullBrave':(hn>=2?'braveFinally':'brave')),1,0,'……いく! ちょっとだけ!'); }
             else{ p.scared=p.scared||{}; p.scared[nz]=B.time+BAL.SCARED_T; p.hesitN=p.hesitN||{}; p.hesitN[nz]=hn+1; B.nChicken=(B.nChicken||0)+1; giveUpOn(target); if(p.goal && (giveUpKey(p.goal)===giveUpKey(target)||p.goal===target)){ if(p.goal.kind==='explore'){ p.explore=null; p.exploreUntil=0; } p.goal=null; p.goalT=0; } sayLine('chicken',1,0,'やめとく……こわいし'); dx=0; dy=0; state='hesitate'; }
             p.hesit=null;
           }
@@ -2735,6 +2795,36 @@ function aiDecide(foc,dt){
               sayLine('mireHesit',1,0,'……これ、あの ぬるぬるの……');
               const sw=Math.sin(B.time*2.6), ux=dx, uy=dy; dx=-ux*0.3-uy*sw*0.25; dy=-uy*0.3+ux*sw*0.25; state='hesitate';
             }
+          }
+          /* ★v6.9 知らない褥では zoneFear が 1.02 しか無いので、そもそも迷いが立たない
+             (v6.3 の設計「知らない所へは軽い気持ちで入る」)。だが体が傷んでいる時に
+             褥へ踏み込むのは、知っているかどうかに関わらず悪手なので、
+             ここは知識を通さずに見る。作者の「無策で突っ込みすぎる」の芯 */
+          if(!scary && nz==='lewd' && p.zone!=='lewd'
+             && ((p.stamina<p.staminaMax*BAL.DEN_VETO_STAM)||((p.heatLv||0)>=BAL.DEN_VETO_HEAT))){
+            p.scared=p.scared||{}; p.scared.lewd=B.time+BAL.SCARED_T;
+            B.nDenVeto=(B.nDenVeto||0)+1;
+            giveUpOn(target);
+            if(p.goal && (giveUpKey(p.goal)===giveUpKey(target)||p.goal===target)){ if(p.goal.kind==='explore'){ p.explore=null; p.exploreUntil=0; } p.goal=null; p.goalT=0; }
+            sayLine('denVeto',1,0,'……いまは、むり。この身体で入ったら 出られない');
+            dx=0; dy=0; state='hesitate';
+          }
+          /* ★v6.9 支度(クウが道を凍らせる 等)も、知らない褥でも掛かるようにする。
+             「入る手前でひと呼吸おいて手を打つ」は、覚えているかどうかとは別の話 */
+          else if(!scary && nz==='lewd' && p.zone!=='lewd' && (()=>{ const pl=denPrepPlan(p); return pl && !denPrepDone(); })()){
+            const pl=B.denPlan;
+            p.hesit={zone:'lewd', fear:2, worth:(p.goal&&p.goal.worth)||1.5, until:B.time+BAL.DEN_PREP_STEP, key:giveUpKey(target)};
+            state='plan';
+            if(!pl.said){ pl.said=true; B.nDenPrep=(B.nDenPrep||0)+1;
+              const who=B.heroes[pl.hi];
+              const key={ice:'denPlanIce', rest:'denPlanRest', cool:'denPlanCool', gather:'denPlanGather'}[pl.kind];
+              sayPartyOrLine(who&&!who.out?who:p,'feat.'+key,
+                {ice:'……先に、道を凍らせる。濡れてるままじゃ、渡れない',
+                 rest:'……ちょっと待って。息、整えてから',
+                 cool:'……このまま入ったら、もたない。冷ましてから',
+                 gather:'ひとりで入らない。揃ってから'}[pl.kind]); }
+            if(pl.kind==='gather'||pl.kind==='ice'){ const sv=steerTo(p,pl.x,pl.y); dx=sv.x*0.5+dx*0.5; dy=sv.y*0.5+dy*0.5; }
+            else { dx*=-0.25; dy*=-0.25; }
           }
           if(scary){
             const worth=(p.goal&&p.goal.worth)?p.goal.worth:(kind==='chest'?(target.bossChest?3.0:2.6):(kind==='item'?3.0:(kind==='heart'?3.2:1.5)));   // 目当てが無い直接の目標(箱・品)は種類から価値を見る
@@ -2839,6 +2929,21 @@ function aiDecide(foc,dt){
   /* v6.8 画面の縁が近づいたら重心へ戻る力を混ぜる。★硬い引き戻し(partyClamp)は最後の砦で、
      そこまで行くと「見えない手で引っぱられた」ように見える。手前で自分の足で戻す */
   { const vp=viewPull(p); if(vp){ dx+=vp.x; dy+=vp.y; } }
+  /* ★v6.9 すぐ横の宝箱は、目当てが何であっても寄って開ける。
+     作者の報告どおり「ちょっと横にずらすだけで手に入る位置」を通り過ぎていた——
+     目当ての系は箱を「行き先」としてしか見ないので、行き先が別に決まっていると
+     すぐ隣の箱が視界から消える。歩く向きに少し混ぜるだけなら往復にならない */
+  if(attachCount(p)===0 && !p.pinned && p.climaxT<=0 && B.chests && B.chests.length){
+    let near=null, nd=1e9;
+    for(const c of B.chests){ if(c.taken||c.fake) continue;
+      const d2=Math.hypot(c.x-p.x,c.y-(p.y-6));
+      if(d2>BAL.CHEST_GRAB_R || d2>=nd) continue;
+      if(G.map && !passAt(c.x,c.y,false)) continue;
+      nd=d2; near=c; }
+    if(near){ const sv=steerTo(p,near.x,near.y-6), w=BAL.CHEST_GRAB_K;
+      dx=dx*(1-w)+sv.x*w; dy=dy*(1-w)+sv.y*w;
+      B.nChestSide=(B.nChestSide||0)+1; }
+  }
   /* v5.0 暑がりは、熱いヒロインが寄ってくると横へ滑って離れる(溶けるので) */
   if(HEROES[p.id]&&HEROES[p.id].heatShy && attachCount(p)===0 && !p.assist){
     const F=B.heroes.find(h=>(HEROES[h.id]||{}).hot&&!h.out);
@@ -4215,13 +4320,42 @@ function mirrorqueenTick(e,dt,d,dx,dy){
       const broken=(G.map.dryT&&G.map.dryT[k])||(G.map.iceT&&G.map.iceT[k]);
       if(broken){ C[k]=0; } else { C[k]=255; calm++; }
     } }
-  e.exposed = tot>0 && (calm/tot)<0.55;      /* 半分以上が割れていれば本体が出る */
+  /* ★v6.9 ここが「実質討伐不可」の元だった(作者の報告)。
+     鏡を割る手は フレイラの乾燥(スタミナ25%以下で焚く)か クウの氷河(ibloom Lv5 + ward Lv2 の進化)
+     しか無く、しかも半径420の鏡タイルの 45% 以上を割る必要があった。
+     二人が居ない周回・進化が出ていない周回では、**物理的に本体へ触れない**。
+     そこで「映り身を割る」を三つ目の道にする——映した影を全部払えば、映す面が保てない。
+     ★これは飾りではなく、この一体の芯(映り込みでしか触れない)をそのまま使った勝ち筋 */
+  e.shards=(e.shards||0);
+  const need=mirrorShardNeed();
+  const byShard=e.shards>=need;
+  const byFloor=tot>0 && (calm/tot)<0.55;
+  const wasExposed=!!e.exposed;
+  if(byShard){
+    e.exposeT=(e.exposeT||0)-dt;
+    if(e.exposeT<=0){ e.shards=0; e.exposed=byFloor; }   /* 出ていられる時間が切れたら、また沈む */
+    else e.exposed=true;
+  }else{
+    e.exposed=byFloor;
+    if(e.exposed) e.exposeT=0;
+  }
+  if(e.exposed && !wasExposed){
+    B.fx.push({kind:'icering', x:e.x, y:e.y, r:200, t:0, life:0.7});
+    parts(e.x,e.y-20,26,['#cfe4ff','#fff','#9fd8ff'],220,0.9); sfx(300,1200,0.5,'triangle',0.06);
+    setBanner('鏡が割れた', '水鏡の女王 — いまだけ、本体に届く', '#9fd8ff');
+    G.shake=Math.min(9,G.shake+5);
+  }
   /* 映り身を絶やさない */
   e.spawnCd=(e.spawnCd||0)-dt;
   if(e.spawnCd<=0){ e.spawnCd=2.4;
     const n=B.enemies.reduce((a,o)=>a+((!o.dead&&o.id==='mirrorling')?1:0),0);
     if(n<8){ const q=snapFloor(p.x+rand(-120,120), p.y+rand(-120,120), false, 4);
       if(q){ const m=spawnUnit('mirrorling',q.x,q.y,{noRank:true,enVal:0,gemMul:0.4}); if(m) m.field=true; } } }
+}
+/* v6.9 何体の映り身を払えば鏡が保てなくなるか。世代で増える(倒すほど女王は厚くなる) */
+function mirrorShardNeed(){
+  const g=Math.max(0,((META.gen&&META.gen.idx)|0)-1);
+  return Math.min(BAL.MIRROR_SHARD_MAX, BAL.MIRROR_SHARD+Math.round(g*BAL.MIRROR_SHARD_K));
 }
 /* はじめましての君: 忘れ水の霧を撒きながら戦う。彼女もまた毎回これを「初めて」見る */
 function nevermetTick(e,dt,d,dx,dy){
@@ -4389,6 +4523,16 @@ function killEnemy(e){
   if(e.dead) return;
   const B=G.B, h=B.hero;
   e.dead=true; B.kills++;
+  /* v6.9 映り身を払うと、水鏡の女王の「映す面」が保てなくなる(三つ目の勝ち筋) */
+  if(e.id==='mirrorling'){
+    const q=B.enemies.find(o=>!o.dead&&o.id==='mirrorqueen');
+    if(q && !q.exposed){
+      q.shards=(q.shards||0)+1;
+      const need=mirrorShardNeed();
+      if(q.shards>=need){ q.exposeT=BAL.MIRROR_EXPOSE_T; }
+      else floatTxt(q.x,q.y-q.r-20,'映り身 '+q.shards+'/'+need,'#9fd8ff',11,1.0);
+    }
+  }
   /* v6.6 綿毛は倒しても撒く。★分かれるのは場が FLUFF_MAX 体未満の時だけ——
      上限を置かないと、自動戦闘では倒すたびに増えて際限がなくなる(作者の懸念どおり) */
   /* 咳き茸も、壊された時に粉を上げる。★実測で、中毒のヒロインは踏む手前(42px)で
@@ -4682,6 +4826,18 @@ function enemiesUpdate(dt){
       succuqueenTick(e,dt,d,dx,dy);
     }else if(e.id==='gobking'){
       gobkingTick(e,dt,d,dx,dy);
+    /* ★v6.9 ここから三体は、汎用の else if(e.boss) より後ろに書かれていたので
+       一度も呼ばれていなかった(v6.0 で足した時に順番を見ていない)。
+       水鏡の女王は mirrorqueenTick が走らないので exposed が一度も立たず、
+       damageEnemy が必ず「鏡に阻まれた」で返る=**完全に無敵**だった
+       ——作者の「実質討伐不可」は、実質どころか文字どおり不可だった。
+       はじめましての君は忘れ水の霧を撒かず、はじめの夜の主は濃くならなかった */
+    }else if(e.id==='mirrorqueen'){
+      mirrorqueenTick(e,dt,d,dx,dy);
+    }else if(e.id==='nevermet'){
+      nevermetTick(e,dt,d,dx,dy);
+    }else if(e.id==='firstslug'){
+      firstslugTick(e,dt,d,dx,dy);
     }else if(e.boss){
       e.bt-=dt;
       if(e.bstate==='chase'){
@@ -4724,12 +4880,7 @@ function enemiesUpdate(dt){
       queenTick(e,dt,d,dx,dy);
     }else if(e.id==='spore'){
       sporeTick(e,dt,d,dx,dy);
-    }else if(e.id==='mirrorqueen'){
-      mirrorqueenTick(e,dt,d,dx,dy);
-    }else if(e.id==='nevermet'){
-      nevermetTick(e,dt,d,dx,dy);
-    }else if(e.id==='firstslug'){
-      firstslugTick(e,dt,d,dx,dy);
+
     }else if(e.id==='nichelord'){
       nichelordTick(e,dt,d);
     }else if(e.id==='seatflesh'){
@@ -5417,15 +5568,40 @@ function rayLen(x,y,ang){
   return Math.max(24,L);
 }
 /* 一本の条を進め、浴びている間の効きを入れる。ray は {ang,state,t} を持つ器 */
+/* ★v6.9 条の向きを決める。8方位のどれかへ固定する。
+   作者の言葉:「ビームは動かずに壁に当たり、ヒロインはあまり通りたくない。
+   横や縦や斜めにランダムに出て、それは動かない」。
+   だから彼女は狙わない——選ぶのは「長く伸びる向き」と「同じ触手の他の条と被らない向き」だけ。
+   ★彼女の居る向きは、むしろ外す(狙い撃ちにしない。避けられる線であること) */
+function rayPickAngle(e,ray){
+  const B=G.B, p=B.hero, ox=e.x, oy=e.y-e.r*1.2;
+  const toHero=Math.atan2((p.y-14)-oy, p.x-ox);
+  const used=(e.rays||[]).filter(r=>r!==ray && r.state!=='off').map(r=>r.ang);
+  let best=null, bs=-1e9;
+  for(let k=0;k<8;k++){
+    const a=k*Math.PI/4;
+    const L=rayLen(ox,oy,a);
+    if(L<120) continue;                                  /* すぐ壁に当たる向きは、線にならない */
+    let sc=L/BAL.RAY_LEN;                                 /* 長く伸びる向きを好む */
+    let dup=false;
+    for(const u of used){ if(Math.abs(((u-a+Math.PI*3)%TAU)-Math.PI)<0.2){ dup=true; break; } }
+    if(dup) continue;                                     /* 同じ触手の条と重ねない */
+    const dh=Math.abs(((toHero-a+Math.PI*3)%TAU)-Math.PI);
+    if(dh<0.45) sc-=BAL.RAY_AIM_AVOID;                    /* いま彼女が居る向きは外す */
+    sc+=Math.random()*0.5;                                /* あとはランダム */
+    if(sc>bs){ bs=sc; best=a; }
+  }
+  return best!==null?best:(Math.floor(Math.random()*8)*Math.PI/4);
+}
 function rayStep(e,ray,dt,d,dx,dy,off){
   const B=G.B, p=B.hero;
   const ox=e.x, oy=e.y-e.r*1.2;
-  const want=Math.atan2((p.y-14)-oy,(p.x)-ox)+(off||0);
-  /* 向きの変わりは遅い。歩けば抜けられる */
-  let da=((want-ray.ang+Math.PI*3)%TAU)-Math.PI;
-  ray.ang+=clamp(da,-BAL.RAY_TURN*dt,BAL.RAY_TURN*dt);
   ray.t-=dt;
-  if(ray.state==='off'){ if(ray.t<=0){ ray.state='warm'; ray.t=BAL.RAY_WARM; sfx(700,1200,0.2,'sine',0.03); } return; }
+  if(ray.state==='off'){ if(ray.t<=0){
+      ray.state='warm'; ray.t=BAL.RAY_WARM;
+      ray.ang=rayPickAngle(e,ray);                        /* ★点く前に向きを決め、以後は動かさない */
+      ray.ox=ox; ray.oy=oy;
+      sfx(700,1200,0.2,'sine',0.03); } return; }
   if(ray.state==='warm'){ if(ray.t<=0){ ray.state='on'; ray.t=BAL.RAY_ON; sfx(1500,900,0.2,'sawtooth',0.05); } }
   const L=rayLen(ox,oy,ray.ang);
   ray.len=L;
@@ -5460,11 +5636,13 @@ function raytentTick(e,dt,d,dx,dy){
   if((e.wakeT||0)>0){ e.wakeT-=dt; if(d>240){ e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt; } return; }
   if(!e.rays){
     const n=3;   /* 三方向 */
-    e.rays=[]; for(let k=0;k<n;k++) e.rays.push({ang:Math.atan2(dy,dx), state:'off', t:rand(0.2,1.6)+k*0.5, len:0});
+    e.rays=[]; for(let k=0;k<n;k++) e.rays.push({ang:0, state:'off', t:rand(0.2,1.6)+k*0.5, len:0});
   }
-  if(d>240){ e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt; }
-  const spread=(e.rBeams||0)>=2?0.62:0.40;
-  e.rays.forEach((r,k)=>rayStep(e,r,dt,d,dx,dy,(k-1)*spread));
+  /* ★v6.9 条が一本でも出ている間は動かない。
+     動くと線ごと引きずられて、「動かない線を避けて通る」という形が崩れる */
+  const lit=e.rays.some(r=>r.state!=='off');
+  if(!lit && d>240){ e.x+=dx/d*e.spd*dt; e.y+=dy/d*e.spd*dt; }
+  e.rays.forEach(r=>rayStep(e,r,dt,d,dx,dy,0));
 }
 /* 絶頂照射触手: 照準1秒(最後の0.25秒は固定)→細い光条→命中で強制絶頂。撃ったらCD9秒 */
 function beamerTick(e,dt,d,dx,dy){
@@ -7773,6 +7951,14 @@ function mireEvaporate(m,by){
     spawnCloud(q.x, q.y, 150+120*m.depth, BAL.MIRE_EVAP_LIFE, BAL.SENSIT_GAS*BAL.MIRE_EVAP_RATE*m.depth, 'gas');
   }
   spawnCloud(m.x, m.y, m.r*2.2, BAL.MIRE_EVAP_LIFE, BAL.SENSIT_GAS*BAL.MIRE_EVAP_RATE*m.depth, 'gas');
+  /* ★v6.9 褥・澱みの中(または縁)の沼が蒸発したら、そこは煮え続ける。
+     ★ここを足さないと「煮え」はほぼ出ない——巣窟は澱みで囲む設計なので、
+       炎のエリアの中にはまず沼が入る。その沼の蒸発が先に学習を立て、
+       次の一拍で彼女が炎を落とすので、巣窟側の大きな蒸発(dryEvapCheck)まで
+       辿り着かない。作者の「たまに発動したりした後」の『たまに』はこれ */
+  { const z=zoneAt(m.x,m.y);
+    if((z==='lewd'||z==='haze') && by!==undefined)
+      B.boil={x:m.x, y:m.y, hi:by, t:0, cd:BAL.DRY_BOIL_CD*0.5, until:B.time+BAL.DRY_BOIL_T, said:false}; }
   for(const h of B.heroes){
     if(h.out) continue;
     const d=Math.hypot(h.x-m.x,h.y-m.y); if(d>R) continue;
@@ -8216,6 +8402,42 @@ function dryAuraTick(dt){
     }
   }
 }
+/* ================= v6.9 褥が煮える =================
+   作者の報告:「たまにえちえちエリアで発動したりした後、そのまま移動しても霧が強くならない。
+   えちえちエリアの媚薬溜まりは危険なものなのだから、罰としてもっと凶悪にして欲しい」。
+   ★煮えを**炎のエリアではなく蒸発そのもの**に紐づける。
+     炎のエリアに付けた最初の版は、v6.6i の学習(「褥だ。ここで焚いたら外まで届く」で
+     自分で炎を落とす)が一拍で効くので、14秒のうち一度しか煮えなかった。
+     一度火が入った媚薬は、彼女が炎を落としても煮え続ける——これが「罰」の形 */
+function boilTick(dt){
+  const B=G.B, Q=B.boil; if(!Q) return;
+  if(B.time>Q.until){ B.boil=null; return; }
+  Q.t+=dt;
+  const src=B.heroes[Q.hi];
+  /* 火を入れた子が褥・澱みの中を歩いているなら、歩いた先が煮える(=移動で強くなる)。
+     外へ出たら、火を入れた場所で煮え続ける */
+  let cx=Q.x, cy=Q.y, follow=false;
+  if(src && !src.out){ const z=zoneAt(src.x,src.y);
+    if(z==='lewd'||z==='haze'){ cx=src.x; cy=src.y; Q.x=cx; Q.y=cy; follow=true; } }
+  Q.cd=(Q.cd||0)-dt;
+  if(Q.cd>0) return;
+  Q.cd=BAL.DRY_BOIL_CD;
+  const stack=Math.min(BAL.DRY_BOIL_STACK, 1+Q.t*0.06)*(follow?1.15:1);   /* 歩いて広げるほうが濃い */
+  const a=rand(TAU), rr=rand(40,BAL.DRY_BOIL_SPREAD);
+  const q=snapFloor(cx+Math.cos(a)*rr, cy+Math.sin(a)*rr, false, 3)||{x:cx,y:cy};
+  spawnCloud(q.x,q.y,BAL.DRY_BOIL_R*stack,BAL.DRY_BOIL_LIFE,BAL.SENSIT_GAS*BAL.DRY_BOIL_RATE*stack,'gas');
+  parts(q.x,q.y,7,['#ff9ec2','#ffc2d8','#ffd0b0'],110,0.9);
+  B.fx.push({kind:'pulse',x:q.x,y:q.y,t:0,life:0.7,r:BAL.DRY_BOIL_R*stack*0.8,col:'#ff5d9a'});
+  sfx(220,140,0.35,'sine',0.05);
+  B.nBoil=(B.nBoil||0)+1;
+  /* 煮えている所に立っている子は、そのぶん直に発情する */
+  for(const h of B.heroes){ if(h.out) continue;
+    if(Math.hypot(h.x-cx,h.y-cy)>BAL.DRY_BOIL_SPREAD+BAL.DRY_BOIL_R*0.5) continue;
+    const ci0=B.ci; B.ci=h.hi; addHeatG(BAL.DRY_BOIL_HEAT*BAL.DRY_BOIL_CD*stack); B.ci=ci0; }
+  if(!Q.said && Q.t>2.0){ Q.said=true;
+    const ci0=B.ci; if(src&&!src.out){ B.ci=src.hi; sayLine('feat.dryBoil',2,0,'……蒸気が、止まらない。わたしの熱で、褥が煮えてる'); B.ci=ci0; }
+    setBanner('褥が煮えている','一度火が入った媚薬溜まりは、炎を落としても止まらない','#ff5d9a'); }
+}
 /* v6.6i 焼いた円が巣窟・澱みに掛かっているか。dryEvapCheck の当たり判定と同じ形——
    ★同じ判定を二度書かないよう、両方からこれを呼ぶ */
 function denHazeNear(x,y,r){
@@ -8246,6 +8468,8 @@ function dryEvapCheck(p,d){
     if(Math.hypot(h.x-d.x,h.y-d.y)>BAL.DRY_EVAP_R) continue;
     evapBreathe(h, d.x, d.y, BAL.DRY_EVAP_HEAT, 7, p.hi);
   }
+  /* ★v6.9 ここから「煮え」が始まる。以後 DRY_BOIL_T 秒、彼女が炎を落としても止まらない */
+  B.boil={x:d.x, y:d.y, hi:p.hi, t:0, cd:BAL.DRY_BOIL_CD*0.5, until:B.time+BAL.DRY_BOIL_T, said:false};
   // これも学習する: 次からは巣窟や澱みの近くで焼かない
   META.gen.dryLesson=(META.gen.dryLesson|0)+1; saveMeta();
   return true;
@@ -8483,6 +8707,15 @@ function iceTick(p,dt){
     if(F && Math.hypot(p.x-F.x,p.y-F.y)<BAL.DRY_AURA_R*1.1){ sayLine('feat.iceNo',0,30,'……そこ、あついから。むり'); return; } }
   /* ★v6.6f 先に「渡るための橋」を見る。敵の点数では沼越えは要求されない——
      戦うためではなく、通るために引く */
+  /* ★v6.9 褥の支度が「道を凍らせる」なら、それをいちばん先に見る。
+     ただの橋(iceBridge)より優先——これが作者の言う「攻略に対する思考」の実体 */
+  if(B.denPlan && B.denPlan.kind==='ice' && B.denPlan.hi===p.hi){
+    const w=denWetPath(p,B.denPlan.x,B.denPlan.y);
+    if(w.n>=2 && w.r>=BAL.DEN_PREP_WET){
+      sayLine('feat.iceDenPath',1,0,'……褥の前、凍らせる。渡れるようにしてから');
+      if(kuuIce(p,w.ang)){ B.nIceDenPath=(B.nIceDenPath||0)+1; return; }
+    }
+  }
   { const br=iceBridge(p);
     if(br!==null){ sayLine('feat.iceBridge',1,0,'……ここ、こおらせる。そのほうが、はやい');
       if(kuuIce(p,br)){ G.B.nIceBridge=(G.B.nIceBridge||0)+1; return; } } }
@@ -8663,6 +8896,66 @@ function coreLeashOk(kind,sub,x,y){
    前室→沼→最奥と進むほど発情と敏感化の効きが強く、床から伸びる手も早くなる。
    中には魔法陣(踏むと紋が灯る)・媚薬の花(甘いガスを吐く)・壁に埋まった光線(催眠/絶頂)・番人(奥へ踏み込むと起きる)。
    入口の外には媚薬の澱み(haze)が漂い、その手前に清水が湧く——覚悟を決める場所 */
+/* ================= v6.9 巣窟の支度(攻略の思考) =================
+   作者の指定:「えちえちエリアに無策で突っ込みすぎる」
+             「例えばクウがいるなら通る所を大変だけど凍らせて通るとか、
+               そういう攻略に対するヒロインの思考が欲しい」
+   境で迷った時の選択肢を、いままでの二つ(入る / 諦める)から三つにする——
+     入る / 諦める / ★支度してから入る
+   支度は四種。濡れた道を凍らせる(クウ) / 息を整える / 火照りを冷ます / 揃う */
+function denEdgeNear(p){
+  const L=denOf(); if(!L) return null;
+  const a=Math.atan2((p.y-L.y)/Math.max(1,L.ry),(p.x-L.x)/Math.max(1,L.rx));
+  return {x:L.x+Math.cos(a)*L.rx, y:L.y+Math.sin(a)*L.ry};
+}
+/* 誰かから境までの道が、どれだけ濡れているか(凍らせる価値があるか) */
+function denWetPath(h,ex,ey){
+  let wet=0, n=0;
+  const dxv=ex-h.x, dyv=ey-h.y, dd=Math.hypot(dxv,dyv)||1;
+  for(let s=40; s<Math.min(dd+120,BAL.ICE_LEN); s+=44){
+    const x=h.x+dxv/dd*s, y=h.y+dyv/dd*s;
+    if(!passAt(x,y,false)) break;
+    n++;
+    if(iceAt(x,y)>0.5) continue;                      /* もう凍っている所は数えない */
+    if(mireAt(x,y)||zoneAt(x,y)==='water'||wetAt(x,y)>0.6) wet++;
+  }
+  return {wet, n, r:n?wet/n:0, ang:Math.atan2(dyv,dxv)};
+}
+function denPrepPlan(p){
+  const B=G.B, L=denOf(); if(!L) return null;
+  if(B.denPlan && B.time<B.denPlan.until) return B.denPlan;
+  if(B.time<(B.denPlanCd||0)) return null;
+  const act=B.heroes.filter(h=>!h.out); if(!act.length) return null;
+  const e=denEdgeNear(p); if(!e) return null;
+  const mk=(kind,x,y,hi,t)=>(B.denPlan={kind, x, y, hi, until:B.time+(t||BAL.DEN_PREP_T), said:false});
+  /* ① 濡れた道 → クウが凍らせてから渡る */
+  const kuu=act.find(h=>h.id==='kuu');
+  if(kuu && !kuu.exhausted && kuu.stamina>=kuu.staminaMax*BAL.ICE_STAM_MIN && B.time>=(kuu.iceCd||0)){
+    const w=denWetPath(kuu,e.x,e.y);
+    if(w.n>=2 && w.r>=BAL.DEN_PREP_WET) return mk('ice',e.x,e.y,kuu.hi);
+  }
+  /* ② 息が上がっている → 外で整える */
+  if(act.some(h=>h.stamina<h.staminaMax*BAL.DEN_PREP_STAM||h.exhausted)) return mk('rest',p.x,p.y,p.hi);
+  /* ③ もう火照っている → 入る前に冷ます */
+  if(act.some(h=>(h.heatLv||0)>=BAL.DEN_PREP_HEAT)) return mk('cool',p.x,p.y,p.hi);
+  /* ④ 散っている → 揃ってから */
+  if(act.length>1 && !partyGathered()){ const c=partyCenter(); if(c) return mk('gather',c.x,c.y,p.hi,BAL.DEN_PREP_T*0.7); }
+  return null;
+}
+function denPrepDone(){
+  const B=G.B, P=B.denPlan; if(!P) return true;
+  const act=B.heroes.filter(h=>!h.out); if(!act.length) return true;
+  if(P.kind==='ice'){ const k=B.heroes[P.hi]; if(!k||k.out) return true;
+    const w=denWetPath(k,P.x,P.y); return !(w.n>=2 && w.r>=BAL.DEN_PREP_WET); }
+  if(P.kind==='rest') return !act.some(h=>h.stamina<h.staminaMax*(BAL.DEN_PREP_STAM+0.10)||h.exhausted);
+  if(P.kind==='cool') return !act.some(h=>(h.heatLv||0)>=BAL.DEN_PREP_HEAT);
+  if(P.kind==='gather') return partyGathered();
+  return true;
+}
+function denPrepClear(ok){
+  const B=G.B; if(!B.denPlan) return;
+  B.denPlan=null; B.denPlanCd=B.time+(ok?BAL.DEN_PREP_CD:BAL.DEN_PREP_CD*2);
+}
 function denOf(){ return (G.map&&G.map.lewd)||null; }
 /* 段: -1=外 / 0=前室 / 1=沼 / 2=最奥。喉道(zone lewd だが楕円の外)は前室と同じ */
 function denStage(x,y){
@@ -9367,7 +9660,10 @@ function pickupsUpdate(dt){
   for(const c of B.chests){
     c.t+=dt;
     if(c.taken) continue;
-    for(const p of hs){ if(Math.hypot(c.x-p.x,c.y-(p.y-6))<22){ c.taken=true; B.ci=p.hi; if(c.fake) fakeChestTrap(c); else openChest(!!c.bossChest); break; } }
+    /* ★v6.9 22px は狭すぎた(作者の報告「体をちょっと横にずらすだけで手に入る位置にあるのに取らない」)。
+       彼女の半径が 14 前後あるので、22 だとほぼ中心を踏まないと開かない。
+       箱の肩に触れれば開く寸法(CHEST_TAKE_R)にする */
+    for(const p of hs){ if(Math.hypot(c.x-p.x,c.y-(p.y-6))<BAL.CHEST_TAKE_R+p.r*0.5){ c.taken=true; B.ci=p.hi; if(c.fake) fakeChestTrap(c); else openChest(!!c.bossChest); break; } }
   }
   B.ci=leaderIdx();
   B.chests=B.chests.filter(c=>!c.taken);
@@ -10092,6 +10388,7 @@ function battleTick(dt){
   eachHero(()=>poiTick(dt));   // 祠・泉・門(v3.0 ヒロインごと)
   denTick(dt);                 // v3.2 巣窟の魔法陣・媚薬の花・壁の光線・番人(1フレームに1度)
   pikesTick(dt);               // v6.7 クウの氷柱(押し戻し・寿命)
+  boilTick(dt);                // v6.9 褥が煮える(蒸発のあと、炎を落としても止まらない)
   lightsTick(dt); lanternTick(dt); bondTick(dt); ringsTick(dt);   // v4.0 灯りの寿命と催淫灯篭 / v4.1 絆の灯り・菌輪
   wornTick(dt); miresTick(dt); dryAuraTick(dt);   // v5.0 すり減り / 媚薬沼 / 炎のエリア
   calmTick(dt);   /* v6.0 凪ぎの鏡: 波立った面が静けさを取り戻していく */

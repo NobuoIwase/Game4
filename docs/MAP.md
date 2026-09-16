@@ -70,6 +70,13 @@
 | ブラウザのバーを消す | `manifest.json`(display:fullscreen)と `js/core.js:fsEnter()` / `js/core.js:fsToggle()`。ボタンは `index.html` の `#fsbtn`(`body.canfs` の時だけ出る) |
 | ヒロインが画面から出る | `js/game.js:partyClamp()`(重心からの箱で硬く戻す)と `js/game.js:viewPull()`(手前で自分の足で戻る)。余白は `BAL.VIEW_KEEP` |
 | 仲間の戦いに気づく | `js/game.js:fightNoise()` / `js/game.js:heardBy()` / `js/game.js:coverTarget()`。`BAL.HEAR_R` `BAL.FIGHT_W` `BAL.FIGHT_N` `BAL.FIGHT_HURT` `BAL.COVER_TH`、逃げより先に助けるかは `BAL.ASSIST_HARD` |
+| レーザーの条の向き・長さ | `js/game.js:rayPickAngle()`(8方位から固定)と `js/game.js:rayLen()`。`BAL.RAY_ON` `BAL.RAY_OFF` `BAL.RAY_AIM_AVOID`。避ける側は `BAL.RAY_AVOID_W` と `js/game.js:rayThreat()` |
+| 水鏡の女王を割る | `js/game.js:mirrorqueenTick()` と `js/game.js:mirrorShardNeed()`。`BAL.MIRROR_SHARD` `BAL.MIRROR_SHARD_K` `BAL.MIRROR_SHARD_MAX` `BAL.MIRROR_EXPOSE_T`。映り身を数える所は `js/game.js:killEnemy()` |
+| 宝箱の取りやすさ | `BAL.CHEST_TAKE_R`(拾い判定)と `BAL.CHEST_GRAB_R` `BAL.CHEST_GRAB_K`(道すがら寄る) |
+| 巣窟へ入る前の支度 | `js/game.js:denPrepPlan()` / `js/game.js:denPrepDone()` / `js/game.js:denWetPath()`。`BAL.DEN_PREP_WET` `BAL.DEN_PREP_STAM` `BAL.DEN_PREP_HEAT` `BAL.DEN_PREP_T`。入らない線は `BAL.DEN_VETO_STAM` `BAL.DEN_VETO_HEAT` |
+| 巣窟の蒸発の凶悪さ | `js/game.js:boilTick()`(煮え続ける本体)。始めるのは `js/game.js:mireEvaporate()` と `js/game.js:dryEvapCheck()` の両方。`BAL.DRY_BOIL_T` `BAL.DRY_BOIL_CD` `BAL.DRY_BOIL_RATE` `BAL.DRY_BOIL_R` `BAL.DRY_BOIL_HEAT` `BAL.DRY_BOIL_STACK` `BAL.DRY_BOIL_SPREAD` |
+| ボスの専用挙動が出ない | `js/game.js:enemiesUpdate()` の `else if` の順番。★汎用の `e.boss` の枝より**前**に置かないと呼ばれない(v6.9 で三体が死んでいた) |
+| 仲間の加入の早さ | `js/data.js:PARTY_JOIN` の `deep`(最深階の目安)と `js/game.js:partyJoinCheck()`。巻き戻りで武器を持って戻るのは `js/game.js:runReset()` |
 | 相談の起きやすさ | `js/game.js:partyBusy()`(歩み寄る門番)と `js/game.js:partyDanger()`(立ち止まる門番)。`BAL.GATHER_BUSY_R` `BAL.GATHER_BUSY_THREAT` `BAL.PARTY_TALK_CD` `BAL.GATHER_CD` |
 | 火照りの「抜けにくさ」 | `BAL.SENSIT_DECAY`(常時)と、v6.7 の**息を整える間** `BAL.CALM_R` `BAL.CALM_WARM` `BAL.CALM_SENS` `BAL.CALM_HEAT`。積むのは `js/game.js:condTick()` の末尾(`h.calmT`/`h.calmK`) |
 | 三人に武器を足す | `js/data.js:UPG` に `owner` 付きで足す → `js/data.js:HEROES` の `wps` に並べる → `js/game.js:freilaWeapons()` / `js/game.js:kuuWeapons()` / `js/game.js:yamiWeapons()` に発射を書く → `js/game.js:heroDpsEst()` の `BASE` に見積りを足す。枠は `BAL.WP_SLOTS` |

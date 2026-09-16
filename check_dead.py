@@ -122,6 +122,17 @@ def is_read(k):
 unused = [k for k in bal if k not in kept and not is_read(k)]
 print('BAL %d件(うち「未使用」と明記 %d件)' % (len(bal), len(kept)))
 print('  読まれない: %s' % (', '.join(unused) if unused else '(なし)'))
+
+# ★v6.9 逆向きの穴も見る: 「読んでいるのに BAL に無い鍵」。
+#   v6.9 で MIRROR_SHARD ほか4つを BAL ではなく MONSTERS の中に書いてしまい、
+#   MONSTERS の走査(m.deep=d)が「数値にプロパティを付けた」で落ちて data.js が途中で死んだ。
+#   このチェッカーは「定義はあるが読まれない」だけを見ていたので、素通りだった。
+read_keys = set(re.findall(r'BAL\.([A-Za-z_$][\w$]*)', OUTSIDE))
+read_keys |= set(re.findall(r"BAL\[\s*'([A-Za-z_$][\w$]*)'\s*\]", OUTSIDE))
+read_keys |= set(re.findall(r'BAL\[\s*"([A-Za-z_$][\w$]*)"\s*\]', OUTSIDE))
+missing = sorted(k for k in read_keys if k not in bal and not any(k.startswith(pp) for pp in prefixes))
+print('  ★BAL に無いのに読んでいる: %s' % (', '.join(missing) if missing else '(なし)'))
+if missing: problems.append('BAL に無いのに読んでいる: ' + ', '.join(missing))
 if dyn:
     print('  (注: 変数で引く BAL[...] があるので、上の一覧は多めに出る可能性がある)')
 if unused: problems.append('読まれない BAL: ' + ', '.join(unused))

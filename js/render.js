@@ -3359,7 +3359,11 @@ function drawRing(g,R){
   const t=(G.B?G.B.time:0);
   if(Math.abs(R.x-G.cam.x)>W/2+R.r*1.6 || Math.abs(R.y-G.cam.y)>H/2+R.r*1.6) return;
   const shut=R.state==='shut', cool=R.state==='cool';
-  const sw=shut?Math.min(1,(BAL.RING_T-R.t)/0.35):0;         // ふくらむ
+  /* ★v6.9 ここは v5.2 で MRING_T に改名される前の古い名前(RING_ から始まる方)を
+     読んだままだった。BAL にその鍵は無いので undefined - R.t = NaN になり、
+     菌輪の「閉じる瞬間にふくらむ」がずっと死んでいた。
+     check_dead.py に「読んでいるのに BAL に無い鍵」の逆向きチェックを足して発覚 */
+  const sw=shut?Math.min(1,(BAL.MRING_T-R.t)/0.35):0;        // ふくらむ
   g.save(); g.translate(R.x,R.y);
   // 輪の内側の菌糸(うっすら白い円)
   g.fillStyle=shut?'rgba(226,192,234,0.30)':'rgba(210,220,215,0.13)';

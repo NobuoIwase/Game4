@@ -804,7 +804,9 @@ const UI={
     const cgHtml=cap?`<div id="cgWrap"></div>`:'';
     this.hideStory();
     const storyHtml=(sum.storyLines&&sum.storyLines.length)?`<details style="text-align:left;margin:8px 0"><summary style="cursor:pointer;color:var(--vio);font-size:12px">物語を読み返す</summary><div class="note storytext">${sum.storyLines.map(storyLineHtml).join('')}</div></details>`:'';   // v2.1 本文は ADV で流れる
-    const carryHtml=(sum.carryLv>1 && sum.runNote!=='reset' && sum.runNote!=='clear')?`<div class="note" style="color:#ffd76a;margin:6px 0">引き継ぎ: 彼女は Lv${sum.carryLv} と武器・パッシブをそのまま持ち越す(リセットまで)。夜側もそのぶん強くなる</div>`:'';
+    /* v6.9 彼女たちの意思で巻き戻った朝は、武器だけ持って戻る(作者の指定) */
+    const keptHtml=(sum.runNote==='reset'&&sum.keptWeapons)?`<div class="note" style="color:#8fd3ff;margin:6px 0">巻き戻したのは彼女たちの側。<b>手に馴染んだ形だけは、そのまま持って戻った</b>——武器・パッシブ・進化はそのまま、Lvと経験は初日へ</div>`:'';
+    const carryHtml=keptHtml+((sum.carryLv>1 && sum.runNote!=='reset' && sum.runNote!=='clear')?`<div class="note" style="color:#ffd76a;margin:6px 0">引き継ぎ: 彼女は Lv${sum.carryLv} と武器・パッシブをそのまま持ち越す(リセットまで)。夜側もそのぶん強くなる</div>`:'');
     this.root.innerHTML=`<div class="screen"><div class="inner" style="text-align:center;min-width:340px">
       <h2 style="color:${color}">${title}</h2>
       ${runHtml}
