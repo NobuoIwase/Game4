@@ -933,6 +933,7 @@ const UI={
       grow.appendChild(lbl); grow.appendChild(sc);
       sc.scrollLeft=atEnd?sc.scrollWidth:keepLeft;   // 右端を見ていたなら新しく来た客が見える位置へ、途中を見ていたならそのまま
     }
+    if(typeof fitRailCards==='function') fitRailCards();   /* v6.10 枚数が変わったらレールに合わせて寸法を測り直す */
     this.refreshHand();
   },
   refreshHand(){

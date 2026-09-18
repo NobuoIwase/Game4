@@ -19,6 +19,11 @@
   --gold:#ffd76a; --blue:#8fd3ff; --pink:#ff86b3; --body:#cdd3ef; --dim:#7b82a8;
   --vio:#b46cff; --vio2:#7a3ff2; --red:#ff5d7a; --green:#7ee89a;
   --card:#191430; --card-line:rgba(160,120,255,.35);
+  /* v6.10 盤面の矩形(core.js:boardVars が毎 resize で書き換える)。
+     ここの値は core.js が走る前の一瞬だけ使われる */
+  --rail:148px; --bx:0px; --by:0px; --bw:100vw; --bh:100vh;
+  --hcw:62px; --hch:78px; --hcn:9px;   /* 札の寸法(core.js:fitRailCards が測って決める) */
+  --barY:0px; --barH:100%;             /* レールの帯(既定は盤面の帯) */
 }
 html,body{height:100%;}
 body{
@@ -353,7 +358,10 @@ canvas#cv.arm{ cursor:crosshair; }
 #storybox .shint{ display:block; margin-top:8px; font-size:10px; color:var(--dim); text-align:right; }
 body.portrait #storybox{ top:5%; font-size:12px; }
 /* ===== v2.1 ADV(立ち絵+名前+台詞/地の文の箱)。表示中はゲーム時間が止まる。タップで次へ ===== */
-#adv{ position:absolute; inset:0; z-index:30; pointer-events:auto; cursor:pointer; overflow:hidden; }
+/* v6.10 ★窓ではなく盤面に重ねる。窓いっぱいだと、盤面が窓より小さいノートで
+   立ち絵(高さ86%)が盤面の上下へはみ出し、暗幕も台詞の箱も枠の外に落ちる */
+#adv{ position:absolute; left:var(--bx); top:var(--by); width:var(--bw); height:var(--bh);
+      z-index:30; pointer-events:auto; cursor:pointer; overflow:hidden; border-radius:8px; }
 #advShade{ position:absolute; inset:0; background:linear-gradient(180deg, rgba(6,4,16,.12) 0%, rgba(6,4,16,.32) 55%, rgba(6,4,16,.86) 100%); }
 #advStand{ position:absolute; left:50%; bottom:0; height:86%; aspect-ratio:832/1216; transform:translateX(-96%); pointer-events:none; transition:filter .25s; }
 /* ★v6.2 箱は aspect-ratio:832/1216 で固定なのに、立ち絵の比は子ごとに違う
@@ -389,8 +397,15 @@ body.portrait #advBox{ bottom:2%; width:96%; font-size:13.5px; padding:14px 14px
    ★DOM は触らない。#battlebar を三列のグリッドにして、既存の子を左右の列へ置くだけ——
    JS(UI.tickBattleBar など)は同じ id を書き換え続けられる。
    盤面ぶんの幅は core.js:resize() が RAIL×2 を引いて確保する */
+/* v6.10 ★レールは「窓」ではなく「盤面」の左右に立てる。
+   窓いっぱいに広げると、盤面が窓より小さいノート(MacBook Air など)では
+   札が窓の隅まで飛んで、盤面との間に何も無い帯ができていた。
+   横は盤面の外側へ RAIL ぶん、縦は盤面の帯そのものに合わせる */
 body.rails #battlebar{
-  position:absolute; inset:0; left:0; bottom:auto; transform:none; width:100% !important;
+  position:absolute; inset:auto; transform:none;
+  left:calc(var(--bx) - var(--rail) - 8px);
+  width:calc(var(--bw) + (var(--rail) + 8px) * 2) !important;
+  top:var(--barY); height:var(--barH);   /* 既定は盤面の帯。入り切らない時だけ core.js が窓いっぱいへ広げる */
   display:grid; grid-template-columns:var(--rail) 1fr var(--rail);
   grid-template-rows:auto auto 1fr auto; align-items:start; justify-items:stretch;
   gap:6px; padding:8px 8px 10px; box-sizing:border-box; pointer-events:none;
@@ -398,8 +413,11 @@ body.rails #battlebar{
 body.rails #battlebar > *{ pointer-events:auto; }
 /* 左のレール: 札(縦に積む。多ければ二列)と、宝箱の客札 */
 body.rails #handrow{
-  grid-column:1; grid-row:1 / span 3; align-content:flex-start; align-items:flex-start;
-  justify-content:flex-start; gap:5px; overflow-y:auto; overflow-x:hidden; max-height:100%;
+  /* ★safe: はみ出す時は中央寄せをやめて頭から並べる。
+     素の center だと上側がスクロールでは戻れない所へ消える */
+  grid-column:1; grid-row:1 / span 3; align-content:safe center; align-items:flex-start;
+  justify-content:safe center; gap:5px; overflow-y:auto; overflow-x:hidden;
+  height:100%; box-sizing:border-box;   /* ★高さを確定させる。fitRailCards がこれを測る */
   scrollbar-width:thin; scrollbar-color:rgba(201,140,255,.5) transparent;
 }
 body.rails #guestrow{ grid-column:1; grid-row:4; flex-wrap:wrap; max-width:100%; }
@@ -411,15 +429,18 @@ body.rails #itemrow{ grid-column:3; grid-row:2; flex-wrap:wrap; overflow:visible
 body.rails #battlebar .spread{
   grid-column:3; grid-row:4; width:auto !important; display:flex; flex-direction:column; gap:6px; align-items:stretch;
 }
-body.rails #formrow{ flex-wrap:wrap; justify-content:center; }
-body.rails #battlebar .side{ flex-wrap:wrap; justify-content:center; }
-body.rails #handrow .hcard{ width:62px; height:78px; }   /* v6.8 #handrow.dense に負けていたので id を足す */
+/* ★v6.10 レールより広い塊は縮めて折り返させる。flex:0 0 auto のままだと
+   max-content で突っ張って、狭いレール(携帯・iPad)では畳の外へ出ていた */
+body.rails #formrow{ flex-wrap:wrap; justify-content:center; flex:0 1 auto; min-width:0; }
+body.rails #battlebar .side{ flex-wrap:wrap; justify-content:center; flex:0 1 auto; min-width:0; }
+/* v6.10 札の寸法は core.js:fitRailCards がレールの実寸から決める(--hcw/--hch)。
+   ★id を含めるのは #handrow.dense に負けないため(v6.8) */
+body.rails #handrow .hcard{ width:var(--hcw); height:var(--hch); box-sizing:border-box; }
+body.rails #handrow .hcard .nm{ font-size:var(--hcn); white-space:nowrap; }   /* 札が小さい時に名前が二行へ折れて崩れないように */
 body.rails .ichip{ font-size:10px; padding:4px 8px; }
 body.rails .fchip{ font-size:10px; padding:3px 8px; }
 /* 狭いレール(正方形・幅の狭い窓)。★13枚が二列で縦に収まる寸法にする——
    一列だと下の札が畳の外へ出て、スクロールしないと見えなくなる */
-body.rails.rails1 #handrow .hcard{ width:52px; height:66px; }
-body.rails.rails1 #handrow .hcard .nm{ font-size:8px; }
 body.rails.rails1 .gchip{ width:44px; height:54px; }
 /* v6.8 背の低い横長の窓では札をさらに小さく(スクロールしないで13枚が見える寸法) */
 /* v6.8 背の低い横長では、右レールの下段(陣形+操作)が縦に積むと畳からはみ出す。
@@ -428,8 +449,6 @@ body.rails.railsShort #battlebar{ padding:5px 6px 6px; gap:4px; }
 body.rails.railsShort #battlebar .spread{ flex-direction:row; flex-wrap:wrap; justify-content:center; gap:4px; }
 body.rails.railsShort #battlebar .side button{ font-size:9.5px; padding:4px 9px; }
 body.rails.railsShort .fchip{ font-size:9px; padding:2px 6px; }
-body.rails.railsShort #handrow .hcard{ width:47px; height:60px; }
-body.rails.railsShort #handrow .hcard .nm{ font-size:7.5px; }
 body.rails.railsShort .gchip{ width:40px; height:50px; }
 body.rails.railsShort .ichip{ font-size:9px; padding:3px 6px; }
 /* ===== 縦持ち・正方形(v1.9 / v6.8): 戦闘バーを世界の上に重ねず、キャンバスの下に置く ===== */

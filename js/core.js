@@ -24,14 +24,23 @@ const VIEW_W=960, VIEW_H=540;
    v6.8 レールを立てるのは「はっきり横長」の窓だけ。正方形に近い窓では
         レールが横幅を食うので、ボタンは下に置いて盤面の幅を最大にする(作者の指定) */
 const RAIL_WIDE=148, RAIL_NARROW=132, RAIL_KEEP_W=360, RAIL_MIN_AR=1.25;
+/* v6.10 レールは「盤面を置いた残りの余白」まで広げてよい。
+   ★ノート(MacBook Air など)では盤面をわざと少し縮める(DESK_SHRINK)ので、
+     その余白がそのまま札の三列目になる——13枚が畳まずに並ぶ */
+const RAIL_MAX=236;
 /* v6.8 窓が画面いっぱいのデスクトップだけ、盤面をすこし小さくする(作者の指定) */
-const DESK_SHRINK=0.90;
+const DESK_SHRINK=0.90, DESK_FULL_H=0.78;
 const isCoarse=()=>!!(window.matchMedia && window.matchMedia('(pointer:coarse)').matches);
 function deskFullWindow(){
   if(!window.screen || isCoarse()) return false;                 /* 触る端末は対象外 */
   const sw=screen.availWidth||screen.width||0, sh=screen.availHeight||screen.height||0;
   if(!sw||!sh) return false;
-  return window.innerWidth>=sw*0.97 && window.innerHeight>=sh*0.86;
+  /* ★v6.10 縦の敷居を 0.86 → DESK_FULL_H。
+     macOS の availHeight は メニューバー(25px)しか引かないのに、Chrome 自身の
+     タブ+アドレス欄が 87px、ブックマークバーを出すと 121px 食う。
+     MacBook Air(875)では 788/875=0.90 と 741/875=0.847——0.86 をまたぐので、
+     ブックマークバーの有無だけで盤面の大きさが変わっていた */
+  return window.innerWidth>=sw*0.97 && window.innerHeight>=sh*DESK_FULL_H;
 }
 function resize(){
   dpr = Math.min(2, window.devicePixelRatio||1);
@@ -49,12 +58,9 @@ function resize(){
   }
   const portrait=!rails;
   document.body.classList.toggle('rails', rails);
-  document.body.classList.toggle('rails1', rails && rail<RAIL_WIDE);
   document.body.classList.toggle('portrait', portrait);
   document.body.classList.toggle('canfs', !!fsAvailable() && !fsActive());
-  document.body.classList.toggle('railsShort', rails && ih<620);      /* 背の低い横長では札を小さく */
   document.body.classList.toggle('tallish', ih>iw*1.15);              /* 縦持ち: 横向きのお願いを出す */
-  if(rails) document.documentElement.style.setProperty('--rail', rail+'px');
   let availH=ih, availW=Math.max(240, iw);
   if(portrait && bb && !bb.hidden) availH=Math.max(200, ih-bb.offsetHeight-10);
   if(rails) availW=Math.max(RAIL_KEEP_W, iw-rail*2-16);   /* 盤面はレールの内側 */
@@ -64,13 +70,72 @@ function resize(){
      作者の指定「横のサイズが最大になるように」に逆らうことになる */
   if(rails && deskFullWindow()) s*=DESK_SHRINK;
   viewScale=s;
+  /* ★v6.10 盤面の寸法が決まってから、余った左右の余白をレールへ渡す。
+     縦は盤面の帯そのもの——レールが「盤面の隣」に見えるのはこの二つが揃った時だけ */
+  if(rails){
+    const bw=Math.round(W*viewScale);
+    /* ★clamp() はこの下で const 宣言されるので、ここではまだ触れない(TDZ) */
+    rail=Math.max(rail, Math.min(RAIL_MAX, Math.floor((Math.max(iw,bw)-bw)/2)-8));
+    document.documentElement.style.setProperty('--rail', rail+'px');
+  }
+  document.body.classList.toggle('rails1', rails && rail<RAIL_WIDE);
+  /* 背の低い盤面では右レールの下段を一段に畳む。★見るのは窓ではなく盤面の高さ
+     (レールが盤面の帯に収まるようになったので、窓の高さは関係が無い) */
+  document.body.classList.toggle('railsShort', rails && Math.round(H*viewScale)<620);
   cv.style.width  = Math.round(W*viewScale)+'px';
   cv.style.height = Math.round(H*viewScale)+'px';
   cv.width  = Math.round(W*viewScale*dpr);
   cv.height = Math.round(H*viewScale*dpr);
   barCover=0;                                        /* バーは盤面を覆わない(レールも下段も) */
   if(bb) bb.style.width = rails ? '' : '100%';
+  boardVars();
   if(typeof makeVignette==='function') makeVignette();   // 周辺減光は画面サイズで焼いているので作り直す
+}
+/* v6.10 盤面の矩形を CSS へ渡す(--bx/--by/--bw/--bh)。
+   ★これが無いと、レールも立ち絵も「窓」を基準に置かれる。携帯では盤面が窓を
+     ほぼ埋めるので誰も気づかないが、ノート(16:10 の横長・MacBook Air など)では
+     盤面が窓の中央に浮くので、札は窓の隅へ飛び、立ち絵は盤面の外まではみ出す。
+     基準を窓から盤面へ移す。読むのは実際に置かれた矩形——計算し直さない */
+function boardVars(){
+  const r=cv.getBoundingClientRect();
+  const st=document.documentElement.style;
+  st.setProperty('--bw', Math.round(r.width)+'px');
+  st.setProperty('--bh', Math.round(r.height)+'px');
+  st.setProperty('--bx', Math.round(r.left)+'px');
+  st.setProperty('--by', Math.round(r.top)+'px');
+  /* レールの帯は既定では盤面の帯そのもの。札がそこに収まらない時だけ、
+     窓の上下に余っているぶんまで広げる(携帯の横持ちのように盤面が低い時) */
+  st.setProperty('--barY', Math.round(r.top)+'px');
+  st.setProperty('--barH', Math.round(r.height)+'px');
+  fitRailCards();
+  const hr=document.getElementById('handrow');
+  if(hr && document.body.classList.contains('rails') && hr.scrollHeight>hr.clientHeight+1){
+    st.setProperty('--barY','0px'); st.setProperty('--barH','100%');
+    fitRailCards();
+  }
+}
+/* v6.10 札の寸法をレールの実寸から決める。
+   ★v6.7〜v6.9 は 62/52/47px の三段を窓の縦横で選んでいた。だがレールに何枚
+     並ぶかは「レールの幅と高さ」で決まるのであって窓では決まらない——
+     ノートでは 13枚が一列に伸びて下半分が畳の外へ落ち、スクロールしないと
+     見えなくなっていた。入る一番大きい寸法を素直に探す */
+const HC_MAX=62, HC_MIN=40, HC_AR=78/62, HC_GAP=5;
+function fitRailCards(){
+  const hr=document.getElementById('handrow');
+  if(!hr || !document.body.classList.contains('rails')) return;
+  const n=hr.querySelectorAll('.hcard').length; if(!n) return;
+  const aw=hr.clientWidth, ah=hr.clientHeight;
+  if(aw<10||ah<10) return;
+  let w=HC_MIN;
+  for(let t=HC_MAX; t>=HC_MIN; t--){
+    const cols=Math.max(1, Math.floor((aw+HC_GAP)/(t+HC_GAP)));
+    const rows=Math.ceil(n/cols);
+    if(rows*(Math.round(t*HC_AR)+HC_GAP)-HC_GAP <= ah){ w=t; break; }
+  }
+  const st=document.documentElement.style;
+  st.setProperty('--hcw', w+'px');
+  st.setProperty('--hch', Math.round(w*HC_AR)+'px');
+  st.setProperty('--hcn', (w<50?7.5:w<58?8:9)+'px');
 }
 /* ================= v6.8 全画面 =================
    ブラウザの上のバーを消せるなら消す(作者の指定)。触る端末では最初のタップで自動、
@@ -106,7 +171,11 @@ resize();
 // 戦闘バーの高さが変わったら(表示/非表示・客札の増減)キャンバスの寸法を合わせ直す
 if(window.ResizeObserver){
   let lastBarH=-1;
-  new ResizeObserver(()=>{ const bb=document.getElementById('battlebar'); const bh=bb.hidden?0:bb.offsetHeight; if(bh!==lastBarH){ lastBarH=bh; resize(); } }).observe(document.getElementById('battlebar'));
+  /* ★横持ち(レール)ではバーは絶対配置で、盤面の寸法に一切効かない。
+     ここで resize() を呼ぶと帯の広げ直しと往復するので、縦持ちだけ見る */
+  new ResizeObserver(()=>{ if(document.body.classList.contains('rails')) return;
+    const bb=document.getElementById('battlebar'); const bh=bb.hidden?0:bb.offsetHeight;
+    if(bh!==lastBarH){ lastBarH=bh; resize(); } }).observe(document.getElementById('battlebar'));
 }
 
 /* ---------------- utils ---------------- */

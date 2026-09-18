@@ -197,6 +197,9 @@ BRIEFING §5 に、同じ罠を三度踏んだ記録があります。
 | 結果画面 | `js/ui.js:showResult()` |
 | 物語のADV箱 | `js/ui.js:showStory()` |
 | 魔物・ヒロインの絵 | `js/render.js`(全部コードで描いています) |
+| 盤面の大きさ・レールの幅・全画面 | `js/core.js:resize()`。盤面の矩形は `boardVars()` が `--bx/--by/--bw/--bh` で CSS へ渡す |
+| レールの札の寸法 | `js/core.js:fitRailCards()`。★CSS に px を書かない——レールの実寸から測って `--hcw/--hch` を決める |
+| レールと立ち絵の置き場所 | `index.html` の `body.rails #battlebar` と `#adv`。**どちらも窓ではなく盤面(`--bx` 等)が基準** |
 
 ---
 
@@ -295,6 +298,33 @@ BRIEFING §5 に、同じ罠を三度踏んだ記録があります。
 - `run_*.js` は `.git/info/exclude` で git 管理外です(コミットされません)
 - **単発の計測は無意味。必ず中央値で、n を大きく**(BRIEFING §6)
 
+### 画面の雛形(v6.10)— 窓を変えて測る
+
+携帯だけで見ても穴は出ません。**携帯は盤面が窓をほぼ埋めるので「窓が基準」の置き方でも
+正しく見えてしまう**からです。ノートの 16:10 では盤面は窓の 69% しか無い。最低この八つで測る:
+iPhone 横 844x390 / Pixel 横 915x412 / iPad 横 1180x820 / 携帯 縦 412x915 /
+正方形 800x800 / MacBook Air 13 1440x788 / MacBook Air 15 1710x995 / FHD 1920x1040。
+
+    /* macOS の screen を騙す。availHeight はメニューバーぶんしか引かれない */
+    await p.addInitScript(([sw,sh])=>{
+      for(const k of ['width','height']) Object.defineProperty(screen,k,{get:()=>k==='width'?sw:sh});
+      Object.defineProperty(screen,'availWidth',{get:()=>sw});
+      Object.defineProperty(screen,'availHeight',{get:()=>sh});
+    },[1440,875]);
+    /* 13枚(実戦の姿)で出撃。3枚の初期デッキでは畳の溢れが出ない */
+    await p.evaluate(()=>{
+      const ids=Object.keys(MONSTERS).filter(id=>!MONSTERS[id].boss).slice(0,13);
+      for(const id of ids){ META.cards[id]={owned:true, lv:1}; }
+      META.deck=ids; startBattle();
+    });
+    /* 見るのは三つ */
+    const hr=document.getElementById('handrow');
+    hr.scrollHeight-hr.clientHeight          /* >0 なら札がスクロールの向こうに隠れている */
+    /* #adv の矩形が #cv の矩形と一致するか(ズレていたら立ち絵が盤面の外) */
+    /* 窓の外へ出た要素。★#screens と、スクロールする入れ物の中身は数えない */
+
+- 一日を回さなくてよい。`startBattle()` の直後に測れば形は出ます
+
 ★**計測が期待と違ったら、まず計測側を疑うこと。**
 このリポジトリの記録では、**器の誤りの方が game の誤りより多く見つかっています**。
 
@@ -310,6 +340,11 @@ BRIEFING §5 に、同じ罠を三度踏んだ記録があります。
 - **`ZONE_IDS` は `Object.keys(ZONES)` の順。** 地形を途中に挿すと既存の帯の番号がずれます
 - **`B.time` は戦闘ごとに 0 へ戻る。** 戦闘を跨いで時刻を持ち越すと誤検出します
 - **四人いる盤で「肢」だけを鍵に数えると他人の腕と混ざる。** 鍵は「ヒロインid + 肢」
+- **画面まわりは携帯だけで見ると穴が残る。** 携帯では盤面が窓をほぼ埋めるので、
+  「窓を基準」の置き方でも正しく見えてしまう。**ノートの 16:10 では盤面は窓の 69% しか無い**——
+  `run_air3.js` のように複数の窓で測る(v6.10 で三つの穴がこれで出ました)
+- **`resize()` の中で `clamp()` など下で `const` 宣言された道具を呼ばない。** TDZ で落ちます
+  (`resize()` は core.js のその場で一度呼ばれる)
 
 ---
 
