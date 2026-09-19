@@ -1229,11 +1229,20 @@ function enterPin(mon){
   G.shake=Math.min(9,G.shake+5);
   awardAil('pinned');
 }
+/* ★v7.0 送りを「一律2.6秒」から「行の長さぶん」へ。
+   実測(run_def70a): pin の一行は中央値 26字。2.6秒で送ると **毎分600字**——
+   日本語の黙読(400〜600字/分)の上限ちょうどで、上位1割(33字)では毎分762字になり
+   読み切れない。長い行には長く、短い行には短く置く */
+function beatTime(sc,idx){
+  const t=sc&&sc.beats&&sc.beats[idx%sc.beats.length];
+  const n=(typeof t==='string')?t.length:26;
+  return BAL.PIN_BEAT_BASE + n/BAL.PIN_BEAT_CPS;
+}
 function pinTick(dt){
   const B=G.B, h=B.hero;
   h.pinT-=dt;
   if(B.pinSceneHi===B.ci) B.pinSceneT+=dt;
-  if(B.pinScene && B.pinSceneT>2.6){ B.pinSceneT=0; B.pinSceneIdx++; }
+  if(B.pinScene && B.pinSceneT>beatTime(B.pinScene,B.pinSceneIdx)){ B.pinSceneT=0; B.pinSceneIdx++; }
   if(h.pinT<=0){
     h.pinT=BAL.PIN_PULSE_T;
     h.stamina-=BAL.PIN_PULSE_COST;
@@ -1854,10 +1863,43 @@ function statesTick(h,dt){
     }
   }
 }
+/* ★v7.0 「その夜、いちばん彼女を軋ませた魔物」を数える。
+   ——実測(run_def70b/30夜): 敗北本文の相手は 18種しか出ず、上位3種で 56%
+     (吸液羽虫23・地上ワーム22・核の落とし子10 / 計98)。
+     ところが捕獲の瞬間に彼女の 300px 以内に居た魔物は **45種**あり、
+     いちばん多いのは痺れ浮遊子(1214体・23%)なのに、とどめには **一度も**出てこない。
+     偏りは「その魔物が多いから」ではなく、**掴む魔物しかとどめになれない**から
+     (beginCapture の相手は h.pinBy か oldestRestraint = 押さえている手)。
+     掴まない責め手(浮遊子・眼系・霊系の間接責め)は、どれだけ彼女を追い詰めても
+     名前が残らなかった。
+   ★だから帳面を「掴んだ手」ではなく「効かせた分」で付ける。
+     掴んで時間を稼いだ分・削った分の両方が積まれる */
+function markCulprit(h,mon,w){
+  if(!h||!mon||!mon.id||!(w>0)) return;
+  if(MONSTERS[mon.id]&&MONSTERS[mon.id].item) return;
+  h.culprit=h.culprit||{};
+  h.culprit[mon.id]=(h.culprit[mon.id]||0)+w;
+}
+/* 帳面のいちばん上。★同点に近いなら、その子がまだ読んでいない相手を先に出す
+   ——作者の「他の敗北文がピックアップされるように」の対策。
+     ただし「効かせていない魔物」を持ち上げることはしない(嘘にならない範囲で) */
+function culpritTop(h){
+  const C=h&&h.culprit; if(!C) return null;
+  const ent=Object.entries(C).filter(([id])=>MONSTERS[id]).sort((a,b)=>b[1]-a[1]);
+  if(!ent.length) return null;
+  const RS=((META.readScenes||{})[h.id])||{};
+  const best=ent[0];
+  for(const [id,w] of ent){
+    if(w>=best[1]/BAL.CULP_NEW_K && !RS['capture/'+id]) return id;
+  }
+  return best[0];
+}
 function condTick(h,dt){
   const B=G.B;
   statesTick(h,dt);
   if(G.mode!=='battle'&&G.mode!=='levelup') return;
+  /* 掴まれている時間そのものを帳面へ(掴む手の取り分) */
+  for(const sl of attachedSlots(h)){ const at=h.limbs[sl]; if(at&&at.mon) markCulprit(h,at.mon,BAL.CULP_HOLD*dt); }
   // 快感の自然減衰
   if(h.aphro>0) h.aphro=Math.max(0,h.aphro-BAL.PLEAS_DECAY*dt);
   // 敏感化の自然減衰(祭壇分は下限として残る)
@@ -7501,6 +7543,7 @@ function hurtHero(dmg,src,opt){
     return;
   }
   p.hp-=net;
+  markCulprit(p,src,net*BAL.CULP_DMG);          /* v7.0 削った分も帳面へ(掴まない責め手にも名前が残る) */
   p.hurtT=B.time;                              /* v6.8 戦いの音の元(仲間はこれを聞いて駆けつける) */
   if(p.iceMirror) iceMirrorBack(p,src,net);   /* v6.7 氷鏡: 受けた分を凍らせて撃ち返す */
   B.dmgDealt+=net;
@@ -7527,6 +7570,10 @@ function beginCapture(src,cause){
   if(G.mode!=='battle'&&G.mode!=='levelup') return;
   if(h.out) return;
   let by=src?src.id:'default';
+  /* ★v7.0 とどめの名は「最後に押さえていた手」ではなく「その夜いちばん効かせた魔物」。
+     掴む手しかとどめになれなかったので、同じ数種の本文ばかりが出ていた(実測: 18種/上位3種で56%) */
+  { const top=culpritTop(h);
+    if(top && !(src&&src.boss)) by=top; }
   // 帰属: 直前6秒の強制絶頂、または催眠Ⅱ以上での敗北は、その源(照射触手/ゲイザー)の仕業として記録する(ボス個体に倒された時は除く)
   { const lb=h.lastBeam, lh=h.lastHypno;
     if(!(src&&src.boss)){
@@ -10090,7 +10137,9 @@ function leaderIdx(){ const B=G.B; if(!B||!B.heroes) return 0; const i=B.heroes.
    B.hero(=B.ci が指す子)に効くので、ヒロインの列を回らない場所から一人だけ触る時に要る */
 function withHero(h,fn){ const B=G.B; const o=B.ci; const i=B.heroes.indexOf(h); if(i>=0) B.ci=i; try{ fn(); } finally { B.ci=o; } }
 function eachHero(fn){ const B=G.B; for(let i=0;i<B.heroes.length;i++){ const h=B.heroes[i]; if(h.out) continue; B.ci=i; fn(h,i); if(G.mode!=='battle'&&G.mode!=='levelup') break; } B.ci=leaderIdx(); }
-function nearestHeroIdx(x,y){ const B=G.B; let bi=-1, bd=1e9; B.heroes.forEach((h,i)=>{ if(h.out) return; const d=Math.hypot(h.x-x,h.y-y); if(d<bd){ bd=d; bi=i; } }); return bi<0?leaderIdx():bi; }
+/* v7.0 観測フェーズでは全員が out なので、そのままだと標的が leader に丸まって
+   魔物が一人に団子になる。観測の間だけ、捕まった子も標的に数える */
+function nearestHeroIdx(x,y){ const B=G.B; const all=!!(B&&B.after); let bi=-1, bd=1e9; B.heroes.forEach((h,i)=>{ if(h.out&&!all) return; const d=Math.hypot(h.x-x,h.y-y); if(d<bd){ bd=d; bi=i; } }); return bi<0?leaderIdx():bi; }
 function partnerOf(p){ const B=G.B; let best=null, bd=1e9; for(const h of B.heroes){ if(h===p||h.out) continue; const d=Math.hypot(h.x-p.x,h.y-p.y); if(d<bd){ bd=d; best=h; } } return best; }
 function heroOf(k){ const B=G.B; const own=(UPG[k]&&UPG[k].owner)||'lumina'; return (B&&B.heroes&&B.heroes.find(h=>h.id===own))||(B&&B.hero); }
 function heroSkills(p){ return (HEROES[p.id]||HEROES.lumina).skills; }
@@ -10214,7 +10263,7 @@ function captiveTick(dt){
   condTick(h,dt);                        /* 発情・敏感化・粉・中毒は、倒れていても進む */
   if(h.climaxT>0) climaxTick(dt);
   if(B.pinSceneHi===B.ci) B.pinSceneT+=dt;
-  if(B.pinScene && B.pinSceneHi===B.ci && B.pinSceneT>BAL.AFTER_BEAT_T){ B.pinSceneT=0; B.pinSceneIdx++; }
+  if(B.pinScene && B.pinSceneHi===B.ci && B.pinSceneT>beatTime(B.pinScene,B.pinSceneIdx)){ B.pinSceneT=0; B.pinSceneIdx++; }
   C.swapT=(C.swapT===undefined?BAL.CAP_SWAP_T:C.swapT)-dt;
   C.shakeT=(C.shakeT===undefined?BAL.CAP_SHAKE_T:C.shakeT)-dt;
   C.pulse=(C.pulse===undefined?BAL.CAP_PULSE:C.pulse)-dt;
@@ -10223,18 +10272,25 @@ function captiveTick(dt){
   /* --- 責め手を呼ぶ。足りなければ、いちばん近い手が寄ってきて絡む --- */
   const slots=attachedSlots(h);
   if(slots.length<BAL.CAP_HOLD){
-    let best=null, bd=BAL.CAP_CALL_R;
+    /* v7.0 観測フェーズでは魔物が本来の動きで散らばるので、呼ぶ声を遠くまで届かせる */
+    let best=null, bd=B.after?BAL.AFTER_CALL_R:BAL.CAP_CALL_R;
     for(const e of B.enemies){
       if(e.dead||e.dormant||e.state==='attached'||MONSTERS[e.id].item) continue;
       if((e.grabCd||0)>0) continue;
       const d=Math.hypot(e.x-h.x,e.y-h.y); if(d<bd){ bd=d; best=e; }
     }
     if(best){
-      if(bd>24 && MONSTERS[best.id].spd>0){
+      /* ★v7.0 順序が逆だった。`bd>24 なら寄せる / さもなくば bd<=44 で掴む` だと、
+         24〜44px の帯は**必ず第一枝に入って寄せるだけ**になり、掴みが一度も起きない。
+         実際に掴めるのは 24px 以内だけ——ところが魔物同士の押し合いが 30〜40px の
+         間隔を作るので、そこへ入れない。実測(run_def70e): 観測フェーズの四肢拘束が
+         平均 0.15本 にしかならなかった。届いているなら掴む、を先に見る */
+      if(bd<=BAL.CAP_GRAB_R) attachMonster(best,'cling',{noDodge:true});
+      else if(MONSTERS[best.id].spd>0){
         const sp=Math.max(46,MONSTERS[best.id].spd)*dt;
         best.x+=(h.x-best.x)/bd*sp; best.y+=(h.y-best.y)/bd*sp;
         collideMap(best,best.r*0.75,canFly(best.id));
-      }else if(bd<=44) attachMonster(best,'cling',{noDodge:true});
+      }
     }
   }
   /* --- 責め手が変わる。一本外して、次の手が入る隙をつくる --- */
@@ -10277,7 +10333,11 @@ function captiveTick(dt){
   }
   /* --- 責め手と本文 --- */
   { const sl=attachedSlots(h);
-    const at=sl.length?h.limbs[sl[0]]:null, m=at&&at.mon;
+    const at=sl.length?h.limbs[sl[0]]:null;
+    let m=at&&at.mon;
+    /* ★v7.0 観測中は、いま箱に流れている本文の相手がまだ取っているなら、その手を主に。
+       そうしないと「本文はナメクジ、絵では触手が押さえている」が起きる */
+    if(B.after && h.pinBy && !h.pinBy.dead && sl.some(k=>h.limbs[k]&&h.limbs[k].mon===h.pinBy)) m=h.pinBy;
     h.pinBy=(m&&!m.dead)?m:null;
     if(m && C.by!==m.id){
       C.by=m.id;
@@ -10458,30 +10518,89 @@ function battleTick(dt){
 function afterStart(){
   const B=G.B; if(!BAL.AFTER_ON) return false;
   if(!B.enemies.some(e=>!e.dead)) return false;
-  B.after={t:0, phase:'gap', gap:0.4, hi:-1, n:0};
-  for(const h of B.heroes) h.pinned=true;
+  B.after={t:0, phase:'gap', gap:0.4, hi:-1, n:0, seen:{}};
+  /* ★v7.0 全員に captive の帳面を持たせる。これが captiveTick を回す鍵で、
+     責め手の入れ替え・身を捩って一本ほどく・這って逃げてまた取られる、が動き出す。
+     v6.5 は帳面を持たせていなかったので、捕獲の瞬間の拘束が凍りついたまま残り、
+     本文だけが横で流れていた */
+  for(const h of B.heroes){
+    h.pinned=true; h.out=true; h.vx=0; h.vy=0;
+    if(!h.captive) h.captive={x:h.x, y:h.y, by:(h.pinBy&&h.pinBy.id)||null, cause:h.recCapCause||'hp', t:B.time, rescue:0};
+  }
+  B.afterFreeze=afterSnap();
   setBanner('観測はまだ終わらない','彼女は形だけ抗い続ける — 終えるなら「観測を終える」','#c98cff');
   if(typeof UI!=='undefined' && UI.afterBtn) UI.afterBtn(true);
   return true;
+}
+/* ★v7.0 観測では何も進まない、を「拍を回さない」ではなく名指しで守る。
+   v6.5 は battleTick を回さないことでそれを担保していたが、魔物に本来の動きを
+   させるために拍を回すので、増える経路を控えて戻す */
+function afterSnap(){
+  const B=G.B;
+  return { orbFrag:B.orbFrag, essence:B.essence, ailCount:B.ailCount, climaxN:B.climaxN,
+           filmed:B.filmed||0, kills:B.kills, dmgDealt:B.dmgDealt,
+           life:JSON.stringify(META.life), codex:JSON.stringify(META.codex||{}),
+           hero:B.heroes.map(h=>({worn:h.worn||0, xp:h.xp, level:h.level,
+                                  recClimax:h.recClimax||0, recAil:h.recAil||0,
+                                  recDmg:h.recDmg||0, recFilmed:h.recFilmed||0, recKills:h.recKills||0})) };
+}
+function afterFreezeApply(){
+  const B=G.B, S0=B&&B.afterFreeze; if(!S0) return;
+  B.orbFrag=S0.orbFrag; B.essence=S0.essence; B.ailCount=S0.ailCount; B.climaxN=S0.climaxN;
+  B.filmed=S0.filmed; B.kills=S0.kills; B.dmgDealt=S0.dmgDealt;
+  META.life=JSON.parse(S0.life); META.codex=JSON.parse(S0.codex);
+  B.heroes.forEach((h,i)=>{ const q=S0.hero[i]; if(!q) return;
+    h.worn=q.worn; h.xp=q.xp; h.level=q.level;
+    h.recClimax=q.recClimax; h.recAil=q.recAil; h.recDmg=q.recDmg; h.recFilmed=q.recFilmed; h.recKills=q.recKills; });
+}
+/* ★v7.0 本文の相手は「実際にその子の四肢を取っている魔物」から選ぶ。
+   ——v6.5 は近くの魔物から一様ランダムに1体選び、彼女の隣へ瞬間移動させていただけ。
+     実測(run_def70d): そうして選ばれた魔物が実際に四肢を取っていたフレームは **0%**。
+     本文は 91% のフレームで出ていたのに、画面で彼女を押さえているのは別の魔物だった。
+     作者の「押し倒されないので押し倒され文章が出ない」の正体はこれ——
+     出ていないのではなく、**画面と本文が食い違っていた**。
+   同じ夜に同じ相手の本文が続かないよう、まだ読んでいない相手を先に選ぶ */
+function afterPickMon(h){
+  const B=G.B, A=B.after;
+  const held=attachedSlots(h).map(sl=>(h.limbs[sl]||{}).mon).filter(m=>m&&!m.dead&&!MONSTERS[m.id].item);
+  if(!held.length) return null;
+  const fresh=held.filter(m=>!A.seen[m.id]);
+  return pickRand(fresh.length?fresh:held);
 }
 function afterNextPin(){
   const B=G.B, A=B.after; if(!A) return;
   /* 主を順に回す。四人ぶんの本文を、同じ画面で順に読ませるため */
   const idx=B.heroes.length?((A.hi+1)%B.heroes.length):0;
   A.hi=idx; const h=B.heroes[idx]; if(!h) return;
-  const near=B.enemies.filter(e=>!e.dead && !MONSTERS[e.id].item);
-  const mon=near.length?near[(Math.random()*near.length)|0]:null;
-  if(mon){ mon.x=h.x+rand(-14,14); mon.y=h.y+rand(-10,10); }
+  const ci0=B.ci; B.ci=idx;
+  let mon=afterPickMon(h);
+  if(!mon){
+    /* 取られていなければ、いちばん近い手を呼んで本当に取らせる(captiveTick と同じ作法) */
+    let best=null, bd=BAL.AFTER_CALL_R;
+    for(const e of B.enemies){
+      if(e.dead||e.dormant||e.state==='attached'||MONSTERS[e.id].item) continue;
+      const d=Math.hypot(e.x-h.x,e.y-h.y); if(d<bd){ bd=d; best=e; }
+    }
+    if(best){
+      best.grabCd=0;
+      best.x=h.x+rand(-26,26); best.y=h.y+rand(-20,20); collideMap(best,best.r*0.75,canFly(best.id));
+      attachMonster(best,'cling',{noDodge:true});
+      mon=afterPickMon(h)||best;
+    }
+  }
   const sid=mon?mon.id:'default';
-  B.ci=idx;
+  if(mon) A.seen[mon.id]=1;
   B.pinScene=sceneForHero(h,'pin',sid); B.pinSceneHi=idx; B.pinSceneIdx=0; B.pinSceneT=0;
   if(B.pinScene) recordScene(h.id,'pin',sid);   /* 図鑑で読み返せるように控える */
   h.pinned=true; h.pinBy=mon||null; h.vx=0; h.vy=0;
+  if(h.captive) h.captive.by=sid;
   A.phase='pin'; A.t=0; A.n++;
+  B.ci=ci0;
   G.shake=Math.min(7,G.shake+4); S.capture();
 }
 function afterEnd(){
   const B=G.B; if(!B||!B.after) return;
+  afterFreezeApply(); B.afterFreeze=null;   /* ★観測の間に動いた数字を、捕まった時点へ戻す */
   B.after=null;
   if(typeof UI!=='undefined' && UI.afterBtn) UI.afterBtn(false);
   endBattle('capture');
@@ -10505,27 +10624,34 @@ function capturedTick(dt){
   /* --- 観測フェーズ --- */
   A.t+=dt;
   const sub=B.heroes[A.hi]||p;
-  sub.anim+=dt;
-  for(const h of B.heroes){ h.pinned=true; h.struggle=Math.max(0,(h.struggle||0)-dt*0.2); }
-  for(const e of B.enemies){
-    if(e.dead) continue;
-    const dx=sub.x-e.x, dy=sub.y-e.y, d=Math.hypot(dx,dy)||1;
-    if(d>34 && MONSTERS[e.id].spd>0){ e.x+=dx/d*52*dt; e.y+=dy/d*52*dt; }
-    e.t+=dt;
-  }
+  for(const h of B.heroes) h.pinned=true;
+  /* ★v7.0 魔物に本来の動きをさせる。
+     v6.5 は「毎秒52pxでまっすぐ寄る」だけだった——実測(run_def70b)で
+     向きの変化の中央値は **0.0000 rad/frame**(通常の戦闘は 0.0004)。
+     作者の「モンスターの動きが直線的」はここ。
+     battleTick そのものは回さない(彼女たちは戦わないし、日も終わらない)。
+     回すのは「魔物の拍」と「捕まった子を責め続ける拍(captiveTick)」だけ。
+     増えてしまう数字は afterFreezeApply で捕まった時点へ戻す */
+  enemiesUpdate(dt);
+  /* ★順序が要る。captiveTick を先に回すと、寄せた手を enemiesUpdate が
+     そのフレームのうちに引き戻してしまい、掴みが成立しなかった
+     (実測: 主の四肢拘束が 2.24本 → 0.20本 に落ちた)。魔物の拍を先に、責めを後に */
+  { const ci0=B.ci;
+    for(const h of B.heroes){
+      if(!h.captive) continue;
+      B.ci=h.hi; h.anim+=dt; captiveTick(dt);
+    }
+    B.ci=ci0; }
+  B.ci=A.hi>=0?A.hi:leaderIdx();
+  afterFreezeApply();
   if(Math.random()<dt*12) parts(sub.x+rand(-22,22),sub.y-rand(0,28),1,['#c98cff','#8458d8','#ff86b3'],40,0.8);
   if(A.phase==='gap'){
     if(A.t>=(A.gap||BAL.AFTER_GAP)){ A.gap=BAL.AFTER_GAP; afterNextPin(); }
     return;
   }
-  /* 本文を送る(pinTick は回っていないので、ここで送る) */
-  B.pinSceneT+=dt;
-  if(B.pinScene && B.pinSceneT>BAL.AFTER_BEAT_T){ B.pinSceneT=0; B.pinSceneIdx++; }
-  if(Math.random()<dt*0.5){   /* 形だけの抵抗 */
-    const V={lumina:['……や、だ……','……もう、やめ……','……はな、して'], freila:['……っ、まだ……','……どけ、って……'],
-             kuu:['……いや……','……やめ、て'], yamiko:['……もう、いい……','……好きに、しなさい']}[sub.id]||['……や、だ……'];
-    heroBubble(sub, V[(Math.random()*V.length)|0], true, 3);
-  }
+  /* 本文の送り。★captiveTick が主の箱を送るので、ここでは二重に送らない。
+     ただし主の拘束が全部ほどけて captiveTick が送りを止めた時のために、保険で拍を見る */
+  if(B.pinSceneHi!==A.hi){ B.pinSceneT+=dt; if(B.pinScene && B.pinSceneT>beatTime(B.pinScene,B.pinSceneIdx)){ B.pinSceneT=0; B.pinSceneIdx++; } }
   /* 本文を最後まで読ませてから次へ。AFTER_PIN_T は保険の上限 */
   const done=B.pinScene && B.pinScene.beats && B.pinSceneIdx>=B.pinScene.beats.length;
   if(done || A.t>=BAL.AFTER_PIN_T){ A.phase='gap'; A.t=0; B.pinScene=null; }

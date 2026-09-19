@@ -795,12 +795,38 @@ const UI={
       :(sum.runNote==='retry'?`<div class="note" style="color:#ff86b3;margin:6px 0">彼女は明日も第${(sum.floor||{}).depth||1}層に立つ(連敗 ${sum.fails}/${BAL.RUN_FAILS_RESET}。あと1敗でリセット)</div>`
       :(sum.runNote==='descend'?`<div class="note" style="color:#8fd3ff;margin:6px 0">次の潜行は第${sum.nextFloor}層 ${esc((FLOORS[(sum.nextFloor||1)-1]||{}).name||'')}。深いほど夜側のENは多く、魔物は硬い</div>`
       :(sum.runNote==='clear'?`<div class="newbadge">✦ 魔核が時を巻き戻す。深淵は一つ深く、心臓は一回り厚くなり、彼女たちはこの世代で覚えたことを失う(第${genNum(META.gen.idx)}世代・手記だけが残る)</div>`:''))))+joinHtml;
-    const by=cap&&sum.capturedBy&&MONSTERS[sum.capturedBy]?MONSTERS[sum.capturedBy].name:null;
     const causeTxt=cap?({stamina:'スタミナが尽き、組み伏せられた', charm:'魅了に蕩けたまま、力尽きた', hp:'体力が尽きた'}[sum.cause]||'体力が尽きた'):null;
     // v3.0 捕まったヒロインごとの敗北本文(二人なら二本)。ヒロインの声の表(SCENES / SCENES_F)で引く
     const caps=cap?((sum.captures&&sum.captures.length)?sum.captures:[{id:'lumina',by:sum.capturedBy,cause:sum.cause}]):[];
+    /* ★v7.0 敗北の本文に「誰に」の札を付ける。
+       実測(run_def70c): 相手の名は結果画面の3行目に 12px の平文で一度だけ、
+       しかも二人捕まった夜でも最後の一人ぶんしか出ていなかった(B.capturedBy は一つしか無い)。
+       本文そのものに相手の名が出てくる回数は 239本ぜんぶで 0。
+       ——だから「誰に倒されたか分からない」。本文の頭に、その子ごとの札を置く */
+    const CAUSE_S={stamina:'スタミナ切れ', charm:'魅了', hp:'体力切れ'};
+    const capCard=(c)=>{
+      const m=MONSTERS[c.by]||null;
+      const hn=(typeof HEROES!=='undefined'&&HEROES[c.id])?HEROES[c.id].name:'';
+      const tg=m?({fodder:'雑魚',mid:'中型',large:'大型',boss:'ボス'}[tierOf(c.by)]||''):'';
+      const fm=(m&&typeof famOf==='function'&&famOf(c.by)&&FAMS[famOf(c.by)])?FAMS[famOf(c.by)].name:'';
+      return `<div class="capcard">`+
+        (MONSTERS[c.by]?`<span class="capicon" data-icon="${esc(c.by)}" data-size="40"></span>`:'')+
+        `<span class="capwho">${esc(hn)}</span>`+
+        `<span class="capsep">を組み伏せたのは</span>`+
+        `<b class="capby">${esc(m?m.name:'——')}</b>`+
+        (tg||fm?`<span class="captag">${esc([tg,fm].filter(Boolean).join(' / '))}</span>`:'')+
+        `<span class="capcause">とどめ: ${esc(CAUSE_S[c.cause]||'体力切れ')}</span>`+
+      `</div>`;
+    };
     const sceneHtml=cap?caps.map(c=>{ const sc=(typeof sceneForHero==='function')?sceneForHero({id:c.id},'capture',c.by):sceneFor('capture',c.by); const nm=(typeof HEROES!=='undefined'&&HEROES[c.id])?HEROES[c.id].name:'';
-      return sc?`<div id="sceneBox"><b>${esc((caps.length>1&&nm?nm+' — ':'')+(sc.title||''))}</b>\n${sc.beats.map(esc).join('\n\n')}</div>`:`<div class="note">敗北シーン(${esc(nm)}): テキスト未実装</div>`; }).join(''):'';
+      if(!sc) return capCard(c)+`<div class="note">敗北シーン(${esc(nm)}): テキスト未実装</div>`;
+      /* ★段落を pre-wrap の \n\n ではなく本物の段落にする。実測で 84% がスクロールの
+         向こうに隠れていたので、字も行送りも上げて、続きがあることを見せる */
+      return capCard(c)+
+        `<div class="sceneBox"><b class="scenetitle">${esc(sc.title||'')}</b>`+
+        sc.beats.map(t=>`<p>${esc(t).split('\n').join('<br>')}</p>`).join('')+
+        `</div><button class="scenemore" data-act="scenefull">▼ 全部読む(${sc.beats.length}段)</button>`;
+    }).join(''):'';
     const cgHtml=cap?`<div id="cgWrap"></div>`:'';
     this.hideStory();
     const storyHtml=(sum.storyLines&&sum.storyLines.length)?`<details style="text-align:left;margin:8px 0"><summary style="cursor:pointer;color:var(--vio);font-size:12px">物語を読み返す</summary><div class="note storytext">${sum.storyLines.map(storyLineHtml).join('')}</div></details>`:'';   // v2.1 本文は ADV で流れる
@@ -812,7 +838,6 @@ const UI={
       ${runHtml}
       ${carryHtml}
       ${storyHtml}
-      ${by?`<div style="font-size:12px;color:var(--body)">とどめ: ${esc(by)}${causeTxt?' — '+esc(causeTxt):''}</div>`:''}
       ${sum.shop&&sum.shop.length?`<div class="note" style="color:var(--gold);margin:6px 0">——夜が明けて、ルミナは自分を強化した——<br>${sum.shop.map(esc).join(' ・ ')}</div>`:''}
       ${sum.shrines&&sum.shrines.length?`<div class="note" style="color:#ffd76a;margin:6px 0">——祠の加護: ${sum.shrines.map(esc).join(' ・ ')}——</div>`:''}
       ${sum.seals>0?`<div class="note" style="color:#ffd76a;margin:6px 0">封印石を ${sum.seals}/3 灯した</div>`:''}
@@ -838,6 +863,18 @@ const UI={
         <button class="sub" data-act="go" data-arg="home">ホーム</button>
       </div>
     </div></div>`;
+    this.attachIcons();   /* v7.0 敗北の札に相手の姿を入れる */
+    /* ★v7.0 本文は長い(実測で中央値1100字)。既定では畳んでおき、押せば全部出す。
+       畳んだままだと 68% がスクロールの向こうに隠れたままになる */
+    for(const btn of this.root.querySelectorAll('[data-act="scenefull"]')){
+      btn.addEventListener('click',e=>{
+        e.stopPropagation();
+        const box=btn.previousElementSibling;
+        if(!box) return;
+        const open=box.classList.toggle('open');
+        btn.textContent=open?'▲ 畳む':('▼ 全部読む('+box.querySelectorAll('p').length+'段)');
+      });
+    }
     // v2.1 結末・リセットの物語は結果画面の上で流れる。v4.0 その後にループの演出(赤黒い渦 / 白い奇跡の光)
     if(sum.storyLines&&sum.storyLines.length) this.showStory(sum.storyLines, sum.loopFx?{onEnd:()=>this.loopFx(sum.loopFx)}:undefined);
     else if(sum.loopFx) this.loopFx(sum.loopFx);

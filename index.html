@@ -238,11 +238,40 @@ canvas#cv.arm{ cursor:crosshair; }
 .breakdown{ font-size:12.5px; line-height:2; color:#e8ebff; text-align:left; margin:8px auto; display:table; }
 .breakdown b{ color:var(--gold); }
 .breakdown .o b{ color:var(--vio); }
-#sceneBox{
-  background:#141024; border:1.4px solid var(--card-line); border-radius:10px;
-  max-height:180px; overflow:auto; padding:10px 14px; font-size:12px; line-height:1.9;
-  color:#cfc8ea; text-align:left; white-space:pre-wrap; margin:8px 0;
+/* ===== v7.0 敗北の本文 =====
+   ★実測(run_def70c): 箱の高さ 200px に中身 1228px——**84% がスクロールの向こう**に
+     隠れていた。しかも続きがあることを示す物が何も無い。字 12px・行送り 22.8px。
+   ★実測(run_def70a): capture の本文は 239本すべてに title があるのに、
+     **相手の名前が入っている title は 0/239**。本文にも相手の名は一度も出てこない。
+     ——だから「誰に倒されたか分からない」。頭に札を置いて、本文を読める寸法にする */
+.capcard{
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  background:linear-gradient(180deg,rgba(60,26,52,.92),rgba(30,16,38,.92));
+  border:1.4px solid rgba(255,110,150,.45); border-left:4px solid var(--pink);
+  border-radius:10px 10px 0 0; padding:8px 12px; margin:12px 0 0; text-align:left;
 }
+.capcard .capicon{ flex:0 0 auto; width:40px; height:40px; line-height:0; }
+.capcard .capwho{ font-weight:bold; color:#fff; font-size:13px; }
+.capcard .capsep{ color:var(--dim); font-size:11px; }
+.capcard .capby{ color:var(--pink); font-size:16px; letter-spacing:.02em; }
+.capcard .captag{ font-size:10px; color:#e7dcff; border:1px solid var(--card-line); border-radius:999px; padding:2px 8px; }
+.capcard .capcause{ margin-left:auto; font-size:11px; color:var(--gold); white-space:nowrap; }
+.sceneBox{
+  background:#141024; border:1.4px solid var(--card-line); border-top:none; border-radius:0 0 10px 10px;
+  max-height:min(44vh,360px); overflow:auto; padding:12px 16px 14px; font-size:13.5px; line-height:2.05;
+  color:#d8d2f0; text-align:left; margin:0;
+  scrollbar-width:thin; scrollbar-color:rgba(201,140,255,.5) transparent;
+}
+.sceneBox .scenetitle{ display:block; color:var(--pink); font-size:14px; margin-bottom:8px; }
+.sceneBox p{ margin:0 0 14px; }          /* ★段落は本物の段落に(pre-wrap の \n\n をやめる) */
+.sceneBox p:last-child{ margin-bottom:0; }
+.sceneBox.open{ max-height:none; overflow:visible; }   /* 「全部読む」で畳みを外す */
+.scenemore{
+  display:block; margin:4px 0 12px auto; padding:3px 12px; font-size:11px; font-weight:normal;
+  background:none; border:1.2px solid var(--card-line); border-radius:999px;
+  color:var(--dim); box-shadow:none; cursor:pointer;
+}
+.scenemore:hover{ color:#e7dcff; border-color:var(--vio); transform:none; }
 .newbadge{ color:var(--pink); font-weight:bold; font-size:12px; }
 /* v5.2 研究所: 横3マスの格子と、マスを押して出す詳細 */
 .mgrid{ display:grid; grid-template-columns:repeat(3,1fr); gap:7px; margin:6px 0 14px; }

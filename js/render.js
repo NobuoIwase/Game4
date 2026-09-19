@@ -3666,17 +3666,33 @@ function drawCutin(g){
 function drawPinScene(g){
   const B=G.B; const hh=B&&((B.heroes&&B.heroes[B.pinSceneHi])||B.hero);   // v3.0 場面の主(押し倒された/絶頂した子)
   if(!B||!hh||(hh.out&&!B.after)||!(hh.pinned||hh.charmBind||hh.climaxT>0)||!B.pinScene||!B.pinScene.beats||!B.pinScene.beats.length) return;   /* v6.5 観測フェーズは out でも描く */
-  const beat=B.pinScene.beats[B.pinSceneIdx % B.pinScene.beats.length];
+  const nb=B.pinScene.beats.length, bi=B.pinSceneIdx % nb;
+  const beat=B.pinScene.beats[bi];
   g.save();
   const w2=Math.min(640,W-80);
   const bc=(typeof barCover==='number'?barCover:0);
-  const by=bc>H*0.3 ? 104 : H-26-bc-44;   // 重なる戦闘バーの上。バーが高い(小さい窓)なら彼女に被せず上へ。縦持ち(bc=0)は下端近く
-  rr(g,W/2-w2/2,by,w2,44,10);
-  g.fillStyle='rgba(14,10,28,0.82)'; g.fill();
+  const by=bc>H*0.3 ? 104 : H-26-bc-56;   // 重なる戦闘バーの上。バーが高い(小さい窓)なら彼女に被せず上へ。縦持ち(bc=0)は下端近く
+  rr(g,W/2-w2/2,by,w2,56,10);
+  g.fillStyle='rgba(14,10,28,0.86)'; g.fill();
   g.strokeStyle='rgba(255,110,150,0.5)'; g.lineWidth=1.2; g.stroke();
-  g.fillStyle='#e8d8ea'; g.font='12px '+FONT;
-  g.textAlign='center'; g.textBaseline='middle';
-  g.fillText(beat, W/2, by+22);
+  /* ★v7.0 「誰にされているか」を本文の上に出す。
+     実測(run_def70a): capture の本文 239本すべてに title があるのに、
+     相手の名前が入っている title は 0/239。pin の本文にも相手の名は出てこない。
+     画面のどこにも相手の名が無いまま本文だけが流れていた */
+  const mon=(hh.pinBy&&MONSTERS[hh.pinBy.id])?MONSTERS[hh.pinBy.id].name:null;
+  const nm=(B.heroes&&B.heroes.length>1&&HEROES[hh.id])?HEROES[hh.id].name:'';
+  const lbl=(nm?nm+' — ':'')+(mon?mon:'');
+  g.textBaseline='middle';
+  if(lbl){
+    g.textAlign='left'; g.font='bold 10.5px '+FONT; g.fillStyle='#ff86b3';
+    g.fillText(lbl, W/2-w2/2+12, by+12);
+  }
+  /* 何拍目か(読み飛ばしていないかが分かる) */
+  g.textAlign='right'; g.font='9.5px '+FONT; g.fillStyle='rgba(231,220,255,0.55)';
+  g.fillText((bi+1)+' / '+nb, W/2+w2/2-12, by+12);
+  g.fillStyle='#e8d8ea'; g.font='12.5px '+FONT;
+  g.textAlign='center';
+  g.fillText(beat, W/2, by+35);
   g.restore();
 }
 
