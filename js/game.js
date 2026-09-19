@@ -2083,6 +2083,8 @@ function condTick(h,dt){
           addHeatG(BAL.HEAT_GAS*dt);
           if(c.src) codexMet(c.src);
         }
+        /* v7.0c 撒いた魔物の取り分。濃さに比例させる(薄い雲より濃い雲が効いている) */
+        if(c.mid && MONSTERS[c.mid]) markCulprit(h,{id:c.mid},BAL.CULP_GAS*(c.rate/BAL.SENSIT_GAS)*dt);
         break;
       }
     }
@@ -4627,7 +4629,7 @@ function killEnemy(e){
   if(e.boss && e.id!=='core') partyExchange('bossDown');   // v3.0 ボスを倒した二人のやりとり
   S.hit();
   if(e.id==='gas'){ // 断末魔の大放出
-    spawnCloud(e.x,e.y,70,7,BAL.SENSIT_GAS*1.2,'gas');
+    spawnCloud(e.x,e.y,70,7,BAL.SENSIT_GAS*1.2,'gas',e.id);
   }
   B.en=Math.min(enMax(), B.en+e.enVal*BAL.EN_REFUND);
   B.essence+=e.xp*BAL.ESS_RATE;
@@ -4679,12 +4681,16 @@ function dropGem(x,y,v,lo){
   if(B.gems.length>BAL.GEM_CAP){ B.gems[(Math.random()*B.gems.length)|0].v+=v; return; }
   B.gems.push({x,y,v,t:rand(10),sp:0,lo:!!lo});
 }
-function spawnCloud(x,y,r,life,rate,src){
+/* v7.0c mid = その雲を撒いた魔物の id(地形から湧く雲では null)。
+   ★src は 'gas'/'musk' の種別でしかなく、誰が撒いたかを持っていなかった。
+     そのせいで「触れずに軋ませる側」が下手人の帳面に一度も載らず、
+     敗北本文の相手が掴む手ばかりになっていた(実測: 帳面に入るのは 1〜3種) */
+function spawnCloud(x,y,r,life,rate,src,mid){
   const B=G.B;
   if(B.clouds.length>44) B.clouds.shift();
   const kind=src==='musk'?'musk':'gas';
   if(kind==='gas' && zoneAt(x,y)==='flower'){ rate*=1.2; r*=1.1; }   // 花園では媚薬の雲が濃く広い
-  const c={x,y,r,t:0,life,rate,src:src||null,kind};
+  const c={x,y,r,t:0,life,rate,src:src||null,kind,mid:mid||null};
   B.clouds.push(c);
   parts(x,y,kind==='musk'?4:8,kind==='musk'?['#a8c86a','#8fb05a']:['#ff9ec2','#ffc2d8'],60,0.8);
   return c;
@@ -4745,7 +4751,7 @@ function enemiesUpdate(dt){
         e.dotAcc=(e.dotAcc||0)+dt;
         if(e.dotAcc>=0.5){ e.dotAcc-=0.5; hurtHero(BAL.HUG_DOT,e,{pierce:true,quiet:true,noKb:true}); }
         e.hugT=(e.hugT||0)+dt;
-        if(e.hugT>3 && !e.puffed){ e.puffed=true; spawnCloud(e.x,e.y,150,8,BAL.SENSIT_GAS*1.1,'gas'); }
+        if(e.hugT>3 && !e.puffed){ e.puffed=true; spawnCloud(e.x,e.y,150,8,BAL.SENSIT_GAS*1.1,'gas',e.id); }
         if(Math.random()<dt*5) parts(p.x+rand(-16,16),p.y-rand(0,26),1,['#e8d4b0','#ffd0a0','#fff'],40,0.6);
         continue;
       }
@@ -4986,7 +4992,7 @@ function enemiesUpdate(dt){
       if(e.id==='ghost'){ e.x+=-ty/td*Math.sin(e.t*2+e.joff)*22*dt; e.y+=tx/td*Math.sin(e.t*2+e.joff)*22*dt; }
       if(MONSTERS[e.id].musk){   // 雄臭: 歩きながら臭いの雲を残す(彼女の近くでだけ・場の雄臭雲は14まで)
         e.muskCd=(e.muskCd||0)-dt;
-        if(e.muskCd<=0 && d<300){ e.muskCd=BAL.MUSK_CLOUD_CD*rand(0.8,1.2); let nm=0; for(const c of B.clouds) if(c.kind==='musk') nm++; if(nm<14) spawnCloud(e.x,e.y+2,BAL.MUSK_CLOUD_R,BAL.MUSK_CLOUD_LIFE,BAL.SENSIT_GAS*0.45,'musk'); }
+        if(e.muskCd<=0 && d<300){ e.muskCd=BAL.MUSK_CLOUD_CD*rand(0.8,1.2); let nm=0; for(const c of B.clouds) if(c.kind==='musk') nm++; if(nm<14) spawnCloud(e.x,e.y+2,BAL.MUSK_CLOUD_R,BAL.MUSK_CLOUD_LIFE,BAL.SENSIT_GAS*0.45,'musk',e.id); }
       }
       if(e.id==='slime'){
         e.trailT-=dt;
@@ -4999,7 +5005,7 @@ function enemiesUpdate(dt){
         e.trailT-=dt;
         if(e.trailT<=0){
           e.trailT=0.75;
-          spawnCloud(e.x,e.y,26,3.5,BAL.SENSIT_GAS*0.6,'mistslime');
+          spawnCloud(e.x,e.y,26,3.5,BAL.SENSIT_GAS*0.6,'mistslime',e.id);
         }
       }
     }
@@ -5109,7 +5115,7 @@ function gasTick(e,dt,d,dx,dy){
   e.puffT-=dt;
   if(e.puffT<=0){
     e.puffT=3.2;
-    spawnCloud(e.x,e.y-4,62,6.5,BAL.SENSIT_GAS,'gas');
+    spawnCloud(e.x,e.y-4,62,6.5,BAL.SENSIT_GAS,'gas',e.id);
     sfx(200,90,0.3,'sine',0.03);
   }
 }
@@ -5290,7 +5296,7 @@ function mothTick(e,dt,d,dx,dy){
   e.dustT-=dt;
   if(e.dustT<=0){
     e.dustT=1.6;
-    spawnCloud(e.x,e.y+4,36,3.4,BAL.SENSIT_GAS*0.7,'moth');
+    spawnCloud(e.x,e.y+4,36,3.4,BAL.SENSIT_GAS*0.7,'moth',e.id);
   }
 }
 function potTick(e,dt,d){
@@ -7059,7 +7065,7 @@ function inyokuTick(e,dt,d,dx,dy){
     const tx=p.x, ty=p.y-30, ddx=tx-e.x, ddy=ty-e.y, dd=Math.hypot(ddx,ddy)||0.001;
     e.x+=ddx/dd*e.spd*1.9*dt; e.y+=ddy/dd*e.spd*1.9*dt;
     if(dd<p.r+e.r+6 && p.ifr<=0){
-      if(attachMonster(e,'cling',{armsOnly:true,needMul:0.6})){ e.holdT=1.8; applySensit(4); spawnCloud(p.x,p.y-10,30,1.6,BAL.SENSIT_GAS*0.4,'moth'); }
+      if(attachMonster(e,'cling',{armsOnly:true,needMul:0.6})){ e.holdT=1.8; applySensit(4); spawnCloud(p.x,p.y-10,30,1.6,BAL.SENSIT_GAS*0.4,'moth',e.id); }
       else{ applySensit(3); applyPleasure(2); }
       e.swoopT=0; e.swoopCd=rand(3,5);
     }
@@ -7283,7 +7289,7 @@ function gobkingTick(e,dt,d,dx,dy){
   const B=G.B, p=B.hero;
   bossChargeTick(e,dt,d,dx,dy);
   e.muskCd-=dt; e.hornCd-=dt;
-  if(e.muskCd<=0 && d<520){ e.muskCd=1.5; const c=spawnCloud(e.x,e.y+2,110,5,BAL.SENSIT_GAS*0.6,'musk'); if(c) c.boss='gobking'; }   // v2.4 濃く広く
+  if(e.muskCd<=0 && d<520){ e.muskCd=1.5; const c=spawnCloud(e.x,e.y+2,110,5,BAL.SENSIT_GAS*0.6,'musk',e.id); if(c) c.boss='gobking'; }   // v2.4 濃く広く
   if(e.hornCd<=0 && d<480){
     e.hornCd=8; let n=0, hasted=0;
     for(let i=0;i<3;i++){ if(aliveOf('goblin')>=12||B.enemies.length>=fieldCap()) break; const a=rand(TAU); spawnUnit('goblin', e.x+Math.cos(a)*40, e.y+Math.sin(a)*40, {parent:e, enVal:0, gemMul:0}); n++; }
@@ -8108,7 +8114,7 @@ function lurecapTick(e,dt,d,dx,dy){
     codexMet('lurecap');
     const got=attachMonster(e,'cling',{legFirst:true,needMul:0.9});
     addHeatG(BAL.LURE_HEAT); applySensit(BAL.LURE_SENS);
-    spawnCloud(e.x,e.y-6,BAL.LURE_CLOUD_R,BAL.LURE_CLOUD_LIFE,BAL.SENSIT_GAS*1.15,'gas');
+    spawnCloud(e.x,e.y-6,BAL.LURE_CLOUD_R,BAL.LURE_CLOUD_LIFE,BAL.SENSIT_GAS*1.15,'gas',e.id);
     parts(e.x,e.y-8,20,['#ff9ec2','#9fe8c8','#fff'],150,0.8);
     sfx(240,120,0.35,'sawtooth',0.07); G.shake=Math.min(6,G.shake+3);
     floatTxt(e.x,e.y-30,'——にせもの','#ff9ec2',12,1.3);
@@ -8296,7 +8302,7 @@ function coreRageTick(e,dt){
   e.rageGasCd-=dt; e.rageSlamCd-=dt;
   if(e.rageGasCd<=0){   // 広範囲の媚薬ガス: 魔核を中心に大きく吐き出す
     e.rageGasCd=BAL.CORE_RAGE_GAS_CD;
-    spawnCloud(e.x,e.y,BAL.CORE_RAGE_GAS_R,BAL.CORE_RAGE_GAS_LIFE,BAL.SENSIT_GAS*1.35,'gas');
+    spawnCloud(e.x,e.y,BAL.CORE_RAGE_GAS_R,BAL.CORE_RAGE_GAS_LIFE,BAL.SENSIT_GAS*1.35,'gas',e.id);
     B.fx.push({kind:'coregas', x:e.x, y:e.y, r:BAL.CORE_RAGE_GAS_R, t:0, life:0.9});
     floatTxt(e.x,e.y-e.r-26,'甘い霧','#ff9ec2',12,1.4); sfx(160,70,0.6,'sine',0.06);
   }
