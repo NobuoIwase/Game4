@@ -10537,15 +10537,21 @@ function afterStart(){
    させるために拍を回すので、増える経路を控えて戻す */
 function afterSnap(){
   const B=G.B;
-  return { orbFrag:B.orbFrag, essence:B.essence, ailCount:B.ailCount, climaxN:B.climaxN,
+  return { time:B.time,
+           orbFrag:B.orbFrag, essence:B.essence, ailCount:B.ailCount, climaxN:B.climaxN,
            filmed:B.filmed||0, kills:B.kills, dmgDealt:B.dmgDealt,
            life:JSON.stringify(META.life), codex:JSON.stringify(META.codex||{}),
            hero:B.heroes.map(h=>({worn:h.worn||0, xp:h.xp, level:h.level,
                                   recClimax:h.recClimax||0, recAil:h.recAil||0,
                                   recDmg:h.recDmg||0, recFilmed:h.recFilmed||0, recKills:h.recKills||0})) };
 }
-function afterFreezeApply(){
+/* full=true(観測を終える時)では時計も戻す。
+   ★観測の間は時計を進めないと掴みが成立しない(freeSlotFor が limbFree を B.time で見る)が、
+     進んだままにすると endBattle の softK=B.time/ESS_SOFT_T が伸びて**逓減が緩む**
+     ——長く観測するほど実入りが増えてしまう。だから終わる時に捕まった時刻へ戻す */
+function afterFreezeApply(full){
   const B=G.B, S0=B&&B.afterFreeze; if(!S0) return;
+  if(full) B.time=S0.time;
   B.orbFrag=S0.orbFrag; B.essence=S0.essence; B.ailCount=S0.ailCount; B.climaxN=S0.climaxN;
   B.filmed=S0.filmed; B.kills=S0.kills; B.dmgDealt=S0.dmgDealt;
   META.life=JSON.parse(S0.life); META.codex=JSON.parse(S0.codex);
@@ -10600,7 +10606,7 @@ function afterNextPin(){
 }
 function afterEnd(){
   const B=G.B; if(!B||!B.after) return;
-  afterFreezeApply(); B.afterFreeze=null;   /* ★観測の間に動いた数字を、捕まった時点へ戻す */
+  afterFreezeApply(true); B.afterFreeze=null;   /* ★観測の間に動いた数字と時計を、捕まった時点へ戻す */
   B.after=null;
   if(typeof UI!=='undefined' && UI.afterBtn) UI.afterBtn(false);
   endBattle('capture');
@@ -10623,6 +10629,17 @@ function capturedTick(dt){
   }
   /* --- 観測フェーズ --- */
   A.t+=dt;
+  /* ★v7.0 時計を進める。これが無いと掴みが**一度も成立しない**——
+     freeSlotFor は v6.2 の「振りほどいたばかりの肢は猶予のあいだ取らせない」を
+     `h.limbFree[slot] > B.time` で見る。B.time を進めるのは battleTick だけなので、
+     観測では時刻が捕獲の瞬間で止まったまま。captiveTick が一本ほどくたびに
+     `limbFree = B.time + REGRAB_GRACE` を置き、その時刻が永遠に来ないので
+     全スロットが恒久的に塞がる。
+     実測(run_def70g): attachMonster は 39669回呼ばれて成功 13回(0%)。
+     呼べる手はいつも居て、距離も 0〜19px の密着が 29149回——届いていないのではなく、
+     掴む先の肢が一つも空いていなかった。
+     ★止めるのは「数字(オーブ・経験・摩耗)」であって「時計」ではない */
+  B.time+=dt;
   const sub=B.heroes[A.hi]||p;
   for(const h of B.heroes) h.pinned=true;
   /* ★v7.0 魔物に本来の動きをさせる。
