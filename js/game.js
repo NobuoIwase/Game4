@@ -1880,19 +1880,30 @@ function markCulprit(h,mon,w){
   h.culprit=h.culprit||{};
   h.culprit[mon.id]=(h.culprit[mon.id]||0)+w;
 }
-/* 帳面のいちばん上。★同点に近いなら、その子がまだ読んでいない相手を先に出す
-   ——作者の「他の敗北文がピックアップされるように」の対策。
-     ただし「効かせていない魔物」を持ち上げることはしない(嘘にならない範囲で) */
-function culpritTop(h){
+/* 帳面から一人を引く。★「いちばん上を取る」ではなく「効かせた分に比例して引く」。
+   ——v7.0 の最初の版は argmax(帳面の首位)にしたが、実測で**かえって偏った**:
+
+     | | v6.10(同じ器) | argmax 版 |
+     | 種類 | 17 | 13 |
+     | 上位3種 | 41% | 49% |
+     | 上位5種 | **57%** | **74%** |
+
+   首位は毎晩「長く張り付く硬い手」(石の番兵・沼の触手・核の落とし子)になる。
+   旧来の「倒れた瞬間に押さえていた手」の方が**偶然が混じるぶん散っていた**。
+   ★意味(その夜いちばん効かせた魔物)は残したまま、決め方を確率に戻す。
+     まだ読んでいない相手には CULP_NEW_K 倍の重みを乗せる——
+     効かせていない魔物を持ち上げることはしない(嘘にならない範囲の対策) */
+function culpritPick(h){
   const C=h&&h.culprit; if(!C) return null;
-  const ent=Object.entries(C).filter(([id])=>MONSTERS[id]).sort((a,b)=>b[1]-a[1]);
+  const ent=Object.entries(C).filter(([id])=>MONSTERS[id]);
   if(!ent.length) return null;
   const RS=((META.readScenes||{})[h.id])||{};
-  const best=ent[0];
-  for(const [id,w] of ent){
-    if(w>=best[1]/BAL.CULP_NEW_K && !RS['capture/'+id]) return id;
-  }
-  return best[0];
+  let tot=0;
+  const w=ent.map(([id,v])=>{ const k=Math.max(0,v)*(RS['capture/'+id]?1:BAL.CULP_NEW_K); tot+=k; return k; });
+  if(tot<=0) return ent[0][0];
+  let r=Math.random()*tot;
+  for(let i=0;i<ent.length;i++){ r-=w[i]; if(r<=0) return ent[i][0]; }
+  return ent[ent.length-1][0];
 }
 function condTick(h,dt){
   const B=G.B;
@@ -1900,6 +1911,14 @@ function condTick(h,dt){
   if(G.mode!=='battle'&&G.mode!=='levelup') return;
   /* 掴まれている時間そのものを帳面へ(掴む手の取り分) */
   for(const sl of attachedSlots(h)){ const at=h.limbs[sl]; if(at&&at.mon) markCulprit(h,at.mon,BAL.CULP_HOLD*dt); }
+  /* ★掴まない責め手の取り分。実測(run_def70i)で帳面に入っていたのは
+     たいてい 1〜3種——掴む手と殴る手しか積まれておらず、
+     「触れずに軋ませる」側(照射触手・ゲイザー)が最初から候補に入っていなかった。
+     雲は src が 'gas'/'musk' の種別しか持たないので拾えないが、
+     光線と催眠は源の id を覚えている(h.lastBeam / h.lastHypno) */
+  { const lb=h.lastBeam, lh=h.lastHypno, T=B.time;
+    if(lb && T-lb.t<BAL.CULP_SRC_T && MONSTERS[lb.id]) markCulprit(h,{id:lb.id},BAL.CULP_BEAM*dt);
+    if(h.hypnoLv>0 && lh && T-lh.t<BAL.CULP_SRC_T && MONSTERS[lh.id]) markCulprit(h,{id:lh.id},BAL.CULP_HYPNO*h.hypnoLv*dt); }
   // 快感の自然減衰
   if(h.aphro>0) h.aphro=Math.max(0,h.aphro-BAL.PLEAS_DECAY*dt);
   // 敏感化の自然減衰(祭壇分は下限として残る)
@@ -7572,7 +7591,7 @@ function beginCapture(src,cause){
   let by=src?src.id:'default';
   /* ★v7.0 とどめの名は「最後に押さえていた手」ではなく「その夜いちばん効かせた魔物」。
      掴む手しかとどめになれなかったので、同じ数種の本文ばかりが出ていた(実測: 18種/上位3種で56%) */
-  { const top=culpritTop(h);
+  { const top=culpritPick(h);
     if(top && !(src&&src.boss)) by=top; }
   // 帰属: 直前6秒の強制絶頂、または催眠Ⅱ以上での敗北は、その源(照射触手/ゲイザー)の仕業として記録する(ボス個体に倒された時は除く)
   { const lb=h.lastBeam, lh=h.lastHypno;

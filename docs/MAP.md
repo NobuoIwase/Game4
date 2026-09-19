@@ -198,7 +198,7 @@ BRIEFING §5 に、同じ罠を三度踏んだ記録があります。
 | 物語のADV箱 | `js/ui.js:showStory()` |
 | 敗北の結果画面(誰に倒されたかの札・本文の箱) | `js/ui.js:showResult()` の `capCard` / `index.html` の `.capcard` `.sceneBox` |
 | 押し倒し本文の送りの速さ | `js/game.js:beatTime()`(★一律秒ではなく行の字数で決める。`BAL.PIN_BEAT_BASE/CPS`) |
-| 敗北本文の相手が誰になるか | `js/game.js:markCulprit()` / `culpritTop()` — その夜いちばん効かせた魔物 |
+| 敗北本文の相手が誰になるか | `js/game.js:markCulprit()` / `culpritPick()` — その夜いちばん効かせた魔物 |
 | 敗北のあとの観測フェーズ | `js/game.js:afterStart()` / `afterNextPin()` / `afterPickMon()` / `capturedTick()` |
 | 観測中に数字を止める | `js/game.js:afterSnap()` / `afterFreezeApply()` |
 | 魔物・ヒロインの絵 | `js/render.js`(全部コードで描いています) |
