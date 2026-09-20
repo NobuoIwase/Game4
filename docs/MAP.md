@@ -163,6 +163,9 @@ BRIEFING §5 に、同じ罠を三度踏んだ記録があります。
 | 魔物が増えすぎる | `js/data.js:SPECIES_MAX`(カードの同時上限)。★オート指揮は安いカードを連打するので、雑魚を足したらここも見る |
 | ボスが深さで強くなる | `js/game.js:bossRank()` と `u.brank`(★熟れた個体の `u.rank` とは別物)、`BAL.BOSS_RANK_D` |
 | オート指揮が特化デッキで黙る | `js/game.js:handOrder()`。`PRESSURE`/`FLUSH_ORDER`/`REFILL_ORDER` の名指しが尽きたら手札から継ぎ足す |
+| 魔物をどこに出すか(カードを切った時) | `js/game.js:playCard()`。歩ける魔物は `placeNear(…560px…)`、**`spd≦WAIT_SPD(22)` の待ち型は `js/game.js:waitSpot()`** で彼女の目当ての先へ(`BAL.WAIT_NEAR`/`WAIT_FAR`/`WAIT_FAN`)。ボスは足の速さで 520/400/300px。DESIGN §3-81 |
+| 出した大物が一仕事する前に溶ける | `js/game.js:damageEnemy()` の `BAL.BIG_GRACE`/`BAL.BIG_GRACE_CUT`(出現後その秒数だけ被ダメ減)。個体の生まれた時刻は `e.born` |
+| 誰にとどめを刺されたか(敗北文の相手) | `js/game.js:markCulprit()`/`js/game.js:culpritPick()`。載せる経路は 掴み(`CULP_HOLD`)・削り(`CULP_DMG`)・光線(`CULP_BEAM`)・催眠(`CULP_HYPNO`)・雲(`CULP_GAS`)・**呪弾/光弾(`CULP_RUNE`)**。触れずに効かせる魔物は、ここに載せないと相手に選ばれない |
 
 ### 2-5. 文章(台詞・本文・図鑑・物語)
 
@@ -187,6 +190,9 @@ BRIEFING §5 に、同じ罠を三度踏んだ記録があります。
 ★**フォーマットが二種類あります。** `js/lines.js` は1行配列
 (`"key": ["a", "b"],`)、他の3人は複数行配列です。
 機械的に差し込む時は、**必ずそのファイルの既存の書き方に合わせること**(混ぜると構文が壊れます)。
+
+| 観測フェーズで何が見えるか | `js/render.js:draw()` の末尾の門(`G.mode==='battle'||G.mode==='captured'`)が押し倒し本文とカットイン、同じ門がもがきの輪。`mood` は**絶頂を押し倒しより先に見る**。`moving` も `captured` を許す。暗幕は `B.after?0.42:…` |
+| 観測中のもがき・這い | `js/game.js:captiveTick()`。`BAL.AFTER_STRUG`(溜まる速さ。快感と発情で落ちる)で `h.struggle` を自前に溜め、満ちたら一本ほどいて `C.crawl` で `BAL.CAP_CRAWL_T` 秒かけて這う。★`struggleRaw` は `h.pinned` で弾かれるので、ここを通さないと輪の針が動かない |
 
 ### 2-6. 画面
 
@@ -367,6 +373,25 @@ iPhone 横 844x390 / Pixel 横 915x412 / iPad 横 1180x820 / 携帯 縦 412x915 
   `run_air3.js` のように複数の窓で測る(v6.10 で三つの穴がこれで出ました)
 - **`resize()` の中で `clamp()` など下で `const` 宣言された道具を呼ばない。** TDZ で落ちます
   (`resize()` は core.js のその場で一度呼ばれる)
+- ★**条件を測るのと、結果を測るのは別物。** 上の「本文は 91% 出ていた」は**誤りでした**。
+  測っていたのは `drawPinScene` の**中の条件**で、**関数が呼ばれているか**ではない。
+  `draw()` の門が `G.mode==='battle'` のままで、観測フェーズ(`'captured'`)では
+  **一度も呼ばれていなかった**(数えなおすと 0%)。**「出ているか」を測るなら、
+  描く関数を包んで `fillText` がその文字列を描いた回数を数える**
+- **同じ `G.mode==='battle'` の門が、描画の各所に散っている。** v7.1 で四つ見つかった
+  (本文/カットイン・もがきの輪・歩きの絵・絶頂の顔)。フェーズを足したら、
+  `grep -n "G.mode==='battle'" js/render.js` を通しで読むこと
+- **場面本文(`SCENES*.pin` / `.capture`)は、同じ鍵を後から書いた方が勝つ。**
+  先頭のリテラルブロックのあと `Object.assign(SCENES*.pin,…)` が何本も続き、
+  `index.html` の読み込み順(scenes → scenes_v20 → freila → kuu → yamiko)に走る。
+  v7.1 で先頭へ足した8件が `scenes_v20.js` に上書きされ、一度も画面に出ないまま残っていた。
+  `python3 check_scene_dup.py` を毎回
+- **個体の成績を `killEnemy` だけで数えない。** 倒されない魔物(ボス・据わり手・
+  夜明けまで生き残った個体)が母数から丸ごと落ちる。v7.1 の最初の計測は
+  魔核が「届いた0% / 与ダメ49.8」という矛盾した行を出した。
+  **配列から消えた瞬間**と**夜の終わり**の両方で引退させる
+- **`markCulprit(h,{id:…},w)` の第二引数は使い捨ての器のことがある**(雲・光線・紋)。
+  ハーネスでそこに印を付けても個体には残らない。同じ種のいちばん近い生存個体へ帰属させる
 
 ---
 

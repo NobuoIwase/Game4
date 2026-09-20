@@ -4008,6 +4008,7 @@ function spawnUnit(id, x, y, o){
     enVal:o.enVal||0, gemMul:o.gemMul!==undefined?o.gemMul:1,
     boss:!!MONSTERS[id].boss, lv:d.lv, elite:elite>1,
     t:rand(10), joff:rand(TAU), hitFlash:0, orbCd:0, stun:0, dead:false,
+    born:(G.B?G.B.time:0),   /* v7.1 生まれた時刻。出たての大物に猶予をやるのに使う(damageEnemy) */
     dormant:!!o.dormant, dormT:0, state:'chase', limb:null, seenT:0,
     vari:(Math.random()*3)|0,                 // 描き込みの個体差(顔・色)
   };
@@ -4557,6 +4558,14 @@ function damageEnemy(e,dmg){
   }
   /* v6.0 はじめの夜の主: 与えたダメージの累計で濃くなる。抗わなければ、ただのナメクジのまま */
   if(e.id==='firstslug') firstslugThicken(e,dmg);
+  /* ★v7.1 出てきた直後の大物は、一仕事する前に溶けない。
+     実測(run_v71d): 遺跡の番人(EN9)は 11秒で消え、届いた% は 0。
+     予兆 1.2秒の淫紋の光弾を一度も撮てていない。レーザー触手(EN9)も 7秒。
+     EN 8〜11 のカードが「出した瞬間に的になるだけ」では、置く意味が無い。
+     ★硬くするのではなく「猫予をやる」——最初の BIG_GRACE 秒だけ被ダメが減る。
+       彼女の火力そのものは一切触らない——変わるのは「一拍目に間に合うか」だけ */
+  { const B9=G.B, tr=tierOf(e.id);
+    if(B9 && e.born!==undefined && (tr==='large'||tr==='boss') && B9.time-e.born<BAL.BIG_GRACE) dmg*=1-BAL.BIG_GRACE_CUT; }
   e.hp-=dmg; e.hitFlash=0.12;
   /* v6.7 闇の吸い上げ: ヤミコが削ったぶんの一部が、いちばん薄い子の傷へ回る */
   { const dh=G.B&&G.B.hero; if(dh && (dh.drainK||0)>0) dh.drainPool=(dh.drainPool||0)+dmg*dh.drainK; }
@@ -7234,6 +7243,11 @@ function runeHit(b){
   }
   p.crestLv=Math.min(BAL.CREST_MAX,(p.crestLv||0)+1);
   applyPleasure(12); applySensit(6);
+  /* ★v7.1 呪弾・光弾も下手人の帳面へ。
+     ——刻印師と遺跡の番人は「触れずに効かせる」ので、掚みにもダメージにも現れない。
+       v7.0 で光線と催眠は帳面に載せたのに、紋だけが漏れていた——
+       彼女を紋だらけにして倒した張本人が、敗北文の相手に一度も選ばれない */
+  if(b&&b.src&&MONSTERS[b.src]) markCulprit(p,{id:b.src},BAL.CULP_RUNE);
   p.stumbleDur=Math.max(p.stumbleDur,0.6);
   parts(p.x,p.y-20,18,['#c98cff','#ff86b3','#fff'],140,0.7);
   sfx(300,900,0.3,'sawtooth',0.07);
@@ -9873,6 +9887,25 @@ function canPlay(id, formId){
   if(B.en<cost) return {ok:false, why:'en'};
   return {ok:true, cost};
 }
+/* ★v7.1 動かない(動けない)魔物を「彼女の行く先」へ置く。
+   ——実測(run_v71d・16夜): spd:0 の大型は、全個体の「最接近」の中央値が 370〜505px。
+     遺跡の番人(EN9)・肉壁の口(EN8)・心根(EN8)・触手壷(EN7)・抱き茸(EN11) は
+     「届いた%」が 0〜4%。理由は単純で、playCard が全ての魔物を
+     **彼女から 560px・無作為な方角** に出していた。歩ける魔物はそこから寄ってくるが、
+     spd:0 は一歩も動けない。EN 6〜11 を払って、一度も彼女に触れないまま夜が明ける
+     ——作者の言う「出オチ」はこれ。
+   待ち型は待ち伏せる。目当て(無ければ進行方向)の先、彼女が踏む帯へ扇に散らす */
+const WAIT_SPD=22;   /* これ以下は「実質動けない」。レーザー触手(16)・絶頂照射触手(20)も含む */
+function waitSpot(p,id,i,n){
+  let a;
+  const g=p.goal;
+  if(g && g.x!==undefined && g.y!==undefined && Math.hypot(g.x-p.x,g.y-p.y)>60) a=Math.atan2(g.y-p.y, g.x-p.x);
+  else if(Math.hypot(p.vx,p.vy)>20) a=Math.atan2(p.vy,p.vx);
+  else a=rand(TAU);
+  const spread=(n>1?((i/(n-1))-0.5)*BAL.WAIT_FAN:0)+rand(-0.10,0.10);
+  const d=rand(BAL.WAIT_NEAR,BAL.WAIT_FAR);
+  return placeNear(p.x,p.y,Math.cos(a+spread)*d,Math.sin(a+spread)*d,24,canFly(id));
+}
 function playCard(id, formId){
   const B=G.B;
   formId=resolveForm(id,formId);
@@ -9890,7 +9923,10 @@ function playCard(id, formId){
   if(MONSTERS[id].boss){
     B.bossUsed=true; B.bossPlayed[id]=true; B.bossCd=BAL.BOSS_CD;
     const a=rand(TAU);
-    const dist=MONSTERS[id].spd>0?620:320;   // 動かないボス(淫夢の樹)は近くに根を張る
+    /* ★v7.1 ボスの湧き場所を足の速さで決める。spd18 の刻印師が 620px 先から歩くと、
+       最初の呪弾までに 34秒かかっていた。「出オチ」の半分はこの助走 */
+    const bs=MONSTERS[id].spd||0;
+    const dist=bs>=40?520:bs>=20?400:300;
     spawnUnit(id, p.x+Math.cos(a)*dist, p.y+Math.sin(a)*dist, {enVal:cost});
     setBanner('⚠ ボス召喚!', MONSTERS[id].name, '#ff6b81');
     heroBubble(p,'おおきいの きた…!?',true);
@@ -9921,20 +9957,25 @@ function playCard(id, formId){
   const gemMul=Math.min(1, f.count/n);
   const so={enVal:per, mult:comboMult, gemMul};
 
+  const slow=(MONSTERS[id].spd||0)<=WAIT_SPD;   /* v7.1 待ち型は彼女の行く先へ */
   if(formId==='scatter'||formId==='burst'||formId==='single'||formId==='duo'){
     for(let i=0;i<n;i++){
       const a=rand(TAU);
-      const q=placeNear(p.x,p.y,Math.cos(a)*560,Math.sin(a)*560,24,canFly(id));
+      const q=slow?waitSpot(p,id,i,n):placeNear(p.x,p.y,Math.cos(a)*560,Math.sin(a)*560,24,canFly(id));
       spawnUnit(id, q.x, q.y,
         Object.assign({elite:f.elite||1}, so));
     }
   }else if(formId==='wave'){
+    if(slow){
+      for(let i=0;i<n;i++){ const q=waitSpot(p,id,i,n); spawnUnit(id, q.x, q.y, so); }
+    }else{
     const a=rand(TAU);
     const q0=placeNear(p.x,p.y,Math.cos(a)*580,Math.sin(a)*580,24,canFly(id)); const cx=q0.x, cy=q0.y;
     const px=-Math.sin(a), py=Math.cos(a);
     for(let i=0;i<n;i++){
       const off=(i-(n-1)/2)*55;
       spawnUnit(id, cx+px*off, cy+py*off, so);
+    }
     }
   }else if(formId==='ambush'){
     const vd=Math.hypot(p.vx,p.vy);
@@ -10330,14 +10371,27 @@ function captiveTick(dt){
       C.swaps=(C.swaps||0)+1;
     }
   }
-  /* --- 身を捩って一本ほどき、少しだけ這って逃げる。すぐまた取られる --- */
+  /* --- もがきが満ちたら一本ほどき、少しだけ這って逃げる。すぐまた取られる --- */
+  /* ★v7.1 観測でも「もがきの輪」が動くように、ここで自前に溜める。
+     struggleRaw は h.pinned で弾かれる(押し倒されている間は抗えない)ので、
+     観測のあいだ h.struggle は捕獲の瞬間の値で凍っていた——輪を出しても動かない。
+     溜まる速さは快感と発情で落ちる。抗う力が快感に食われていく、その分解能 */
+  if(B.after && restraintCount(h)>0 && h.climaxT<=0){
+    const drag=Math.max(0.25, 1-(h.aphro||0)/180-0.14*(h.heatLv||0));
+    h.struggle+=BAL.AFTER_STRUG*drag*dt;
+    const o=oldestRestraint(h);
+    if(o && h.struggle>=o.at.need){ h.struggle=0; C.shakeT=0; }
+  }
   if(C.shakeT<=0){
     C.shakeT=BAL.CAP_SHAKE_T*rand(0.75,1.3);
     const sl=attachedSlots(h);
     if(sl.length) detachLimb(sl[(Math.random()*sl.length)|0],{fling:true});
     const a=rand(TAU);
-    slideXY(h, h.x+Math.cos(a)*BAL.CAP_SHAKE_D, h.y+Math.sin(a)*BAL.CAP_SHAKE_D);
-    C.x=h.x; C.y=h.y; C.shakes=(C.shakes||0)+1;
+    /* ★v7.1 瞬間移動ではなく這わせる。普段の歩きと同じ絵(moving)で、
+       CAP_CRAWL_T 秒かけて CAP_SHAKE_D だけ進む。
+       実測(run_v71a): 観測の間、彼女が動いていたフレームは 0% だった */
+    C.crawl={ax:Math.cos(a), ay:Math.sin(a), t:BAL.CAP_CRAWL_T};
+    C.shakes=(C.shakes||0)+1;
     parts(h.x,h.y-14,7,['#fff','#c98cff'],110,0.45);
     heroBubble(h, pickRand({
       lumina:['……っ、まだ……うごけ、る……','はな、して……! まだ、いける……','やだ……そこ、ちが……っ'],
@@ -10345,6 +10399,14 @@ function captiveTick(dt){
       kuu:['……まだ、こおる……','……はなして。……おねがい','……や、……つめたく、したい……'],
       yamiko:['……ふざけ、ないで……','……その手、あとで憶えていなさい','……まだ、闇は残ってる……'],
     }[h.id]||['……や、だ……']), true, 3);
+  }
+  /* 這っている間。普段の歩きの絵のまま、少しだけ進む */
+  h.moving=false;
+  if(C.crawl && C.crawl.t>0){
+    const sp=BAL.CAP_SHAKE_D/Math.max(0.05,BAL.CAP_CRAWL_T)*dt;
+    slideXY(h, h.x+C.crawl.ax*sp, h.y+C.crawl.ay*sp);
+    if(Math.abs(C.crawl.ax)>0.2) h.face=C.crawl.ax<0?-1:1;
+    h.moving=true; C.crawl.t-=dt; C.x=h.x; C.y=h.y;
   }
   /* --- 責められ続ける。責め手が替わったら、その相手の本文を控える --- */
   if(C.pulse<=0){

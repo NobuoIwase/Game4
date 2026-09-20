@@ -4435,20 +4435,26 @@ function draw(){
     }
     // ルミナ
     const heatVis=p.heatLv>0?100:p.aphro;
-    const mood = (G.mode==='captured'||p.pinned||p.charmBind)?'pinned'
-               : p.climaxT>0?'climax'
+    /* ★v7.1 絶頂を押し倒しより先に見る。観測の間は G.mode==='captured' が常に真なので、
+       前の順番だと表情がずっと 'pinned' のままだった——実測(run_v71a)で
+       主は 32% のフレームで絶頂しているのに、その顔は一度も出ていない */
+    const mood = p.climaxT>0?'climax'
+               : (G.mode==='captured'||p.pinned||p.charmBind)?'pinned'
                : attachCount(p)>0?'bound'
                : G.mode==='survived'?'happy'
                : (G.hurtFlash>0.15?'hurt':'normal');
     const blinking = p.ifr>0 && G.mode==='battle' && (Math.floor(p.ifr*14)%2===0);
     if(blinking) g.globalAlpha=0.45;
-    drawGirl(g,p.x,p.y,{t:p.anim,face:p.face,moving:p.moving&&G.mode==='battle',mood,heat:heatVis,id:p.id});
+    /* ★v7.1 観測でも歩きの絵を使う。一本ほどいて這って逃げる間だけ真になる */
+    drawGirl(g,p.x,p.y,{t:p.anim,face:p.face,moving:p.moving&&(G.mode==='battle'||G.mode==='captured'),mood,heat:heatVis,id:p.id});
     g.globalAlpha=1;
     drawAttachments(g,p);
     drawSuckers(g,p);
     if(p.out && p.captive) drawCaptiveMark(g,p);
     drawStateFx(g,p);
-    if(G.mode==='battle'){
+    /* ★v7.1 観測の間も「もがきの輪」を出す。
+       脆弱な抵抗が見えないと、画面上はただ凍っているのと別がつかない */
+    if(G.mode==='battle'||G.mode==='captured'){
       if(p.pinned && !p.out) drawPinGauge(g,p);   // v3.0 捕まって残っている子には脱出ゲージを出さない
       else if(p.charmBind) drawCharmBindGauge(g,p);
       else if(restraintCount(p)>0) drawStruggleRing(g,p);
@@ -4633,12 +4639,20 @@ function draw(){
   }
   if(G.mode==='captured'){
     const B=G.B;
-    const pr=clamp(1-B.captureT/2.8,0,1);
+    /* ★v7.1 暗幕は「捕まった瞬間の落ち込み」であって、観測のあいだ被せ続ける物ではない。
+       B.captureT は観測に入ると減らなくなるので pr が 1 に張りついて、
+       **55% の暗幕が最後までかかりっぱなし**になっていた。観測中は薄く残すだけ */
+    const pr=B.after ? 0.42 : clamp(1-B.captureT/2.8,0,1);
     g.fillStyle='rgba(20,8,36,'+(pr*0.55).toFixed(3)+')';
     g.fillRect(0,0,W,H);
   }
   if(['battle','levelup','captured','survived'].includes(G.mode) && G.B) drawHUD(g);
-  if(G.mode==='battle'){ drawCutin(g); drawPinScene(g); }
+  /* ★v7.1 押し倒しの本文を 'captured' でも描く。
+     ——v6.5 で観測フェーズを足した時、ここが 'battle' のままだった。
+       drawPinScene の中の条件は 93% のフレームで満たされていたのに(v7.0 で実測)、
+       **関数そのものが一度も呼ばれていなかった**。観測の本文は最初から画面に出ていない。
+       作者の「読んだ覚えがない」はこれ */
+  if(G.mode==='battle'||G.mode==='captured'){ drawCutin(g); drawPinScene(g); }
   if(G.mode==='levelup') drawCards(g);
   drawBanner(g);
 }

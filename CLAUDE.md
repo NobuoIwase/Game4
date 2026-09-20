@@ -34,6 +34,9 @@
 - **定義だけあって繋がっていないものは、走らせても出ない。** `python3 check_dead.py` を毎回
   (刻む場所の無い性癖・効きを読まない性癖・誰も読まない `BAL` を数える)
 - **`docs/MAP.md` の索引は `python3 check_map.py` で検証される。** MAP を書き換えたら走らせる
+- **場面本文(`SCENES*.pin` / `.capture`)は、同じ鍵を後から書いた方が勝つ。**
+  `python3 check_scene_dup.py` を毎回(先頭ブロックへ足した本文が、後段の
+  `Object.assign` に黙って上書きされて一度も出ない、を潰す)
 - コミット前に `node --check` 全ファイルと、キリル文字などの混入スキャン
 - **モデル名をコード・コミット・PRに書かない**
 - push 先は `claude/ai-girl-deck-battle-game-1k94l5` のみ
