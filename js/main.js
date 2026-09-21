@@ -1,7 +1,14 @@
 'use strict';
-/* ============================================================
-   main.js — 起動 / メインループ
-============================================================ */
+/* main.js — 起動。quality_patch.js を確実に読み込んでからゲームを開始する */
+(function bootGame4(){
+  const s=document.createElement('script');
+  s.src='js/quality_patch.js?v=14';
+  s.async=false;
+  s.onload=startGame4;
+  s.onerror=()=>{ console.warn('[Game4] quality_patch.js failed to load'); startGame4(); };
+  document.head.appendChild(s);
+})();
+function startGame4(){
 loadMeta();
 UI.init();
 G.spd=1;
@@ -25,10 +32,10 @@ function frame(now){
   if(rdt>0.1) rdt=0.1;
   if(rdt>0) G.fps=G.fps*0.95+(1/rdt)*0.05;
   const dt=Math.min(rdt,0.05);
-  const paused=UI.advOpen();   // v2.1 物語(立ち絵+台詞)を表示している間はゲーム時間が止まる
+  const paused=UI.advOpen();
   const speedy=!paused && ['battle','levelup','captured','survived'].includes(G.mode) && G.B;
   const steps=paused ? 0 : (speedy ? TS*(G.spd||1) : 1);
-  if(paused){ UI.tickAdv(rdt); G.shake=Math.max(0,G.shake-dt*14); }   // 文字送りだけ進め、揺れは収める(fxTick は止まる)
+  if(paused){ UI.tickAdv(rdt); G.shake=Math.max(0,G.shake-dt*14); }
   for(let k=0;k<steps;k++){
     switch(G.mode){
       case 'home':     lobbyTick(dt); break;
@@ -41,18 +48,15 @@ function frame(now){
     if(!G.B && speedy) break;
   }
   if(G.B){
-    // v3.0 カメラは(離脱していない)ヒロインたちの重心を追う
-    /* v6.6e 捕まってその場に残された子も画面に入れる。
-       ★以前は !h.out だけを追っていたので、捕まった子はカメラの外へ置き去りになっていた
-         (実測: 捕獲後54秒のうち 25.6% は画面の外。カメラの追う点から最大 675px) */
     const hs=(G.B.heroes||[G.B.hero]).filter(h=>!h.out||h.captive); const p=G.B.hero;
     const cx=hs.length?hs.reduce((a,h)=>a+h.x,0)/hs.length:p.x, cy=hs.length?hs.reduce((a,h)=>a+h.y,0)/hs.length:p.y;
     const k2=Math.min(1,dt*5*steps);
     G.cam.x+=(cx-G.cam.x)*k2; G.cam.y+=(cy-G.cam.y)*k2;
-    if(typeof MAP_HW!=='undefined'){ G.cam.x=clamp(G.cam.x,-MAP_HW+W/2,MAP_HW-W/2); G.cam.y=clamp(G.cam.y,-MAP_HH+H/2,MAP_HH-H/2); }   // マップの外を見せない
+    if(typeof MAP_HW!=='undefined'){ G.cam.x=clamp(G.cam.x,-MAP_HW+W/2,MAP_HW-W/2); G.cam.y=clamp(G.cam.y,-MAP_HH+H/2,MAP_HH-H/2); }
   }
   UI.tickBattleBar();
   draw();
 }
 UI.show('home');
 requestAnimationFrame(frame);
+}
