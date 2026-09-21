@@ -1,4 +1,12 @@
 'use strict';
+// Load tactical/rendering quality patch after core game/render code has been defined.
+(function(){
+  const s=document.createElement('script');
+  s.src='js/quality_patch.js';
+  s.defer=false;
+  s.onerror=()=>console.warn('[Game4] quality_patch.js failed to load');
+  document.head.appendChild(s);
+})();
 /* ============================================================
    main.js — 起動 / メインループ
 ============================================================ */
