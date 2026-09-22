@@ -17,6 +17,10 @@
       "kind": "vfx",
       "src": "assets/generated/vfx/holy_slash.webp"
     },
+    "vfx.impact_flash": {
+      "kind": "vfx",
+      "src": "assets/generated/vfx/impact_flash.webp"
+    },
     "vfx.mire_ripple": {
       "kind": "vfx",
       "src": "assets/generated/vfx/mire_ripple.webp"
