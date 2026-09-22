@@ -1,6 +1,10 @@
 {
   "version": 1,
   "assets": {
+    "atlas.moon": {
+      "kind": "atlas",
+      "src": "assets/generated/atlas/moon.webp"
+    },
     "atlas.normal": {
       "kind": "atlas",
       "src": "assets/generated/atlas/normal.webp"
