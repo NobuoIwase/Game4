@@ -163,6 +163,8 @@ BRIEFING §5 に、同じ罠を三度踏んだ記録があります。
 | 魔物が増えすぎる | `js/data.js:SPECIES_MAX`(カードの同時上限)。★オート指揮は安いカードを連打するので、雑魚を足したらここも見る |
 | ボスが深さで強くなる | `js/game.js:bossRank()` と `u.brank`(★熟れた個体の `u.rank` とは別物)、`BAL.BOSS_RANK_D` |
 | オート指揮が特化デッキで黙る | `js/game.js:handOrder()`。`PRESSURE`/`FLUSH_ORDER`/`REFILL_ORDER` の名指しが尽きたら手札から継ぎ足す |
+| 堕ちの二軸と反応段階(抵抗/綻び/yield/待ってしまう) | 読むのは `js/data.js:fallBodyOf()`/`js/data.js:fallMindOf()`/`js/codex.js:fallTier()`。積むのは `js/data.js:fallNight()`(`endBattle` から一夜に一度)。一夜の上限は `BAL.FALL_BODY_NIGHT`(一段)と `BAL.FALL_MIND_RATIO`(体の伸びの1/3)。帳簿は `js/data.js:heroRot()` の `R.body`/`R.mind`。DESIGN §3-83 |
+| 地図チップに絵を重ねる | `js/map.js` の `CHUNK_DECOR` へ関数を登録する(チャンクを焼く時に一度だけ呼ばれる)。★`drawTiles` を包んで毎フレーム描かない。DESIGN §3-82 |
 | 魔物をどこに出すか(カードを切った時) | `js/game.js:playCard()`。歩ける魔物は `placeNear(…560px…)`、**`spd≦WAIT_SPD(22)` の待ち型は `js/game.js:waitSpot()`** で彼女の目当ての先へ(`BAL.WAIT_NEAR`/`WAIT_FAR`/`WAIT_FAN`)。ボスは足の速さで 520/400/300px。DESIGN §3-81 |
 | 出した大物が一仕事する前に溶ける | `js/game.js:damageEnemy()` の `BAL.BIG_GRACE`/`BAL.BIG_GRACE_CUT`(出現後その秒数だけ被ダメ減)。個体の生まれた時刻は `e.born` |
 | 誰にとどめを刺されたか(敗北文の相手) | `js/game.js:markCulprit()`/`js/game.js:culpritPick()`。載せる経路は 掴み(`CULP_HOLD`)・削り(`CULP_DMG`)・光線(`CULP_BEAM`)・催眠(`CULP_HYPNO`)・雲(`CULP_GAS`)・**呪弾/光弾(`CULP_RUNE`)**。触れずに効かせる魔物は、ここに載せないと相手に選ばれない |

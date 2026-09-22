@@ -391,6 +391,7 @@ function endBattle(outcome){
     L.filmed+=(h.recFilmed||0); L.herBoss+=(h.recBoss||0);
     for(const k in (h.recAilBy||{})) L.ailBy[k]=(L.ailBy[k]||0)+h.recAilBy[k];
     R.dmg+=Math.round(h.recDmg||0); R.ail+=(h.recAil||0);
+    fallNight(R, h.recDmg, h.recAil, !!h.recCapBy);   /* v7.2 堕ちの二軸は夜ごとの伸びで積む(js/data.js) */
     if(h.recCapBy){
       L.captures++; R.captures++; L.streak=0;
       L.capBy[h.recCapBy]=(L.capBy[h.recCapBy]||0)+1;

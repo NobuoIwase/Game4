@@ -232,6 +232,11 @@ const BAL={
   BIG_GRACE:3.2,       /* v7.1 大型・ボスは出現後この秒数だけ被ダメが減る(一拍目に間に合わせる) */
   BIG_GRACE_CUT:0.55,  /* v7.1 その間の減り幅 */
   CULP_RUNE:26.0,      /* v7.1 呪弾・光弾一発で下手人の帳面に載る重み(紋は後から全ての入りを増やす) */
+  /* v7.2 堕ちの二軸(js/data.js fallNight)。カタログ第四章: 肉体は比較的早く、精神は肉体の1/3以下 */
+  FALL_BODY_NIGHT:25,  /* 一夜で伸びる body の上限(=一段の幅)。一夜で段を二つ跨がない */
+  FALL_MIND_RATIO:0.3333, /* mind の一夜の伸びは、その夜の body の伸びのこの倍率まで */
+  FALL_MIND_CAP:22,    /* 捕まった夜の mind の生の伸び(上の比率で頭を押さえる) */
+  FALL_MIND_AIL:0.5,   /* 状態異常一つあたりの mind の生の伸び */
   CULP_HOLD:9.0,       /* v7.0 下手人の帳面: 四肢を一本取っている 1秒ぶんの重み */
   CULP_DMG:1.0,        /* 同: 与えたダメージ 1 ぶんの重み */
   CULP_NEW_K:2.2,      /* 同: まだ読んでいない相手に乗せる重み(確率で引くときの倍率) */
@@ -2142,9 +2147,29 @@ function heroRot(id){
   const k=id||'lumina';
   const R=(META.rotH[k]=META.rotH[k]||{});
   R.dmg=R.dmg||0; R.ail=R.ail||0; R.captures=R.captures||0; R.battles=R.battles||0;
+  /* v7.2 二軸は夜ごとの伸びで積む(下の fallNight)。それ以前のセーブは、生の累計から一度だけ起こす */
+  if(R.body===undefined){ R.body=clamp(R.dmg/8 + R.ail*2, 0, 100); R.mind=clamp(R.captures*22 + R.ail*0.5, 0, 100); }
   return R;
 }
 function rotHClear(){ META.rotH={}; }
 /* 堕ちの二軸を、その子の世代内の記録から */
-function fallBodyOf(id){ const R=heroRot(id); return clamp(R.dmg/8 + R.ail*2, 0, 100); }
-function fallMindOf(id){ const R=heroRot(id); return clamp(R.captures*22 + R.ail*0.5, 0, 100); }
+function fallBodyOf(id){ return heroRot(id).body; }
+function fallMindOf(id){ return heroRot(id).mind; }
+/* ★v7.2 一夜ぶんの伸びを帳簿へ積む(endBattle から、ヒロインごとに一度)。
+   カタログ第四章: 肉体は「比較的早く進む」/ 精神は「**肉体の1/3以下の速度**で進む」/
+   設計の芯は「心は拒んでいるのに体だけが応えてしまう(yield)期間が最も長く続くこと。
+   簡単には堕ちない」。
+   以前は生の累計から毎回 body=被ダメ/8+状態異常×2、mind=捕獲×22+状態異常×0.5 を計算していた。
+   状態異常の多い一夜で body が 0→50 を跨いで**綻び(strain)を一度も通らず**、
+   捕獲の夜は mind が body の半分近く伸びて「1/3以下」を破っていた。
+   ・body: 一夜の伸びを FALL_BODY_NIGHT(=一段の幅 25)で頭打ちにする。一夜で段を二つ跨がない
+   ・mind: その夜の body の伸び × FALL_MIND_RATIO を上限にする(カタログの 1/3 そのもの) */
+function fallNight(R, recDmg, recAil, captured){
+  const rawB=(recDmg||0)/8 + (recAil||0)*2;
+  const rawM=(captured?BAL.FALL_MIND_CAP:0) + (recAil||0)*BAL.FALL_MIND_AIL;
+  const gB=Math.min(rawB, BAL.FALL_BODY_NIGHT);   /* 頭打ち。指数で飽和させると中くらいの夜を削りすぎた(クウは綻びが yield を上回った) */
+  const gM=Math.min(rawM, gB*BAL.FALL_MIND_RATIO);
+  R.body=clamp((R.body||0)+gB, 0, 100);
+  R.mind=clamp((R.mind||0)+gM, 0, 100);
+  return {gB, gM, rawB, rawM};
+}
