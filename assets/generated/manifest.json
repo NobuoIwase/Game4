@@ -9,6 +9,10 @@
       "kind": "tile",
       "src": "assets/generated/tile/moonstone.webp"
     },
+    "vfx.curse_cloud": {
+      "kind": "vfx",
+      "src": "assets/generated/vfx/curse_cloud.webp"
+    },
     "vfx.holy_slash": {
       "kind": "vfx",
       "src": "assets/generated/vfx/holy_slash.webp"
