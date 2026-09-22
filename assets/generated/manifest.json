@@ -8,6 +8,10 @@
     "tile.moonstone": {
       "kind": "tile",
       "src": "assets/generated/tile/moonstone.webp"
+    },
+    "vfx.holy_slash": {
+      "kind": "vfx",
+      "src": "assets/generated/vfx/holy_slash.webp"
     }
   }
 }
