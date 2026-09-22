@@ -13,6 +13,10 @@
       "kind": "vfx",
       "src": "assets/generated/vfx/holy_slash.webp"
     },
+    "vfx.mire_ripple": {
+      "kind": "vfx",
+      "src": "assets/generated/vfx/mire_ripple.webp"
+    },
     "vfx.moon_burst": {
       "kind": "vfx",
       "src": "assets/generated/vfx/moon_burst.webp"
