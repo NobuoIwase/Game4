@@ -5,6 +5,10 @@
       "kind": "atlas",
       "src": "assets/generated/atlas/mire.webp"
     },
+    "atlas.mire_edge": {
+      "kind": "atlas",
+      "src": "assets/generated/atlas/mire_edge.webp"
+    },
     "atlas.moon": {
       "kind": "atlas",
       "src": "assets/generated/atlas/moon.webp"
