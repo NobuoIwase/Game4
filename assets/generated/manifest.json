@@ -1,1 +1,9 @@
-{"version":1,"assets":{}}
+{
+  "version": 1,
+  "assets": {
+    "tile.moonstone": {
+      "kind": "tile",
+      "src": "assets/generated/tile/moonstone.webp"
+    }
+  }
+}
