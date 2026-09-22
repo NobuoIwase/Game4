@@ -1,12 +1,19 @@
 'use strict';
 /* main.js — 起動。quality_patch.js を確実に読み込んでからゲームを開始する */
 (function bootGame4(){
-  const s=document.createElement('script');
-  s.src='js/quality_patch.js?v=14';
-  s.async=false;
-  s.onload=startGame4;
-  s.onerror=()=>{ console.warn('[Game4] quality_patch.js failed to load'); startGame4(); };
-  document.head.appendChild(s);
+  function load(src){
+    return new Promise(resolve=>{
+      const s=document.createElement('script');
+      s.src=src;
+      s.async=false;
+      s.onload=resolve;
+      s.onerror=()=>{ console.warn('[Game4] failed to load '+src); resolve(); };
+      document.head.appendChild(s);
+    });
+  }
+  load('js/quality_patch.js?v=14')
+    .then(()=>load('js/visual_pack.js?v=20'))
+    .then(startGame4);
 })();
 function startGame4(){
 loadMeta();
