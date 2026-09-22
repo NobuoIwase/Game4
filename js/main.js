@@ -12,6 +12,8 @@
     });
   }
   load('js/quality_patch.js?v=14')
+    .then(()=>load('js/generated_assets.js?v=10'))
+    .then(()=>window.Game4Assets ? Game4Assets.load() : null)
     .then(()=>load('js/visual_pack.js?v=20'))
     .then(startGame4);
 })();
