@@ -12,6 +12,10 @@
     "vfx.holy_slash": {
       "kind": "vfx",
       "src": "assets/generated/vfx/holy_slash.webp"
+    },
+    "vfx.projectile_trail": {
+      "kind": "vfx",
+      "src": "assets/generated/vfx/projectile_trail.webp"
     }
   }
 }
