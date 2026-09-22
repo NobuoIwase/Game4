@@ -9,6 +9,10 @@
       "kind": "atlas",
       "src": "assets/generated/atlas/normal.webp"
     },
+    "atlas.wet": {
+      "kind": "atlas",
+      "src": "assets/generated/atlas/wet.webp"
+    },
     "tile.mire": {
       "kind": "tile",
       "src": "assets/generated/tile/mire.webp"
