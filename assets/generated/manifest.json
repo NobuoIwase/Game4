@@ -24,6 +24,10 @@
     "vfx.projectile_trail": {
       "kind": "vfx",
       "src": "assets/generated/vfx/projectile_trail.webp"
+    },
+    "vfx.slime_splash": {
+      "kind": "vfx",
+      "src": "assets/generated/vfx/slime_splash.webp"
     }
   }
 }
