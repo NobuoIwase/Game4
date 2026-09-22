@@ -15,6 +15,7 @@
     .then(()=>load('js/generated_assets.js?v=10'))
     .then(()=>window.Game4Assets ? Game4Assets.load() : null)
     .then(()=>load('js/visual_pack.js?v=20'))
+    .then(()=>load('js/generated_asset_hooks.js?v=10'))
     .then(startGame4);
 })();
 function startGame4(){
