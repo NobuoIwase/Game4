@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "assets": {
+    "atlas.mire": {
+      "kind": "atlas",
+      "src": "assets/generated/atlas/mire.webp"
+    },
+    "atlas.mire_edge": {
+      "kind": "atlas",
+      "src": "assets/generated/atlas/mire_edge.webp"
+    },
+    "atlas.moon": {
+      "kind": "atlas",
+      "src": "assets/generated/atlas/moon.webp"
+    },
+    "atlas.normal": {
+      "kind": "atlas",
+      "src": "assets/generated/atlas/normal.webp"
+    },
+    "atlas.wet": {
+      "kind": "atlas",
+      "src": "assets/generated/atlas/wet.webp"
+    },
+    "tile.mire": {
+      "kind": "tile",
+      "src": "assets/generated/tile/mire.webp"
+    },
+    "tile.moonstone": {
+      "kind": "tile",
+      "src": "assets/generated/tile/moonstone.webp"
+    },
+    "vfx.curse_cloud": {
+      "kind": "vfx",
+      "src": "assets/generated/vfx/curse_cloud.webp"
+    },
+    "vfx.holy_slash": {
+      "kind": "vfx",
+      "src": "assets/generated/vfx/holy_slash.webp"
+    },
+    "vfx.impact_flash": {
+      "kind": "vfx",
+      "src": "assets/generated/vfx/impact_flash.webp"
+    },
+    "vfx.mire_ripple": {
+      "kind": "vfx",
+      "src": "assets/generated/vfx/mire_ripple.webp"
+    },
+    "vfx.moon_burst": {
+      "kind": "vfx",
+      "src": "assets/generated/vfx/moon_burst.webp"
+    },
+    "vfx.projectile_trail": {
+      "kind": "vfx",
+      "src": "assets/generated/vfx/projectile_trail.webp"
+    },
+    "vfx.purification_pulse": {
+      "kind": "vfx",
+      "src": "assets/generated/vfx/purification_pulse.webp"
+    },
+    "vfx.slime_splash": {
+      "kind": "vfx",
+      "src": "assets/generated/vfx/slime_splash.webp"
+    }
+  }
+}
