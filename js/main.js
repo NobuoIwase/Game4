@@ -11,11 +11,11 @@
       document.head.appendChild(s);
     });
   }
-  load('js/quality_patch.js?v=14')
+  load('js/quality_patch.js?v=15')
     .then(()=>load('js/generated_assets.js?v=10'))
     .then(()=>window.Game4Assets ? Game4Assets.load() : null)
-    .then(()=>load('js/visual_patck.js?v=20'))
-    .then(()=>load('js/generated_asset_hooks.js?v=13'))
+    .then(()=>load('js/visual_pack.js?v=22'))
+    .then(()=>load('js/generated_asset_hooks.js?v=15'))
     .then(startGame4);
 })();
 function startGame4(){

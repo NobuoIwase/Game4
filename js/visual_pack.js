@@ -112,29 +112,24 @@
     g.restore();
   }
 
-  if(typeof drawTiles==='function'){
-    const base=drawTiles;
-    drawTiles=function(g){
-      base(g);
-      if(!G||!G.cam||gfx()===0) return;
-      const b=visibleBounds(), step=64;
-      if(!b) return;
-      const sx=tileCenter(b.x0,step), sy=tileCenter(b.y0,step);
-      g.save();
-      for(let y=sy;y<=b.y1;y+=step){
-        for(let x=sx;x<=b.x1;x+=step){
-          if(typeof passAt==='function'&&!passAt(x,y,false)) continue;
-          moonstoneDetail(g,x,y,step);
-          if(gfx()>1){
-            mireDetail(g,x,y,step);
-            sacredPathDetail(g,x,y,step);
-            crystalSpark(g,x,y,step);
-          }
+  /* ★v7.2 床の細部はチャンクを焼く時に一度だけ描く(js/map.js の CHUNK_DECOR)。
+     以前は drawTiles を包んで、毎フレーム・画面内の 64px 升ごとに放射グラデを作り直していた */
+  const decor=(g,x0,y0,x1,y1)=>{
+    if(gfx()===0) return;
+    const step=64;
+    for(let y=tileCenter(y0,step);y<y1;y+=step){
+      for(let x=tileCenter(x0,step);x<x1;x+=step){
+        if(typeof passAt==='function'&&!passAt(x,y,false)) continue;
+        moonstoneDetail(g,x,y,step);
+        if(gfx()>1){
+          mireDetail(g,x,y,step);
+          sacredPathDetail(g,x,y,step);
+          crystalSpark(g,x,y,step);
         }
       }
-      g.restore();
-    };
-  }
+    }
+  };
+  if(typeof CHUNK_DECOR!=='undefined') CHUNK_DECOR.push(decor);
 
   function ring(g,x,y,r,c,a=.55,w=2){
     g.save(); g.globalCompositeOperation='screen'; g.globalAlpha=a;
@@ -155,11 +150,16 @@
     g.closePath(); g.fill(); g.restore();
   }
 
+  /* ★v7.2 線や扇の形をした fx(光条・閃光・鎖)は、中心に光を置いても形が合わない。
+     しかも beam は絶頂照射触手、denbeam は巣窟の壁の光線——魔物側の光条に聖なる星が乗っていた */
+  const LINE_FX={beam:1,denbeam:1,corebeam:1,chain:1,flash:1,gaze:1,icepath:1};
   function vfxOverlay(g,f){
     if(!f||gfx()===0) return;
-    const k=f.kind||'', r=Math.max(10,f.r||24), life=Number.isFinite(f.t)&&Number.isFinite(f.life)&&f.life>0?clamp(f.t/f.life,0,1):.55;
+    const k=f.kind||'';
+    if(LINE_FX[k]) return;
+    const r=Math.min(160,Math.max(10,f.r||24)), life=Number.isFinite(f.t)&&Number.isFinite(f.life)&&f.life>0?clamp(f.t/f.life,0,1):.55;
     const pulse=.75+.25*Math.sin((G&&G.B?G.B.time:0)*7);
-    if(k==='bolt'||k==='beam'||k==='denbeam'){
+    if(k==='bolt'){
       glow(g,f.x,f.y,r*1.8,'rgba(160,185,255,.44)',undefined,.42);
       star(g,f.x,f.y,r*.62,'#f7f3ff',.88);
       ring(g,f.x,f.y,r*.82,'rgba(150,185,255,.78)',.45,1.25);
@@ -192,6 +192,7 @@
   }
 
   // ambient post grade; subtle enough not to obscure UI
+  let vig=null;
   if(typeof draw==='function'){
     const base=draw;
     draw=function(){
@@ -199,17 +200,21 @@
       if(typeof ctx==='undefined'||gfx()===0) return;
       const g=ctx, ds=(typeof dpr==='number'?dpr:1)*(typeof viewScale==='number'?viewScale:1);
       g.save(); g.setTransform(ds,0,0,ds,0,0);
-      const v=g.createRadialGradient(W*.5,H*.44,Math.min(W,H)*.18,W*.5,H*.48,Math.max(W,H)*.72);
-      v.addColorStop(0,'rgba(45,55,95,0)');
-      v.addColorStop(.72,'rgba(22,18,44,.025)');
-      v.addColorStop(1,'rgba(8,8,22,.07)');
-      g.fillStyle=v; g.fillRect(0,0,W,H);
+      /* v7.2 周辺減光は画面寸法だけで決まるので、寸法が変わった時だけ作り直す */
+      if(!vig||vig.w!==W||vig.h!==H){
+        const v=g.createRadialGradient(W*.5,H*.44,Math.min(W,H)*.18,W*.5,H*.48,Math.max(W,H)*.72);
+        v.addColorStop(0,'rgba(45,55,95,0)');
+        v.addColorStop(.72,'rgba(22,18,44,.025)');
+        v.addColorStop(1,'rgba(8,8,22,.07)');
+        vig={w:W,h:H,grad:v};
+      }
+      g.fillStyle=vig.grad; g.fillRect(0,0,W,H);
       g.restore();
     };
   }
 
   window.Game4VisualPack={
-    version:'2.0.0',
+    version:'2.1.0',
     scope:'map+vfx',
     note:'monster/hero/scenario rendering untouched'
   };

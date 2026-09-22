@@ -1005,6 +1005,15 @@ function makeTileAtlas(){
 makeTileAtlas();
 const CHUNK=8;   // タイル数(8×32=256px)
 function chunkKey(ci,cj){ return ci*1000+cj; }
+/* ★v7.2 チャンクへ焼き込む重ね絵の差し込み口。
+   描画パック(js/visual_pack.js / js/generated_asset_hooks.js / js/quality_patch.js)は
+   以前 drawTiles() を包んで**毎フレーム・全タイル**に drawImage と放射グラデを作り直していた。
+   実測で描画 p90 が 10〜25ms → 80〜100ms(drawImage の回数 8倍)。
+   重ね絵はどれもタイル位置のハッシュで決まる静止画なので、チャンクを焼く時に一度だけ描く。
+   登録する関数は (g, x0, y0, x1, y1, i0, j0, i1, j1) を受け取り、g は**ワールド座標**
+   (チャンクの外へはみ出した分は切れる)。地形が変わったチャンクは焼き直されるので、
+   沼の広がり・乾き・凍りにもそのまま追従する。★一つが投げても地図は描き続ける */
+const CHUNK_DECOR=[];
 function renderChunk(ci,cj){
   const T=MAP_T, S=CHUNK*T, cv=document.createElement('canvas'); cv.width=S; cv.height=S; const g=cv.getContext('2d');
   const zone=G.map.zone, solid=G.map.solid;
@@ -1083,6 +1092,12 @@ function renderChunk(ci,cj){
       if(s===SOLID_CLIFF){ g.strokeStyle='rgba(170,165,210,0.55)'; g.lineWidth=1.5; if(sol(i,j-1)===0) { g.beginPath(); g.moveTo(x,y+0.75); g.lineTo(x+T,y+0.75); g.stroke(); } if(sol(i-1,j)===0){ g.beginPath(); g.moveTo(x+0.75,y); g.lineTo(x+0.75,y+T); g.stroke(); } if(sol(i+1,j)===0){ g.beginPath(); g.moveTo(x+T-0.75,y); g.lineTo(x+T-0.75,y+T); g.stroke(); } }
       else if(sol(i,j-1)===0){ g.fillStyle='rgba(140,130,180,0.28)'; g.fillRect(x,y,T,2); }
     }
+  }
+  if(CHUNK_DECOR.length){
+    const ox=i0*T-MAP_HW, oy=j0*T-MAP_HH;
+    g.save(); g.translate(-ox,-oy);
+    for(const f of CHUNK_DECOR){ try{ f(g, ox, oy, ox+S, oy+S, i0, j0, i0+CHUNK-1, j0+CHUNK-1); }catch(e){ if(!CHUNK_DECOR.warned){ CHUNK_DECOR.warned=1; console.warn('[CHUNK_DECOR]',e); } } }
+    g.restore();
   }
   return cv;
 }
