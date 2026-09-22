@@ -8,7 +8,8 @@
     return Game4Assets.draw(g,key,x-step/2,y-step/2,step,step,alpha);
   }
   function drawFxAsset(g,key,x,y,size,alpha){
-    return Game4Assets.draw(g,key,x-size/2,y-size/2,size,size,alpha);
+    const h=size*.75;
+    return Game4Assets.draw(g,key,x-size/2,y-h/2,size,h,alpha);
   }
 
   if(typeof drawTiles==='function'){
@@ -26,9 +27,9 @@
           if(typeof passAt==='function'&&!passAt(x,y,false)) continue;
           const inMire=typeof mireAt==='function'&&mireAt(x,y);
           if(inMire){
-            drawTile(g,'tile.mire',x,y,step,.5);
+            drawTile(g,'tile.mire',x,y,step,.82);
           }else{
-            drawTile(g,'tile.moonstone',x,y,step,.34);
+            drawTile(g,'tile.moonstone',x,y,step,.68);
           }
         }
       }
@@ -57,12 +58,12 @@
       const key=fxMap[f.kind||''];
       if(!key||!Game4Assets.has(key)) return;
       const r=Math.max(12,f.r||24);
-      drawFxAsset(g,key,f.x,f.y,r*3.2,.9);
+      drawFxAsset(g,key,f.x,f.y,r*3.6,.86);
     };
   }
 
   window.Game4GeneratedAssetHooks={
-    version:'1.0.0',
+    version:'1.1.0',
     tileKeys:['tile.moonstone','tile.mire'],
     vfxKeys:Object.values(fxMap)
   };
