@@ -1,6 +1,10 @@
 {
   "version": 1,
   "assets": {
+    "atlas.normal": {
+      "kind": "atlas",
+      "src": "assets/generated/atlas/normal.webp"
+    },
     "tile.mire": {
       "kind": "tile",
       "src": "assets/generated/tile/mire.webp"
